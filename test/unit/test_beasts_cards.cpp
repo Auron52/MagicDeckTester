@@ -2268,3 +2268,298 @@ TEST_CASE("Contaminator: the human proliferate chooser sees every candidate, an 
     CHECK(PlusCountersOn(BeNum(s, 51)) == 2);
     CHECK(BeNum(s, 52).loyalty == 3);
 }
+
+// ---- Woodland Bellower (Beasts H) -----------------------------------------------------------------------------------
+// "When this creature enters, you may search your library for a nonlegendary green creature card with mana value 3 or
+// less, put it onto the battlefield, then shuffle." The Natural Order put route (PerformTutorToBattlefield) fired from
+// the creature's OWN ETB; the target is the searched tutor axis, the decline puts nothing and does not shuffle.
+namespace
+{
+constexpr const char* kBell = "Woodland Bellower";
+// The test library: the three legal targets and the two legendary / off-filter Beasts in front of BeState's Forests.
+GameState BeBellBoard(int forests)
+{
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < forests; ++i) { BeAdd(s, "Forest", 10 + i); }
+    auto& lib = s.players[0].library;
+    const char* front[] = { "Kaheera, the Orphanguard", "Krosan Warchief", "Migloz, Maze Crusher",
+                            "Garruk's Harbinger", "Craterhoof Behemoth", "Bloated Contaminator", "Herald of Ilharg" };
+    for (int i = static_cast<int>(sizeof(front) / sizeof(front[0])) - 1; i >= 0; --i)
+    { lib.insert(lib.begin(), BeZone(front[i], 300 + i)); }
+    return s;
+}
+std::vector<std::string> BeBellCands(const GameState& s)
+{
+    std::vector<std::string> out;
+    for (const std::string& c : RankedTutorCandidates(ResolveProvider(s), s, 0, BeDef(kBell).params))
+    { if (std::find(out.begin(), out.end(), c) == out.end()) { out.push_back(c); } }
+    return out;
+}
+bool BeOnBf(const GameState& s, const char* name)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == name) { return true; } }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("Woodland Bellower: card data, and the filter is green + creature + MV <= 3 + NONLEGENDARY")
+{
+    const CardDefinition& d = BeDef(kBell);
+    CHECK(d.card.m_mana_cost.ManaValue() == 6);
+    CHECK(d.card.m_power.value_or(0) == 6);
+    CHECK(d.card.m_toughness.value_or(0) == 5);
+    CHECK(d.params.tutor_to_battlefield_single);
+    CHECK(d.params.tutor_optional);
+    CHECK(d.params.tutor_nonlegendary);
+    CHECK(d.params.tutor_max_mv == 3);
+    CHECK(d.params.tutor_shuffle_after);
+    auto ok = [&](const char* nm) { return TutorPutTargetMatches(BeDef(nm).card, d.params); };
+    CHECK(ok("Krosan Warchief"));
+    CHECK(ok("Garruk's Harbinger"));
+    CHECK(ok("Bloated Contaminator"));
+    CHECK_FALSE(ok("Kaheera, the Orphanguard"));   // legendary (MV 3, green)
+    CHECK_FALSE(ok("Migloz, Maze Crusher"));       // legendary
+    CHECK_FALSE(ok("Questing Beast"));             // legendary, MV 4
+    CHECK_FALSE(ok("Craterhoof Behemoth"));        // MV 8
+    CHECK_FALSE(ok("Herald of Ilharg"));           // MV 4
+    CHECK_FALSE(ok("Forest"));                     // not a creature
+    // The conjunct is TutorNumericFilterOk's, so every tutor filter site (the providers' TutorCandidates) sees it.
+    CHECK_FALSE(TutorNumericFilterOk(BeDef("Kaheera, the Orphanguard").card, d.params));
+    CHECK(TutorNumericFilterOk(BeDef("Krosan Warchief").card, d.params));
+    // The candidate list over the test library: exactly the three legal names.
+    BoarsProvider provider;
+    GameState s = BeBellBoard(0);
+    s.m_provider = &provider;
+    std::vector<std::string> c = BeBellCands(s);
+    std::sort(c.begin(), c.end());
+    CHECK(c == std::vector<std::string>{ "Bloated Contaminator", "Garruk's Harbinger", "Krosan Warchief" });
+}
+
+TEST_CASE("Woodland Bellower: the tutor pin picks EACH candidate, the named target is put, and the put shuffles")
+{
+    BoarsProvider provider;
+    GameState base = BeBellBoard(0);
+    base.m_provider = &provider;
+    const std::vector<std::string> cands = BeBellCands(base);
+    REQUIRE(cands.size() == 3);
+    for (int k = 0; k < 3; ++k)
+    {
+        GameState g = base;
+        const int sc = g.search_count;
+        {
+            ScriptedTutor pin(k);
+            BeEnter(g, kBell, 60);
+        }
+        CHECK(BeOnBf(g, cands[static_cast<std::size_t>(k)].c_str()));
+        CHECK(g.battlefield.size() == 2);                       // Bellower + exactly one put
+        CHECK(g.players[0].library.size() == base.players[0].library.size() - 1);
+        CHECK(g.search_count == sc + 1);                         // "then shuffle"
+    }
+    // The human menu's named target rides chosen_tutor.
+    GameState h = base;
+    const int idx = BeAdd(h, kBell, 61, 0, true);
+    FireEtbWatchers(h, 0, idx);
+    FireOwnEtbTriggers(h, 0, idx, std::string("Bloated Contaminator"), -1);
+    CHECK(BeOnBf(h, "Bloated Contaminator"));
+}
+
+TEST_CASE("Woodland Bellower: 'you may' -- both decline shapes put nothing and do NOT shuffle")
+{
+    BoarsProvider provider;
+    GameState base = BeBellBoard(0);
+    base.m_provider = &provider;
+    // (a) the search's decline variant (Plan::tutor_choice = kTutorDeclineChoice).
+    GameState g = base;
+    {
+        ScriptedTutor pin(kTutorDeclineChoice);
+        BeEnter(g, kBell, 60);
+        CHECK(g_scripted_tutor_choice == -1);   // consumed like any pin
+    }
+    CHECK(g.battlefield.size() == 1);
+    CHECK(g.search_count == base.search_count);
+    CHECK(BeLibNums(g) == BeLibNums(base));
+    // (b) the human menu's named decline.
+    GameState h = base;
+    const int idx = BeAdd(h, kBell, 61, 0, true);
+    FireOwnEtbTriggers(h, 0, idx, std::string(kTutorDeclineTarget), -1);
+    CHECK(h.battlefield.size() == 1);
+    CHECK(h.search_count == base.search_count);
+    CHECK(BeLibNums(h) == BeLibNums(base));
+    // ...while a Natural Order fail-to-find (not optional) still shuffles (byte-identical for the old route).
+    GameState n = base;
+    PerformTutorToBattlefield(n, 0, BeDef("Natural Order").params, 1, { std::string(kTutorDeclineTarget) }, "Natural Order");
+    CHECK(n.search_count == base.search_count + 1);
+}
+
+TEST_CASE("Woodland Bellower: only legendary / off-filter creatures left -> nothing is put")
+{
+    BoarsProvider provider;
+    GameState s = BeState();
+    s.m_provider = &provider;
+    auto& lib = s.players[0].library;
+    lib.insert(lib.begin(), BeZone("Craterhoof Behemoth", 303));
+    lib.insert(lib.begin(), BeZone("Questing Beast", 302));
+    lib.insert(lib.begin(), BeZone("Migloz, Maze Crusher", 301));
+    lib.insert(lib.begin(), BeZone("Kaheera, the Orphanguard", 300));
+    BeEnter(s, kBell, 60);
+    CHECK(s.battlefield.size() == 1);
+    CHECK(lib.size() == 14);
+}
+
+TEST_CASE("Woodland Bellower: the put creature's OWN ETB fires (Nest Invader's Spawn), and a put is not a cast")
+{
+    BoarsProvider provider;
+    GameState s = BeState();
+    s.m_provider = &provider;
+    BeAdd(s, "Herald of Ilharg", 40);   // "Whenever you cast a creature spell" -- a put is no cast
+    auto& lib = s.players[0].library;
+    lib.insert(lib.begin(), BeZone("Nest Invader", 300));
+    const int spells = s.spells_cast_this_turn;
+    BeEnter(s, kBell, 60);
+    CHECK(BeIndexOf(s, 300) >= 0);
+    int tokens = 0;
+    for (const Permanent& p : s.battlefield) { if (p.is_token) { ++tokens; } }
+    CHECK(tokens == 1);                               // the Eldrazi Spawn
+    CHECK(s.spells_cast_this_turn == spells);
+    CHECK(PlusCountersOn(s.battlefield[static_cast<std::size_t>(BeIndexOf(s, 40))]) == 0);   // no cast trigger
+}
+
+TEST_CASE("Woodland Bellower: Packleader draws for Bellower BEFORE the search, and for the put Harbinger AFTER the shuffle")
+{
+    BoarsProvider provider;
+    GameState s = BeState();
+    s.m_provider = &provider;
+    BeAdd(s, "Garruk's Packleader", 40);
+    auto& lib = s.players[0].library;
+    lib.insert(lib.begin() + 1, BeZone("Garruk's Harbinger", 300));   // under the top Forest (200)
+    // The reference: the pre-search draw takes Forest 200, the put removes Harbinger, then the shuffle.
+    GameState ref = s;
+    ref.players[0].library.erase(ref.players[0].library.begin());
+    ref.players[0].library.erase(ref.players[0].library.begin());
+    ShuffleAfterSearch(ref, 0);
+    const int post_top = ref.players[0].library.front().m_number;
+    BeEnter(s, kBell, 60);   // base pin: the provider front = Harbinger (the only legal name)
+    REQUIRE(BeIndexOf(s, 300) >= 0);
+    const auto& hand = s.players[0].hand;
+    REQUIRE(hand.size() == 2);
+    CHECK(hand[0].m_number == 200);        // Bellower's own entry: the ordering collapse (draw first)
+    CHECK(hand[1].m_number == post_top);   // Harbinger's entry: drawn off the SHUFFLED library
+}
+
+TEST_CASE("Woodland Bellower: every put target is SEARCHED -- one plan per legal name + the decline, no greedy pick")
+{
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    GameState s = BeBellBoard(6);
+    BeHand(s, kBell, 70);
+    s.m_provider = &provider;
+    std::set<int> choices;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        bool casts = false;
+        for (const Action& a : p.actions) { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == kBell) { casts = true; } }
+        if (casts) { choices.insert(p.tutor_choice); }
+    }
+    CHECK(choices.count(-1) == 1);                   // base = the provider front
+    CHECK(choices.count(1) == 1);
+    CHECK(choices.count(2) == 1);
+    CHECK(choices.count(kTutorDeclineChoice) == 1);
+    CHECK(choices.count(3) == 0);                    // only three legal names
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Woodland Bellower: executor and rollout put the same pinned target")
+{
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    GameState s = BeBellBoard(6);
+    BeHand(s, kBell, 70);
+    s.m_provider = &provider;
+    const std::vector<std::string> cands = BeBellCands(s);
+    REQUIRE(cands.size() == 3);
+    const TurnSolver::Plan* pick = nullptr;
+    std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.tutor_choice != 2) { continue; }
+        for (const Action& a : p.actions) { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == kBell) { pick = &p; } }
+        if (pick) { break; }
+    }
+    REQUIRE(pick != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *pick, true);
+    CHECK(BeIndexOf(roll, 70) >= 0);
+    CHECK(BeOnBf(roll, cands[2].c_str()));
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, *pick, true);
+    GameState ex = s;
+    eng.TakeTurn(ex, true, BeResolveAll);
+    CHECK(BeIndexOf(ex, 70) >= 0);
+    CHECK(BeOnBf(ex, cands[2].c_str()));
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Woodland Bellower: a Nykthos line paid by the PUT's devotion is enumerated and both worlds cast it")
+{
+    // Nykthos + eight Forests, no devotion on board. Bellower {4}{G}{G} off six Forests (devotion 2), the put Harbinger
+    // {1}{G}{G} makes it 4: two Forests feed Nykthos for four green = Questing Beast. Nine sources, ten mana: payable
+    // ONLY through the put (Bellower's own pips alone leave Nykthos at 2), so a bound / walk that credited the cast
+    // and not the put would refuse the pair before any payment could price it.
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    GameState s = BeNykBoard(8, {});
+    auto& lib = s.players[0].library;
+    lib.insert(lib.begin(), BeZone("Garruk's Harbinger", 300));   // the provider front (base plan)
+    BeHand(s, kBell, 70);
+    BeHand(s, "Questing Beast", 71);
+    s.m_provider = &provider;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* both = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.tutor_choice != -1) { continue; }
+        int n = 0;
+        for (const Action& a : p.actions) { if (a.kind == Action::Kind::CastFromHand) { ++n; } }
+        if (n == 2) { both = &p; break; }
+    }
+    REQUIRE(both != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *both, true);
+    CHECK(BeIndexOf(roll, 300) >= 0);
+    CHECK(BeIndexOf(roll, 71) >= 0);
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, *both, true);
+    GameState ex = s;
+    eng.TakeTurn(ex, true, BeResolveAll);
+    CHECK(BeIndexOf(ex, 300) >= 0);
+    CHECK(BeIndexOf(ex, 71) >= 0);
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Woodland Bellower: a put Krosan Warchief's {1} off a later Beast is credited -- the exact-mana pair is enumerated")
+{
+    // Ten Forests. Bellower (6) + Thragtusk {4}{G} (5) = 11 printed; the put Warchief makes Thragtusk 4 -> 10.
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < 10; ++i) { BeAdd(s, "Forest", 10 + i); }
+    auto& lib = s.players[0].library;
+    lib.insert(lib.begin(), BeZone("Krosan Warchief", 300));
+    BeHand(s, kBell, 70);
+    BeHand(s, "Thragtusk", 71);
+    s.m_provider = &provider;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* both = BeFindCastPlan(plans, { kBell, "Thragtusk" });
+    REQUIRE(both != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *both, true);
+    CHECK(BeIndexOf(roll, 300) >= 0);
+    CHECK(BeIndexOf(roll, 71) >= 0);
+    ManaCacheClearPerGame();
+}

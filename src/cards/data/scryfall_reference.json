@@ -8863,6 +8863,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Woodland Bellower": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{4}{G}{G}",
+    "oracle_text": "When this creature enters, you may search your library for a nonlegendary green creature card with mana value 3 or less, put it onto the battlefield, then shuffle.",
+    "power": "6",
+    "toughness": "5",
+    "type_line": "Creature — Beast"
+  },
   "World War Hulk": {
     "cmc": 5.0,
     "keywords": [

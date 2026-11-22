@@ -1296,6 +1296,7 @@ INERT_PARAMS = {
     "static_self_pump_tough": "Borderland Behemoth self-pump magnitude -- a constant",
     # ---- Melira Pod (2026-09-04) ----
     "tutor_max_mv": "tutor target FILTER (Ranger of Eos 'mana value 1 or less') -- legality, not a choice; the pick rides tutor_to_hand -> sac_tutor/main_phase",
+    "tutor_nonlegendary": "tutor target FILTER (Woodland Bellower 'nonlegendary') -- legality, not a choice; the pick rides tutor_to_battlefield_single -> main_phase tutor_target variants + '(decline search)'",
     "tutor_max_toughness": "tutor target FILTER (Recruiter 'toughness 2 or less') -- legality, not a choice; the pick rides tutor_to_hand -> main_phase/tutor_etb",
     "tutor_mv_max_is_x": "tutor MV cap = the chosen X (Chord of Calling) -- a legality filter; the X itself rides the chosen_x plan-variant axis -> main_phase",
     "pod_taps": "Birthing Pod {T} constant -- not a choice",

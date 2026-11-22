@@ -1691,6 +1691,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tutor_shuffle_after       = params.value("tutor_shuffle_after", false);
     p.tutor_max_mv              = params.value("tutor_max_mv", -1);
     p.tutor_max_toughness       = params.value("tutor_max_toughness", -1);
+    p.tutor_nonlegendary        = params.value("tutor_nonlegendary", false);
     p.etb_tutor_hand_count      = params.value("etb_tutor_hand_count", 0);
     p.convoke                   = params.value("convoke", false);
     p.tutor_mv_max_is_x         = params.value("tutor_mv_max_is_x", false);

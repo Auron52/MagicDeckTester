@@ -1753,6 +1753,11 @@ struct CardParams
     //                          card in a library).
     int                      tutor_max_mv = -1;
     int                      tutor_max_toughness = -1;
+    // Woodland Bellower: "a NONLEGENDARY green creature card with mana value 3 or less". A SUPERTYPE
+    // conjunct inside TutorNumericFilterOk (so it reaches every tutor filter site at once, the put
+    // route's type match included), read off the printed definition. false = no filter, so every
+    // other tutor is byte-identical.
+    bool                     tutor_nonlegendary = false;
     // Ranger of Eos: "search your library for up to two creature cards with mana value 1 or less,
     // reveal them, put them into your hand, then shuffle." > 1 routes the ETB through
     // PerformEtbTutorToHandMulti (provider-ranked ordered list, one entry per library COPY, human-

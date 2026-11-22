@@ -2817,7 +2817,24 @@ inline bool TutorNumericFilterOk(const Card& card, const CardParams& pp)
     // the OR. Empty for every other tutor -> byte-identical.
     if (!pp.tutor_required_subtype.empty() && !CardHasSubtype(card, pp.tutor_required_subtype))
     { return false; }
+    // "...a NONLEGENDARY ... card" (Woodland Bellower): the supertype conjunct. false for every
+    // other tutor -> byte-identical.
+    if (pp.tutor_nonlegendary && card.HasSupertype(Supertype::Legendary)) { return false; }
     return true;
+}
+
+// The put route's LEGALITY match for one library card (PerformTutorToBattlefield's type match, and
+// the search's over-approximations of what a put can bring -- TurnSolver's EtbPutTargetDefs): the
+// colour filter, every TutorNumericFilterOk conjunct (MV cap, toughness, required subtype,
+// nonlegendary, ...), then the tutor_types OR-list. `card` is the DEFINITION card. One predicate so a
+// gate can never disagree with the resolution about what is findable.
+inline bool TutorPutTargetMatches(const Card& card, const CardParams& pp)
+{
+    if (!CardHasColorNamed(card, pp.tutor_color)) { return false; }   // Natural Order: green only
+    if (!TutorNumericFilterOk(card, pp)) { return false; }
+    for (const std::string& t : pp.tutor_types)
+    { if (CardMatchesTypeName(card, t)) { return true; } }
+    return false;
 }
 
 // Beseech the Queen: "a card with mana value less than or equal to the number of lands you
@@ -5352,6 +5369,10 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // ...but a fail-to-find still SEARCHED, so a "then shuffle" card shuffles (2026-10-27, Q14/Q28).
     if (preferred.size() == 1 && preferred.front() == kTutorDeclineTarget)
     {
+        // ...EXCEPT a "you MAY search" (tutor_optional: Woodland Bellower's ETB) -- the human menu's
+        // named decline means NO search at all, so no shuffle (PerformTutor's twin, SpellEffects.cpp).
+        // No put card before Bellower carries tutor_optional -> byte-identical for them.
+        if (pp.tutor_optional) { return; }
         if (pp.tutor_shuffle_after) { WhiffShuffle(state, controller, "tutor to battlefield"); }
         return;
     }
@@ -5368,15 +5389,13 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     auto matches_types = [&](const Card& c) -> bool {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         const Card& card = d ? d->card : c;
-        if (!CardHasColorNamed(card, pp.tutor_color)) { return false; }   // Natural Order: green only
         if (require_mv >= 0 && card.m_mana_cost.ManaValue() != require_mv) { return false; }   // Pod
         if (max_mv_cap >= 0 && card.m_mana_cost.ManaValue() > max_mv_cap) { return false; }    // Chord
-        // Shadowborn Apostle's "Demon creature card" (tutor_required_subtype; empty = no filter).
-        if (!pp.tutor_required_subtype.empty() && !CardHasSubtype(card, pp.tutor_required_subtype))
-        { return false; }
-        for (const std::string& t : pp.tutor_types)
-        { if (CardMatchesTypeName(card, t)) { return true; } }
-        return false;
+        // Colour + every TutorNumericFilterOk conjunct (Shadowborn Apostle's "Demon creature card",
+        // Woodland Bellower's "nonlegendary ... mana value 3 or less") + the type OR-list. Every put
+        // card before Bellower sets no numeric conjunct but tutor_required_subtype (Seahunter / Apostle
+        // / Maze's End, which this used to test inline), so the match is byte-identical for them.
+        return TutorPutTargetMatches(card, pp);
     };
 
     // The put-list: the SEARCHED `preferred` if the caller supplied one, else the deck provider's
@@ -5409,6 +5428,15 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         && (tutorpin::NoteRead(), g_scripted_tutor_choice >= 0))
     {
         pinned_single = true;
+        // "You MAY search" declined by the SEARCH (kTutorDeclineChoice, the tutor axis' decline
+        // variant): consumed like any pin, then NO put and NO shuffle (nothing was searched).
+        // Checked BEFORE the clamp below, which would fold the sentinel onto the last candidate.
+        // Gated on tutor_optional (Bellower) -> every other put card is byte-identical.
+        if (pp.tutor_optional && g_scripted_tutor_choice == kTutorDeclineChoice)
+        {
+            g_scripted_tutor_choice = -1;
+            return;
+        }
         const int pick = TutorChoiceIndex(g_scripted_tutor_choice);
         g_scripted_tutor_choice = -1;
         std::vector<std::string> cands = RankedTutorCandidates(ResolveProvider(state), state, controller, pp);
@@ -15431,6 +15459,23 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         {
             PerformTutor(state, controller, p, chosen_tutor, def->card.m_name.str());
         }
+    }
+    else if (p.tutor_to_battlefield_single && def->card.IsCreature())
+    {
+        // (4b) WOODLAND BELLOWER: "When this creature enters, you may search your library for a
+        //      nonlegendary green creature card with mana value 3 or less, put it onto the battlefield,
+        //      then shuffle." The Natural Order put route, fired from the creature's OWN ETB -- one body
+        //      for every entry path, executor and rollout alike (both hand the cast's tutor_target in as
+        //      `chosen_tutor`). The target: the human menu's named variant (or its "(decline search)"),
+        //      else the search's tutor-axis index pin (Plan::tutor_choice, kTutorDeclineChoice = decline),
+        //      else the provider's TutorCandidates front -- all inside PerformTutorToBattlefield. A put
+        //      is not a cast (no Herald / Warchief cast triggers); the put body's ETB watchers fire there,
+        //      and its draw triggers (Packleader) wait for the shuffle (SearchPutTriggerScope).
+        //      ORDERING COLLAPSE (USER-approved 2026-11-21): a Packleader draw raised by Bellower's own
+        //      entry already resolved in FireEtbWatchers, before this search.
+        std::vector<std::string> pref;
+        if (!chosen_tutor.empty()) { pref.push_back(chosen_tutor); }
+        PerformTutorToBattlefield(state, controller, p, /*max_puts=*/1, pref, def->card.m_name.str());
     }
 
     // (5) ETB reveal-and-cheat (Muxus): reveal top N, put matching creatures MV<=k onto the

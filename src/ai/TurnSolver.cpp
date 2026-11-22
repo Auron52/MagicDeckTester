@@ -8424,6 +8424,77 @@ static int LiveDevotionLands(const GameState& state)
     return n;
 }
 
+// ---- A PUT FROM THE LIBRARY INSIDE THE LINE (Woodland Bellower, Beasts H) ----------------------------------------------
+// A creature whose OWN ETB puts a library card onto the battlefield (tutor_to_battlefield_single on a creature: "search
+// your library for a nonlegendary green creature card with mana value 3 or less, put it onto the battlefield") brings
+// that permanent into the line the moment it resolves, so every gate that must OVER-approximate what a line can reach
+// has to credit what the put CAN bring: its devotion (a Nykthos tapped later in the same main) and its cost reduction
+// (Krosan Warchief: Beast spells after it cost {1} less). Which card is put is the searched tutor axis, unknown to a
+// gate, so the credit is the UNION over every distinct legal target still in the active player's library -- the
+// resolution's own match (TutorPutTargetMatches). Only one is put, so the union errs HIGH: a ceiling only ever prunes
+// less, and a walk that admits a subset no single target pays only costs that plan's rollout (the
+// CountSameTurnReducers soundness note). Every reader is gated on the param, so every other deck is byte-identical.
+static bool CastHasEtbLibraryPut(const CardDefinition& d)
+{ return d.params.tutor_to_battlefield_single && d.card.IsCreature(); }
+static void EtbPutTargetDefs(const GameState& state, const CardDefinition& d, std::vector<const CardDefinition*>& out)
+{
+    out.clear();
+    if (!CastHasEtbLibraryPut(d) || d.params.tutor_types.empty()) { return; }
+    for (const Card& lc : state.players[static_cast<std::size_t>(state.active_player_index)].library)
+    {
+        const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+        if (ld == nullptr || !TutorPutTargetMatches(ld->card, d.params)) { continue; }
+        if (std::find(out.begin(), out.end(), ld) == out.end()) { out.push_back(ld); }
+    }
+}
+// A put target that discounts LATER spells (the reducer class every mana gate bails or credits on).
+static bool EtbPutTargetReducesSpells(const CardDefinition& t)
+{ return !t.params.reduces_spell_subtype.empty() || t.params.chooses_creature_type || !t.params.reduces_spell_color.empty(); }
+// The most generic {N} one put target's reducer can take off ONE later cast, for the gates that price reducers by an
+// amount; 0 when no legal target reduces. `st` null (a gate with no state) -> a large ceiling (the gate stays open).
+static int EtbPutReducerAmount(const GameState* st, const Action& a)
+{
+    if (a.def == nullptr || !CastHasEtbLibraryPut(*a.def)) { return 0; }
+    if (st == nullptr) { return 99; }
+    std::vector<const CardDefinition*> tg;
+    EtbPutTargetDefs(*st, *a.def, tg);
+    int best = 0;
+    for (const CardDefinition* t : tg)
+    {
+        if (!EtbPutTargetReducesSpells(*t)) { continue; }
+        const int amt = (t->params.reduces_spell_color.empty() ? 0 : 1)
+                      + ((!t->params.reduces_spell_subtype.empty() || t->params.chooses_creature_type)
+                         ? std::max(1, t->params.reduces_spell_subtype_amount) : 0);
+        best = std::max(best, amt);
+    }
+    return best;
+}
+// The scratch-board twin for the two payment walks (SubsetPayableWithFiltersImpl, SeqWalkFixedOrder): right after a
+// put-route cast pays, the legal targets that change what later casts pay join the scratch board -- one that grows
+// a devotion land's yield (while one is live on `cp`), and, when `with_reducers`, one that discounts later spells
+// (the walk's live cost recompute reads reducers off the board). Summoning-sick (entered_this_turn), so no mana
+// ability of one can be tapped. `lib_state` supplies the library (a reused scratch board carries none).
+static void PushEtbPutPhantoms(GameState& cp, const GameState& lib_state, const CardDefinition& d, bool with_reducers)
+{
+    if (!CastHasEtbLibraryPut(d)) { return; }
+    std::vector<const CardDefinition*> tg;
+    EtbPutTargetDefs(lib_state, d, tg);
+    if (tg.empty()) { return; }
+    const bool devotion = LiveDevotionLands(cp) > 0;
+    for (const CardDefinition* t : tg)
+    {
+        const bool reduces = with_reducers && (!t->params.reduces_spell_subtype.empty()
+                                               || !t->params.reduces_spell_color.empty());
+        if (!reduces && !(devotion && CastGrowsDevotion(*t))) { continue; }
+        Permanent ph;
+        ph.card              = t->card;
+        ph.controller_index  = cp.active_player_index;
+        ph.owner_index       = cp.active_player_index;
+        ph.entered_this_turn = true;
+        cp.battlefield.push_back(ph);
+    }
+}
+
 // UPPER BOUND on the mana the devotion-growing casts among `cands` (only those in `sel` when given) can add to the
 // untapped devotion lands' fed yield this turn: per land, the largest single-colour devotion they could add (every
 // such cast resolved before the land taps). The flat pool and the supply bounds read the land at the BOARD's devotion,
@@ -8440,6 +8511,22 @@ static int DevotionGrowthBound(const GameState& state, const std::vector<Action>
     {
         if (a.kind != Action::Kind::CastFromHand || a.def == nullptr || !CastGrowsDevotion(*a.def)) { return; }
         AddCostDevotion(a.def->card.m_mana_cost, add);
+        // ...and the permanent its own ETB PUTS from the library (Woodland Bellower), resolved before any later
+        // Nykthos tap: per colour, the most any one legal target adds (EtbPutTargetDefs; 0 for every other cast).
+        if (CastHasEtbLibraryPut(*a.def))
+        {
+            std::vector<const CardDefinition*> tg;
+            EtbPutTargetDefs(state, *a.def, tg);
+            int mx[5] = { 0, 0, 0, 0, 0 };
+            for (const CardDefinition* t : tg)
+            {
+                if (!CastGrowsDevotion(*t)) { continue; }
+                int one[5] = { 0, 0, 0, 0, 0 };
+                AddCostDevotion(t->card.m_mana_cost, one);
+                for (int c = 0; c < 5; ++c) { mx[c] = std::max(mx[c], one[c]); }
+            }
+            for (int c = 0; c < 5; ++c) { add[c] += mx[c]; }
+        }
     };
     if (sel != nullptr) { for (int j : *sel) { take(cands[static_cast<std::size_t>(j)]); } }
     else { for (const Action& a : cands) { take(a); } }
@@ -8458,6 +8545,20 @@ static bool DevotionOrderDomain(const GameState& state, const std::vector<Action
         const Action& a = acts[static_cast<std::size_t>(j)];
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (a.kind == Action::Kind::CastFromHand && d != nullptr && CastGrowsDevotion(*d)) { return true; }
+    }
+    return false;
+}
+
+// A Bellower put can make a later Beast cheaper only when Bellower resolves first. Price both cast orders
+// even without a devotion land; the fixed rank order may put the discounted spell first.
+static bool EtbPutReducerOrderDomain(const GameState& state, const std::vector<Action>& acts,
+                                     const std::vector<int>& order)
+{
+    if (order.size() < 2) { return false; }
+    for (int j : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::CastFromHand && EtbPutReducerAmount(&state, a) > 0) { return true; }
     }
     return false;
 }
@@ -8946,12 +9047,8 @@ static SameTurnReducerCounts CountSameTurnReducers(const GameState& state,
 {
     SameTurnReducerCounts rc;
     uint16_t chosen = SubtypeRegistry::kNone;   // lazily resolved; deck-constant
-    for (int j : sel)
+    auto credit = [&](const CardDefinition* d)
     {
-        if (const int gya = ActionGyCastReducerAmount(cands[j]); gya > 0)   // Patrician Geist (0 elsewhere)
-        { rc.gy_cast += gya; rc.gy_cast_keys.emplace_back(CastOrderKeyOf(state, cands[j]), gya); }
-        const CardDefinition* d = cands[j].def;
-        if (!d) { continue; }
         if (!d->params.reduces_spell_subtype.empty() || d->params.chooses_creature_type)
         {
             uint16_t id;
@@ -8975,11 +9072,27 @@ static SameTurnReducerCounts CountSameTurnReducers(const GameState& state,
                 else                                                    { rc.sub[id] += amt; }
             }
         }
-        if (d->params.reduces_spell_color.empty()) { continue; }
+        if (d->params.reduces_spell_color.empty()) { return; }
         const std::string& c = d->params.reduces_spell_color;
         if      (c == "R") { ++rc.red; }   else if (c == "W") { ++rc.white; }
         else if (c == "U") { ++rc.blue; }  else if (c == "B") { ++rc.black; }
         else if (c == "G") { ++rc.green; }
+    };
+    for (int j : sel)
+    {
+        if (const int gya = ActionGyCastReducerAmount(cands[j]); gya > 0)   // Patrician Geist (0 elsewhere)
+        { rc.gy_cast += gya; rc.gy_cast_keys.emplace_back(CastOrderKeyOf(state, cands[j]), gya); }
+        const CardDefinition* d = cands[j].def;
+        if (!d) { continue; }
+        credit(d);
+        // A Woodland Bellower in the subset PUTS one library card as it resolves: credit every legal target's
+        // reduction (the union -- see EtbPutTargetDefs; optimistic like the rest of this credit, so it only ADDS).
+        if (CastHasEtbLibraryPut(*d))
+        {
+            std::vector<const CardDefinition*> tg;
+            EtbPutTargetDefs(state, *d, tg);
+            for (const CardDefinition* t : tg) { if (EtbPutTargetReducesSpells(*t)) { credit(t); } }
+        }
     }
     return rc;
 }
@@ -11641,6 +11754,10 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
                 perm.owner_index = cp.active_player_index;
                 cp.battlefield.push_back(perm);
             }
+            // Woodland Bellower (Beasts H): the creature its ETB PUTS from the library grows the devotion too, before
+            // any later cast taps the land (PushEtbPutPhantoms; this walk prices a.cost, so devotion only).
+            if (devotion_growth && a.kind == Action::Kind::CastFromHand && CastHasEtbLibraryPut(*def))
+            { PushEtbPutPhantoms(cp, state, *def, /*with_reducers=*/false); }
             // ...and its resolution: the ETB untap, after the creature's own payment.
             if (untapper)
             { EtbUntapLands(cp, cp.active_player_index, def->params.etb_untap_lands, /*log_ledger=*/false); }
@@ -13091,6 +13208,10 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         // LAND-PUT CREDIT (Search for Tomorrow hard-cast): the basic its credit names enters
         // untapped AFTER this cast paid, so it funds a later cast and never itself.
         if (a.rock_mana.Total() > 0 && LandSearchPutsUntapped(def)) { PutLandPutCreditOnScratch(cp, a); }
+        // WOODLAND BELLOWER (Beasts H): the permanent its ETB PUTS from the library joins right after it paid -- a
+        // devotion grower (a live Nykthos) or a reducer (Krosan Warchief) the live recompute prices later casts off.
+        if (a.kind == Action::Kind::CastFromHand && CastHasEtbLibraryPut(def))
+        { PushEtbPutPhantoms(cp, state, def, /*with_reducers=*/true); }
         // MANA-UNLOCK pieces join as they resolve (a fresh creature: summoning-sick until hasted), and the
         // unlocks fire after this cast, as both apply worlds fire them.
         if (!unlock_acts.empty() && a.hand_index >= 0
@@ -13900,7 +14021,8 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
                         { return cands[static_cast<std::size_t>(j)].kind == Action::Kind::ActivateVial; })
         && (UnlockOrderHasHaste(cands, order, std::any_of(sel.begin(), sel.end(), [&](int j)
                                 { return SeqWalkUnlockEquip(state, cands[static_cast<std::size_t>(j)]); }))
-            || DevotionOrderDomain(state, cands, order));
+            || DevotionOrderDomain(state, cands, order)
+            || EtbPutReducerOrderDomain(state, cands, order));
     // MTG_UO_FOLD (DEFAULT ON; =0 -> the given walk, the ETB retry and the unlock-order search run one after the
     // other, as before). In the unlock-order domain this site's verdict is "the given order pays, or the ETB order
     // does, or some other class order does" -- an OR over walks, so the order they are tried in is free. The given
@@ -14141,7 +14263,8 @@ bool TurnSolver::UnlockPayableOrder(const GameState& state, const std::vector<Ac
         if (SeqWalkUnlockEquip(state, a)) { sel.push_back(i); any_unlock = true; }
         else if (SeqWalkTrailingEquip(state, a)) { sel.push_back(i); }   // priced at the walk's end, as the apply pays it
     }
-    if (!UnlockOrderHasHaste(*use, order, any_unlock) && !DevotionOrderDomain(state, *use, order)) { return false; }
+    if (!UnlockOrderHasHaste(*use, order, any_unlock) && !DevotionOrderDomain(state, *use, order)
+        && !EtbPutReducerOrderDomain(state, *use, order)) { return false; }
     const std::vector<int> none;
     if (SeqWalkFixedOrder(state, *use, sel, order, none)) { return false; }   // the given order pays: kept
     return UnlockOrderSearch(state, *use, sel, order, none, /*nearest=*/true);
@@ -56994,7 +57117,8 @@ static std::vector<std::vector<int>> ViewerGroupCosts(const std::vector<Action>&
 }
 
 static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands,
-                          int extra_credit = 0, const GameState* etb_state = nullptr);
+                          int extra_credit = 0, const GameState* etb_state = nullptr,
+                          const GameState* put_state = nullptr);
 
 // THE VALVE'S ESTIMATE MUST KNOW ABOUT THE COPY FOLD, OR IT LIES BY ORDERS OF MAGNITUDE.
 //
@@ -58421,8 +58545,11 @@ static int MintHeroismBonus(const Action& a, int heroism_copies, int heroism_bod
 // it); Solve passes 0, so its bound is byte-identical. This is an UPPER bound on the turn's mana, so
 // adding to it can only LOOSEN the prune -- it can never drop a payable plan.
 static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands,
-                          int extra_credit, const GameState* etb_state)
+                          int extra_credit, const GameState* etb_state, const GameState* put_state)
 {
+    // `put_state`: the state whose LIBRARY a put-route cast (Woodland Bellower) searches, for the put-reducer
+    // bail below only. Solve passes it without enabling the enumerator-only `etb_state` terms.
+    const GameState* lib_state = put_state != nullptr ? put_state : etb_state;
     static const bool on = EnvOn("MTG_MANA_PRUNE", true);   // DEFAULT ON; =0 disables
     if (!on) { return std::numeric_limits<int>::max(); }
     // Affinity applies a per-subset generic discount consider() sees but this scalar bound cannot ->
@@ -58447,6 +58574,10 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
                         || a.def->params.chooses_creature_type))
           { return std::numeric_limits<int>::max(); } }
     }
+    // ...and a reducer a cast's own ETB can PUT from the library (Woodland Bellower -> Krosan Warchief): the same
+    // CountSameTurnReducers credit, so the same bail (EtbPutReducerAmount: 0 unless a legal put target reduces).
+    for (const Action& a : cands)
+    { if (EtbPutReducerAmount(lib_state, a) > 0) { return std::numeric_limits<int>::max(); } }
     // A Ragemonger cast/vialed THIS turn takes coloured pips off later Minotaur casts -- the same
     // per-subset discount shape as the Medallion bail above (pip credit, not generic).
     for (const Action& a : cands)
@@ -58631,7 +58762,8 @@ static bool SelectionExactManaGateEnabled() { return g_sel_mana_gate; }
 // ManaGateIndex allocation. Solve is the rollout leaf (once per node), so an unconditional
 // make_unique cost +0.3..0.65pp on the decks that never use the gate -- burn/treasure_hunt paid a
 // malloc+free per node for a gate that always declined (callgrind, 2026-07-29).
-static inline bool ManaGateWouldHelp(const std::vector<Action>& cands, const GameState* etb_state)
+static inline bool ManaGateWouldHelp(const std::vector<Action>& cands, const GameState* etb_state,
+                                     const GameState* lib_state = nullptr)
 {
     for (const Action& a : cands)
     {
@@ -58644,6 +58776,7 @@ static inline bool ManaGateWouldHelp(const std::vector<Action>& cands, const Gam
                           || !a.def->params.reduces_spell_subtype.empty()
                           || a.def->params.chooses_creature_type))
             || ActionGyCastReducerAmount(a) > 0   // Patrician Geist (soft term, below)
+            || EtbPutReducerAmount(lib_state, a) > 0   // a reducer the cast's ETB puts (Bellower -> Warchief)
             || EtbUntapBoundCredit(etb_state, a) > 0
             || LandAuraBoundCredit(etb_state, a) > 0
             || UntapLandActionBoundCredit(etb_state, a) > 0)
@@ -58669,8 +58802,11 @@ static int WidenBoundGain(const Action& a, int domain_mask, int live)
 
 static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& cands,
                                const std::vector<int>& independent, ManaGateIndex& out,
-                               const GameState* etb_state = nullptr)
+                               const GameState* etb_state = nullptr, const GameState* put_state = nullptr)
 {
+    // `put_state`: the library a put-route cast (Woodland Bellower) searches, read ONLY by the put-reducer terms
+    // (ManaPruneBound's note); Solve passes it without enabling the enumerator-only `etb_state` terms.
+    const GameState* lib_state = put_state != nullptr ? put_state : etb_state;
     // Enumerator only (`etb_state` set), the same asymmetry as the ETB-untap term.
     int w_dom = 0, w_live = 0;
     if (etb_state && DomainWidenEnabled() && DomainWidenPartialOn()) { ScalingWidenScan(*etb_state, w_dom, w_live); }
@@ -58679,7 +58815,7 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
     {
         for (const Action& a : cands) { if (WidenBoundGain(a, w_dom, w_live) > 0) { w_help = true; break; } }
     }
-    if (!w_help && !ManaGateWouldHelp(cands, etb_state)) { return false; }
+    if (!w_help && !ManaGateWouldHelp(cands, etb_state, lib_state)) { return false; }
 
     const int m = static_cast<int>(cands.size());
     out.term.assign(m, ManaGateTerm{});
@@ -58724,7 +58860,8 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
                                || a.def->params.cost_less_per_opponent_noncombat_damage)
                               || a.def->params.chooses_creature_type))
                    || ActionColoredReducerDef(a) != nullptr      // Ragemonger pip credit
-                   || ActionGyCastReducerAmount(a) > 0) ? 1 : 0; // Patrician Geist (graveyard casts)
+                   || ActionGyCastReducerAmount(a) > 0           // Patrician Geist (graveyard casts)
+                   || EtbPutReducerAmount(lib_state, a) > 0) ? 1 : 0; // a put reducer (Bellower -> Warchief)
         t.gen = std::max(0, a.cost.generic);
         if (ltb_sum > 0 && a.kind == Action::Kind::CastFromHand && a.def != nullptr)
         {
@@ -58744,7 +58881,8 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
             t.red  = (a.def->params.reduces_spell_color.empty() ? 0 : 1)
                    + ((!a.def->params.reduces_spell_subtype.empty() || a.def->params.chooses_creature_type)
                       ? std::max(1, a.def->params.reduces_spell_subtype_amount) : 0)
-                   + ActionGyCastReducerAmount(a);
+                   + ActionGyCastReducerAmount(a)
+                   + EtbPutReducerAmount(lib_state, a);   // the put target's own reduction (0 elsewhere)
         }
     }
     out.pool_total   = pool.Total();
@@ -66466,7 +66604,8 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
     // ...plus the first-equip waiver's addend (0 unless leaf_waiver; see its declaration).
     // ...plus the Nykthos devotion growth (DevotionGrowthBound; 0 without an untapped devotion land).
     const int mana_bound = ManaPruneBound(pool, cands, spec_ctx.bound_credit + leaf_waiver_bound
-                                                       + DevotionGrowthBound(state, cands));
+                                                       + DevotionGrowthBound(state, cands),
+                                          /*etb_state=*/nullptr, /*put_state=*/&state);   // Bellower's library
     // Both indices are allocated ONLY when the deck actually uses them. Solve is the rollout leaf --
     // called once per node -- so even default-constructing their (empty) vectors on every call cost a
     // measurable ~1% on decks that use neither (Hinata/TH/burn A/B, 2026-07-29). A null pointer plus a
@@ -66477,7 +66616,8 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
     if (SelectionExactManaGateEnabled() && gate_relevant && !spec_ctx.live && !leaf_waiver)
     {
         auto idx = std::make_unique<ManaGateIndex>();
-        if (BuildManaGateIndex(pool, cands, independent, *idx)) { gate_owned = std::move(idx); }
+        if (BuildManaGateIndex(pool, cands, independent, *idx, /*etb_state=*/nullptr, /*put_state=*/&state))
+        { gate_owned = std::move(idx); }
     }
     const ManaGateIndex* gate    = gate_owned.get();      // null -> legacy scalar path
     const bool           gate_on = (gate != nullptr);
@@ -89232,6 +89372,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             // rescue above walks ONE order; which cast resolves first decides the fed yield, so the sequenced walk
             // and its payable-order search (DevotionOrderDomain) must get to price the others. Rescue-only.
             const bool pending_devotion_growth = DevotionOrderDomain(state, cands, sel);
+            const bool pending_put_reducer = EtbPutReducerOrderDomain(state, cands, sel);
             bool pending_enter_haste = false;
             if (pending_enter_haste_bound > 0)
             {
@@ -89246,10 +89387,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                 pending_enter_haste = watcher && dork;
             }
             if (!ef_on && !seq_on_etb && !seq_on_aura && !pending_noncombat_discount
-                && !pending_enter_haste && !pending_devotion_growth)
+                && !pending_enter_haste && !pending_devotion_growth && !pending_put_reducer)
             { return false; }
             bool interacts = (ef_on && any_hinata_credit) || pending_noncombat_discount
-                          || pending_enter_haste || pending_devotion_growth;
+                          || pending_enter_haste || pending_devotion_growth || pending_put_reducer;
             int  aura_bonus  = 0;           // new mana a same-subset land Aura brings online
             bool other_inter = interacts;   // any interaction OTHER than a land Aura?
             int  nonaura     = 0;           // casts the Aura could be funding

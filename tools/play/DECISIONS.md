@@ -754,7 +754,11 @@ still keys on cast NAMES only (byte-identical GT), delegating the target to the 
 Harbinger — "you MAY search"). A permanent's ETB tutor fetches with `human_repick` false, so the menu's
 named `tutor_target` variants are the human's only say; under human play `CollectActions` appends one
 more cast variant whose `tutor_target` is the sentinel `(decline search)` (`kTutorDeclineTarget`), which
-`PerformTutor` resolves as a decline on both the executor and rollout paths. A tutor SPELL needs none (its
+`PerformTutor` resolves as a decline on both the executor and rollout paths. **Woodland Bellower** (Beasts H,
+2026-11-22: "you may search ... put it onto the battlefield, then shuffle") is the same shape on the PUT route: one
+main-phase cast variant per distinct legal name (`tutor_target`) plus `(decline search)`, carried into its own ETB
+(`FireOwnEtbTriggersBody` step 4b -> `PerformTutorToBattlefield`, the pin suppresses the Dragon multi-pick), where the
+decline puts nothing and does NOT shuffle; no resolution frame re-asks. A tutor SPELL needs none (its
 resolution `tutor_etb` frame already takes -1), and a Vial/put-route ETB tutor asks `tutor_etb` with -1 =
 decline. Autonomous enumeration never emits it (the search's decline is the `tutor_choice` index axis).
 **Land searches reuse `tutor_etb` as SEQUENTIAL per-land prompts** (2026-10-15; core/LandSearch.h

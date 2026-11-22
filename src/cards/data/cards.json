@@ -19291,6 +19291,32 @@
     "toxic": 1,
     "combat_damage_self_proliferate": true
    }
+  },
+  {
+   "name": "Woodland Bellower",
+   "mana_cost": "{4}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Beast"
+   ],
+   "keywords": [],
+   "power": 6,
+   "toughness": 5,
+   "oracle_text": "When this creature enters, you may search your library for a nonlegendary green creature card with mana value 3 or less, put it onto the battlefield, then shuffle. [ETB tutor-to-battlefield: the Natural Order put route (tutor_to_battlefield_single) fired from the creature's own ETB (FireOwnEtbTriggersBody, one body for executor and rollout); filters tutor_types Creature + tutor_color G + tutor_max_mv 3 + tutor_nonlegendary (Kaheera / Migloz excluded; Krosan Warchief, Garruk's Harbinger, Bloated Contaminator are the legal targets in this list). The target is the searched tutor axis (one variant per distinct legal name; provider TutorCandidates is the only narrower). 'You may' = tutor_optional decline arm: no put, no shuffle. A putting is not a cast (no Herald of Ilharg / Krosan Warchief cast triggers); the put creature's ETB watchers fire, and a Garruk's Packleader draw it raises waits for the shuffle. PARTIAL (USER-approved 2026-11-22): a deliberate fail-to-find with a legal match left in the library is not offered (it differs from a decline only by the shuffle). ORDERING COLLAPSE (USER-approved 2026-11-21): when Bellower's entry also triggers Garruk's Packleader, the watcher draw resolves before the search (pre-shuffle top); the reverse trigger order is not offered.]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_battlefield_single": true,
+    "tutor_types": [
+     "Creature"
+    ],
+    "tutor_color": "G",
+    "tutor_max_mv": 3,
+    "tutor_nonlegendary": true,
+    "tutor_shuffle_after": true,
+    "tutor_optional": true
+   }
   }
 ]
 }
