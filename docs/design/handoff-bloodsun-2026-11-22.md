@@ -19,15 +19,13 @@ decisions" and B12 / B12-bis, then only the §14 notes for the step you take.
 - Logs given to the USER: `/workspaces/MagicDeckTester2/logs/bloodsun-grim-lost/` (game logs of the Grim prune's lost
   games, ship / prune / amendment arms; play them in `tools/replay/index.html`).
 
-## In flight at handoff (check before acting)
-Integration 2 (brief `logs/bloodsun/int-2-brief.md`; handoff, if written, `logs/bloodsun/int-2-handoff.md`): after
-87143e9cb, ONE pooled `test/regression.sh --both` was running (`build/scratch/bloodsun/int2/tier.sh`, pid in
-`int2/tier.pid`, `int2/tier.log`). Remaining INT-2 steps: inspect every moved key against origin GT (`int2/moves.md`,
-the `int1/moves.md` shape: INT-1 traced all 27 moved keys / 88 games to step 6d `MTG_BP_NEST_REARM`, commit
-39ca4245b); re-run every slower game at `--depth 8 --budget-ms 0` (must recover; the 3 Hinata seed-2019 gi17 games
-already do on 87143e9cb, `int2/fix_rec*`); then `bash test/regression.sh --both --accept` (note naming 39ca4245b /
-b5253ba63 / 87143e9cb / 95d250743), `python3 test/check_gt_logs.py`, `python3 scripts/check_references_safe.py`,
-commit "GT: accept smoke + regression for Blood Sun integration ...". If git log shows that GT commit, INT-2 is done.
+## Integration: DONE (2026-11-22)
+INT-2 (`logs/bloodsun/int-2-brief.md`): 87143e9cb TapAheadUndo fixed the phantom-mana kill; mtg-test 3981/3981,
+scenarios 670/670; pooled tier: the same 27 keys as INT-1 move vs origin GT, 94 games, 8 faster, 0 slower; GT accepted
+014ea5d01 (`check_gt_logs.py` 1409 consistent; `check_references_safe.py` rc 0). Root cause + table: blood-sun-pipeline.md
+"Implementation notes (integration 2)". FOLLOW-UP (sound fix, do it): `EtbUntapTapAheadIntoFloat` (Peregrine Drake /
+Cloud of Faeries; EDF) leaks the same way on a failed payment -- wrap it in `TapAheadUndo`, then A/B the EDF keys that
+move and accept.
 
 ## Next, in order
 1. **Land it (the parent's steps, after the GT commit):** `python3 scripts/check_references_safe.py`; `git fetch`; if
