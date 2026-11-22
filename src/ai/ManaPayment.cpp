@@ -4334,7 +4334,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
           int swap_k = 0;
           ManaPool swap_back;
           if (s_cre_exact && float_drain_known && for_creature && restricted > 0 && cost_in.snow_pips == 0
-              && FloatLeftoverManaEnabled())
+              && FloatLeftoverManaEnabled() && CreatureFloatSwapOn())
           {
               const PlanTraits* pt = CurrentPlanTraits();
               int room = cost_in.generic - tap_bill.generic;
