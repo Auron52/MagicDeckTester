@@ -217,8 +217,10 @@ these questions for any one change. Instead the regeneration queue handles these
 regenerating it when developing or doing so when holding up the queue." + "(although if you do generate the overnight
 at some point, I recommend pulling from origin first)". So: mullgen `fast`; overnight FULL-set expansion once at
 adoption, after a fresh pull, never under the lease.
-STILL OPEN for the USER: (4) per-turn fold (likely moot under the anticipating Browbeat policy); pingers counted in
-"visible" damage? (default no); same anticipation for Vexing Devil?
+USER 2026-11-22: "If the pinger pings are visible they probably should. Yes, Vexing Devil should act the same way.
+That's good if we don't need to work with the fold anymore." -> relayed to cb-bbgap: visible = combat to come + one ping
+per READY tap pinger; same anticipation for Vexing Devil (shared helper; its decks join the A/B); fold lever deleted if
+the main-2 trigger goes. No USER questions open.
 NEXT after landing: s9 check (USER expects T5 with the opponent Karoo fix); Stage 6 report + 6a disclosure (items: fold
 OFF verdict; main-1 attack-then-Browbeat gap; PEAKS_PLAIN_FOLD; Browbeat out of signature; extra Peaks positions; echo
 census NO GAP; Pyromancer response ping / un-ping; 1-power pinger exemption; Peaks inert-class premise; PoP vs Peaks;
