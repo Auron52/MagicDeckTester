@@ -6,10 +6,13 @@ The four sets were cherry-picked linearly onto current shared `94cd1e06b` in
 `.claude/worktrees/worldfire-integration` (`wip/worldfire-integration`), LTB →
 Worldfire cantrips → tutor width → free turns. The Worldfire-only GT acceptance
 commit was skipped for a single integrated acceptance after audit. The combined
-build passed, and the serial suite passed 3,946/3,946. The one pooled
-smoke/regression/scenario/reference run is in progress in
-`logs/worldfire-integration/both.log`. The LTB follow-ups are now recorded in
-`docs/design/worldfire-sweep-deferred.md`. No push queue lease has been joined.
+build passed, and the serial suite passed 3,946/3,946. The pooled run finished:
+608 scenarios passed; all 940 references replayed with zero drift, board
+divergence, or enum gap. All 133 changed keys and 28 searched-depth slower games
+were audited in `docs/design/worldfire-integration-audit.md`. Smoke and regression
+ground truth were accepted from that run, with 1,409 consistent logs. The LTB
+follow-ups are recorded in `docs/design/worldfire-sweep-deferred.md`. The
+integration joined the push queue at 2026-11-22 13:01 UTC.
 
 ## Codex continuation (2026-11-22 ~12:05 UTC)
 
