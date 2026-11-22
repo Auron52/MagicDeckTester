@@ -15747,6 +15747,22 @@ static bool AttackPlanLifegainEnabled()
     static const bool env_on = EnvOn("MTG_ATTACK_PLAN_LIFEGAIN", true);   // DEFAULT ON; =0 pre-plan gain
     return heurarm::Flag(heurarm::ATTACK_PLAN_LIFEGAIN, env_on);
 }
+// MTG_ATTACK_LORD_CAST -- a lord / anthem creature the subset casts BEFORE combat ("other Spirits you control get
+// +1/+1") pumps every attacker already on the board this turn, and nothing projected it: the walk entered the cast
+// body and erased it again before reading the board, so the static pump left with it. Spirits d0 gi2341 (seed
+// 1412341) T4, opponent at 12: {Drogskol Captain, Supreme Phantom} deals 14 through the two lords but read
+// proj_atk 8, so it did not read as a win and competed on eval alone (it won only while no other subset out-scored
+// it). Now a lord body stays on the walk's board, TAPPED: a tapped lord still grants its static bonus (CR 613), and
+// tapped it is never counted as an attacker, so its own attack stays haste_cast_atk's (no double count). Exact,
+// through the same PendingAttackDamage / ComputeLordBonus the board uses (subtype filter, "other", double strike,
+// the spent mana sources tapped). A lord's pump on a HASTE body cast in the same plan is still not credited (the
+// conservative direction). Inert for a plan with no lord cast, and with no attack on the board (pending_atk 0).
+// Lockstep: Solve and EnumeratePlans both read it through AttackTapLoss. Default ON; =0 -> no lord credit.
+static bool AttackLordCastEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_LORD_CAST", true);   // DEFAULT ON; =0 no lord credit
+    return heurarm::Flag(heurarm::ATTACK_LORD_CAST, env_on);
+}
 static bool AttackAuraHostTapEnabled()
 {
     static const bool env_on = EnvOn("MTG_ATTACK_AURA_HOST_TAP", true);   // DEFAULT ON; =0 host counted
@@ -15805,7 +15821,7 @@ static bool AttackReprojectIntentEnabled()
 }
 
 // Per-candidate walk flags (AttackTapCtx::cand_walk).
-enum : unsigned char { kWalkPump = 1, kWalkLife = 2 };
+enum : unsigned char { kWalkPump = 1, kWalkLife = 2, kWalkLord = 4 };
 
 struct AttackTapCtx
 {
@@ -15994,13 +16010,14 @@ std::vector<std::string> TurnSolver::PlanCastOrderNames(const GameState& state, 
 // Craterhoof cast at or after it, the counters of a later gain). Then the plan's lifegain activations,
 // in plan order, which is where the trailing pass applies them -- after every cast.
 static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vector<Action>& cands,
-                           const std::vector<int>& sel, bool pump, bool life)
+                           const std::vector<int>& sel, bool pump, bool life, bool lord)
 {
     RevealLogPause _rlp;   // a projection: no play events, no human choosers
     const int active = t.active_player_index;
     std::vector<int> order;
     PlanCastOrder(state, cands, sel, order);
     constexpr int kWalkNumberBase = 1 << 29;   // synthetic numbers for the bodies the walk enters
+    constexpr int kWalkLordBase   = 1 << 28;   // ... and for the lord bodies it KEEPS (MTG_ATTACK_LORD_CAST)
     std::vector<std::pair<int, int>> entered;  // (number, this-turn attack weight: 0 sick, 1, 2 DS)
     for (int j : order)
     {
@@ -16014,15 +16031,19 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
         if (!d->card.IsLand()) { ++t.spells_cast_this_turn; }
         if (life) { ApplyCastLifegain(t, active, *d, a.player_target); }   // instants / sorceries only (inside)
         if (d->card.IsLand() || d->card.IsInstant() || d->card.IsSorcery()) { continue; }
-        const bool body = d->card.IsCreature()
+        // MTG_ATTACK_LORD_CAST: a lord body is kept (below kWalkNumberBase, so the erase skips it) and TAPPED, so
+        // its static pump reaches the board's attackers while it is never counted as one itself.
+        const bool keep_lord = lord && IsLordPermanent(*d);
+        const bool body = d->card.IsCreature() || keep_lord
                        || (life && (LifegainAttackWatcher(d->params) || EnterLifegainWatcher(d->params)));
         if (!body) { continue; }
         Permanent p;
         p.card              = d->card;
-        p.card.m_number     = kWalkNumberBase + j;
+        p.card.m_number     = (keep_lord ? kWalkLordBase : kWalkNumberBase) + j;
         p.controller_index  = active;
         p.owner_index       = active;
         p.entered_this_turn = true;
+        if (keep_lord) { p.tapped = true; }
         t.battlefield.push_back(p);
         const int ei = static_cast<int>(t.battlefield.size()) - 1;
         const int weight = a.haste_attack_power > 0
@@ -16390,7 +16411,8 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
         }
         life = consumer;
     }
-    if (!pump && !life) { return; }
+    const bool lord = pending_atk > 0 && AttackLordCastEnabled();   // nothing on the board for a lord to pump
+    if (!pump && !life && !lord) { return; }
     for (int j = 0; j < static_cast<int>(cands.size()); ++j)
     {
         const Action& a = cands[j];
@@ -16404,6 +16426,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
             if (life && d->params.cast_lifegain > 0 && !d->params.solo_target_trick
                 && (d->card.IsInstant() || d->card.IsSorcery())) { f |= kWalkLife; }
             if (life && enter_lg && d->card.IsCreature()) { f |= kWalkLife; }
+            if (lord && IsLordPermanent(*d)) { f |= kWalkLord; }   // MTG_ATTACK_LORD_CAST
         }
         else if (life && a.kind == Action::Kind::ActivatePermAbility
                  && (a.ability_mode == Action::AbilityMode::TapLifegain
@@ -16501,7 +16524,7 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
     std::uint64_t spent = 0;
     const int lost_base = AttackTapDiscountSplit(*pay, need, need_nc, &spent);
     // Stage 2: which re-projection terms THIS subset needs.
-    bool walk_pump = false, walk_life = false;
+    bool walk_pump = false, walk_life = false, walk_lord = false;
     if (!ctx.cand_walk.empty())
     {
         for (int j : sel)
@@ -16509,9 +16532,10 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
             const unsigned char f = ctx.cand_walk[static_cast<std::size_t>(j)];
             if (f & kWalkPump) { walk_pump = true; }
             if (f & kWalkLife) { walk_life = true; }
+            if (f & kWalkLord) { walk_lord = true; }
         }
     }
-    const bool walk   = walk_pump || walk_life;
+    const bool walk   = walk_pump || walk_life || walk_lord;
     const bool reproj = spent != 0 && (walk || AttackTapReprojectEnabled());
     if (!reproj && !walk) { return (ctx.pending_atk - pend1) + lost_base; }
     // Memo key: the stage-1 taps, the spent sources, and the subset's walk-relevant members (casts and
@@ -16568,7 +16592,7 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
         }
     }
     AttackIntentScope intent_scope(PrePlanAttackIntent(state, ctx));   // point 10
-    const int pend2 = walk ? ProjectPlanWalk(t, state, cands, sel, walk_pump, walk_life)
+    const int pend2 = walk ? ProjectPlanWalk(t, state, cands, sel, walk_pump, walk_life, walk_lord)
                            : PendingAttackDamage(t);
     if (keyable) { ctx.memo2.emplace(key, pend2); }
     return (ctx.pending_atk - pend2) + (reproj ? 0 : lost_base);
