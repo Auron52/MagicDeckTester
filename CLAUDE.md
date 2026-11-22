@@ -462,6 +462,17 @@ the CPU if possible."*), checking memory (`free -g`) first.
     ON despite measuring 0.2%. `MTG_FUNGUS_DEVOUR_LANDMARKS` is the second — eating 3 of eight
     identical N/N tokens really does differ from eating 5 — and stays OFF until a quality A/B.
 
+- **"DO NOTHING MORE" IS ALWAYS AN OPTION — AT EVERY SEARCH ROOT, MID-PHASE INCLUDED (user hard rule,
+  restated 2026-11-22).** Every searched decision about what to do next in a phase must offer ending the phase
+  with nothing further done (the idle pass), whatever the root: the start of a main phase, a re-solve after a
+  mid-turn draw or breakpoint, the executor's second entry into a main, the viewer's search-from-here, a
+  scenario or fixture resumed mid-turn. No prune, fold, filter, provider hook or "something is castable" rule
+  may remove it. The user's words: *"This needs to stop reappearing. I say every time that it must always be
+  able to do nothing to end the phase."* It reappeared (2026-11-22, Creature Burn) as a search rooted mid-main
+  that offered only cast plans while anything was castable, so "pass, attack, then main-2 Browbeat" was
+  unfindable. It is a COMPLETENESS defect, not a quality lever: no flag, no A/B to adopt it; validate it as a
+  play change and accept the GT.
+
 - **A BUDGET MAY RE-PRICE WORK, IT MAY NOT MAKE A LINE UNFINDABLE — COMPLETENESS AT LARGE BUDGET IS
   THE INVARIANT (user directive, 2026-10-06).** The user's words: *"I won't accept a lossy
   solution"*, and the general form: *"You can use practically any methods with good results to
