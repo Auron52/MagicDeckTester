@@ -675,6 +675,12 @@ struct GameState
     // discard at its end step, a creature it could have cast -- the lock check of that turn does not hold. Set and
     // consumed inside one opponent turn (like pending_free_turn): never live at a search node, never folded.
     bool                     sire_lock_veto               = false;
+    // MTG_FREE_TURN_ANNIHILATOR_FAIR (core/SpellEffects.h ApplyAnnihilator, opponentdeck::AnnihilatorWouldKeepPermanent):
+    // an annihilator sacrifice of OUR turn took every opposing permanent, but the opponent could have cast enough
+    // nonland permanents to keep one -- the next regular opponent turn's lock check does not hold (cleared there,
+    // NoteOpponentTurnEnd). LIVE at search nodes (our combat -> the opponent's turn end), so it IS folded, value-gated
+    // (BuildSimKey, dominance::Build, the route signature). Never set unless the lever and the rule are armed.
+    bool                     annihilator_lock_veto        = false;
     // Extra turns are taken in reverse creation order (CR 500.7). Zero names our player;
     // one names the passive opponent. Keep the old own-turn count for the existing search
     // gates and for scenario states that install pending_extra_turns directly.

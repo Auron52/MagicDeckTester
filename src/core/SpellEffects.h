@@ -25978,6 +25978,12 @@ inline void ApplyAnnihilator(GameState& state, int controller, std::vector<int>&
     }
     if (total <= 0) { return; }
     const int defender = 1 - controller;
+    // MTG_FREE_TURN_ANNIHILATOR_FAIR (DEFAULT OFF; the free-turn rule armed -- FreeTurnsOn and the lock trait): a sacrifice
+    // that takes every opposing permanent while a real opponent would have kept one (virtual targets = the nonland
+    // permanents it could have cast from hand) vetoes the next lock check. A check only: the sacrifice is unchanged.
+    if (defender == 1 && state.deck_has_free_turn && FreeTurnsOn() && FreeTurnAnnihilatorFairOn()
+        && opponentdeck::AnnihilatorWouldKeepPermanent(state, total))
+    { state.annihilator_lock_veto = true; }
     int sacrificed = 0;
     std::string gone;
     for (int k = 0; k < total; ++k)

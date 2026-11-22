@@ -706,8 +706,9 @@ bool GoldFishRunner::DeckMayLockOpponent(const Decklist& deck)
     // of that card you would drop all permanents you can on the field, but the opponent has no ability to do so."
     // and then: "That is why it is in the list, because some decks literally lose to the card." / "(and it
     // protects your board)". So it stays IN; MTG_FREE_TURN_SIRE_FAIR (core/FreeTurns.h) is the fairness check.
-    static const bool sire_in = EnvOn("MTG_FREE_TURN_SIRE", true);
-    auto locks = [](const std::vector<Card>& zone) {
+    static const bool sire_env = EnvOn("MTG_FREE_TURN_SIRE", true);
+    const bool sire_in = heurarm::Flag(heurarm::FREE_TURN_SIRE, sire_env);   // per-job arm (one pooled A/B batch)
+    auto locks = [sire_in](const std::vector<Card>& zone) {
         for (const Card& c : zone)
         {
             const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -1090,6 +1091,8 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     result.games_played = num_games;
     result.win_turns.resize(num_games, -1);
     result.inf_life_turn.resize(num_games, -1);
+    std::vector<int> free_n(static_cast<std::size_t>(std::max(0, num_games)), 0);    // informational (RunResult)
+    std::vector<int> extra_n(static_cast<std::size_t>(std::max(0, num_games)), 0);
 
     // Detect once whether this deck's second main is relevant (e.g. spectacle
     // finishers cast after combat). All worker AIs get the same setting.
@@ -1238,6 +1241,8 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 }
                 result.win_turns[gi]     = win_turn;
                 result.inf_life_turn[gi] = state.inf_life_turn;
+                free_n[static_cast<std::size_t>(gi)]  = state.free_turns_taken;
+                extra_n[static_cast<std::size_t>(gi)] = state.extra_turns_taken;
                 running[static_cast<std::size_t>(t)].store(-1, std::memory_order_release);
                 // Diagnostic (MTG_DUMP_WINS, inert by default): per-game win turn, for
                 // per-game A/B diffs between builds (e.g. `join` two runs to find the
@@ -1282,6 +1287,8 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     }
     result.avg_turns = ComputeAvgTurns(result.win_turns, max_turns);
     for (int t : result.inf_life_turn) { if (t >= 0) { ++result.games_inf_life; } }
+    for (int n : free_n)  { result.free_turns_total  += n; }
+    for (int n : extra_n) { result.extra_turns_total += n; }
 
     if (logging)
     {
@@ -2356,7 +2363,8 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     state.opponent_library_read = DeckTouchesOpponentZones(deck) || DeckUsesDiverseOpponentPool(deck);
     if (legacy_passive_opponent_lands) { state.opponent_plays_lands = false; }
     // FREE TURNS (MTG_FREE_TURNS only): the screw / flood / bounceland hurdles on the opponent's opening hand(s),
-    // so mana screw alone cannot lock the opponent (core/FreeTurns.h). A no-op with the flag off.
+    // so mana screw alone cannot lock the opponent (core/FreeTurns.h). A no-op with the flag off, except that
+    // MTG_OPP_BOUNCE_OPENING (default off) applies the bounceland opening rule in every game.
     freeturn::ApplyOpeningHurdles(state);
 
     DealWishPool(state, deck);

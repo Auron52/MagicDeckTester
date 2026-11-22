@@ -21,6 +21,7 @@
 #include "../cards/CardDatabase.h"
 #include "../ai/EngineFlags.h"   // FreeTurnHurdlesOn: the free-turn rule's cleanup floor
 #include <algorithm>
+#include <array>
 #include <string>
 #include <utility>
 #include <vector>
@@ -308,9 +309,11 @@ inline void EndOfTurnDrawHead1(GameState& state)
 // THE HAND'S TWO SIDES under the free-turn rule (USER 2026-11-22: "I guess a MDFC that is both should count as
 // whatever you have less of."). Shared by the lock (core/FreeTurns.h HeadLocked), the opening-hand hurdles and the
 // cleanup floor below, so the three can never disagree. Every card that is not a spell//land MDFC counts by its
-// front face; then each MDFC joins whichever side is SMALLER at that point, a TIE going to LAND (agent default,
-// reported). So an MDFC fills an empty side: {Bolt, MDFC} is 1 land + 1 nonland; {Mountain, MDFC} likewise;
-// a hand holding only {MDFC} is 1 land + 0 nonlands (the tie).
+// front face; then each MDFC joins whichever side is SMALLER at that point, a TIE going to NONLAND (agent reading,
+// reported to the USER 2026-11-22: an opponent with lands out would cast the spell side, so a tie read as a land
+// could lock an opponent that is not locked; read as a nonland it never can). So an MDFC fills an empty side:
+// {Bolt, MDFC} is 1 land + 1 nonland; {Mountain, MDFC} likewise; a hand holding only {MDFC} is 0 lands + 1 nonland
+// (the tie).
 struct HandSides { int lands = 0; int nonlands = 0; };
 // A spell//land modal double-faced card: a nonland front whose back face is a land (Turntimber Symbiosis).
 inline bool IsSpellLandMdfc(const CardDefinition* def)
@@ -337,8 +340,65 @@ inline HandSides CountHandSides(const std::vector<Card>& hand, int skip = -1)
         else if (HandCardIsLandFront(c)) { ++h.lands; }
         else { ++h.nonlands; }
     }
-    for (; mdfcs > 0; --mdfcs) { if (h.lands <= h.nonlands) { ++h.lands; } else { ++h.nonlands; } }
+    for (; mdfcs > 0; --mdfcs) { if (h.lands < h.nonlands) { ++h.lands; } else { ++h.nonlands; } }
     return h;
+}
+
+// THE FREE-TURN FAIRNESS CHECKS' MANA (core/FreeTurns.h SireDeployableCreature; AnnihilatorWouldKeepPermanent below).
+// One head's lands on the battlefield (its card-number band; a land token counts, a land is a land) and, per colour,
+// how many of them produce it. A card is castable with that when its mana value <= the land count and each coloured
+// pip is covered by that many lands producing the colour (an X is 0; a hybrid pip counts its first colour, as
+// ManaCost stores it). A CHECK only, for a passive opponent that never casts.
+struct HeadMana { int lands = 0; std::array<int, 5> sources{}; };
+inline HeadMana HeadManaOf(const GameState& state, int head)
+{
+    HeadMana m;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (!HeadControls(p, head) || !p.card.IsLand()) { continue; }
+        ++m.lands;
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        for (Color c : d->params.produces)
+        {
+            const int k = static_cast<int>(c);
+            if (k >= 0 && k < 5) { ++m.sources[static_cast<std::size_t>(k)]; }
+        }
+    }
+    return m;
+}
+inline bool CastableWith(const CardDefinition* d, const HeadMana& m)
+{
+    if (d == nullptr) { return false; }
+    const ManaCost& c = d->card.m_mana_cost;
+    if (c.ManaValue() > m.lands) { return false; }
+    return c.white <= m.sources[0] && c.blue <= m.sources[1] && c.black <= m.sources[2] && c.red <= m.sources[3]
+        && c.green <= m.sources[4];
+}
+// MTG_FREE_TURN_ANNIHILATOR_FAIR (USER 2026-11-22: "apply the same rule to Annihilator if even just to check if it
+// would make enough sacrifice targets to keep a permanent"). Called by ApplyAnnihilator BEFORE the sacrifice, with
+// the annihilator total: does the sacrifice take EVERY opposing permanent (real <= total), while a real opponent that
+// had cast the nonland PERMANENT cards in its hand it could afford (CastableWith its head's lands; MDFCs by their
+// front face, the placeholder sorcery never) would have had more than `total` permanents, so kept one? Both heads
+// (2HG: the defending team's shared board; each hand on its own head's lands). A check only: no state changes.
+inline bool AnnihilatorWouldKeepPermanent(const GameState& state, int total)
+{
+    int real = 0;
+    for (const Permanent& p : state.battlefield) { if (p.controller_index == 1) { ++real; } }
+    if (real > total) { return false; }   // it keeps a real permanent: the lock check reads the board as usual
+    int virt = 0;
+    auto count_hand = [&](const std::vector<Card>& hand, int head) {
+        const HeadMana m = HeadManaOf(state, head);
+        for (const Card& c : hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || d->card.IsLand() || !d->card.IsPermanentCard()) { continue; }
+            if (CastableWith(d, m)) { ++virt; }
+        }
+    };
+    count_hand(state.players[1].hand, 1);
+    if (HasSecondHead(state)) { count_hand(state.opponent2_hand, 2); }
+    return real + virt > total;
 }
 
 // UNDER THE FREE-TURN RULE (FreeTurnHurdlesOn AND the deck's lock trait, GameState::deck_has_free_turn) the cleanup

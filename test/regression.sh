@@ -712,6 +712,10 @@ report_mode() {
       fi
     fi
     log "$(printf '  %s  %-26s exp=%-16s got=%-16s' "$status" "$key" "$expected" "$got")"
+    # INFORMATIONAL (USER 2026-11-22): free turns (MTG_FREE_TURNS) and extra turns taken per game, printed by the
+    # batch only when nonzero. Never part of the fingerprint above or of GT.
+    ftinfo=$(printf '%s\n' "$line" | sed -nE "s/^${key}: .* free_avg=([0-9.]+) extra_avg=([0-9.]+).*/free turns\/game=\1 extra turns\/game=\2/p")
+    if [ -n "$ftinfo" ]; then log "      (info) $ftinfo"; fi
 
     # Per-game diff against committed ground-truth logs. Lists every game whose win
     # turn moved (old -> new), so changed games can be inspected before --accept.

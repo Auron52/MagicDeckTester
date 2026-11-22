@@ -23,6 +23,10 @@ struct RunResult
     // kills only; this is the separately-reported number the user asked for.
     std::vector<int> inf_life_turn;  // per-game proof turn; -1 = never went infinite
     int    games_inf_life = 0;
+    // INFORMATIONAL (USER 2026-11-22): free turns (MTG_FREE_TURNS) and extra turns taken, summed over every game.
+    // Printed beside avg by the --games summary only when nonzero; never read by the search or the GT.
+    long long free_turns_total  = 0;
+    long long extra_turns_total = 0;
 };
 
 // --force-mulligan / manifest "force_mulligan": "<count>:<n1,n2,...>" -> keep at <count> mulligans,
