@@ -476,9 +476,17 @@ TEST_CASE("rfx step 4: a summoning-sick Doll offers no ping; a settled untapped 
         // untapped for later in the turn) -- step 5's root cause of the assertion step 4 dropped.
         CHECK(std::all_of(plans.begin(), plans.end(), PlanPings));
         CHECK(TurnSolver::HoldPassAppendedForTest(s, plans));
+        // Since 2026-11-22 the pass does not depend on the board (USER hard rule: "it must always be able to do
+        // nothing to end the phase"): a list without an apply-empty plan always gets it, an empty list is the
+        // host's own nothing-to-cast case, and a list that already holds the pass gets nothing more.
         GameState tapped = s;
         for (Permanent& p : tapped.battlefield) { if (p.card.m_number == 1201) { p.tapped = true; } }
-        CHECK_FALSE(TurnSolver::HoldPassAppendedForTest(tapped, plans));   // nothing to hold: no extra line
+        CHECK(TurnSolver::HoldPassAppendedForTest(tapped, plans));
+        CHECK_FALSE(TurnSolver::HoldPassAppendedForTest(s, {}));
+        std::vector<TurnSolver::Plan> with_pass = plans;
+        with_pass.push_back(TurnSolver::Plan{});
+        with_pass.back().land_decided = true;
+        CHECK_FALSE(TurnSolver::HoldPassAppendedForTest(s, with_pass));
     }
 }
 

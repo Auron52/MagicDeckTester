@@ -402,9 +402,22 @@ top, six Mountains. The main-1 fixture failed for two reasons, neither of them a
    (pass holding the Mountain, attack, main-2 Browbeat, three Bolts).
 So the every-turn main 2's 0.000-turn measurement is NOT explained by an unreachable line. Under the anticipating
 opponent the main-1 frame wins by a main-1 Browbeat (scenario `creatureburn_browbeat_m1_anticipates_combat`).
-Residual engine gap (all decks, narrow): a mid-turn root -- the executor's second entry after a main-1 draw, a
-breakpoint re-solve, a viewer search-from-here frame, a `resume_at` fixture -- offers no "cast nothing (more)" plan
-while anything is castable. Measured with a temporary arm (MTG_FS_ROOT_IDLE_PASS, never landed): see the bbgap report.
+Residual engine gap (all decks): a mid-turn root -- the executor's second entry after a main-1 draw, a
+breakpoint re-solve, a viewer search-from-here frame, a `resume_at` fixture -- offered no "cast nothing (more)" plan
+while anything was castable, and `SolveWithLookahead`'s POST-combat main offered none either. **FIXED 2026-11-22 as a
+completeness fix, no lever** (USER: *"This needs to stop reappearing. I say every time that it must always be able to
+do nothing to end the phase."*, now a CLAUDE.md hard rule): `IdlePassMissing` (TurnSolver.cpp, beside
+`IsApplyEmptyPlan`) is checked by every searched host -- FSLineWin, SolveWithLookahead (both mains), NcRootPlans,
+EnumerateEarliestWins -- and the pass (+ its axes) is appended to any list that lacks one. It subsumes the two
+special cases that had been patched one at a time (morph's face-up hold, Stuffy Doll's self-ping hold,
+`FaceUpHoldPassMissing`), and `MTG_FS_IDLE_NODE` is deleted. FSLineTail and the breakpoint continuations always
+carried their own pass. Witnesses: unit test "mid-turn root: the search can always do nothing" and scenario
+`creatureburn_midturn_root_pass`.
+
+USER rulings 2026-11-22 on the anticipating opponent: visible = max(combat, ping) per creature -- *"yes"*; the
+opponent assumes we attack with everything -- *"yes"*; staged cards count as held for BOTH punisher policies --
+*"staged cards should be counted because the idea is the opponent thinks you may have burn in hand to finish them
+off. (it being staged instead does not change this reasoning)"* (`HeldCardCount`, SpellEffects.h).
 
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-11-21)

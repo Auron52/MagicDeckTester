@@ -15577,13 +15577,14 @@ inline int OpponentAnticipatedLife(const GameState& s, int opponent, int exclude
 // (CLAUDE.md "NO GREEDY PICK"): no option of OURS is collapsed. Executor and rollout reach it through the
 // same cascade (FireOwnEtbTriggers), so they cannot disagree.
 inline void SacrificePermanentAt(GameState& state, int controller, int idx);  // defined below
+inline int HeldCardCount(const GameState& s, int who);   // defined below (Browbeat): hand + staged cards
 // ANTICIPATION (USER 2026-11-22, "Vexing Devil should act the same way"): the life compared is the opponent's life
 // LESS the damage it can see coming this turn (OpponentAnticipatedLife, shared with Browbeat), the Devil itself
 // excluded (`devil_number`: whether it attacks is what the choice decides; -1 = not on the battlefield yet).
 inline bool VexingDevilOpponentTakesDamage(const GameState& s, int controller, int opponent, int amount,
                                            int devil_number = -1)
 {
-    const bool holding = !s.players[static_cast<std::size_t>(controller)].hand.empty();
+    const bool holding = HeldCardCount(s, controller) > 0;   // staged cards count (USER 2026-11-22)
     const int  decline_at_or_below = amount + (holding ? 3 : 0);
     return OpponentAnticipatedLife(s, opponent, devil_number) > decline_at_or_below;
 }
@@ -15646,15 +15647,18 @@ inline void ResolveVexingDevilEtb(GameState& state, int controller, int devil_nu
 // a search branch nor a viewer decision, and no option of OURS is collapsed (CLAUDE.md "NO GREEDY PICK"). Our
 // own "take 5" option is never used: it is dominated (no draw, no damage to the opponent).
 //
-// HELD CARDS = our hand excluding STAGED (exiled-playable) cards, which are not in the hand: the rollout
-// keeps staged cards in the hand vector (m_is_staged) and the executor in Player::staged_cards, so counting
-// the raw hand would let the two worlds disagree. Browbeat itself is never counted -- it has left the hand
-// (on the stack in the executor, erased at the cast in the rollout) when it resolves.
+// HELD CARDS = our hand PLUS our STAGED (exiled-playable) cards. USER 2026-11-22: *"staged cards should be counted
+// because the idea is the opponent thinks you may have burn in hand to finish them off. (it being staged instead
+// does not change this reasoning)"*. Both punisher policies read it (Browbeat here, Vexing Devil's
+// VexingDevilOpponentTakesDamage). The worlds store a staged card differently -- the rollout in the hand vector
+// (m_is_staged) throughout, the executor in the hand during a main (MergeStagedIntoHand) and in
+// Player::staged_cards between passes -- so both places are counted; a card is in exactly one of them, and the
+// policies only ask "> 0" anyway. Browbeat itself is never counted -- it has left the hand (on the stack in the
+// executor, erased at the cast in the rollout) when it resolves.
 inline int HeldCardCount(const GameState& s, int who)
 {
-    int n = 0;
-    for (const Card& c : s.players[static_cast<std::size_t>(who)].hand) { if (!c.m_is_staged) { ++n; } }
-    return n;
+    const Player& p = s.players[static_cast<std::size_t>(who)];
+    return static_cast<int>(p.hand.size() + p.staged_cards.size());
 }
 inline int BrowbeatTakeThreshold(int amount, bool we_hold_cards) { return amount + (we_hold_cards ? 3 : 0); }
 inline bool BrowbeatOpponentTakesDamage(const GameState& s, int opponent, int amount, bool we_hold_cards)

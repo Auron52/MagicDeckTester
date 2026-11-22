@@ -31662,6 +31662,24 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0
         && p.dig_choice == -1;   // apply-read (the dig loop); was missing -- continuations never carry it
 }
+// THE IDLE PASS AT EVERY SEARCH ROOT (CLAUDE.md hard rule "DO NOTHING MORE IS ALWAYS AN OPTION", USER 2026-11-22:
+// *"This needs to stop reappearing. I say every time that it must always be able to do nothing to end the
+// phase."*). A main-phase list holds the pass ("cast nothing", apply-empty) only when its land drop is still open
+// (EnumeratePlansWithLand's DEFER branch, add_for_land("", "")): the no-drop path enumerates NON-EMPTY subsets,
+// so at a mid-turn root with the drop spent -- the executor's second entry into a main, a re-solve after a
+// mid-turn draw or breakpoint, the viewer's search-from-here, a fixture resumed mid-turn -- and in every post-combat
+// main, "end the phase now" was missing whenever anything was castable (Creature Burn 2026-11-22: a main-1 root
+// with the drop made offered only cast plans, so "pass, attack, then main-2 Browbeat" was unfindable). Every
+// searched host (FSLineWin, SolveWithLookahead, NcRootPlans, EnumerateEarliestWins; FSLineTail and the
+// breakpoint continuations always seed their own) appends the pass whenever this is true -- an EMPTY list
+// included, which is the old "nothing to cast" case. It only ADDS a line; a list that already holds the pass is
+// untouched. A lazy list (PbLazyLayout) is scanned on its real entries only: a synthesised clone carries its fan's
+// varied field and is never apply-empty.
+static bool IdlePassMissing(const std::vector<TurnSolver::Plan>& plans)
+{
+    for (const TurnSolver::Plan& p : plans) { if (IsApplyEmptyPlan(p)) { return false; } }
+    return true;
+}
 // A SUB-DECISION AXIS VARIANT: a plan that differs from a sibling base plan only by a pinned
 // resolution choice (breakpoint continuation, scry/ponder/tutor/dig pick, discard, Emiel counter,
 // end-of-main-1 sweep, ...). The post-apply state dedup may SKIP such a plan when an earlier
@@ -116410,42 +116428,13 @@ static bool UpkeepLegendUncoveredPending(const GameState& state)
     { if (sc.arrive_turn >= 0 && sc.arrive_turn <= state.TurnSeq() + 1) { return true; } }
     return UpkeepRevealTopEnabled() && UpkeepRevealTopCandidate(state, state.active_player_index) != nullptr;
 }
-// THE HOLD PASS (morph's opponent-end-step flip; Morph INT-2c, 2026-11-12). A main whose enumeration offers
-// a plan offers no PASS unless its land drop is still open (the no-land pass, add_for_land("", "")): the
-// hosts append the pass only when the list is EMPTY (FSLineWin's idle node, SolveWithLookahead's empty
-// candidate set). That silently assumes "doing something" is never worse than passing, which a face-down
-// permanent breaks: turning Blistering Firecat face up in main 1 or main 2 hands its end-step sacrifice the
-// turn's own end step, while holding the {R}{R} and turning it face up at the OPPONENT's end step keeps a
-// haste-less 7/1 for the next turn. With the drop already made (a mid-turn root, the scenario's turn 2) the
-// only plan left was the flip, the hold line was never enumerated, and morph_eot_flip_firecat was unwinnable
-// in the search at EVERY budget and depth (d3 b0 passed only because the root's no-win fallback happened to
-// pass and the executor's crossing node then searched the flip). So while the end-step flip axis is live
-// (FaceUpUncoveredPending: a face-down permanent of ours, the window not yet pinned, a searched frame) and the
-// list holds no apply-empty plan, the host appends the pass. It ADDS a line and removes none; at every other
-// node (every deck without a face-down permanent) nothing changes.
-// THE SELF-PING HOLD (Stuffy Doll, damage-reflection design 14 step 5): the main-1 walk skips the empty
-// selection, so with the drop made and a settled untapped Doll the only main-1 plan was the {T} ping, and
-// "keep the Doll untapped through combat" (e.g. to ping AFTER a main-2 Guilty Conscience lands on it, which
-// loops) was never enumerated. That is an in-window removal of the "don't activate" option, not a sound fold
-// (ping-now does not dominate ping-later once main 2 can change the board). Same remedy as the face-up hold:
-// append the pass. Gated on reflect_armed + a self_ping_damage permanent, so no other deck moves.
-static bool SelfPingHoldPending(const GameState& state)
-{
-    if (!state.reflect_armed || g_bp_enum_depth != 0 || t_rollout_narrow || HumanPlayActive()) { return false; }
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != state.active_player_index || p.tapped || p.def_absent) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d != nullptr && d->params.self_ping_damage > 0 && CanTapNow(p, state.battlefield)) { return true; }
-    }
-    return false;
-}
-static bool FaceUpHoldPassMissing(const GameState& state, const std::vector<TurnSolver::Plan>& plans)
-{
-    if (plans.empty() || !(FaceUpUncoveredPending(state) || SelfPingHoldPending(state))) { return false; }
-    for (const TurnSolver::Plan& p : plans) { if (IsApplyEmptyPlan(p)) { return false; } }
-    return true;
-}
+// THE HOLD PASS (morph's opponent-end-step flip, Morph INT-2c 2026-11-12; Stuffy Doll's self-ping hold, damage-
+// reflection design 14 step 5) was the first two special cases of the general rule now in IdlePassMissing: a
+// face-down Blistering Firecat held to the OPPONENT's end step, or a settled Doll kept untapped through combat,
+// was unenumerated once the drop was made, because the hosts appended the pass only to an EMPTY list. Both
+// predicates gated the pass on their own deck feature; since 2026-11-22 (USER hard rule) every host appends it to
+// EVERY list that lacks it, so the special-case gates are gone (morph_eot_flip_firecat and the rfx step-4 test
+// still witness them).
 // MTG_FACEUP_AXIS_STATS: the no-greedy census for the opponent-end-step flip -- an UNPINNED choice (more than one
 // menu entry) resolved in a searched frame (a crossing no BoundaryFan covered: must read 0), in the playout beyond
 // the horizon (permitted), at a constant-leaf edge (the identity fold), outside any search, or at the executor's
@@ -117618,7 +117607,8 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateM2HostPlansForTest(const Game
 
 bool TurnSolver::HoldPassAppendedForTest(const GameState& state, const std::vector<Plan>& plans)
 {
-    return FaceUpHoldPassMissing(state, plans);
+    (void)state;   // the pass no longer depends on the board (IdlePassMissing, USER 2026-11-22)
+    return !plans.empty() && IdlePassMissing(plans);
 }
 std::vector<std::pair<int, int>> TurnSolver::HornBoundaryForTest(const GameState& state)
 {
@@ -119821,11 +119811,6 @@ static bool LastPlyFoldHere(const GameState& s)
         && FsNextLeafConstant(s) && !OpponentHasLost(s);
 }
 
-// TEMPORARY MEASUREMENT (cb-bbgap, MTG_FS_ROOT_IDLE_PASS): how many FSLineWin nodes had plans but no empty one.
-static std::atomic<long long> g_fs_root_pass_seeded{0};
-struct FsRootPassDump { ~FsRootPassDump() { const long long n = g_fs_root_pass_seeded.load();
-    if (n > 0) { std::fprintf(stderr, "[fs-root-pass] seeded=%lld\n", n); } } };
-static FsRootPassDump g_fs_root_pass_dump;
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
                                         FSLineCache* lc, SearchBudget* budget)
@@ -120867,7 +120852,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                           ? remap[p.bp_base] : -1;
             }
         }
-        // THE IDLE CONTINUATION (Session 30, 2026-09-16; MTG_FS_IDLE_NODE=0 restores). A main with
+        // THE IDLE CONTINUATION (Session 30, 2026-09-16; unconditional since 2026-11-22). A main with
         // NOTHING to do -- drop used or no land in hand, nothing castable, no affordable activation
         // -- enumerates ZERO plans, and this loop then never ran: `best` stayed at max_turns+1 and
         // the node answered "no win" for its WHOLE subtree, with nothing truncated, so the answer
@@ -120879,27 +120864,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // (Mariposa's draw, then Cloud + Emiel), as the human did. FSLineTail already seeds its
         // idle option; the pre-combat node did not. One empty plan, land decided (there is no drop
         // to take), so ApplyPlanDirect changes nothing and the recursion advances the turn.
-        // Byte-identical wherever the node had any plan at all.
-        static const bool s_fs_idle_node_env = EnvOn("MTG_FS_IDLE_NODE", true);
-        const bool s_fs_idle_node = heurarm::Flag(heurarm::FS_IDLE_NODE, s_fs_idle_node_env);
-        // ...and THE HOLD PASS (FaceUpHoldPassMissing): a node with plans, its drop made, and a face-down
-        // permanent whose opponent-end-step flip the pass keeps open.
-        const bool fu_hold = FaceUpHoldPassMissing(state, pre);
-        // TEMPORARY MEASUREMENT ARM (cb-bbgap, MTG_FS_ROOT_IDLE_PASS): the idle pass at a node with plans but no
-        // empty one -- a mid-turn root with the drop spent (an interior node is a turn start: the drop is open and
-        // EnumeratePlansWithLand's DEFER branch already carries "cast nothing").
-        bool root_pass = false;
-        static const bool s_root_pass_env = EnvOn("MTG_FS_ROOT_IDLE_PASS");
-        if (!pre.empty() && !fu_hold && heurarm::Flag(heurarm::FS_ROOT_IDLE_PASS, s_root_pass_env))
+        // ...and the same pass whenever the list has plans but no apply-empty one (IdlePassMissing, USER hard rule
+        // 2026-11-22: a mid-turn root with the drop spent -- an interior node is a turn start, whose drop is open
+        // and whose DEFER branch already carries the pass). Unconditional: no lever.
+        if (IdlePassMissing(pre))
         {
-            PbLazyMaterialize(pre, pre_lazy);
-            root_pass = std::none_of(pre.begin(), pre.end(), [](const TurnSolver::Plan& q)
-                                     { return IsApplyEmptyPlan(q) && q.land_to_play.empty(); });
-            if (root_pass) { g_fs_root_pass_seeded.fetch_add(1, std::memory_order_relaxed); }
-        }
-        if ((pre.empty() || fu_hold || root_pass) && s_fs_idle_node)
-        {
-            if (fu_hold) { PbLazyMaterialize(pre, pre_lazy); }   // the pass and its clones go after every plan
+            PbLazyMaterializeOrdered(pre, pre_lazy, pre_ord);   // the pass and its clones go after every plan
             TurnSolver::Plan idle;
             idle.land_decided = true;   // no drop to take -> "(defer)": never a greedy land play
             pre.push_back(std::move(idle));
@@ -127973,6 +127943,13 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
     // Same candidate set the search ranks (cast ORDERINGS included iff MTG_SEARCH_ORDER /
     // MTG_UNPRUNED is set -- EnumeratePlansWithLand expands them there).
     std::vector<TurnSolver::Plan> pre = EnumeratePlansWithLand(state, true);
+    // ...plus the pass wherever the list lacks it (IdlePassMissing, USER hard rule 2026-11-22): a label rooted mid-turn
+    // with the drop spent must still see "do nothing more". An EMPTY list keeps its historical empty report.
+    if (!pre.empty() && IdlePassMissing(pre))
+    {
+        pre.push_back(TurnSolver::Plan{});
+        pre.back().land_decided = true;
+    }
 
     // Cross-candidate B&B is OFF by default (cutoff = max_turns+1) so each candidate gets its TRUE
     // earliest win rather than a pruned bound -- the eval-row dump needs every candidate's own
@@ -128441,10 +128418,13 @@ static std::vector<TurnSolver::Plan> NcRootPlans(const GameState& state, bool is
         plans = EnumeratePlansWithLand(state, true);
         // Nothing to cast: the pass and its sub-decision axes (the no-dig twin of the empty-of-gas dig,
         // the combat pins -- AppendIdlePassAxes), so each is ranked by the reshuffle average rather
-        // than taken. One plan = byte-identical.
-        if (plans.empty())
+        // than taken. One plan = byte-identical. And wherever the list has plans but no pass (a mid-turn root with
+        // the drop spent): the same pass, land decided (IdlePassMissing, USER hard rule 2026-11-22).
+        if (IdlePassMissing(plans))
         {
+            const bool had_plans = !plans.empty();
             plans.push_back(TurnSolver::Plan{});
+            if (had_plans) { plans.back().land_decided = true; }
             AppendIdlePassAxes(state, plans, 2);
         }
         AppendEotHoldTwins(state, plans);   // kind 4: each plan's Soulstoke-HOLD twin (gated; see its note)
@@ -129239,14 +129219,18 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // dig deck the empty-of-gas cycle was AUTOMATIC here (a depth>0 lookahead node: the rollout's
     // searched turns, the uncommitted fallback). Under MTG_DIG_SEARCHED_CHOICE, when a dig sibling is
     // wanted, the pass (marked 2) and its no-dig twin are SCORED like any candidate set instead.
-    // ...and THE HOLD PASS (FaceUpHoldPassMissing): candidates exist, but a face-down permanent's opponent-end-
-    // step flip makes passing a line none of them is -- appended and SCORED like any candidate.
-    const bool fu_hold = FaceUpHoldPassMissing(state, candidates);
-    if (candidates.empty() || fu_hold)
+    // ...and THE PASS WHEREVER IT IS MISSING (IdlePassMissing, USER hard rule 2026-11-22): candidates exist but
+    // none is "do nothing more" -- a mid-turn root with the drop spent, or any post-combat main with something
+    // castable -- so the pass is appended and SCORED like any candidate. Unconditional: no lever.
+    if (IdlePassMissing(candidates))
     {
-        if (fu_hold) { PbLazyMaterialize(candidates, pb_lazy); }   // the pass and its clones go after every plan
+        PbLazyMaterialize(candidates, pb_lazy);   // the pass and its clones go after every plan
         const std::size_t idle_at = candidates.size();
         candidates.push_back(Plan{});
+        // Appended beside other plans it is the PASS, never a greedy land play (a drop still open here means the
+        // provider folded the no-land family away -- NoLandPlanDominated -- and the pass outranks that prune).
+        // The lone-pass case keeps its historical Plan{}.
+        if (idle_at > 0) { candidates.back().land_decided = true; }
         // A pre-combat pass gets every sub-decision axis an enumerated plan would (the no-dig twin and
         // every pin it carries into this turn's combat and beyond -- AppendIdlePassAxes); a post-combat
         // one only its no-dig twin (its combat is over).
