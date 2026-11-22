@@ -742,7 +742,7 @@ TEST_CASE("free turns: MTG_OPP_BOUNCE_OPENING -- the bounceland opening rule in 
     struct BScope { int saved = freeturn::t_force_bounce_opening;
                     explicit BScope(int v) { freeturn::t_force_bounce_opening = v; }
                     ~BScope() { freeturn::t_force_bounce_opening = saved; } };
-    {   // Off (the default), flag on or off: untouched.
+    {   // Off (=0; the default is ON since the fourth pass), flag on or off: untouched.
         BScope b(0);
         FtScope f(1);
         GameState t = s;
@@ -804,4 +804,137 @@ TEST_CASE("free turns: cleanup by kind -- the field counts, creature tokens do n
         opponentdeck::EndOfTurnCleanup(t);
         CHECK(t.players[1].graveyard.front().m_number == 100001);
     }
+}
+
+TEST_CASE("free turns: MTG_OPP_BOUNCE_OPENING default ON, --legacy-opponent-bounce-opening turns it off for a replay")
+{
+    REQUIRE(freeturn::t_force_bounce_opening == -1);
+    CHECK(OppOpeningBounceBasicOn());   // the environment is unset in the suite: the default
+    g_play_legacy_opponent_bounce_opening = true;
+    CHECK_FALSE(OppOpeningBounceBasicOn());
+    g_play_legacy_opponent_bounce_opening = false;
+    CHECK(OppOpeningBounceBasicOn());
+}
+
+TEST_CASE("free turns: MTG_FREE_TURNS default ON")
+{
+    REQUIRE(freeturn::t_force == -1);
+    CHECK(FreeTurnsOn());
+    g_play_legacy_no_free_turns = true;
+    CHECK_FALSE(FreeTurnsOn());
+    g_play_legacy_no_free_turns = false;
+}
+
+TEST_CASE("free turns: MTG_FREE_TURN_REACH -- the reachable-lock certificate")
+{
+    FtScope f(1);
+    GameState s = FtFresh();
+    s.deck_free_turn_hand_intact = true;
+    auto hand = [](std::initializer_list<std::pair<const char*, int>> cards) {
+        std::vector<Card> h;
+        for (const auto& c : cards) { h.push_back(FtCard(c.first, c.second)); }
+        return h;
+    };
+    // (a) + (b): a plain land and a plain nonland -> certified, the prunes stay armed.
+    CHECK(freeturn::HeadHoldsSureLandAndNonland(hand({ { "Lightning Bolt", 100001 }, { "Forest", 100002 } })));
+    // no nonland: a head with a land in play and no nonland in hand is LOCKED -> no certificate.
+    CHECK_FALSE(freeturn::HeadHoldsSureLandAndNonland(hand({ { "Forest", 100001 }, { "Mountain", 100002 } })));
+    // no land, only a Karoo (it may return itself): no certificate.
+    CHECK_FALSE(freeturn::HeadHoldsSureLandAndNonland(hand({ { "Gruul Turf", 100001 }, { "Ponder", 100002 } })));
+    // a fetchland LEFT of the plain land is the drop and may find nothing: no certificate ...
+    CHECK_FALSE(freeturn::HeadHoldsSureLandAndNonland(
+        hand({ { "Misty Rainforest", 100001 }, { "Forest", 100002 }, { "Ponder", 100003 } })));
+    // ... to its RIGHT it is never the drop: certified.
+    CHECK(freeturn::HeadHoldsSureLandAndNonland(
+        hand({ { "Forest", 100001 }, { "Misty Rainforest", 100002 }, { "Ponder", 100003 } })));
+    // a Karoo left of the plain land: taken only with another land in play, and it keeps itself -> certified.
+    CHECK(freeturn::HeadHoldsSureLandAndNonland(
+        hand({ { "Gruul Turf", 100001 }, { "Forest", 100002 }, { "Ponder", 100003 } })));
+    // an MDFC is neither side's proof.
+    CHECK_FALSE(freeturn::HeadHoldsSureLandAndNonland(hand({ { "Turntimber Symbiosis", 100001 }, { "Forest", 100002 } })));
+
+    s.players[1].hand = hand({ { "Lightning Bolt", 100001 }, { "Forest", 100002 } });
+    CHECK_FALSE(freeturn::FreeTurnMayFollow(s));
+    CHECK_FALSE(freeturn::NextTurnMayShareRound(s));
+    {   // =0 restores the stand-down at every node.
+        const std::int8_t saved = heurarm::t_arm[heurarm::FREE_TURN_REACH];
+        heurarm::t_arm[heurarm::FREE_TURN_REACH] = 0;
+        CHECK(freeturn::NextTurnMayShareRound(s));
+        heurarm::t_arm[heurarm::FREE_TURN_REACH] = saved;
+    }
+    {   // a deck whose cards touch the opponent's hand or library: never certified.
+        GameState t = s;
+        t.deck_free_turn_hand_intact = false;
+        CHECK(freeturn::NextTurnMayShareRound(t));
+    }
+    {   // no sure land: the lock may be reachable -> stand down.
+        GameState t = s;
+        t.players[1].hand = hand({ { "Lightning Bolt", 100001 }, { "Ponder", 100002 } });
+        CHECK(freeturn::NextTurnMayShareRound(t));
+    }
+    {   // an extra-turn deck stands down whatever the certificate says.
+        GameState t = s;
+        t.deck_has_extra_turn = true;
+        CHECK(freeturn::NextTurnMayShareRound(t));
+    }
+    {   // a deck without the lock trait never stands down for a free turn.
+        GameState t = s;
+        t.deck_has_free_turn = false;
+        t.players[1].hand = hand({ { "Lightning Bolt", 100001 } });
+        CHECK_FALSE(freeturn::NextTurnMayShareRound(t));
+    }
+}
+
+TEST_CASE("free turns: MTG_FREE_TURN_REACH 2HG -- ONE certified head is enough (the lock needs every head)")
+{
+    FtScope f(1);
+    GameState s = FtFresh(2);
+    REQUIRE(opponentdeck::HasSecondHead(s));
+    s.deck_free_turn_hand_intact = true;
+    s.players[1].hand = { FtCard("Lightning Bolt", 100001) };
+    s.opponent2_hand = { FtCard("Forest", opponentdeck::kNumberBase2 + 1), FtCard("Ponder", opponentdeck::kNumberBase2 + 2) };
+    CHECK_FALSE(freeturn::FreeTurnMayFollow(s));
+    s.opponent2_hand = { FtCard("Ponder", opponentdeck::kNumberBase2 + 2) };
+    CHECK(freeturn::FreeTurnMayFollow(s));
+}
+
+TEST_CASE("free turns: the certificate's deck precondition (GoldFishRunner::DeckLockNeedsLandStrip)")
+{
+    FtLoadDb();
+    Decklist d = FtForests();
+    d.mainboard.push_back(CardDatabase::Instance().Lookup("Acidic Slime")->card);
+    CHECK(GoldFishRunner::DeckMayLockOpponent(d));
+    CHECK(GoldFishRunner::DeckLockNeedsLandStrip(d));
+    Decklist w = d;
+    w.mainboard.push_back(CardDatabase::Instance().Lookup("Worldfire")->card);
+    CHECK_FALSE(GoldFishRunner::DeckLockNeedsLandStrip(w));
+    Decklist si = d;
+    si.mainboard.push_back(CardDatabase::Instance().Lookup("Sire of Insanity")->card);
+    CHECK_FALSE(GoldFishRunner::DeckLockNeedsLandStrip(si));
+}
+
+TEST_CASE("free turns: MTG_OPP_SPAWN_DRAW_T1 -- a held land counts at our first untap on the draw (lever, default OFF)")
+{
+    FtScope f(1);
+    GameState s = FtFresh();
+    struct SScope { int saved = freeturn::t_force_spawn_land; SScope() { freeturn::t_force_spawn_land = 1; }
+                    ~SScope() { freeturn::t_force_spawn_land = saved; } } sp;
+    s.turn_number = 1;
+    s.free_turns_taken = 0;
+    s.on_the_play = false;
+    s.players[1].hand = { FtCard("Forest", 100001), FtCard("Ponder", 100002) };
+    CHECK_FALSE(freeturn::SpawnMayAppear(s));   // default OFF: no land in play, no spawn
+    const std::int8_t saved = heurarm::t_arm[heurarm::OPP_SPAWN_DRAW_T1];
+    heurarm::t_arm[heurarm::OPP_SPAWN_DRAW_T1] = 1;
+    CHECK(freeturn::SpawnMayAppear(s));
+    GameState p = s;
+    p.on_the_play = true;
+    CHECK_FALSE(freeturn::SpawnMayAppear(p));   // on the play the opponent has had no turn
+    GameState t2 = s;
+    t2.turn_number = 2;
+    CHECK_FALSE(freeturn::SpawnMayAppear(t2));   // only our first untap
+    GameState nl = s;
+    nl.players[1].hand = { FtCard("Ponder", 100002) };
+    CHECK_FALSE(freeturn::SpawnMayAppear(nl));
+    heurarm::t_arm[heurarm::OPP_SPAWN_DRAW_T1] = saved;
 }

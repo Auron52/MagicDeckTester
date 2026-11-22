@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-// MTG_FREE_TURNS (DEFAULT OFF; the USER adopts) -- the opponent-lockdown FREE TURN rule
+// MTG_FREE_TURNS (DEFAULT ON since 2026-11-22, the USER's design; =0 turns it off) -- the opponent-lockdown FREE TURN rule
 // (docs/design/opponent-lockdown-free-turns.md, core/FreeTurns.h): a passive-opponent turn that ends
 // LOCKED (every head: no land OR no nonland in hand; and no opposing creature) does not advance the
 // round. Read by BOTH worlds' lock check (GameEngine::RunTurnFrom, TurnSolver's
@@ -31,7 +31,7 @@ inline thread_local int t_force_bounce_opening = -1;   // -1 = the environment; 
 }
 inline bool FreeTurnsOn()
 {
-    static const bool on = EnvOn("MTG_FREE_TURNS");   // DEFAULT OFF; =1 enables credit + hurdles
+    static const bool on = EnvOn("MTG_FREE_TURNS", true);   // DEFAULT ON (USER design, fourth pass); =0 off
     if (freeturn::t_force >= 0) { return freeturn::t_force != 0; }
     // A reference recorded with the rule off replays with it off (--legacy-no-free-turns, GameLogger.h).
     return heurarm::Flag(heurarm::FREE_TURNS, on) && !g_play_legacy_no_free_turns;   // per-job arm (pooled A/B)
@@ -64,17 +64,19 @@ inline bool FreeTurnAnnihilatorFairOn()
     if (freeturn::t_force_ann_fair >= 0) { return freeturn::t_force_ann_fair != 0; }
     return heurarm::Flag(heurarm::FREE_TURN_ANNIHILATOR_FAIR, on);   // per-job arm (one pooled A/B batch)
 }
-// MTG_OPP_BOUNCE_OPENING (DEFAULT OFF; a play change for EVERY game against a Karoo / Lake of the Dead list when on).
+// MTG_OPP_BOUNCE_OPENING (DEFAULT ON since the fourth pass, USER ruling below; a play change for EVERY game against a
+// Karoo / Lake of the Dead list; =0 restores the unchanged opening hand).
 // USER 2026-11-22: "we shouldn't be playing a bounceland first if we don't have an existing land unless forced by what
 // the player does. The basic replacing bounceland rule should apply." The free-turn hurdles' bounceland extension,
 // generalised: an opening hand in which EVERY land needs another land in play has its RIGHTMOST land replaced by a
-// basic (freeturn::ApplyBouncelandOpening, core/FreeTurns.h), in every game, flag or no flag. Under the armed
+// basic (freeturn::ApplyBouncelandOpening, core/FreeTurns.h), in every game, free-turn flag or no flag. Under the armed
 // free-turn rule the hurdles already apply it. Post-Worldfire (forced) a drawn bounceland still returns itself.
 inline bool OppOpeningBounceBasicOn()
 {
-    static const bool on = EnvOn("MTG_OPP_BOUNCE_OPENING");   // DEFAULT OFF; =1 every game
+    static const bool on = EnvOn("MTG_OPP_BOUNCE_OPENING", true);   // DEFAULT ON (USER 2026-11-22); =0 off
     if (freeturn::t_force_bounce_opening >= 0) { return freeturn::t_force_bounce_opening != 0; }
-    return on;
+    // A reference recorded without the rule replays with it off (--legacy-opponent-bounce-opening, GameLogger.h).
+    return on && !g_play_legacy_opponent_bounce_opening;
 }
 // MTG_OPP_SPAWN_NEEDS_LAND (USER 2026-11-22: "Perhaps we should have a land requirement for token creation? If
 // there are no lands played or on board no token should appear."): a scheduled passive-opponent creature spawn

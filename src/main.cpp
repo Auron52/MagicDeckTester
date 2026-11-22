@@ -6770,6 +6770,10 @@ if (!log_dir.empty())
     if (!g_play_legacy_opponent_spawn_any
         && (OppSpawnNeedsLandEnv() == 1 || (OppSpawnNeedsLandEnv() < 0 && FreeTurnsOn())))
     { out << ", \"opponent_spawn_land\": 1"; }
+    // Dealt under the every-game bounceland opening rule (MTG_OPP_BOUNCE_OPENING, OppOpeningBounceBasicOn). A reference
+    // without `opponent_bounce_opening` was dealt its opponent's opening hand unchanged and replays under
+    // --legacy-opponent-bounce-opening.
+    if (OppOpeningBounceBasicOn()) { out << ", \"opponent_bounce_opening\": 1"; }
     // The opponent's library shuffles on its OWN ordinal (2ad8c3d41, ShuffleAfterSearch). A reference
     // recorded before shuffled it on the shared search_count, carries no `opponent_shuffle_ordinal`,
     // and replays under --legacy-shared-shuffle-ordinal.
@@ -12209,6 +12213,7 @@ int main(int argc, char* argv[])
         if (flag == "--legacy-opponent-land-entry") { g_play_legacy_opponent_land_entry = true; continue; } // replay a reference recorded before the opponent's land entry rules (no opponent_land_entry stamp; value-less; see GameLogger.h)
         if (flag == "--legacy-no-free-turns") { g_play_legacy_no_free_turns = true; continue; } // replay a reference recorded with MTG_FREE_TURNS off (no free_turns stamp; value-less; see GameLogger.h)
         if (flag == "--legacy-opponent-spawn-any") { g_play_legacy_opponent_spawn_any = true; continue; } // replay a reference recorded without the opponent-spawn land requirement (no opponent_spawn_land stamp; value-less; see GameLogger.h)
+        if (flag == "--legacy-opponent-bounce-opening") { g_play_legacy_opponent_bounce_opening = true; continue; } // replay a reference recorded without the every-game bounceland opening rule (no opponent_bounce_opening stamp; value-less; see GameLogger.h)
         if (flag == "--legacy-gsz-shuffle")  { g_play_legacy_gsz_shuffle = true; continue; } // replay a reference recorded before the Green Sun's Zenith copy-id shuffle (value-less; see GameLogger.h)
         if (flag == "--jitte-prompt")        { jitte_prompt = true; continue; }          // Jitte spend: value-less, same trap as above
         try

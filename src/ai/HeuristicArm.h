@@ -1090,10 +1090,12 @@ enum Slot : int
     WORLDFIRE_ORDER_DEADLINE, // MTG_WORLDFIRE_ORDER_DEADLINE  Worldfire AMENDMENT (agent proposal; DEFAULT ON, adopted 2026-11-22): the Ponder / Preordain kept cards go back quota-first in DEADLINE order (when the plan needs each in hand: a go-off-pulling Lotus Bloom and the dig now, a Halberdier T*-3, Worldfire / Rift Bolt / rituals by T*), keep value breaking ties. Found at seed 9200001 gi 31 (the rank's Rift Bolt over a Bloom cost the go-off a turn, persists at b200). =0 disables
     WORLDFIRE_PREORDAIN_AGGR_DIG_BLUE, // MTG_WORLDFIRE_PREORDAIN_AGGR_DIG_BLUE  Worldfire EXPERIMENT ARM (USER 2026-11-21 "either one is correct"): in Preordain's aggressive mode a dig spell stays on top when 2+ blue mana is left this turn, no other blue spell in hand, and no go-off this turn. DEFAULT OFF
     WORLDFIRE_BAZAAR_T1,      // MTG_WORLDFIRE_BAZAAR_T1  Worldfire optional arm (USER 2026-11-21): Mercadian Bazaar keeps its land-keep place on turn 1 only (default: turns 1-2). DEFAULT OFF
-    FREE_TURNS,               // MTG_FREE_TURNS            the opponent-lockdown free-turn rule (core/FreeTurns.h). Default OFF; per job so ONE pooled batch carries the OFF arm
+    FREE_TURNS,               // MTG_FREE_TURNS            the opponent-lockdown free-turn rule (core/FreeTurns.h). Default ON (USER design, 2026-11-22); per job so ONE pooled batch carries the OFF arm
     FREE_TURN_SIRE,           // MTG_FREE_TURN_SIRE        Sire of Insanity is in the free-turn lock trait (GoldFishRunner::DeckMayLockOpponent). Default ON; =0 -> Sire out
     FREE_TURN_SIRE_FAIR,      // MTG_FREE_TURN_SIRE_FAIR   Sire's lock is vetoed when the discarded hand held a creature the opponent could have cast. Default OFF
     FREE_TURN_ANNIHILATOR_FAIR, // MTG_FREE_TURN_ANNIHILATOR_FAIR  an annihilator wipe is vetoed when castable nonland permanents would have kept a permanent. Default OFF
+    FREE_TURN_REACH,          // MTG_FREE_TURN_REACH       the turn-edge prunes stand down for a lock-trait deck only where a free turn is REACHABLE (freeturn::FreeTurnMayFollow, a sound certificate). Default ON; =0 -> stand down at every node of a trait deck
+    OPP_SPAWN_DRAW_T1,        // MTG_OPP_SPAWN_DRAW_T1     the spawn land requirement counts a land the opponent holds at our first untap on the draw. Default OFF (fidelity lever, measured only)
     COUNT
 };
 
@@ -2132,6 +2134,8 @@ inline const char* Name(int slot)
         "MTG_FREE_TURN_SIRE",
         "MTG_FREE_TURN_SIRE_FAIR",
         "MTG_FREE_TURN_ANNIHILATOR_FAIR",
+        "MTG_FREE_TURN_REACH",
+        "MTG_OPP_SPAWN_DRAW_T1",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

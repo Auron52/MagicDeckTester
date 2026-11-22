@@ -670,6 +670,10 @@ struct GameState
     bool                     pending_free_turn            = false;
     bool                     in_free_turn                 = false;
     bool                     deck_has_free_turn           = false;
+    // DECK CONSTANT (StampDeckTraits): deck_has_free_turn AND the deck's cards cannot touch the opponent's hand or
+    // library (GoldFishRunner::DeckLockNeedsLandStrip) -- the precondition of the reachable-lock certificate
+    // (freeturn::FreeTurnMayFollow, MTG_FREE_TURN_REACH). Never folded.
+    bool                     deck_free_turn_hand_intact   = false;
     std::uint8_t             free_turns_taken             = 0;
     // MTG_FREE_TURN_SIRE_FAIR (core/FreeTurns.h NoteSireBeforeDiscard): the opponent's hand held, just before Sire's
     // discard at its end step, a creature it could have cast -- the lock check of that turn does not hold. Set and
@@ -687,7 +691,7 @@ struct GameState
     std::vector<std::uint8_t> extra_turn_order;
     std::uint8_t             pending_opponent_extra_turns = 0;
     // FREE TURNS (opponent lockdown; USER proposal 2026-11-21, docs/design/opponent-lockdown-free-turns.md;
-    // MTG_FREE_TURNS, DEFAULT OFF). At the END of each passive-opponent turn the opponent is LOCKED when,
+    // MTG_FREE_TURNS, DEFAULT ON since 2026-11-22). At the END of each passive-opponent turn the opponent is LOCKED when,
     // for every opposing head, (it controls no land OR its hand holds no nonland card) AND no creature is
     // on the opposing side (core/FreeTurns.h, freeturn::LockHolds). A locked opponent turn is a FREE TURN
     // for us: the ROUND (`turn_number`) does not advance into our next turn, exactly like an extra turn
@@ -703,13 +707,12 @@ struct GameState
     //   deck_has_free_turn -- DECK CONSTANT (StampDeckTraits): MTG_FREE_TURNS is on AND the deck holds a
     //     card that can strip the opponent's lands or hand (GoldFishRunner::DeckMayLockOpponent). Switches OFF
     //     the turn-edge prunes that assume "the next turn is round+1", exactly as deck_has_extra_turn does
-    //     (NextTurnMayShareRound). FALSE for every deck while the flag is off.
+    //     (freeturn::NextTurnMayShareRound). FALSE for every deck while the flag is off.
     // All zero / false for every game while MTG_FREE_TURNS is off: TurnSeq(), RawRound() and every key are
     // byte-identical by construction.
     // (The four fields themselves sit after extra_turns_taken above.)
-    // A following turn may share this turn's ROUND (an extra turn, or a free turn): the turn-edge prunes'
-    // gate. Identical to deck_has_extra_turn while MTG_FREE_TURNS is off.
-    bool NextTurnMayShareRound() const { return deck_has_extra_turn || deck_has_free_turn; }
+    // The turn-edge prunes' gate ("a following turn may share this turn's ROUND") is freeturn::NextTurnMayShareRound
+    // (core/FreeTurns.h): an extra-turn deck, or a lock-trait deck where a free turn is reachable from the node.
     // The current turn is not a new ROUND (an extra turn or a free turn): the depth give-back's gate.
     bool InSameRoundTurn() const { return in_extra_turn || in_free_turn; }
     // The round WITHOUT the free-turn credit (== turn_number while MTG_FREE_TURNS is off). The opponent's
