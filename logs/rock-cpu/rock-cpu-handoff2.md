@@ -44,6 +44,11 @@ identchk.py, perf2.sh).
 
 ## Progress since: batch A compared (results in doc), d8 b0 replays queued in the lane: manifest ab2/d8_ab2.json, wrapper `box_lane.sh` PID 914899, out `d8_ab2.out`, logs `logs_d8_ab2/`, marker `d8_ab2.done` (MTG_LKR_PRICE_MILLI=85 set for the price check jobs). Step 1 below is DONE (cmp_*.txt in logs/rock-cpu/), except price05 (needs batch B).
 
+## Progress 13:30 UTC: chain DONE (batch A, batch B, perf); results + interpretation in the doc ("Batch B ...").
+Finding: the price rounds up per call, so MILLI 85 and 43 both charge ~1 unit per call (price NOT measured at 1x / 0.5x);
+fix = carry the residual on the decision frame, then re-measure. Remaining: d8_ab2 replays (lane, marker
+$S/d8_ab2.done), then write the menu (step 4 below).
+
 ## Next, in order
 1. When `status` shows `batchA`: `cd .../claude_rock_cpu && for a in poff pnt price; do python3 cmp.py ab2/A.out ab2/logs_A def $a --list > ab2/cmp_$a.txt; done`
    For price05: `cat ab2/A.out ab2/B.out > ab2/AB.out; mkdir -p ab2/logs_AB; ln -sf $PWD/ab2/logs_A/* $PWD/ab2/logs_B/* ab2/logs_AB/;

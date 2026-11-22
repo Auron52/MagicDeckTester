@@ -355,3 +355,33 @@ d0 (500 games per deck per arm): **every arm byte-identical to def** (0 faster, 
 Slower searched games: poff hinata 975, niv 352 / 871 / 1346; pnt hinata 975, niv 871; price 10 hinata + 13 niv (list in
 `cmp_price.txt`). d8 b0 replays queued (`build/scratch/claude_rock_cpu/ab2/d8_ab2.json`, lane, marker `d8_ab2.done`): every
 poff / pnt slower game on both arms, plus two price games as a check that the price is inert at b0.
+
+### Batch B (price at MILLI 43) and instruction counts
+
+price05 (MILLI 43, same seeds) vs def, searched: niv 0/13 **+13**, hinata 4/10 **+5**, every other deck 0; units ratio
+ALL 1.2026 (price@85: 1.2079); d0 byte-identical. **The half price is effectively the same arm as the full price, and
+the reason is a defect in the price as built:** the charge is rounded UP per call (`(work * MILLI + 999) / 1000`) and
+never carried between calls, and a call is only 2-4 work events, so at any MILLI below ~250 every call costs exactly 1
+unit. The arms really charged ~1 unit per rung call: about 3x the calibrated price on Niv (~3,000 instead of ~970
+units per game) and up to ~6x on Extra Turns. So the price at 1x and 0.5x is NOT measured yet. A fix that keeps it
+deterministic: carry the fractional residual on the decision frame (`DecisionBudget()`, reset when the frame opens),
+not on the thread. Then re-measure at 1x and 0.5x.
+
+User-space instructions per (deck, arm), 1 thread, searched seeds 796000, start-up subtracted, ratio vs def (every
+sampled game had the same outcome and digest as def, so these ratios are per-unit savings):
+
+| deck | games | poff | pnt | price@85 | price@43 | def G instr / game |
+|---|---|---|---|---|---|---|
+| niv | 40 | **0.9550** | **0.9539** | **0.9387** | 0.9417 | 4.44 |
+| extraturns | 30 | 0.9980 | 1.0002 | 0.9913 | 0.9915 | 7.65 |
+| hinata | 15 | 0.9828 | 0.9874 | 1.0000 | 1.0009 | 14.98 |
+| dragons | 30 | 0.9993 | 1.0000 | 1.0241 | 1.0242 | 0.45 |
+| galadriel | 30 | 0.9976 | 1.0000 | 0.9640 | 0.9640 | 0.91 |
+| fivecolour | 30 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 2.78 |
+| stuffy | 30 | 0.9923 | 1.0000 | 0.9708 | 0.9708 | 2.66 |
+| stompy | 30 | 0.9989 | 1.0000 | 1.0001 | 1.0001 | 0.36 |
+| merfolkturns | 30 | 0.9956 | 0.9998 | 0.9998 | 0.9998 | 3.45 |
+
+The batch's thread-CPU ratios for the price arm (extraturns 0.876, hinata 1.198) do not agree with these counts
+(0.991, 1.000), so I read them as shared-box timing noise, not as a cost. On Extra Turns the price left all 1,500 games
+byte-identical (the same digests), so it can only have trimmed search that did not change any choice. `ab2/perf/`.
