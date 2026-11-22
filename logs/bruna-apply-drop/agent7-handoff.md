@@ -84,6 +84,35 @@ Compare arms: `python3 $B/cmp_arms.py <wins_dir> <batch.out> <armA> <armB>` (net
   `build_gt.DONE`, `units_gt.log`. If lpab says to flip TOKEN_SELF: commit the flip, rebuild (incremental, under
   the lock at full cores), then run the GT.
 
+## Milestone 17:25 UTC: lpab RESULT (a7/lpab/cmp_lord.txt, cmp_both.txt)
+- LORD_CAST alone vs off:
+  - SEARCHED (19 lord decks x 4000, sea/sea2hg/spirits x 8000, spirits2hg 4000): every deck 0 except stompy +1
+    (gi320, 5 -> 6) and elementals 0 (1 faster, 1 slower: gi3563, 4 -> 5).
+  - d0: -10,397 overall (knights -2172, whiteknights -1627, slivers -1385, merfolk -988, vampires -905, ...). It
+    FAILS on boarsd0 +172 (216 slower) and goblinsd0 +177 (259 slower).
+  - CPU: d0 up to 1.035 (slivers), merfolk 1.029, vampires 1.027; searched up to 1.028 (vampires).
+- BOTH (LORD + TOKEN_SELF) vs off, on the token decks: sea -3, sea2hg -27, sead0 -6429, spirits 0,
+  spirits2hg 0, spiritsd0 -34. All <= 0, but LORD alone fails on other decks, so neither is adopted.
+- Boars d0 gi143 (seed 1810143), partly root-caused (a7/rc/b143_*.err, MTG_SOLVE_PROJ_TRACE=4): on T4,
+  {Raggadragga} reads proj 16 with the lever on and 20 with it off (opp 19). The suspect is Boars' Ilharg
+  attack-put projection (ApplyAttackPutProjection). It reads the hand, the walk never removes the cast lord from
+  t's hand, and a copy of the legendary Raggadragga stays on the board. A fix to try: drop the kept lord's card
+  from t.players[active].hand in ProjectPlanWalk. Goblins d0 (gi36 4 -> 5, gi430 3 -> 8) is not yet examined;
+  the haste lords (Warchief/Chieftain) are the suspects.
+- DECISION TAKEN: MTG_ATTACK_LORD_CAST set default OFF (8bd187a38), TOKEN_SELF stays OFF. Both are USER calls,
+  reported with the numbers above. No d8 b0 replays were run for the lever's slower games, because it is not
+  adopted.
+- GT: `$B/a7/gt.sh` (PID 1039103). It waits 200 s, then under the box lock: full-core build of bruna-apply-drop
+  8bd187a38, all units, then `MTG_PGO=0 MTG_RSS_CAP_GB=40 test/regression.sh --both`. Status in
+  `$B/a7/gt.status`, logs `gt_build.log`, `gt_units.log`, `gt_regr.log`, DONE = `$B/a7/gt.DONE`.
+  Next:
+  1. Read the regression summary and attribute every changed key. The changes in play are fix 1 (EXACT), fix 2
+     (KEEP), the swap and the memo, plus Merfolk from the rebase (Merfolk's own GT was accepted upstream).
+  2. Every slower game must recover: test/classify_turn_later.sh (4x/16x), then d8 b0.
+  3. `test/regression.sh --both --accept` with a one-line note.
+  4. `python3 test/check_gt_logs.py` and `python3 scripts/check_references_safe.py`.
+  5. Push wip/bruna-apply-drop only.
+
 ## Running jobs (all agent-owned, none USER-requested; waiters use DONE files / kill -0, never pgrep -f)
 | job | PID | what | marker / output |
 |---|---|---|---|
