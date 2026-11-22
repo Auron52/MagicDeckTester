@@ -91,11 +91,13 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   (surfaced to the USER 2026-11-22 ~02:30). ADOPTION agent (fresh) in THIS worktree: attribute ON+deadline's worse
   games (b200, then d8 b0), flip defaults ON if none persists, units/scenarios/smoke/regression, accept worldfire
   GT keys, ledger. Handoff: logs/worldfire/adopt-handoff.md. Never `commit -a` here while it runs.
-- FREE-TURN pass 3 agent (fresh) in .claude/worktrees/freeturn from logs/freeturn/handoff3.md (on disk only) +
-  the "Pending" section below: build 94b9d46ca (UNCOMPILED), trait-gate verify (trait=0 decks byte-identical),
-  MDFC tie -> NONLAND (my change, surfaced), Sire + annihilator fairness arms (Shadowborn; Cyclone then Extra
-  Turns), avg-free-turns report, diagnostic flag-ON ref sweep LIST (no ref edits), bounceland opening basic
-  generalised (if context allows). Handoff file if it stops: logs/freeturn/handoff4.md.
+- FREE-TURN pass 3 DONE (9d396adc8, 5267c39d0; logs/freeturn/handoff4.md): flags-OFF smoke 243/243 play-changed=0;
+  flag-ON smoke: no trait-0 deck moved; Worldfire d5 5.725 -> 4.550 credited (1.98 free turns/game), Cyclone d5
+  4.710 -> 4.660, Shadowborn d5 4.780 -> 4.750. 2a/2b built; 2b flips Elementals, Prevent Damage, Sea Creatures to
+  trait 1. Spawn land rule GLOBAL moves 58 smoke keys (+0.635 summed; Stuffy, Burn) -- a genuine USER choice
+  (global vs free-turn-scoped). PASS 4 agent (fresh) from handoff4: waits on chain PID 4152934 ->
+  build/scratch/freeturn/chain5.DONE, then fairness batch, ref LIST, bounceland measurement, doc, full units.
+  Handoff: logs/freeturn/handoff5.md.
 - TUTOR-WIDTH deletion agent in .claude/worktrees/tutorwidth (branch wip/tutorwidth off d0d5f8463): delete
   TutorSearchWidth + MTG_TUTOR_WIDTH; narrowing lives in TutorCandidates (USER: "I don't like those tutor widths
   one bit ... the heuristic should have full control of how many it returns" / "A width provides either too few or
