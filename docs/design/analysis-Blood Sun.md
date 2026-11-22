@@ -320,6 +320,72 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   plays: Time Warp; Fastbond with >= 2 lands in hand to play), all measured and presented; no default chosen
   by an agent. The same caution applies to the B3 "no Fastbond target once Fastbond is held" and any other
   tutor-list prune.
+- B12-bis Grim Tutor list REWORK (USER 2026-11-22, after reviewing the lost games; every quote verbatim). Evidence:
+  the plain prune's d8 b0 losses were gi 7 and gi 431 = CLAIRVOYANCE (the search knew the post-shuffle draw: USER
+  *"Blood Sun is the obvious fetch there and we pass it up because we know we will draw one."*); gi 518 = the
+  engine's breakpoint walker gap (USER line wins T4 under the prune; needs two non-front breakpoint picks in one main,
+  `DevSeqSeedWorth` opens compound slots only at latent / canon-drop occurrences; `MTG_BP_DEV_SEQ_ALL=1` finds it at
+  ~183x units; see `docs/design/handoff-bloodsun-2026-11-22.md`); gi 141 = an IMPLEMENTATION BUG in the Time Warp
+  exception (`BloodSunGrimTimeWarpCastable` tests the board as it stands, not counting a land still playable this
+  turn; the Grim -> Time Warp line with Lotus Vale's blue wins T3); gi 277 = a genuine use (Fastbond). USER on 277 /
+  141: *"One of them has the "add mana through Grim Tutor -> Scorched Ruins line that only is valid under fastbond
+  when you are short on mana for a large revelation and the other played just after blood sun where you don't have
+  the mana to cast Revelation and used the time to get more mana. Those are both valid uses."*
+  Rulings: *"I don't think we should admit them under just any circumstances, but there are circumstances where we
+  can cast the Grim Tutor where we could not use the mana for Diabolic revelation. This is a use-case worth
+  considering, but it probably should always go scorched ruins unless immediate mana needs require the colour for
+  something like time warp or another grim tutor. Ideally we prune this down to one option. The adding mana case
+  where we are short of the combo makes sense only with fastbond out. I can't see doing that in an other
+  circumstances, since the land drops are too valuable and it should only be scorched ruins."* /
+  *"Immediate mana needs meaning we can play and use it this turn."* / *"I think if mana is 6 it is also okay to put
+  in rule 1. 6 mana doesn't do enough productive with the Diabolic Revelation, so we can cast other stuff. 5-6 mana
+  would probably be the situation under which, with a free land drop, we might have a chance to cast Time Warp and
+  may need the lotus to do so. At 3 mana and a land drop we are more likely to just be able to cast this grim tutor
+  -> another grim tutor or Dimir Machinations transmute using the land drop. In these cases we should lean toward
+  the lotus as it allows a productive play. For next turn, assuming we have 2 black which is pretty much guaranteed,
+  the scorched ruins would be better."* / *"I wonder whether Fastbond should be in the list when it isn't and we have
+  multiple lands and Revelation in hand. That might be worth testing as well for cases where we have only a few mana
+  available like Turn 2 of game 141. The reason being that it allows a big Revelation next turn. Beyond that test I
+  think this looks good."* / *"I don't think it competes on gi141 in that we should count how many lands we can play
+  without fastbond."* / *"A more likely hand would not have the extra Diabolic Revelation and perhaps would not even
+  have an exploration out. The exploration doesn't make fastbond useless, but it does make it a lot less effective
+  compared to the extra land."* / *"We might even want to cut the land in case I mentioned, especially if we have
+  some big lands already in hand, but we're not required to go too far with this."* / *"But yeah, you do need at
+  least two lands and at least one of them big and no second land drop on field for it to be worth dropping the
+  land."* / *"Of course assuming that Diabolic Revelation is in hand and Blood Sun out. Nothing trumps those ones."* /
+  *"I think we should try it as the only targets and see how it does."* / *"Realistically a real player would go
+  for those first because not having either is disastrous to the engine."* / red source: *"I guess the red land over
+  revelation is somewhat arguable, though. We may need to leave that in so blood sun can be played. Then again, I'm
+  not sure how necessary that rule is in the first place. If we have a lotus it is probably better to just play the
+  lotus than give up our opportunity to get Diabolic Revelation in hand."* / *"With the red source option, I'm fine
+  with it either way. We'll go with whichever option works best."* / *"Whether it is red source always on (until we
+  have one), red source always off or red source conditionally off. (based on whether we still need Diabolic
+  Revelation)"* / *"Right and conditional also is when no red source is on the battlefield or in hand."*
+  -> THE LIST TO BUILD (all new switches DEFAULT OFF, inert while `MTG_BLOODSUN_GRIM_PRUNE` is off; "available mana"
+  = untapped sources + floating + a hand land still playable this turn, as in the >= 8 gate):
+  1. Blood Sun: none on battlefield / in hand. 2. Diabolic Revelation: none in hand.
+  3. The red source (B3): 3 ARMS -- ON (no red source on battlefield / in hand), OFF, COND (= ON AND a Revelation in
+     hand). USER pre-authorised adopting whichever measures best (still report the numbers).
+  4. Time Warp: Grim then Time Warp both castable this turn -- FIX the castability test to count a land still playable
+     this turn (an implementation fix of the USER's exception, not a new rule).
+  5. Rule 1 (idle mana): Revelation in hand, Blood Sun on battlefield, available mana this turn BEFORE Grim <= 6 ->
+     ONE land: a Lotus (Vale / Field one class) if a land drop is open this turn and the Lotus makes a Time Warp,
+     another Grim or a Machinations transmute in hand castable THIS turn that is not castable without it; else
+     Scorched Ruins.
+  6. Rule 2 (Fastbond): Fastbond on battlefield, Revelation in hand, Blood Sun on battlefield -> Scorched Ruins only
+     (played this turn). With the >= 8 gate on, this applies below 8 only.
+  7. The original "lands cannot reach 7 mana" big land: same one-option choice as row 5.
+  8. Fastbond (own switch): no Fastbond on battlefield / in hand, Revelation in hand, Blood Sun on battlefield,
+     available mana <= 6, extra lands (lands in hand minus next turn's drops without Fastbond = 1 + Exploration
+     extras) >= T; A/B at T = 1 and T = 2.
+  Optional arm LAND_CUT: when row 8 admits Fastbond AND >= 2 lands in hand, >= 1 of them big, and no extra-drop
+  permanent on the battlefield -> Fastbond is Grim's only target (row 5's land cut).
+  Arm ONLY_MISSING: while Blood Sun or Revelation is missing, Grim's ONLY targets are the missing one(s) (+ the red
+  source per its arm; parent's reading, surfaced). Gate: the >= 8 Revelation gate (`MTG_BLOODSUN_GRIM_REV_GATE`) on
+  top, Time Warp excepted. DROP / BOARD / TW_ANY (perf part 6) are superseded (TW_ANY's only evidence was
+  clairvoyant). Measure: unit tests on the gi 141 / gi 277 boards + a 3-mana Grim -> Lotus -> Grim board; d8 b0 on the
+  lost games; ONE pooled held-out A/B vs ship and vs amended+LATE; d8 b0 recovery of every slower game; then the
+  USER decides adoption (except the red-source arm, pre-authorised).
 - B13 Lotus sacrifices (USER 2026-11-21, verbatim): *"Machinations is the one case that is dead simple at
   least. I doubt it will be a notable cost unless we haven't applied the prune yet. We should prune the
   sacrifices for sure. Usually the choices are obvious, but we should have an order that we follow that
