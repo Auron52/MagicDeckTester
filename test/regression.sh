@@ -75,7 +75,9 @@ for arg in "$@"; do
     --fast)      MODES+=(smoke) ;;      # back-compat alias
     --both)      MODES+=(smoke regression) ;;   # = --smoke --regression (one pooled batch)
     --accept)    ACCEPT=1 ;;
-    --accept-with-regressions=*) ACCEPT=1; ACCEPT_ACK="${arg#*=}" ;;
+    # The note is written as ONE '#' line of the GT header, so fold any newlines (a multi-line note
+    # once left uncommented lines in regression_gt.txt, 2026-11-21).
+    --accept-with-regressions=*) ACCEPT=1; ACCEPT_ACK="$(printf '%s' "${arg#*=}" | tr '\r\n' '  ')" ;;
     --deck=*)    DECK_ONLY="${arg#*=}" ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
