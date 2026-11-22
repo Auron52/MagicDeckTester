@@ -93,7 +93,7 @@ Paired game gi = seed 1810000+gi; "off / arm" = the A/B turns (unwon = -1); d8 =
 | b (= ba) | cyclone | 1188, 1209 | 8/unwon, 7/8 (d0) | 5, 3 | recovered |
 | b (= ba) | mirrorwing | 1358 | 5 / 6 (d0) | 3 | recovered |
 | b (= ba) | niv | 662, 753, 1150, 1363 | 5/6, 5/7, 6/7, 5/7 (d0) | 5, 4, 4, 3 | recovered |
-| b (= ba) | worldfire | 295 | 7 / unwon (d0) | WORLDFIRE_D8 | |
+| b (= ba) | worldfire | 295 | 7 / unwon (d0) | 5 (4,694 s) | recovered |
 
 h / bh (the d0 haste-sac charge, 80 slower games) were not replayed: the lever is net +60 on Niv d0 and +6 searched,
 far from adoptable, and does not fix the game it was built for.
