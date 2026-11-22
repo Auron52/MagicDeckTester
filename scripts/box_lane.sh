@@ -9,8 +9,12 @@
 # memory-capped and admitted only when the memory is actually free.
 #
 # usage: scripts/box_lane.sh [--slots N] [--cap-gb G] -- <command...>
-#   --slots N   cores the job uses (1..4, default 1). An mtg batch must pass --threads <= N; a build gets
+#   --slots N   cores the job uses (1..2, default 1). An mtg batch must pass --threads <= N; a build gets
 #               MTG_BUILD_JOBS=N. The job waits until N slots are free at once.
+#               At most 2 per job (2026-11-22): admission is in arrival order, so a 3- or 4-slot job at the head
+#               waits for slots that rarely free together, and everything queues behind it. On 2026-11-21/22 such
+#               heads blocked seven 1-2 slot jobs for 1.5-4 h while two slots sat idle. With every job <= 2 slots,
+#               the head can start whenever half the lane is free.
 #   --cap-gb G  memory cap PER SLOT (default 6). The job runs with MTG_RSS_CAP_GB = N*G (the engine aborts past it)
 #               and is admitted only when MemAvailable >= N*G + 2 GB.
 # Not for a big run: anything that wants more than 4 cores goes under claude_box.lock as before.
@@ -25,8 +29,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ $# -gt 0 ] || { echo "usage: $0 [--slots N] [--cap-gb G] -- <command...>" >&2; exit 2; }
-max=4
-if [ "$slots" -lt 1 ] || [ "$slots" -gt "$max" ]; then echo "box_lane: --slots must be 1..$max" >&2; exit 2; fi
+max=4        # lane size (slot files)
+job_max=2    # per-job limit (see --slots above)
+if [ "$slots" -lt 1 ] || [ "$slots" -gt "$job_max" ]; then echo "box_lane: --slots must be 1..$job_max" >&2; exit 2; fi
 dir=/workspaces/MagicDeckTester/build/scratch/lane
 mkdir -p "$dir"
 need_gb=$(( slots * cap + 2 ))

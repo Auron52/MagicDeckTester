@@ -79,7 +79,8 @@ process, so several big engine processes at once have no memory protection (2026
 container down). Run ONE big process at a time (a gate, tier, A/B or full-core build; serialise on a lock).
 Beside it, small work (a few single games, a d8 b0 replay, a unit-test run, a worktree build) may use up to
 4 cores through `scripts/box_lane.sh --slots N [--cap-gb G] -- <cmd>`: per-slot memory cap, admitted only
-when the memory is free. The USER: *"I wouldn't try 2 32-core processes, but your suggestion makes sense."*
+when the memory is free, **at most 2 slots per job** (a 3- or 4-slot job at the head of the arrival-order queue
+blocked the whole lane for hours on 2026-11-22). The USER: *"I wouldn't try 2 32-core processes, but your suggestion makes sense."*
 **Do not leave the box underused.** Start the next big process when the current one is stuck in a long tail
 or is only waiting on long-running d8 b0 results (*"We should avoid getting stuck in a way that poorly uses
 the CPU if possible."*), checking memory (`free -g`) first.
