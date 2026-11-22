@@ -9528,7 +9528,7 @@ bool BeastsProvider::ProvenWinlessThisTurn(const GameState& s, int controller) c
     if (controller != s.active_player_index || s.Opponent().poison_counters > 0
         || s.deck_poison_hit_bound != 0 || !s.battlefield.empty()) { return false; }
     const Player& ap = s.players[static_cast<std::size_t>(controller)];
-    return ap.hand.empty() && ap.exile.empty() && ap.graveyard.empty() && ap.sideboard.empty();
+    return ap.hand.empty() && s.exile.empty() && ap.graveyard.empty() && ap.sideboard.empty();
 }
 
 // Bloated Contaminator's proliferate (see the declaration). The sound one-option collapse: every candidate holds only
