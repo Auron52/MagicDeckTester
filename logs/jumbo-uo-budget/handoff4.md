@@ -12,23 +12,45 @@ ONE big engine process at a time under `flock /workspaces/MagicDeckTester/build/
 with `./build.sh`, ~200 s after a src edit (9p clock lag). No `timeout`, no `pgrep -f` / `pkill -f` waiters (wait on a
 PID with `kill -0` or on a DONE file). Rebase, never merge. Never touch `references/` except to commit.
 
-## State (2026-11-22 ~14:45 UTC)
-- xm3 result (see handoff3 "xm3 RESULT"): normalising eval / equiv_ord / cont_pins brings back no hits. Some other
-  Action field differs on every action-mismatched hit (Jumbo UOT act_diff 36,968, all `other_after_norm`).
-  Bruna's 78 UOT diffs are all hand_index.
-- Added a census of EVERY Action member (`uotx::CensusAll`, X-macro `UOTX_FIELDS` in `src/ai/TurnSolver.cpp`,
-  diagnostic only, printed as `[uot-xmemo] site=... all-field diffs:` at exit).
-- Running: lane job xm4 (`$S/xm4/chain.sh`: build, then Jumbo 400 `$S/prof/on.json` with both sites + VERIFY).
-  DONE marker `$S/xm4/DONE`; read `grep uot-xmemo $S/xm4/jver/batch.err`.
+## State (2026-11-22 15:40 UTC)
+- xm4 (`$S/xm4`): the field census found the unidentified field. It is **tutor_target**, in 36,886 of 36,968 Jumbo
+  UOT diffs (GSZ / Finale / Tooth and Nail variants of the same subset). Within the walk cluster the field is read only
+  for the Fireblast, Archive Trap and Walk-the-Aeons-buyback pins (SeqWalkFixedOrder) and in TutoredUntapperHostId.
+  Every other reader is plan-level; the function map is in this session's log, so grep `tutor_target` to check it.
+  Folded under `spsx::TutorWalkSame`.
+- xm5 (`$S/xm5`, d7366d723): VERIFY 0 mismatches on both sites and both decks. Play is byte-identical on every arm.
+  Hits: UOT 73,698, SPS 179,064. Instructions (Jumbo, 400 games, 2 threads, `perf stat instructions:u`):
+  | arm | lever on | lever off |
+  |---|---|---|
+  | no memo | 348.97G | 303.45G |
+  | UOT site | 338.41G | -- |
+  | SPS site | **329.63G** | **293.86G** |
+  | both sites | 330.53G | -- |
+
+  Bruna: no memo 837.75G, UOT site 836.74G, both sites 837.50G. Most of Bruna's SPS act-diffs are hand_index, which
+  stays strict because the walk reads it.
+- **a27e75565**: shipped as `MTG_SPS_XMEMO` DEFAULT ON (`SpsCrossEnumMemo`, namespace `spsx`). This is the SPS site
+  alone. The UOT-site prototype and `MTG_UOT_XMEMO` / `MTG_XMEMO_NORM` were removed. Diagnostics print only under
+  `MTG_SPS_XMEMO_VERIFY=1`. Memory is bounded at 32 MB of stored Actions per thread.
+- Running: detached chain `$S/id1/chain.sh` (setsid; log `$S/id1/chain.log`). It sleeps 200 s, builds in the lane
+  (`$S/id1/build.log`) and copies the binary to `$S/mtg.id1`. Then, under the box lock (`$S/id1/big.sh`, nproc threads,
+  MTG_PGO=0, RSS 40), it runs:
+  - identity slice `on` (memo on) and `off` (MTG_SPS_XMEMO=0) over `$S/id1/id.json`: 60 suite decks x 300 games plus
+    Jumbo 2000, gi 733000+;
+  - `ver` (VERIFY) over `$S/id1/ver.json`: 100 games per deck, Jumbo 400, gi 736000+;
+  - `bash test/regression.sh --both` (log `$S/id1/regr.log`, marker `$S/id1/REGR_DONE`);
+  - `test/check_gt_logs.py` (`$S/id1/checkgt.log`).
+
+  Per-arm markers: `$S/id1/<arm>/DONE`. Final marker: `$S/id1/DONE` (or "buildfail").
 
 ## Next steps
-1. Read xm4's all-field line and name the differing field(s). Prove the unlock-order tree / SPS walk never reads
-   them (or key on them), normalise them in `uotx::WalkSame`, and confirm the hits return to about 73,780 with
-   instructions near 338G.
-2. Make the winner DEFAULT ON (`EnvOn("MTG_UOT_XMEMO", true)`), rewrite its comment as a shipped exact cut, and drop
-   the SPS site if it does not pay.
-3. Run the identity slice under the box lock (`logs/jumbo-uo-budget/mkid.py out.json 300 2000 733000`: every suite deck
-   300 games at play settings, Jumbo 2000). Run one process with the memo on and one with `MTG_UOT_XMEMO=0`, in
-   sequence, with nproc threads and `MTG_PGO=0`. Each game's played= line must match once ms/cpu are stripped.
-4. Run `bash test/regression.sh --both` under the lock. No GT change is expected. Then run `python3 test/check_gt_logs.py`.
-5. Write the doc section, commit, and push wip/jumbo-uo-budget.
+1. When `$S/id1/on/DONE` and `off/DONE` exist, diff the arms with
+   `sed 's/ ms=[0-9]*//;s/ cpu=[0-9]*//' batch.out | grep played= | sort` on each. The result must be identical
+   (digest per 25-game job). Then `grep sps-xmemo $S/id1/ver/batch.err` must show VERIFY_MISMATCH=0.
+2. regression `--both` must show no GT change; nothing to accept. check_gt_logs rc=0.
+3. Add the doc section "Exact cuts, 2026-11-21/22" to `docs/design/jumbo-apply-drop-order-2026-11-18.md`. It should
+   cover: the memo revert (0 hits), replay refuted, the perf split, the census, the xmemo numbers above, the
+   tutor_target finding, and the shipped cut. Then commit and push wip/jumbo-uo-budget.
+4. Report to the coordinator. The price variants all fail the bar (USER decision, not settled). The lever's overhead
+   on Jumbo falls from +15.0% to about +8.6% vs today's off (329.6 vs 303.5). Off itself also gets 3.2% cheaper, so
+   on-with-memo is +12.2% over off-with-memo.
