@@ -37,7 +37,7 @@ date first) is the full picture; this section is the short version of how to pic
    | Prepay floating {C} (gi548) | hinata-gi548 / wip/hinata-gi548 | MTG_PREPAY_FLOAT_C_PHYS -> default ON; chain build/scratch/claude_prepayc/chain1.sh | A/B, GT; then remove gi548-base + hinata-gi548 via scripts/safe_worktree_remove.sh |
    | Sac-fodder pricing | sacfodder-fix / wip/sacfodder-fix | ab2 in build/scratch/claude_sacfodder_fix5 (AB2.DONE; `python3 tools/cmp2.py ab2:off ab2:on ab2:p2x2 ab2:p2x4 ab2:p2skip`) | priced arm nets <= 0 on Goblins+Fungus and cuts CPU -> adopt per logs/sacfodder-fix/handoff4.md; else USER call |
    | Rock CPU | rock-cpu, rock-cpu-dev / wip/rock-cpu | cut-menu measurement build/scratch/claude_rock_cpu/ab2 | report only |
-   | Maze Summit | maze-summit / wip/maze-summit | repros; handoff file in its logs/ | continue from handoff |
+   | Maze Summit | maze-summit / wip/maze-summit (9d15c0d69, handoff 65d357e98) | Claude agent STOPPED (261K). MTG_MAZE_SUMMIT_PAY_FIRST built, default OFF: d5 b20 +15 (6/21) FAILS, 2HG 0, d0 -17. Suspected cause: the {all unneeded, none} menu applies the Maze's End {3} reserve even when the line never activates Maze. Lane repros pending (`build/scratch/claude_maze_summit/sg.DONE`) | confirm cause from repro logs, apply reserve only when line activates Maze's End, re-A/B on fresh seeds, d8 b0, then flip + GT (logs/maze-summit/handoff.md) |
    | Jumbo unlock price | agent-a1cd888d17514cedb / wip/jumbo-uo-budget (45615b04f) | Claude agent STOPPED (253K). Price variants all fail (+4..+8 vs lever ON; USER call). MTG_UOT_XMEMO (default off) exact so far, cuts 24% of lever cost on Jumbo; lane job xm3 (PID 901357, `$S/xm3/DONE`) measures which action fields differ | continue from logs/jumbo-uo-budget/handoff3.md |
    | Maze gate record | batch-1121 | self-yielding filler build/scratch/claude_batch1121/gate_filler.sh, DONE3 in status | commit the mana_clean record |
 6. **Standing USER bars:** every deck net <= 0 (searched AND d0; searched reported first and sized 1-2k games/shape --
@@ -46,7 +46,10 @@ date first) is the full picture; this section is the short version of how to pic
    justify it by the 3x headroom; USER-owned decisions are surfaced, never settled.
    Agent handoff files (Codex-readable, pushed): Hinata `hinata-d4-d5/logs/hinata-d4-d5/hinata-handoff4.md`; Rock CPU
    `rock-cpu-dev/logs/rock-cpu/rock-cpu-handoff2.md`; Prepay-C `hinata-gi548/logs/prepay-c/prepay-c-handoff.md`; Bruna lord
-   `bruna-lordproj/logs/bruna-apply-drop/agent7-handoff.md`; Jumbo `agent-a1cd888d17514cedb/logs/jumbo-uo-budget/handoff3.md`.
+   `bruna-lordproj/logs/bruna-apply-drop/agent7-handoff.md`; Jumbo `agent-a1cd888d17514cedb/logs/jumbo-uo-budget/handoff3.md`; Heath
+   `heath-derived/logs/heath/heath-handoff3.md` (wip/heath-derived be8bcaa6e); Bruna-RO `bruna-ro/logs/bruna-ro/bruna-ro-handoff.md`
+   (wip/bruna-rule-override 31e483db8: amendments MTG_PAY_LINE_CRIT_UNTAPPER_LAST / _HASTE_SAC_LAST written, build queued on lock,
+   A/B not yet run, ~2.5 h of box); Maze Summit `maze-summit/logs/maze-summit/handoff.md`.
 7. **Open USER decisions:** Jumbo unlock-order price: every price variant costs +4..+8 net games vs lever ON (trade-off); Bruna 7a/7b (after its A/B reports); sac-fodder CPU-vs-quality (only if no priced arm passes).
 
 ## Live status (Claude), updated 16:50 UTC
