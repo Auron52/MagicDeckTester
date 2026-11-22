@@ -166,6 +166,64 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
   - Bruna 7a/7b: recommend off (Jumbo +6, Niv +13). Each has a named amendment.
   - Hinata: AL/CG/Dragonstorm share the same d5 W3 beam.
 
+**10:45 UTC 11-22:** STATE FOR RESUME (pre-compaction 7).
+- **Shared branch:** origin 94cd1e06b (the other session's Creature Burn Magma Jet/Fireblast landing).
+- **MERFOLK LANDING (in flight, ours):**
+  - **Lease:** we hold the push-queue lease as 839667a3a15d:wip/merfolk-gate. Nobody is behind us.
+  - **Tree:** .claude/worktrees/land-1122b, branch wip/land-1122b (pushed), tip cd330ec5a. It is Merfolk ENUM-GAP option (a) rebased onto 94cd1e06b, with GT 43695aac5.
+  - **Validation:** build/scratch/claude_land1122b/validate.sh (PID 858396) is waiting for the box lock. It runs ./build.sh, units, then MTG_PGO=0 smoke, then check_gt_logs.
+    - Status: claude_land1122b/status. "ALL OK" means pass; exit 11-14 means a stage failed.
+    - Background task bjx0lpa4x wraps it in `hold`. The hold uses the wrong ID, so it is harmless and only warns.
+    - Keepalive task bx0xsshf0 runs with MDT_PUSH_QUEUE_ID=839667a3a15d:wip/merfolk-gate --pid 858396.
+  - **On ALL OK:**
+    1. From land-1122b: `git fetch`. If origin moved, rebase and revalidate.
+    2. `MDT_PUSH_QUEUE_ID=839667a3a15d:wip/merfolk-gate python3 scripts/push_queue.py land`.
+    3. `git -C /workspaces/MagicDeckTester pull --rebase` (the primary).
+    4. Hinata 3's waiter then fires by itself.
+  - **On a failure:** `MDT_PUSH_QUEUE_ID=... push_queue.py requeue`, then fix.
+  - **CI:** gh is not authenticated, so CI is not watched (report this).
+- **AGENTS (each lands through me via the queue; none pushes the shared branch):**
+  - **HINATA 3** ab27a0a483d947243: waits for origin to contain "Merfolk ENUM-GAP: ship the generic option".
+    - Then it rebases wip/hinata-d4-d5 (worktree hinata-d4-d5) and runs gate2/run.sh under the lock: full build, units, regression --both, no accept.
+    - Then it checks that only Hinata keys moved, classifies any new slower games, runs the accept with the note from hinata-handoff3.md, does check_gt_logs, check_references_safe and doc section 5, and pushes wip only.
+    - Ship commit 0c993e9a9.
+    - Slower games so far: 23. 19 recover at 4x/16x; gi20 at 32x, gi128 at 64x, smoke gi46 at 64x (d5) and 128x (d3).
+  - **ROCK CPU 2** a87656165cca29a40: from rock-cpu-dev/logs/rock-cpu/rock-cpu-handoff.md (wip/rock-cpu 9c01aee92).
+    - It measures MTG_LKR_PLAYOUT_OFF / _PLAYOUT_NO_TABLE / _PRICE as a menu and adopts nothing.
+    - Step-1 table: searched -10, d0 -20 on fresh seeds. CPU is searched-only: Niv +6.5%, ExtraTurns +3-7%, Hinata +3%.
+    - Startup costs 416M instructions per process.
+    - Lane jobs 816001 (perf_base100) and 850695 (d8_m1).
+    - The old Rock agent a09ead7d63302df2a was STOPPED by me.
+  - **BRUNA 7** a94440518d98b40a1: from logs/bruna-apply-drop/handoff6.md (a1d3ba763, pushed).
+    - Waits on build/scratch/bad/a6/lock7.DONE. That marker covers tok3 (PID 850661, TOKEN_SELF re-measure, 200k pairs) and lock7 (PID 858877: fix7 build, instruction counts, the CREATURE_FLOAT_SWAP gi21770 fix and its A/B).
+    - Then the CPU cut, TOKEN_SELF (strictly better -> ON, else USER), rebase, regression --both, GT.
+    - CPU so far: EDF d0 1.047, Jumbo 1.044, Sea 1.035 (noisy timings).
+  - **HEATH 3** af9aa5293dc35c5aa: from logs/heath/heath-handoff.md.
+    - The 10 r2 slower games all recover at d8 b0.
+    - The larger Burn/Morph/Sea play re-measure gave 33 new slower games. Running now: d8 b0 on those, and a clairvoyance-decoupled A/B (search shuffle salt; blind search on Sea).
+    - Then GT on wip/heath-produces (088ecfbc6).
+  - **MAZE SUMMIT** a1dd9734aa58e3ebb (~236K): MTG_MAZE_SUMMIT_PAY_FIRST, waiting on its jobs. Ask for a handoff when it passes 250K.
+  - **SAC-FODDER 6** a749438ca18baf77f, **gi548** a6b2bfdd7edc7266c, **JUMBO** aa3c32315f48ad7c6 (~242K; xm3): waiting on their jobs.
+  - **DONE / handed off:** Heath 2, Hinata 2, Bruna 5, Bruna 6, Rock CPU 1, Merfolk ship (afe6020fa9ae24f1f), Merfolk ENUM-GAP old (aca5d470df1230759).
+- **Agent tree note:** agent-a1651726d5b941608 is back on wip/merfolk-gate. Bruna 6 used it briefly; ignore its wip/bruna-apply-drop-a6 branch.
+- **MAZE GATE FILLER:** gate_filler.sh, waiter bbhw5mk1l on DONE3. It is yielding while the lock queue is busy.
+- **USER DECISIONS OPEN (surfaced, not settled):**
+  1. Heath: keep the Flooded Strand W/U hint (Spirits d0 -259, Sea -224 vs Worldfire +17)? It is [] now.
+  2. Heath: adopt the Orchard-before-fetch provider rule (MTG_ORCHARD_BEFORE_FETCH, Creature Giving + Stuffy)? It is ON in the WIP.
+  3. Bruna: MTG_EVAL_COMBAT_TOKEN_SELF (Sea d0 -1928; the Spirits +1 is the d0 lord-pump lethal defect), if tok3 fails the bar.
+  4. Bruna 7a (Jumbo d0 +6; amendment: leave land-untapping creatures out) and 7b (Niv d0 +13; amendment: keep the sacrificed Servant out). I recommend OFF.
+  5. Hinata: AL/CG/Dragonstorm ship the same d5-only W3 beam, unmeasured.
+- **FOLLOW-UPS:**
+  - The d0 lethal check ignores lords cast this turn (docs/design/d0-lord-pump-lethal-projection.md).
+  - The Pirates routing unit test.
+  - Delete MTG_PO_DAMAGE_ORDER.
+  - The Merfolk 3218cc593 per-selection pricing cut is inert; delete it.
+  - Hinata gi33 unpriced plan enumeration.
+  - The 19 unattributed overnight games.
+  - Gate d (--resume claude-queue-20261120d).
+  - Remove the board-share-base worktree.
+  - The lane is ~2 h backlogged at -j2 builds, so tell agents to build at full cores under the lock.
+
 **21:45 UTC 11-21:** Maze gate resume (lock 21:21): the on arm at 24 threads tripped its 28 GB cap after 333 s (rss 28.9 GB: ~1.2 GB/worker, so fewer threads barely saves memory), 0 new on games; mana_clean then ran the OFF arm to completion (5000/5000, 13 min). State: on arm 1631/5000, off arm DONE; report says 'incomplete'. NOT requeued yet: the gate is a record (the batch-1121 changes are oracle-only + smoke passed), so it does not block landing. PLAN: when rock's d8 b0 verdicts are in, build ONE integration batch (batch-1121 + PD f98cfb65f + rock wip/rock-in-plan-rb + Merfolk wip/merfolk-gate as ready) on current origin, validate under the lock, join the push queue; THEN resume the Maze on arm at 32 threads / MTG_RSS_CAP_GB=40 (`mana_clean.py run --resume claude-queue-20261121a` in .claude/worktrees/batch-1121, src must stay unchanged there).
 
 **20:45 UTC 11-21:** status check + SCHEDULING CHANGE. The Maze gate (32 threads, ~32 GB) left MemAvailable ~10 GB, so every 4-slot lane job (need 14 GB: Bruna build_ro, burn chain1, Merfolk eg_chain1) sat at the lane head and blocked ~15 agent jobs (Hinata probes/traces, sac-fodder diag4, overnight bisect, Bruna fix3) for hours; gate ETA was ~06:00. STOPPED it at 20:40 (1631/5000 on-arm games streamed; chunk-granular resume), batch-1121 status 'gate rc=143' + DONE. REQUEUED: build/scratch/claude_batch1121/resume.sh (setsid) = flock box.lock + `mana_clean.py run --resume claude-queue-20261121a --threads 24` at MTG_RSS_CAP_GB=28 (~24 GB, leaves the lane room); status lines 'resume lock', 'gate-resume rc=', 'DONE2' in claude_batch1121/status, log gate_resume.log. Rock chain10 took the lock at 20:41. Also resubmitted Bruna's build_fix3 at --slots 2 (was 4; same script/log).
