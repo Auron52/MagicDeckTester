@@ -29,8 +29,10 @@ Nykthos (63aa2fe6b), G Bloated Contaminator (e2838e47a). Commit list: `git log -
 
 Batch H is integrated as `c279a5ff3`; batch I is integrated locally as `cd1ea5116`.
 Batch I passed 3892/3892 units and 235/235 smoke configurations with 0 play changes before
-a human-only viewer menu follow-up. That follow-up passed 60 human-mode assertions and awaits
-the final pre-push regression. Resume at step 3 (viewer readiness); historical batch H/I
+a human-only viewer menu follow-up. That follow-up passed 60 human-mode assertions. The full
+pre-push regression then passed 375/375 with 0 config or play changes; viewer reference replay
+reported 930 refs with 0 protocol drift. The shared push queue currently has Merfolk and
+Worldfire ahead of Beasts. Resume at step 3 (viewer readiness); historical batch H/I
 instructions below are retained for context.
 
 1. **Batch H, Woodland Bellower -- IN PROGRESS, start here.** Everything is in WIP commit `f75719a58`
