@@ -277,7 +277,7 @@ creatureburn2hg_overnight_d5_s5005	74808
 creatureburn2hg_overnight_d5_s6006	74926
 creatureburn2hg_overnight_d5_s7007	85880
 creatureburn2hg_regression_d5_s2002	76413
-creatureburn2hg_smoke_d5_s1001	44437
+creatureburn2hg_smoke_d5_s1001	49240
 creatureburn_overnight_d0_s10010	1
 creatureburn_overnight_d0_s4004	1
 creatureburn_overnight_d0_s6006	1
@@ -299,8 +299,8 @@ creatureburn_regression_d5_s2002	21191
 creatureburn_regression_d5_s3003	28578
 creatureburn_regression_d5_s30161	3709
 creatureburn_smoke_d0_s1001	1
-creatureburn_smoke_d3_s1001	12659
-creatureburn_smoke_d5_s1001	23521
+creatureburn_smoke_d3_s1001	13401
+creatureburn_smoke_d5_s1001	24616
 critter2hg_smoke_d3_s1001	4889
 critter2hg_smoke_d5_s1001	1168
 critter_overnight_d0_s10010	1
@@ -986,7 +986,7 @@ midrangeburn2hg_overnight_d5_s5005	36170
 midrangeburn2hg_overnight_d5_s6006	37445
 midrangeburn2hg_overnight_d5_s7007	37218
 midrangeburn2hg_regression_d5_s2002	33527
-midrangeburn2hg_smoke_d5_s1001	25959
+midrangeburn2hg_smoke_d5_s1001	26657
 midrangeburn_overnight_d0_s10010	1
 midrangeburn_overnight_d0_s4004	1
 midrangeburn_overnight_d0_s6006	1
@@ -1008,8 +1008,8 @@ midrangeburn_regression_d5_s2002	9577
 midrangeburn_regression_d5_s30021	3815
 midrangeburn_regression_d5_s3003	9636
 midrangeburn_smoke_d0_s1001	1
-midrangeburn_smoke_d3_s1001	8739
-midrangeburn_smoke_d5_s1001	12076
+midrangeburn_smoke_d3_s1001	8826
+midrangeburn_smoke_d5_s1001	12114
 mill2hg_overnight_d5_s4004	22027
 mill2hg_regression_d5_s2002	18579
 mill2hg_smoke_d5_s1001	27376
