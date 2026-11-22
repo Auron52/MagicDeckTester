@@ -140,3 +140,15 @@ recommendation.
   bridge retains the cheaper package's joint payment instead of the last package's bill. Five focused go-off tests
   pass (161 assertions). The B12-bis and B14 binaries were frozen before this change; their A/B arms remain
   internally paired, but the final default-on go-off fix needs the shared suite smoke before landing.
+- At 16:18 the push queue put Blood Sun at its head. Rebased 104 local commits over origin `9575556d5f`
+  (Worldfire, free-turn flood, tutor-width deletion, Merfolk); resolved the card-definition and search includes,
+  merged both heuristic-arm blocks, kept origin's complete Worldfire LTB resolver, and took origin GT at conflicts
+  pending a fresh pooled regression. The rebase exposed removed `TutorSearchWidth` / `TutorAxisWidth` APIs;
+  Blood Sun's per-cast tutor axis now searches every distinct candidate, matching origin's complete search.
+  The first build failed on those APIs; per CLAUDE.md queue rule the session requeued at 16:24 while fixing them.
+  The incremental Release build completed (throttled to 4 jobs during a host-memory dip, then 12 jobs); full unit
+  passed 4050 cases / 3,661,766 assertions. Reference safety passed across 107 checkouts; origin GT restored as one
+  snapshot and `check_gt_logs.py` passed 1409 consistent / 0 stale. The pooled regression started, but was stopped
+  when Beasts landed 47 new commits at origin `c841cd59c4`; Blood Sun is queue HEAD again at 17:04 and must rebase
+  onto that tip before a final gate. The B12-bis frozen batch PID 459036 is PAUSED; `kill -CONT 459036` when gates
+  permit. Queue waiter exec session 96044 is active (it may have exited on becoming HEAD).
