@@ -23768,6 +23768,42 @@ int CreatureGivingProvider::CastOrderRank(const GameState& s, const CardDefiniti
     return GenericProvider::CastOrderRank(s, def);
 }
 
+// ---- Forbidden Orchard ahead of a fetchland (MTG_ORCHARD_BEFORE_FETCH, default ON; 2026-11-22) --------------------
+// Creature Giving and Stuffy Doll both turn the Orchard's opponent Spirit into value (Suture Priest drains, Defense of
+// the Heart's three-creature test, Massacre Wurm; Blasphemous Act's discount, Chain Reaction's X), so an Orchard on
+// the battlefield a turn earlier is one more Spirit. The USER (CG, 2026-08-19): "you want the fixing and creature
+// creation of Forbidden Orchard". Until 2026-11-22 a fetchland in hand had no `produces` colour hint (Windswept Heath
+// since Boars I1, Arid Mesa always), so the ranker's multi-colour pass put the Orchard ahead of it by construction;
+// restoring the hint (docs/design/heath-produces-2026-11-22.md) left the two tied and hand order decided. The held-out
+// d0 A/B measured fetch-before-Orchard as the one real cost of the restore: Creature Giving +266 turn-games over
+// 2971 games, Stuffy Doll +179 over 972 (z > 4 each). ORDER only, and only of the greedy ranker (the depth-0 runner,
+// the playout's drop and the search's last-resort land tiebreak): with an Orchard that can tap this turn and a
+// fetchland both in hand, the Orchard is the drop. Every other hand is untouched.
+static int OrchardBeforeFetchIndex(const GameState& s, int controller)
+{
+    static const bool s_on = EnvOn("MTG_ORCHARD_BEFORE_FETCH", true);
+    if (!s_on) { return -1; }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    int orchard = -1;
+    bool fetch = false;
+    for (int i = 0; i < static_cast<int>(pl.hand.size()); ++i)
+    {
+        const Card& c = pl.hand[static_cast<std::size_t>(i)];
+        if (c.m_impulse_no_land) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->card.IsLand()) { continue; }
+        if (!d->params.fetch_land_types.empty()) { fetch = true; }
+        else if (orchard < 0 && d->params.taps_spawn_opp_token && LandUsableOnEntry(s, *d)) { orchard = i; }
+    }
+    return fetch ? orchard : -1;
+}
+
+int CreatureGivingProvider::GreedyLandFirst(const GameState& s, int controller) const
+{ return OrchardBeforeFetchIndex(s, controller); }
+
+int StuffyDollProvider::GreedyLandFirst(const GameState& s, int controller) const
+{ return OrchardBeforeFetchIndex(s, controller); }
+
 bool CreatureGivingProvider::LandDropAfterHandLandTutor(const GameState& s, int controller) const
 {
     // USER (2026-08-19, final round): "If you can play it before the land drop, you should. The

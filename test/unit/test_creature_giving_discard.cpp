@@ -8,6 +8,7 @@
 
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/LandPlay.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -420,5 +421,40 @@ TEST_CASE("CG Crop Rotation: the resolution tutor pin picks the land; the Orchar
         PerformLandTutorToBattlefield(s, 0, pp, std::string());
         CHECK(put_land(s) == std::string(kOrch));
         CHECK(g_scripted_tutor_choice == -1);
+    }
+}
+
+// Forbidden Orchard ahead of a fetchland in the greedy land ranker (OrchardBeforeFetchIndex, 2026-11-22,
+// docs/design/heath-produces-2026-11-22.md): with the fetchland's hand colour hint restored, the Heath and the
+// Orchard tie in the multi-colour pass and hand order decided; the Orchard is the token engine, so it goes first.
+TEST_CASE("CG + Stuffy greedy land: Forbidden Orchard ahead of a fetchland, nothing else moved")
+{
+    {
+        GameState s = MakeCg({ kHeath, kOrch, kTG }, { kFor });
+        s.players[0].lands_played_this_turn = 0;
+        CHECK(Prov().GreedyLandFirst(s, 0) == 1);
+        CHECK(GreedyLandChoiceIndex(s) == 1);
+    }
+    {
+        // No fetchland in hand: the hook stays out and the four passes decide (Temple Garden, first in hand order).
+        GameState s = MakeCg({ kTG, kOrch }, { kFor });
+        s.players[0].lands_played_this_turn = 0;
+        CHECK(Prov().GreedyLandFirst(s, 0) == -1);
+        CHECK(GreedyLandChoiceIndex(s) == 0);
+    }
+    {
+        // No Orchard: the hook stays out.
+        GameState s = MakeCg({ kHeath, kTG }, { kFor });
+        s.players[0].lands_played_this_turn = 0;
+        CHECK(Prov().GreedyLandFirst(s, 0) == -1);
+    }
+    {
+        // Stuffy Doll: the same rule over Arid Mesa.
+        static const StuffyDollProvider stuffy;
+        GameState s = MakeCg({ "Arid Mesa", kOrch }, { "Mountain" });
+        s.m_provider = &stuffy;
+        s.players[0].lands_played_this_turn = 0;
+        CHECK(stuffy.GreedyLandFirst(s, 0) == 1);
+        CHECK(GreedyLandChoiceIndex(s) == 1);
     }
 }

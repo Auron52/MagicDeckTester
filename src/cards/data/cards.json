@@ -215,13 +215,10 @@
    "types": ["Land"],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Mountain or Plains card, put it onto the battlefield, then shuffle. [REAL battlefield fetchland: its entry and searched activation are separate decisions. Keeps a W/R `produces` (its basic types' colours) ONLY so a copy in HAND counts as a colour source for fixing heuristics; a fetchland on the battlefield has no mana ability (EffectiveProducesFor). Added 2026-11-22 with Windswept Heath (docs/design/heath-produces-2026-11-22.md).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Mountain or Plains card, put it onto the battlefield, then shuffle. [REAL battlefield fetchland: its entry and searched activation are separate decisions. `produces` stays EMPTY (no hand colour hint): a W/R hint was measured with the 2026-11-22 Windswept Heath restore and cost Modern RW Burn d0 (+68 and +35 turn-games over two 50k held-out samples); docs/design/heath-produces-2026-11-22.md.]",
    "template": "custom",
    "parameters": {
-    "produces": [
-     "W",
-     "R"
-    ],
+    "produces": [],
     "fetch_land_types": ["Mountain", "Plains"],
     "land_search_count": 1,
     "land_search_activation_cost": "",
@@ -16805,13 +16802,10 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Plains or Island card, put it onto the battlefield, then shuffle. [REAL battlefield fetchland (the Arid Mesa / Wooded Foothills model): its entry and its searched activation are separate decisions -- it may be held on the battlefield and cracked in a later main, and (the engine; SpiritsProvider DECLINES the hold by default since 2026-11-14 -- USER: \"we should drop the fetch hold. It isn't helpful here.\" -- MTG_SPIRITS_NO_FETCH_HOLD=0 restores it) where a provider keeps the hold, the crack-on-play variants are offered BESIDE it, one per target, so a Strand played this turn can find a land that pays for this main's casts (FetchCrackOnPlayOffered). A Strand already HELD on the battlefield may be cracked FIRST to pay for a cast in the same main: the crack-first plans are priced on the post-crack board, one per pick (AppendHeldFetchCrackFirstPlans; docs/design/held-fetch-crack-then-cast-hole.md, FIXED 2026-11-13). The activation pays 1 life and sacrifices this land as costs, then searches a Plains or Island card (in the Spirits list: Plains, Island, Hallowed Fountain, Godless Shrine = Plains Swamp, Watery Grave = Island Swamp; the pick is searched, LandSearchPicks) and shuffles. The fetched shock land resolves its own pay-2-or-tapped choice as it enters. It cannot tap for mana. Instant-speed activation is collapsed to our searched main-phase activation slots (against the passive opponent a crack at the opponent's end step is equivalent to one in our next main before anything is cast, minus the draw information, so the main-phase slot weakly dominates). Keeps a W/U `produces` (its basic types' colours) ONLY so a copy in HAND counts as a colour source for fixing heuristics; a fetchland on the battlefield has no mana ability (EffectiveProducesFor). Added 2026-11-22 with Windswept Heath (docs/design/heath-produces-2026-11-22.md).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Plains or Island card, put it onto the battlefield, then shuffle. [REAL battlefield fetchland (the Arid Mesa / Wooded Foothills model): its entry and its searched activation are separate decisions -- it may be held on the battlefield and cracked in a later main, and (the engine; SpiritsProvider DECLINES the hold by default since 2026-11-14 -- USER: \"we should drop the fetch hold. It isn't helpful here.\" -- MTG_SPIRITS_NO_FETCH_HOLD=0 restores it) where a provider keeps the hold, the crack-on-play variants are offered BESIDE it, one per target, so a Strand played this turn can find a land that pays for this main's casts (FetchCrackOnPlayOffered). A Strand already HELD on the battlefield may be cracked FIRST to pay for a cast in the same main: the crack-first plans are priced on the post-crack board, one per pick (AppendHeldFetchCrackFirstPlans; docs/design/held-fetch-crack-then-cast-hole.md, FIXED 2026-11-13). The activation pays 1 life and sacrifices this land as costs, then searches a Plains or Island card (in the Spirits list: Plains, Island, Hallowed Fountain, Godless Shrine = Plains Swamp, Watery Grave = Island Swamp; the pick is searched, LandSearchPicks) and shuffles. The fetched shock land resolves its own pay-2-or-tapped choice as it enters. It cannot tap for mana. Instant-speed activation is collapsed to our searched main-phase activation slots (against the passive opponent a crack at the opponent's end step is equivalent to one in our next main before anything is cast, minus the draw information, so the main-phase slot weakly dominates). `produces` stays EMPTY (no hand colour hint): a W/U hint was measured with the 2026-11-22 Windswept Heath restore -- Spirits d0 -259 and Sea Creatures -224 turn-games, but Worldfire +17 / +60 over two 50k held-out samples, so it is not adopted under the every-deck bar (USER decision pending; docs/design/heath-produces-2026-11-22.md).]",
    "template": "custom",
    "parameters": {
-    "produces": [
-     "W",
-     "U"
-    ],
+    "produces": [],
     "fetch_land_types": [
      "Plains",
      "Island"
