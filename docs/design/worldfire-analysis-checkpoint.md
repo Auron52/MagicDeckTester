@@ -85,22 +85,30 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   no trait=0 free turns; Vampires / Sea Creatures units 1.000). Flags default OFF; USER questions in the report.
 - Found: scripts/unit_par.sh --first/--last does nothing (every shard runs all 3889 cases) -- deferred tooling fix.
 
-## Running
-- URGENT ref-fix agent: ports only the opponent_land_entry stamp + --legacy-opponent-land-entry replay from
-  b861f7160 onto origin in worktree .claude/worktrees/refland (branch wip/refland); validates; parent lands with
-  `push_queue.py join --urgent` (fix ONLY in that landing).
-- Cantrip/discard bucket agent in the worldfire worktree (flags default OFF; A/B 9100001 x64 + 9200001 x96).
-- gi4 (seed 9300005) d8 b0 replay, PID 3629867 (6h+) -> build/scratch/worldfire/gi4/{d8b0.out,DONE}.
+## Running (2026-11-22 ~02:00 UTC)
+- Cantrip/discard BUCKET agent in THIS worktree (uncommitted src edits are ITS work -- never `commit -a`; commit
+  only named files). Design + all USER amendments: docs/design/worldfire-discard-buckets.md (latest 43b29cca3).
+  Flags default OFF; final arm folds in the USER answers Q1-Q9 + the Mystical Tutor correction. It was also asked
+  to add the gi4 d8 b0 RECOVERS line to the ledger.
+- FREE-TURN pass 3 agent (fresh) in .claude/worktrees/freeturn from logs/freeturn/handoff3.md (on disk only) +
+  the "Pending" section below: build 94b9d46ca (UNCOMPILED), trait-gate verify (trait=0 decks byte-identical),
+  MDFC tie -> NONLAND (my change, surfaced), Sire + annihilator fairness arms (Shadowborn; Cyclone then Extra
+  Turns), avg-free-turns report, diagnostic flag-ON ref sweep LIST (no ref edits), bounceland opening basic
+  generalised (if context allows). Handoff file if it stops: logs/freeturn/handoff4.md.
+- TUTOR-WIDTH deletion agent in .claude/worktrees/tutorwidth (branch wip/tutorwidth off d0d5f8463): delete
+  TutorSearchWidth + MTG_TUTOR_WIDTH; narrowing lives in TutorCandidates (USER: "I don't like those tutor widths
+  one bit ... the heuristic should have full control of how many it returns" / "A width provides either too few or
+  more often too many options." / "And is a fixed number for no reason where the real problem is not."). Tiers,
+  d8 b0 recovery of slower games, held-out A/B on moved decks; parent lands.
 
 ## Next, in order
-1. Land wip/refland urgently once validated (join --urgent; land; CI watch).
-2. (done) free-turn pass 2.
-3. Relay the bucket agent's A/B; surface the bucket doc's open questions.
-4. gi4 d8 b0 DONE (2026-11-22): RECOVERS -- the search itself suspends Halberdier T1, Worldfire T4, wins T5
-   (Claude's line). Add to the ledger's sweep OPEN line once the bucket agent's ledger edit is committed (do not
-   `commit -a` while it has a dirty tree).
-5. Stage 6 report; CronDelete cf1c0324 when everything is reported.
-
+1. Relay each agent's report as it lands; surface its USER questions.
+2. Tutor-width: if the bar is met, land via push_queue (batch with anything else ready); CI watch --interval 60.
+3. Free-turn: when trait=0 decks are byte-identical and the USER answers the remaining Qs, adoption is the USER's.
+4. Buckets: relay the A/B; the bucket flags' default is the USER's. Then re-measure the budget curve and re-screen
+   the b0 backstop rows (USER Q16: optimize first).
+5. Land the worldfire docs commits with the next landing (wip/worldfire is pushed; ungated docs).
+6. Stage 6 report; CronDelete cf1c0324 when everything is reported.
 
 ## Pending for the NEXT free-turn agent (from handoff3.md, plus these USER items given after it)
 - USER 2026-11-22, Sire fairness check: *"Okay, that sounds worth trying."* -- build the "could have deployed a
