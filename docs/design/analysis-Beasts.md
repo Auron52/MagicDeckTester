@@ -381,24 +381,21 @@ or the game cannot last until the token can attack); otherwise (the typical case
 
 ## Decisions and follow-ups (none awaiting a USER reply)
 
-1. **Kaheera companion (sideboard).** The deck MEETS Kaheera's companion condition (every
-   creature is a Beast). The simulator has no companion mechanic, so the sideboard Kaheera is
-   currently unreachable through the intended mechanism. Batch I is implementing companion
-   (CR 702.139: "{3}: put your companion into your hand", sorcery speed, once per game; Tier 3) and
-   teaching the coverage scan that an eligible companion makes the sideboard reachable.
+1. **Kaheera companion (sideboard).** Implemented in batch I: the once-per-game {3} hand move is
+   searched and available in the viewer. Stage 3 confirms the sideboard copy is reachable.
 
 ## Provider routing (Stage 4a, found in Stage 2)
 
-Today the deck routes to **BoarsProvider** (Herald's `creature_cast_trigger_plus_counters`), a
-foreign provider = Stage 4a failure; without Herald it would misroute to Goblins
-(`reduces_spell_subtype`). Plan: a `BeastsProvider` routed above `boars`, signature OR-ing
-Beasts-only params from several new cards.
+Batch J routes the deck to **BeastsProvider** above BoarsProvider. Its signature ORs Beasts-only
+params from multiple cards, so removing Herald or a single signature card retains the route;
+`test_pirates_provider.cpp` and Beasts unit tests pin this result.
 
 2. **Second main (USER-owned main-1-vs-main-2).** Contested Cliffs (fight after attacking),
    Elder Gargaroth (draw mode / token -> Packleader draw) and Garruk's Harbinger (combat-damage
    dig) all create combat-time resources, so the deck needs a searched post-combat main.
-   Default taken: deck-wide `DeckUsesSecondMain` (Hellkite / Tectonic precedent). The cheaper
-   alternative is a per-turn gate live only after a combat-time draw/dig.
+   The provisional batch-J shape is a per-turn gate after an actual combat-time hand arrival
+   or a proliferated Garruk/Herald resource. Deck-wide main 2 remains available through
+   `MTG_FORCE_USES_M2`; none/per-turn/deck-wide cost and outcome measurement is pending.
 3. **Elder Gargaroth's life mode** is folded away in the provider as a sound dominance (nothing
    reads our life; max self-damage 13 < 20). The viewer still offers all three modes.
 
