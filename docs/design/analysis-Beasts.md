@@ -206,6 +206,13 @@ On the seven deferral questions (Warchief regenerate; Questing Beast's three cla
 Bellower deliberate fail-to-find while a match remains; Migloz menace unmodelled, vigilance only):
 *"All questions 1-7 sound good to me."* -> all seven APPROVED; drop PROVISIONAL from their notes.
 
+On the ordinal-product cap (Gargaroth attack-mode axis and Harbinger dig axis, cap 27; past it the host
+falls back to a default for the extra ordinals -- a possible completeness/greedy defect): *"We should
+probably prune those cases with a heuristic."* -> batch J: the BeastsProvider restricts the per-ordinal
+options (same-name dig fold, heuristic top-k per ordinal, Gargaroth mode order) so the admitted product
+fits the cap, and the host then branches over everything admitted; no host-side default for an
+over-cap ordinal. Audit every other cap-27 axis the Beasts cards reach for the same shape.
+
 ## Open USER questions (surfaced, not blocking)
 
 1. **Kaheera companion (sideboard).** The deck MEETS Kaheera's companion condition (every
