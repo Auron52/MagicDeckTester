@@ -30,3 +30,9 @@ remain unchanged.
 
 The score caches and full logs are in the isolated worktree's ignored
 `build/scratch/worldfire-mullperf/` and `logs/worldfire-mullperf-*.log`.
+
+The suite PGO training manifest initially read generation settings only from
+`.value.json`. Worldfire has no value sidecar, so it trained at the default
+depth 5 / 20 ms despite the new contract. `pgo_train_manifest.py` now reads
+the profile first, then lets a value sidecar override it. The regenerated
+manifest reports `gen_worldfire` at depth 2 / 8 ms.
