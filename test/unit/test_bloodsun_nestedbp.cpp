@@ -13,6 +13,7 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/RevelationPackages.h"
+#include "core/SpellEffects.h"
 
 #include <string>
 #include <vector>
@@ -121,4 +122,73 @@ TEST_CASE("nested acquisition: Grim -> Demonic Tutor (in the continuation) -> Bo
     GameState s = GrimRevBoltsN({ "Grim Tutor" }, { "Demonic Tutor", "Lightning Bolt" });
     s.players[1].life = 3;
     CHECK(TurnSolver::FullSearchLine(s, 1, 8, /*second_main=*/false).win_turn == s.turn_number);
+}
+
+// Blood Sun integration 2 (Hinata seed 2019 gi 17, d8 b0): a FAILED untap-ritual cast must leave no trace. The tap-ahead
+// (RitualTapAheadIntoFloat) runs before the payment; when the payment failed, the tapped-ahead sources stayed tapped and
+// their mana stayed floating -- mana the executor's replay (which records only what happened) never produced, so a
+// nested pass's canon continuation of failing casts paid for a "verified" kill the played game could not cast.
+namespace
+{
+GameState SpasmUnpayableN(const std::vector<std::string>& lands)
+{
+    EnsureCardsN();
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.phase               = Phase::PostCombatMain;
+    s.players[0].life     = 20;
+    s.players[1].life     = 20;
+    for (std::size_t k = 0; k < lands.size(); ++k) { PutN(s, lands[k], 10 + static_cast<int>(k)); }
+    s.players[0].hand.push_back(CardN("Reality Spasm", 1));
+    return s;
+}
+int TappedN(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield) { if (p.tapped) { ++n; } }
+    return n;
+}
+}   // namespace
+
+TEST_CASE("tap-ahead undo: an uncommitted TapAheadUndo restores the float and the sources it tapped; Commit keeps them")
+{
+    GameState s = SpasmUnpayableN({ "Mountain", "Mountain" });
+    s.battlefield[1].tapped = true;   // already tapped: the undo must leave it tapped
+    {
+        TapAheadUndo u;
+        u.Run(s, 0, [&] { RitualTapAheadIntoFloat(s, 2); });
+        CHECK(TappedN(s) == 2);
+        CHECK(s.floating_mana.Total() == 1);
+    }
+    CHECK(TappedN(s) == 1);
+    CHECK(s.battlefield[1].tapped);
+    CHECK(s.floating_mana.Total() == 0);
+    {
+        TapAheadUndo u;
+        u.Run(s, 0, [&] { RitualTapAheadIntoFloat(s, 2); });
+        u.Commit();
+    }
+    CHECK(TappedN(s) == 2);
+    CHECK(s.floating_mana.Total() == 1);
+}
+
+TEST_CASE("tap-ahead undo: an unpayable Reality Spasm in an apply leaves the board untapped and nothing floating")
+{
+    GameState s = SpasmUnpayableN({ "Mountain", "Mountain", "Cascade Bluffs" });   // {X}{U}{U}: no blue at all
+    TurnSolver::Plan p;
+    Action a;
+    a.kind      = Action::Kind::CastFromHand;
+    a.card_name = "Reality Spasm";
+    a.def       = CardDatabase::Instance().Lookup("Reality Spasm");
+    a.chosen_x  = 3;
+    p.actions.push_back(a);
+    GameState t = s;
+    const long long taps_before = g_tap_ahead_calls;
+    TurnSolver::ApplyPlan(t, p, false);
+    CHECK(g_tap_ahead_calls > taps_before);        // the tap-ahead DID run (so the rollback is what is tested)
+    CHECK(t.players[0].hand.size() == 1);          // dropped: still in hand
+    CHECK(TappedN(t) == 0);                        // the tap-ahead was rolled back
+    CHECK(t.floating_mana.Total() == 0);
+    CHECK(t.floating_mana.wild == 0);
 }

@@ -2266,3 +2266,33 @@ replayed as real games with `--force-mulligan 3:35,16,13` (219 s) and `3:9,16,49
 - **For the USER (no default chosen):** amended + LATE (`MTG_BLOODSUN_GRIM_PRUNE=1` + the three amendment levers +
   `MTG_BLOODSUN_GRIM_AMEND_LATE=1`) is the first B12 version that both recovers every slower game at d8 b0 and measures
   faster than ship (and than the plain Grim prune) at d5 b20, with 13% fewer units.
+
+### Implementation notes (integration 2, 2026-11-22): the step-6d re-arm exposed a leaking failed untap-ritual cast
+- **Symptom.** After the rebase (95d250743) three Hinata-family games (seed 2019 / game_index 17: hinata reg d3 / d5
+  s2002, hinata2hg reg d5 s2002) went T4 -> T5, and at `--depth 8 --budget-ms 0` HEAD still won T5 while
+  `MTG_BP_NEST_REARM=0` won T4.
+- **Not a lost line: a phantom one.** `MTG_FD_TRACE=1`: both arms commit a "verified" T4 line at T1. REARM=0 commits the real
+  one (T4 main 1 plays Izzet Boilerworks). HEAD commits a line that holds the land. Its T4 main 2 is Spasm, Ponder and
+  Soulfire Eruption. Soulfire, cast in Ponder's deferred continuation, re-arms a nested pass (step 6d), and that pass's
+  canon continuation plays Cascade Bluffs, then tries Spasm, Gamble and Preordain off a lone Bluffs plus Sol Ring's
+  {C}{C}. All three fail (`MTG_BP_TRACE=1`: `[bp-pay] apply ... -> FAILED`). The failed Spasm had already run
+  `RitualTapAheadIntoFloat`, which taps every source into the float before the payment. When the payment failed, the
+  sources stayed tapped and the float stayed: float {C}{C} became {U}{C}{C}{C}{C}, and the next section paid
+  Preordain, Ornithopter, Spasm and the lethal Crackle out of it. That mana came from the filter land's NET model
+  (Bluffs counts as one free coloured mana with no {U/R} input). A dropped cast is never recorded, so the executor's
+  segment replay never taps ahead for it: in the played game Preordain, Spasm, Gamble and Crackle all FAIL (`[bp-pay]
+  exec`) and the game wins T5. With REARM=0 the nested pass does not exist, so the failing casts never ran.
+- **Code sites.** `ApplyPlanDirect`'s `apply_one` cast payment (TurnSolver.cpp, the `untap_x_mana_sources` tap-ahead
+  before `TapForCostDirect`) and its executor twin `AIEngine::CastSpellFromHand`. Neither restored the tap-ahead when the
+  payment failed. A failed `TapForCostDirect` is atomic, but the tap-ahead is not.
+- **Fix.** `TapAheadUndo` (SpellEffects.h) wraps the tap-ahead and snapshots the float plus the sources it tapped. It
+  restores both unless the payment succeeds (`Commit`), on every exit (RAII; called explicitly in both failure
+  branches, and the executor re-derives `available`). So a failed untap-ritual cast leaves no trace in either world. The
+  re-arm keeps step 6d's purpose (the `bloodsun_nested_*` scenarios still pass) and now only ADDS: the phantom line is no
+  longer scored as a win.
+- **Not fixed, surfaced:** `EtbUntapTapAheadIntoFloat` (Peregrine Drake / Cloud of Faeries; EDF) runs in the same place
+  and has the same leak shape when the creature's payment fails. It is left as-is to keep EDF out of this change; it
+  is the same one-line `TapAheadUndo::Run` wrap if wanted.
+- **Tests.** `test_bloodsun_nestedbp.cpp`: 2 new cases (`tap-ahead undo:` the helper's restore / commit, and an
+  unpayable Spasm through `ApplyPlan` leaves the board untapped with nothing floating, with the tap-ahead proven to have
+  run). The 3 games at d8 b0 on the fixed binary: T4 / T4 / T4.
