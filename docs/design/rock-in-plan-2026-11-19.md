@@ -393,3 +393,45 @@ win turn, same digest): poff niv 352 T4, 871 T5, 1346 T4, hinata 975 T5; pnt niv
 two price checks (niv 360 T4, hinata 141 T4: the price is inert at b0, as built). None hit the unit cap (the longest,
 niv 871, ran ~3.4 M units and ~7-9 min per arm). The 23 per-call-price slower games recover by construction (the price
 never reads a budget at b0); only the two above were replayed as a check.
+
+### The price with its residual carried (commit e578605d1; `mtg.dev2`, flags-off identity vs base 64/64)
+
+Searched only, same seeds as batch A, vs batch A's def (`logs/rock-cpu/cmp_pricec*.txt`):
+
+| deck | pairs | price@85 f/s, net | units | CPU | instr (30-40 g) | price@43 f/s, net | units | CPU | instr |
+|---|---|---|---|---|---|---|---|---|---|
+| niv | 3000 | 0/3, **+3** | 1.0356 | 1.0101 | 1.0027 | 0/1, **+1** | 1.0196 | 1.0045 | 1.0078 |
+| hinata | 1500 | 2/5, **+3** | 1.1044 | 1.1164 | 1.0018 | 1/5, **+4** | 1.0558 | 1.1709 | 1.0026 |
+| extraturns | 1500 | 0/0, 0 | 1.0238 | 0.9192 | 0.9999 | 0/0, 0 | 1.0125 | 0.9383 | 1.0000 |
+| other 6 decks | 3000 | 0/0, 0 | 1.00-1.01 | noise | 0.97-1.00 | 0/0, 0 | 1.00-1.01 | noise | 0.999-1.000 |
+
+At the calibrated price, the charge mostly adds units on top (units ratio > 1). Most decisions finish inside their
+budget, so they never bind and the price trims nothing. **It saves no instructions** on the decks that carry the cost,
+and it makes Niv and Hinata slower. Hinata's thread CPU rose 12-20% in all four price arms while its instruction count
+did not move on 15 games. I have not explained that. The price is the right SHAPE (inert at b0), but it is the wrong
+lever here, because the rung's cost sits mostly in decisions whose budget does not bind.
+
+## THE MENU (agent rock-cpu 2, 2026-11-22). Nothing adopted; every flag stays default OFF; the USER decides.
+
+Rung cost to cut (step 1 + perf_base100, searched): Niv +4.8% instructions / +6.4% CPU, Extra Turns +3.9% / +3.3%,
+Hinata +2.4% / +2.9%, every other deck <= ~1.7%. At d0 the rung is Niv +4.1% and Hinata +3.8% of instructions, but
+d0 games cost only ~2-13 M instructions each, and no cut here reaches the d0 runner.
+
+| cut | shape | Niv searched (3000) | Hinata (1500) | Extra Turns (1500) | other 6 decks (3000) | d0 | slower games at d8 b0 |
+|---|---|---|---|---|---|---|---|
+| **MTG_LKR_PLAYOUT_OFF** | predicate in the horizon playout (beyond the window: the doctrine's greedy policy) | **CPU -5.1%, instr -4.5%**; net **-8** (10 faster / 3 slower) | CPU -2.1%, instr -1.7%; +1 (0/1) | ~0 / ~0; 0 | ~0; 0 | byte-identical | all 4 recover (identical game) |
+| MTG_LKR_PLAYOUT_NO_TABLE | same place; hold-out sets only | CPU -2.7%, instr -4.6%; -3 (3/1) | CPU -1.7%, instr -1.3%; +1 (0/1, the same game) | ~0; 0 | ~0; 0 | byte-identical | both recover |
+| MTG_LKR_PRICE (per-call round-up, as first built) | budget price | instr -6.1%; **+13** (0/13) | +5 (4/10), CPU +20% | instr -0.9%; 0 | 0 | byte-identical | inert at b0 (2 checked) |
+| MTG_LKR_PRICE (carried residual, 1x / 0.5x) | budget price, inert at b0 | instr +0.3% / +0.8%; +3 / +1 | +3 / +4 | 0 / 0 | 0 | (searched only) | inert at b0 |
+
+**Recommendation: `MTG_LKR_PLAYOUT_OFF`**, with the default left to the USER. It removes almost all of Niv's rung cost
+(about 4.5-5% of Niv's searched CPU), and about 2% on Hinata. On the held-out sample its quality is BETTER, not worse:
+net -7 over 9,000 pairs. Every slower game replays identically at d8 b0, and d0 is byte-identical. It cannot help Extra
+Turns, whose rung time is ~97% in the search window. The trade-off to weigh: it is a predicate (in the beyond-horizon
+playout, where the doctrine permits a greedy policy, never inside the search window), so it changes play at every
+budget, including b0. It is not a budget price. Adopting it would need GT accepts as a play change. `NO_TABLE` is
+dominated by `PLAYOUT_OFF`. The price, in both forms, saves nothing and costs quality: drop it (or keep it OFF as a
+documented negative).
+Extra Turns' window cost (3-4%) and Hinata's remain. No cut here reaches them without cutting the in-window rung, which
+is the play the rung exists for. The next candidate there is a per-unit (exact) speedup of the window trials: Extra
+Turns averages 2 work events per trial and never reaches the table, so its cost is the trial payment plus the witness.

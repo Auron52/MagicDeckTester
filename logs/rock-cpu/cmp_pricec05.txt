@@ -1,0 +1,30 @@
+# pricec05 vs def  (missing jobs: 45)
+
+## searched (play settings)
+
+| deck | pairs | faster | slower | net turns | digest-only | units ratio | CPU ratio |
+|---|---|---|---|---|---|---|---|
+| dragons | 500 | 0 | 0 | +0 | 0 | 1.0027 | 0.9902 |
+| extraturns | 1500 | 0 | 0 | +0 | 0 | 1.0125 | 0.9383 |
+| fivecolour | 500 | 0 | 0 | +0 | 0 | 1.0047 | 0.9347 |
+| galadriel | 500 | 0 | 0 | +0 | 0 | 1.0027 | 0.9839 |
+| hinata | 1500 | 1 | 5 | +4 | 7 | 1.0558 | 1.1709 |
+| merfolkturns | 500 | 0 | 0 | +0 | 0 | 1.0015 | 1.0066 |
+| niv | 3000 | 0 | 1 | +1 | 8 | 1.0196 | 1.0045 |
+| stompy | 500 | 0 | 0 | +0 | 0 | 1.0038 | 1.0778 |
+| stuffy | 500 | 0 | 0 | +0 | 0 | 1.0064 | 0.9044 |
+| ALL | 9000 | 1 | 6 | +5 | 15 | 1.0315 | 1.0586 |
+
+## d0
+
+| deck | pairs | faster | slower | net turns | digest-only | units ratio | CPU ratio |
+|---|---|---|---|---|---|---|---|
+| ALL | 0 | 0 | 0 | +0 | 0 | 0.0000 | 0.0000 |
+
+slower hinata s 282 5 6
+slower hinata s 515 6 7
+slower hinata s 847 5 6
+slower hinata s 1279 5 6
+slower hinata s 1341 6 7
+faster hinata s 1464 8 7
+slower niv s 1902 4 5

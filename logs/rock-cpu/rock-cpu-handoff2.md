@@ -62,7 +62,11 @@ price games as a check).
 
 ## Progress 14:50 UTC: d8_ab2 DONE, all recovered (doc). run2.sh still waiting for the box lock (since 13:31).
 
-## Next, in order
+## Progress 16:05 UTC: ALL STEPS DONE. run2 DONE (identity 64/64; carried price saves nothing, +3/+1 Niv, +3/+4
+Hinata). THE MENU is written at the end of docs/design/rock-in-plan-2026-11-19.md. Nothing running. Nothing adopted.
+Remaining only: the USER's decision on MTG_LKR_PLAYOUT_OFF (recommended), and the parent relays the menu.
+
+## Next, in order (historical; all done)
 1. When `status` shows `batchA`: `cd .../claude_rock_cpu && for a in poff pnt price; do python3 cmp.py ab2/A.out ab2/logs_A def $a --list > ab2/cmp_$a.txt; done`
    For price05: `cat ab2/A.out ab2/B.out > ab2/AB.out; mkdir -p ab2/logs_AB; ln -sf $PWD/ab2/logs_A/* $PWD/ab2/logs_B/* ab2/logs_AB/;
    python3 cmp.py ab2/AB.out ab2/logs_AB def price05 --list > ab2/cmp_price05.txt`.
