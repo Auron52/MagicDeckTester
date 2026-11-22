@@ -139,6 +139,16 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   (and extra turns) taken per game as a separate, informational number beside the credited avg (batch per-job
   line, --games summary, tier report); never used by the search or the GT digest.
 
+- USER 2026-11-22 (2a, replaces the keep-2-nonlands floor): *"The opponent should discard whichever is more common
+  between lands and nonlands including hand and field I suppose. (not counting the creature tokens) That should avoid
+  any weirdness as we will try to keep the thing we might be missing."* -- re-count before each discard; MDFC in hand
+  uses the "fewer side" rule; exact tie -> discard a land (parent's default, surfaced).
+- USER 2026-11-22 (2b, one-land removals lock): *"Yes, it should. We don't have a deck like that yet in the list, but
+  I will be adding one later that turns things into artifacts and destroys them. I believe these rules cover that case
+  well enough as an underestimation of the effect on the opponent. Those decks need to lock out all lands and the
+  turns where the opponent can play a land would still not be free."* -- one-land removals join DeckMayLockOpponent's
+  IN set; list suite decks that flip trait 0->1 and whether their games move.
+
 ## Other USER answers 2026-11-22 (Q12-Q16)
 - Q13 life-gain lands: the moved games are vs Angels (Seraph Sanctuary) and Landfall (Radiant Fountain); also
   Blossoming Sands / Kazandu Refuge carry etb_lifegain but are in no list. Shockland life for the opponent: USER
