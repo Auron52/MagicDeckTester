@@ -321,7 +321,7 @@ TEST_CASE("worldfire provider: Rift Bolt is held until the combo; Halberdier is 
     CHECK(prov.OffersCastNow(after, 0, bolt));
 }
 
-// ---- THE BUCKETED KEEP ORDER (docs/design/worldfire-discard-buckets.md; every consumer DEFAULT OFF) ----
+// ---- THE BUCKETED KEEP ORDER (docs/design/worldfire-discard-buckets.md; every consumer DEFAULT ON since 2026-11-22) ----
 namespace {
 struct WFArm
 {
@@ -379,7 +379,8 @@ TEST_CASE("worldfire keep order: the cleanup discard sheds the lowest card, re-r
                          WFCard("Mountain", 33), WFCard("Mountain", 34), WFCard("Mountain", 35),
                          WFCard("Mountain", 36), WFCard("Memory Lapse", 37)};
     {
-        // Lever OFF: the generic rule (highest mana value) -- it would shed Worldfire.
+        // Lever OFF (=0): the generic rule (highest mana value) -- it would shed Worldfire.
+        WFArm off_arm{{heurarm::WORLDFIRE_BUCKET_DISCARD, 0}};
         const std::vector<int> off = prov.CleanupDiscardCandidates(s, nullptr);
         REQUIRE_FALSE(off.empty());
         CHECK(off.front() == 0);
@@ -406,8 +407,14 @@ TEST_CASE("worldfire keep order: Brainstorm puts back the two lowest, the higher
     // Post-draw hand. 8 Mountains + this turn's drop + next turn's: T* = now+1 with the Rift Bolt's {R}.
     s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Memory Lapse", 32),
                          WFCard("Island", 33), WFCard("Mountain", 34), WFCard("Ponder", 35)};
-    CHECK_FALSE(prov.PutBackSingleCandidate(s));
-    CHECK_FALSE(prov.PutBackRankingPerCard(s));
+    {
+        WFArm off{{heurarm::WORLDFIRE_BRAINSTORM_RULE, 0}};
+        CHECK_FALSE(prov.PutBackSingleCandidate(s));
+        CHECK_FALSE(prov.PutBackRankingPerCard(s));
+    }
+    // The defaults (no arm): the rule and its one-option prune are ON.
+    CHECK(prov.PutBackRankingPerCard(s));
+    CHECK(prov.PutBackSingleCandidate(s));
     WFArm arm{{heurarm::WORLDFIRE_BRAINSTORM_RULE, 1}};
     const WorldfireKeepRank r = WorldfireKeepRank::Of(s, 0, nullptr, false);
     CHECK(r.t_star == 1);
@@ -428,8 +435,21 @@ TEST_CASE("worldfire keep order: Ponder keeps a set that fills a missing quota, 
     GameState s = WFTutorBase(5);
     s.players[0].hand = {WFCard("Rift Bolt", 30), WFCard("Mountain", 31)};
     const std::vector<Card> look = {WFCard("Island", 40), WFCard("Memory Lapse", 41), WFCard("Worldfire", 42)};
-    CHECK_FALSE(prov.ReorderKeepShuffleOnly(s));
-    WFArm arm{{heurarm::WORLDFIRE_PONDER_RULE, 1}};
+    {
+        WFArm off{{heurarm::WORLDFIRE_PONDER_RULE, 0}};
+        CHECK_FALSE(prov.ReorderKeepShuffleOnly(s));
+    }
+    CHECK(prov.ReorderKeepShuffleOnly(s));                   // the default: the rule ON, keep/shuffle searched
+    CHECK_FALSE(prov.ReorderSingleCandidate(s));             // ... and _PONDER_SINGLE OFF
+    {
+        // The default deadline order: the next land drop is needed now, Worldfire only by T*.
+        const TopDisposition d0 = prov.TopDispositionPick(s, look, LookKind::Reorder, -1);
+        CHECK_FALSE(d0.shuffle);
+        REQUIRE(d0.top_order.size() == 3);
+        CHECK(d0.top_order.front() == 0);                    // Island
+        CHECK(d0.top_order.back() == 1);                     // Memory Lapse at the bottom of the three
+    }
+    WFArm arm{{heurarm::WORLDFIRE_PONDER_RULE, 1}, {heurarm::WORLDFIRE_ORDER_DEADLINE, 0}};   // the keep-value order
     CHECK_FALSE(prov.ReorderSingleCandidate(s));
     CHECK(prov.ReorderKeepShuffleOnly(s));                   // the order is the rule's; keep vs shuffle is searched
     CHECK(prov.KeepReorderTop(s, look));
@@ -601,7 +621,13 @@ TEST_CASE("worldfire keep order: the proposed deadline order puts a go-off Lotus
                          WFCard("Personal Tutor", 33)};
     for (const char* nm : {"Worldfire", "Irencrag Feat", "Ponder"}) { s.players[0].library.push_back(WFCard(nm, 200)); }
     const std::vector<Card> look = {WFCard("Rift Bolt", 40), WFCard("Lotus Bloom", 41), WFCard("Seething Song", 42)};
-    WFArm arm{{heurarm::WORLDFIRE_PONDER_RULE, 1}};
+    {
+        // The default (no arm) is the deadline order.
+        const TopDisposition d0 = prov.TopDispositionPick(s, look, LookKind::Reorder, 1);
+        REQUIRE(d0.top_order.size() == 3);
+        CHECK(d0.top_order[0] == 1);
+    }
+    WFArm arm{{heurarm::WORLDFIRE_PONDER_RULE, 1}, {heurarm::WORLDFIRE_ORDER_DEADLINE, 0}};
     const TopDisposition rank = prov.TopDispositionPick(s, look, LookKind::Reorder, 1);
     REQUIRE(rank.top_order.size() == 3);
     CHECK(rank.top_order.front() == 0);                      // the keep value: the missing finisher first

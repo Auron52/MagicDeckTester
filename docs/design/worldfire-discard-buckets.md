@@ -162,7 +162,8 @@ FINISHER. **Nothing missing:** DIG first, then the last-needed land, then ritual
 
 ## Build and measurement plan
 
-Behind `EnvOn` flags in `WorldfireProvider`, **default OFF until the USER approves the buckets**: one for the
+Behind `EnvOn` flags in `WorldfireProvider` (built default OFF; **turned ON 2026-11-22** with the deadline order,
+see `analysis-Worldfire.md` "Adoption"): one for the
 cleanup discard, one each for the Brainstorm put-back, the Ponder disposition and the Preordain scry (all reading
 the one ranking). A/B on the prune blocks (seed 9100001 x 64, held-out 9200001 x 96, d5 b20, profile attached,
 paired), plus units/wall; every worse game attributed by a one-lever flip at b200.
