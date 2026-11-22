@@ -101,6 +101,15 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
    `commit -a` while it has a dirty tree).
 5. Stage 6 report; CronDelete cf1c0324 when everything is reported.
 
+
+## Pending for the NEXT free-turn agent (from handoff3.md, plus these USER items given after it)
+- USER 2026-11-22, Sire fairness check: *"Okay, that sounds worth trying."* -- build the "could have deployed a
+  creature" check (lever, default OFF), measure on Shadowborn vs Sire-in / Sire-out.
+- USER 2026-11-22: *"What might be nice is to include the average of the extra turns as a separate number, even if
+  we don't optimize for it. This is just informative for agents and users."* -- report the average free turns
+  (and extra turns) taken per game as a separate, informational number beside the credited avg (batch per-job
+  line, --games summary, tier report); never used by the search or the GT digest.
+
 ## Open USER questions (defaults taken)
 - Search depth for free turns: default = no ply cost (match Extra Turns; its Q9 was never USER-answered).
 - Integrator #1's: four PROVISIONAL deferrals (Overmaster / Mistrise uncounterable riders inert,
