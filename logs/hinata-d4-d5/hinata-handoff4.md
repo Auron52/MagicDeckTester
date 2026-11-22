@@ -15,12 +15,13 @@ Last commit before this file: c3eb0a931.
 3. 2026-11-22 12:35 (via coordinator): "Claude usage is at 5%, so keep running until it runs out, but keep a Codex
    handoff current."
 
-## Status
-- DONE: read handoff3; prepared the gate script
-  `/workspaces/MagicDeckTester/build/scratch/claude_hinata_d4d5/gate2/run.sh`. It waits on the box lock, then runs
-  `./build.sh`, the units, and `MTG_PGO=0 MTG_RSS_CAP_GB=40 test/regression.sh --both` (no accept). It writes
-  `gate2/status`, `gate2/pid` (the real PID) and `gate2/DONE`, plus logs `build.log`, `unit.log`, `regression.log`.
-- 15:00 UTC: Merfolk landed (origin cd330ec5a). Rebased cleanly onto it; check_gt_logs clean. gate2 LAUNCHED 15:00:38 UTC, PID 989382 (gate2/pid), waiting on the box lock -> next is step 4 (inspect).
+## Status (18:25 UTC): DONE except the final push
+- Rebased onto origin cd330ec5a (Merfolk landed). gate2: build 0, units 0, `--both` 624 passed, 8 FAIL (all Hinata), with
+  digests byte-identical to the 4a7f65983 gate, and the slower-game listing identical (the 23 from handoff3). Logs:
+  `/workspaces/MagicDeckTester/build/scratch/claude_hinata_d4d5/gate2/`.
+- Accepted smoke + regression: **a579747bf** (GT + job_cost + gt_logs + doc section 5). check_gt_logs clean (1409).
+- Left to do: confirm `python3 scripts/check_references_safe.py` exits 0, then
+  `git push --force-with-lease origin wip/hinata-d4-d5`. The coordinator lands phase-1-2-deck-analyzer.
 
 ## Next commands, in order
 1. Wait until origin has the Merfolk fix:
