@@ -669,6 +669,10 @@ public:
     int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }
     bool RestrictedSecondMainLive(const GameState& s) const override;
+    // Combat damage and toxic/proliferate resolve before this phase. The list has
+    // no post-combat burn, drain, mill, extra combat or instant-win action, so a
+    // horizon turn that only asks whether main 2 kills can skip that search.
+    bool PostCombatCannotKillOptIn() const override { return true; }
     std::vector<int> EtbDigCandidates(const GameState& s, int controller,
         const std::vector<Card>& examined, const std::vector<int>& legal) const override;
     bool OffersOilVigilanceMenace(const GameState& s, const CardDefinition& src) const override;
