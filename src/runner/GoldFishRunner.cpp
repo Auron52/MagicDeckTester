@@ -4,6 +4,7 @@
 #include "../core/OpponentDeck.h"
 #include "../core/SpellEffects.h"   // g_pending_self_bounces (cleared per game in StampDeckTraits)
 #include "../core/FreeTurns.h"     // MTG_FREE_TURNS: the opening-hand hurdles after the deal
+#include "../core/Companion.h"
 #include "../core/GameEngine.h"
 #include "../core/GameLogger.h"
 #include "../core/MemBudget.h"
@@ -635,13 +636,22 @@ bool GoldFishRunner::DeckWishesFromSideboard(const Decklist& deck)
 // Exactly the StampDeckTraits hole one field over. Two callers, one definition, no drift.
 void GoldFishRunner::DealWishPool(GameState& state, const Decklist& deck)
 {
-    if (!DeckWishesFromSideboard(deck)) { return; }
+    const bool wish = DeckWishesFromSideboard(deck);
+    const bool kaheera = !deck.sideboard.empty() && KaheeraCompanionEligible(deck.mainboard);
+    if (!wish && !kaheera) { return; }
     constexpr int kWishNumberBase = 200000;   // deck 1..60, tokens 1000+, opponent 100000+
     int number = kWishNumberBase;
+    bool selected_companion = false;
     for (const Card& c : deck.sideboard)
     {
+        if (!wish && (!kaheera || c.m_name != "Kaheera, the Orphanguard")) { continue; }
+        if (!wish && selected_companion) { continue; }
         Card w = c;
-        w.m_number = number++;
+        // Only the first eligible Kaheera is chosen as companion. A Kaheera in
+        // an ineligible wish deck stays wishable but has no companion action.
+        if (kaheera && c.m_name == "Kaheera, the Orphanguard" && !selected_companion)
+        { w.m_number = 300000; selected_companion = true; }
+        else { w.m_number = number++; }
         state.players[0].sideboard.push_back(w);
     }
 }

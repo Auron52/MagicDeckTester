@@ -22,6 +22,7 @@
 #include "../core/GameEngine.h"
 #include "../core/EffectHandler.h"   // PushCastTriggers (real-stack cascade/demonstrate)
 #include "../core/SpellEffects.h"
+#include "../core/Companion.h"
 #include "../core/RolloutTouch.h"
 #include "../core/GameSetup.h"   // gamesetup::BlindSearchSalt (the known-respecting blind search)
 #include "../core/MemBudget.h"  // MTG_BOTTOM_TRIAL_TRACE RSS diagnostics
@@ -7399,6 +7400,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 ApplyGraveyardReturnAbility(state, state.active_player_index, a.sac_source_id,
                                             a.tutor_target);
             }
+        }
+        else if (a.kind == Action::Kind::CompanionToHand)
+        {
+            if (!state.stack.empty() || !CompanionInSideboard(state, state.active_player_index,
+                                                               a.sac_source_id)) { continue; }
+            ManaCost fee; fee.generic = 3;
+            ManaPool avail = AvailableManaPool(state);
+            if (!TapForCost(state, fee, avail, /*for_creature=*/false)) { continue; }
+            if (PutCompanionIntoHand(state, state.active_player_index, a.sac_source_id)
+                && a.chosen_x == 1)
+            { cast_by_name(a.card_name); resolve_now(); }
         }
         else if (a.kind == Action::Kind::GraveyardPlayAbility)
         {

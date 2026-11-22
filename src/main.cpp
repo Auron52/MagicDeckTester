@@ -938,6 +938,10 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             }
             case Action::Kind::ActivateVial:      tag = a.card_name + " (vial)"; break;
             case Action::Kind::PlayLand:          tag = a.card_name + " (land)"; break;
+            case Action::Kind::CompanionToHand:
+                tag = a.chosen_x == 1 ? "Pay {3} for companion, then cast " + a.card_name.str()
+                                      : "Pay {3}: put companion " + a.card_name.str() + " into hand";
+                break;
             // A suspend card that is ALSO castable (Search for Tomorrow) needs its suspend variant told
             // apart from the cast in the menu; a suspend-only card (Lotus Bloom) keeps its bare name.
             case Action::Kind::Suspend:
@@ -2944,6 +2948,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 || k == Action::Kind::GraveyardPlayAbility
                 || k == Action::Kind::AnimateLand   || k == Action::Kind::TapForTokenPay
                 || k == Action::Kind::Eternalize || k == Action::Kind::Unearth
+                || k == Action::Kind::CompanionToHand
                 // An activated untapper names its SOURCE permanent (a Crab Umbra, a Staff, a
                 // Witch, or Galvanic's paired creature) -- never a hand cast.
                 || k == Action::Kind::ActivateUntap;
@@ -3140,7 +3145,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
              || ac.kind == Action::Kind::ActivatePermAbility
              || ac.kind == Action::Kind::ActivatePod
              || ac.kind == Action::Kind::GraveyardExileGrow
-             || ac.kind == Action::Kind::ActivateUntap))
+             || ac.kind == Action::Kind::ActivateUntap
+             || ac.kind == Action::Kind::CompanionToHand))
             {
                 os << ", \"activate\": true";
                 // `cost_pips` = this activation's NON-GENERIC pips as the W/U/B/R/G/C letters the
@@ -3283,6 +3289,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                     // at random" and never offer a pick.
                     if (ac.tutor_target.str() == kGyReturnRandom) { os << ", \"gyreturn_random\": true"; }
                 }
+                else if (ac.kind == Action::Kind::CompanionToHand)
+                { os << ", \"verb\": \"" << (ac.chosen_x == 1 ? "companioncast" : "companion")
+                     << "\", \"companion_cast\": "
+                     << (ac.chosen_x == 1 ? "true" : "false"); }
                 // Kaldring: names the SOURCE artifact, carries the PLAYED card -- same shape as
                 // gyreturn, or two gy-play variants of one Kaldring would be indistinguishable.
                 else if (ac.kind == Action::Kind::GraveyardPlayAbility)
@@ -6307,6 +6317,8 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "gyexile")   { ls.gy_exiles.push_back(std::atoi(val.c_str())); }  // Deathrite mode
         else if (key == "gyreturn")  { ls.gy_returns.push_back(val); }    // Haven rebuy (returned card)
         else if (key == "gyplay")    { ls.gy_plays.push_back(val); }      // Kaldring gy-play (played card)
+        else if (key == "companion") { ls.companion_hands.push_back(val); }
+        else if (key == "companioncast") { ls.companion_casts.push_back(val); }
         else if (key == "channel")   { ls.channels.push_back(val); }      // from-hand channel ability
         else if (key == "cycle")     { ls.cycles.push_back(val); }        // cycle a card from hand (DigDraw)
         else if (key == "sacdraw")   { ls.sac_draws.push_back(val); }     // sacrifice a land to draw (DigDraw)

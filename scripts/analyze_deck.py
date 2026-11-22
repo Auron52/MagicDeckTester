@@ -370,6 +370,23 @@ def SideboardReachability(main_names: list[str], side_names: list[str],
             if n not in reachable_names:
                 reachable_names.append(n)
 
+    # A selected Kaheera is reachable through the companion special action when
+    # every starting-deck creature has one of its required subtypes. A main-deck
+    # Kaheera's reminder text is not a wish and must not make the whole board live.
+    kaheera_types = {"Cat", "Elemental", "Nightmare", "Dinosaur", "Beast"}
+    companion_eligible = all(
+        n not in all_entries or (
+            "Creature" not in all_entries[n].get("types", [])
+            or bool(kaheera_types.intersection(all_entries[n].get("subtypes", []))))
+        for n in main_names)
+    if companion_eligible and "Kaheera, the Orphanguard" in side_names:
+        side_entry = all_entries.get("Kaheera, the Orphanguard", {})
+        if "Companion" in side_entry.get("keywords", []):
+            hits = ["Kaheera, the Orphanguard"]
+            via.append({"card": "Kaheera, the Orphanguard", "detected_by": "companion",
+                        "names": hits})
+            _contribute(hits)
+
     for name in main_names:
         entry = entries.get(name)
         params = (entry.get("parameters", {}) or {}) if entry else {}
@@ -400,7 +417,8 @@ def SideboardReachability(main_names: list[str], side_names: list[str],
                                            + (f" (restricted: {restriction})" if restriction else ""),
                             "names": hits})
                 _contribute(hits)
-        elif entry and "outside the game" in entry.get("oracle_text", "").lower():
+        elif (entry and "outside the game" in entry.get("oracle_text", "").lower()
+              and "Companion" not in entry.get("keywords", [])):
             via.append({"card": name, "detected_by": "oracle text 'outside the game'",
                         "names": list(side_names)})
             _contribute(side_names)

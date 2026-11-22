@@ -928,6 +928,10 @@ MANIFEST = {
 # `target`, not `soulfire_targets`. (Crackle with Power is the same pattern.) Verified by live
 # trace: Soulfire cast -> `target` decision, source="Soulfire Eruption", 256 (=2^8) subset opts.
 NAME_CHOICES = {
+    # Kaheera's companion action is a starting-deck/sideboard rule rather than a
+    # cards.json parameter. Both `companion` and `companioncast` are main-phase
+    # plan actions; the viewer exposes each on its outside-game card thumb.
+    "Kaheera, the Orphanguard": "main_phase",
     "Soulfire Eruption": "target",
     # Ezuri, Renegade Leader's "{2}{G}{G}{G}: Elf creatures you control get +3/+3" rides the combat
     # converter (ApplyFirebreathing), whose AMOUNT is the turn-keyed `firebreathe` decision

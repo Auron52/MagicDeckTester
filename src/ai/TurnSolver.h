@@ -316,6 +316,9 @@ struct Action
                              // interchangeable, so equiv_tag folds them to a canonical prefix and a
                              // plan may unearth k of n), cost = unearth_cost. Resolved by the shared
                              // ApplyUnearth in the trailing pass of both worlds. Appended LAST.
+        CompanionToHand,     // Kaheera: pay {3} at sorcery speed, consume the chosen sideboard
+                             // copy and put it in hand. chosen_x=1 also casts it in this main phase;
+                             // that compound line is searched alongside the hand-only option.
     };
 
     // ActivatePermAbility sub-mode. Defined in the CORE layer (core/Permanent.h) because the shared
@@ -4169,6 +4172,8 @@ public:
         // choice is the PLAYED card -- one Kaldring with three distinct snow cards in the yard is
         // three distinguishable lines only through this token.
         std::vector<std::string> gy_plays;
+        std::vector<std::string> companion_hands;
+        std::vector<std::string> companion_casts;
         // "channel=<card name>": Twinshot Sniper's from-HAND channel ability. Not a board activation
         // (its source is a card in hand) and not a cast either -- "{1}{R}, Discard this card" plays the
         // same card a different way, so `cast=<name>` cannot distinguish the two. EMPTY => legacy

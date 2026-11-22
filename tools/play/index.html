@@ -1468,6 +1468,7 @@ function activatableSources(){
       // MORPH: a hand-source TRAIL flip (face_up_from_hand) is not a board activation -- it is the
       // hand thumb's "↑ flip later" badge (faceDownSources) -- so it never joins a board source's menu.
       if (a.verb==='face_up' && a.face_up_from_hand) return;
+      if (a.verb==='companion' || a.verb==='companioncast') return; // outside the game, not on the board
       per[src]=(per[src]||0)+(a.sacout ? Math.max(1, a.sac_count||1) : 1);
       if (a.sacout) sacout[src]=true;
       // Every distinct (verb, payload) this source can produce, deduped — the menu a two-step
@@ -2959,6 +2960,8 @@ function renderPlanbar() {
               : p.kind!=='activate' ? ''
               : p.verb==='gyexile'   ? ' ⟳ ' + (p.mode===2 ? 'exile a creature, gain 2' : 'exile an instant/sorcery, drain 2')
               : p.verb==='gyreturn'  ? ' ⟳ sac → return ' + (p.name==='@random' ? 'a creature at random' : p.name)
+              : p.verb==='companion' ? ' {3} → hand'
+              : p.verb==='companioncast' ? ' {3} → hand, cast'
               : p.verb==='animate'   ? ' ⟳ animate'
               : p.verb==='taptoken'  ? ' ⟳ make a token'
               : p.verb==='taplife'   ? ' ⟳ gain life'
@@ -3154,6 +3157,20 @@ function renderHand() {
       (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
       `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
   }
+  // Only an eligible selected companion has an action in the engine's menu.
+  const compActs=(S.decision.plans||[]).flatMap(p=>p.actions||[])
+    .filter(a=>a && (a.verb==='companion' || a.verb==='companioncast'));
+  if (compActs.length) {
+    const nm=compActs[0].card;
+    const hand=compActs.some(a=>a.verb==='companion');
+    const cast=compActs.some(a=>a.verb==='companioncast');
+    html += `<span class="stagedsep">companion<br>outside game</span>`+
+      `<span class="thumb spell companion"><img loading="lazy" src="${scryImg(nm,'small')}" alt="${esc(nm)}" onerror="this.style.opacity=.15"/>`+
+      `<span class="altcasts">`+
+      (hand?`<span class="landface" data-companion="companion" title="Pay {3} to put ${esc(nm)} into your hand">{3} to hand</span>`:'')+
+      (cast?`<span class="landface" data-companion="companioncast" title="Pay {3}, then cast ${esc(nm)} this main phase">{3} + cast</span>`:'')+
+      `</span><em>${esc(nm)}</em></span>`;
+  }
   // Staged (exiled) cards — playable until end of their listed turn — shown set apart at the right.
   if (staged.length) {
     html += `<span class="stagedsep">⟂ exiled<br>playable</span>`;
@@ -3172,6 +3189,17 @@ function renderHand() {
     }
   }
   row.innerHTML = html;
+  row.querySelectorAll('[data-companion]').forEach(b => {
+    b.onclick = e => { e.stopPropagation(); e.preventDefault();
+      const verb=b.dataset.companion, nm=compActs[0].card;
+      const old=S.plan.findIndex(p=>p.verb==='companion'||p.verb==='companioncast');
+      if (old>=0) { const same=S.plan[old].verb===verb; S.plan.splice(old,1); if (same) { renderBoard(); return; } }
+      S.plan.push({name:nm, src:nm, kind:'activate', verb});
+      flashHint(verb==='companioncast' ? `Pay {3}, then cast ${nm} this main phase.`
+                                        : `Pay {3} to put ${nm} into your hand.`);
+      renderBoard(); };
+    b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
+  });
   // Cycle badge: the ONLY route to cycling a hand card. It used to have no handler at all -- the
   // whole thumb's click fired `activateAbility`, which cycled any card `digSources().cyc` listed --
   // so clicking a cycling land ANYWHERE discarded it for a card, instantly and irreversibly (it is a

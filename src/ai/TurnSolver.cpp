@@ -30,6 +30,7 @@
 #include "AIEngine.h"
 #include "../core/SpellEffects.h"
 #include "../core/FreeTurns.h"   // MTG_FREE_TURNS: the end-of-opponent-turn lock check (executor twin: RunTurnFrom)
+#include "../core/Companion.h"
 #include "../core/Trace.h"
 #include <algorithm>
 #include <array>
@@ -34524,7 +34525,8 @@ enum : uint64_t {
     // Migloz, Maze Crusher (Beasts E): its oil-costed +2/+2 (ActivatePump mode 7) is payable -- a Migloz the plan CAST
     // is newly activatable (no {T}, legal while sick), which opens site 9 so the same main can pump it (Garruk,
     // Primal Hunter's -3 reads the greatest power).
-    kActOilPump = 223
+    kActOilPump = 223,
+    kActCompanionHand = 224
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -35099,6 +35101,12 @@ std::vector<uint64_t> TurnSolver::SnapshotActivatableAbilities(const GameState& 
         if (p.controller_index != ctrl || p.card.m_number == 0) { continue; }
         CollectActivationKeys(state, ctrl, p, total_cache, out);
     }
+    // A companion moved from outside the game into hand is a new same-main
+    // option. The selected copy keeps its number there; an ordinary main-deck
+    // Kaheera or an unselected wish copy never carries this key.
+    for (const Card& c : state.players[ctrl].hand)
+    { if (c.m_number == 300000 && c.m_name == "Kaheera, the Orphanguard")
+      { out.push_back(ActKey(300000, kActCompanionHand)); break; } }
     std::sort(out.begin(), out.end());
     return out;
 }
@@ -35212,6 +35220,13 @@ bool TurnSolver::PostEntryActivationPending(const GameState& state,
                 return true;   // activatable NOW, and it was not when the plan started
             }
         }
+    }
+    for (const Card& c : state.players[ctrl].hand)
+    {
+        if (c.m_number != 300000 || c.m_name != "Kaheera, the Orphanguard") { continue; }
+        if (!std::binary_search(pre_plan_keys.begin(), pre_plan_keys.end(),
+                                ActKey(300000, kActCompanionHand))) { return true; }
+        break;
     }
     return false;
 }
@@ -42984,6 +42999,42 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     const Player& ap = state.ActivePlayer();
     bool has_creature_target = HasLegalCreatureTarget(state);
     int  n = static_cast<int>(ap.hand.size());
+    // The selected companion is outside the game until its one-shot {3} special action.
+    // Offer both keeping it in hand and paying/casting it this main phase. A single
+    // source family makes those mutually exclusive while the search chooses the line.
+    std::vector<Action> companion_actions;
+    if (state.stack.empty())
+    for (const Card& sc : ap.sideboard)
+    {
+        if (!CompanionInSideboard(state, state.active_player_index, sc.m_number)) { continue; }
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(sc);
+        if (!cd) { continue; }
+        Action hand;
+        hand.kind = Action::Kind::CompanionToHand;
+        hand.card_name = sc.m_name;
+        hand.hand_index = -1;
+        hand.sac_source_id = sc.m_number;
+        hand.cost.generic = 3;
+        hand.eval = 2;
+        hand.is_noncreature = true;
+        hand.def = cd;
+        companion_actions.push_back(hand);
+        Action cast = hand;
+        cast.chosen_x = 1;
+        // Only the fixed fee is a sound enumeration lower bound. A Warchief or
+        // Incubator cast earlier in this plan may reduce Kaheera's printed cost;
+        // both apply worlds pay that spell cost from the resulting board exactly.
+        cast.cost.generic = 3;
+        cast.eval = EvalCard(*cd, state);
+        cast.is_noncreature = false;
+        cast.card_mv = cd->card.m_mana_cost.ManaValue();
+        // The autonomous search needs this lower-bound compound action to find
+        // lines where an earlier reducer makes the cast affordable. In a human
+        // menu the same lower bound could advertise "fee + cast" with only the
+        // fee payable. Offer the fee alone; the next main decision shows the
+        // ordinary cast from hand at its exact current cost.
+        if (!HumanPlayActive()) { companion_actions.push_back(std::move(cast)); }
+    }
     const int mana_ceiling = g_emit_prune ? OptimisticTurnMana(state) : kNoManaCeiling;
     // Hoisted: one battlefield scan per CollectActions call, not one per candidate card, and only
     // when the prune is on (this is a millions-of-calls hot path). See the exemption below.
@@ -56592,6 +56643,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         };
         actions.erase(std::remove_if(actions.begin(), actions.end(), dead), actions.end());
     }
+    actions.insert(actions.end(), companion_actions.begin(), companion_actions.end());
     FinalizeFoldTags(state, actions);
     return actions;
 }
@@ -56741,6 +56793,7 @@ static int PlanGroupKey(const GameState& state, const Action& a,
     // cycler -- a plan section cycles at most once, the chain continues through the site-4 re-solve. Not
     // behind s_off: the seed has no ungrouped form (two seeds in one plan are not a legal selection).
     if (IsCycleSeed(a)) { return -6000000; }
+    if (a.kind == Action::Kind::CompanionToHand) { return -8000000 - a.sac_source_id; }
     if (a.hand_index >= 0) { return a.hand_index; }
     // Jumbo Cactuar's free Greaves can haste an Elf, let it fund a Satyr,
     // then move to that Satyr before a later cast. Ordinary equip variants of
@@ -72520,6 +72573,7 @@ bool TurnSolver::IsTrailingActivation(Action::Kind k)
         case Action::Kind::GarthActivate:
         case Action::Kind::Eternalize:
         case Action::Kind::Unearth:
+        case Action::Kind::CompanionToHand:
             return true;
         default:
             return false;
@@ -72563,6 +72617,7 @@ static bool HumanVerbMatchesKind(const std::string& verb, Action::Kind k)
     if (verb == "channel")    { return k == K::Channel; }
     if (verb == "eternalize") { return k == K::Eternalize; }
     if (verb == "unearth")    { return k == K::Unearth; }
+    if (verb == "companion" || verb == "companioncast") { return k == K::CompanionToHand; }
     // A cycle / sacrifice-to-draw (USER 2026-10-28: "Cycling should be a plan item like any other").
     if (verb == "cycle" || verb == "sacdraw") { return k == K::DigDraw; }
     if (verb == "sacout")     { return k == K::SacForMana || k == K::SacCreatureOutlet; }
@@ -72591,6 +72646,7 @@ static const char* HumanStepLabel(const Action& a)
         case K::Channel:           return "channel";
         case K::Eternalize:        return "eternalize";
         case K::Unearth:           return "unearth";
+        case K::CompanionToHand:   return "companion";
         case K::ActivatePod:       return "Pod";
         case K::TapForTokens:      return "tap";
         case K::TapMillToughness:  return "mill";
@@ -72783,6 +72839,8 @@ static bool HumanStepMatches(const HumanStepToken& st, const Action& a, const Ga
             && a.tutor_target.str() == st.name;
     }
     if (a.card_name.str() != st.name || !HumanVerbMatchesKind(st.verb, a.kind)) { return false; }
+    if (a.kind == Action::Kind::CompanionToHand
+        && ((st.verb == "companioncast") != (a.chosen_x == 1))) { return false; }
     if (a.kind == Action::Kind::CastFromHand
         && ((st.verb == "casttop") != a.cast_from_top)) { return false; }
     if (a.kind == Action::Kind::CastFromHand
@@ -72854,6 +72912,7 @@ const char* TurnSolver::HumanStepVerbFor(Action::Kind k)
         case K::Channel:                return "channel";
         case K::Eternalize:             return "eternalize";
         case K::Unearth:                return "unearth";
+        case K::CompanionToHand:        return "companion";
         case K::SacForMana:             return "";         // MANA: payment, never a step (USER ruling)
         case K::SacCreatureOutlet:      return "sacout";
         case K::TapForTokens:
@@ -81802,6 +81861,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                             a.tutor_target);
             }
         }
+        else if (a.kind == Action::Kind::CompanionToHand)
+        {
+            if (!state.stack.empty() || !CompanionInSideboard(state, state.active_player_index,
+                                                               a.sac_source_id)) { continue; }
+            ManaCost fee; fee.generic = 3;
+            if (!TapForCostDirect(state, fee, /*for_creature=*/false)) { continue; }
+            if (PutCompanionIntoHand(state, state.active_player_index, a.sac_source_id)
+                && a.chosen_x == 1)
+            {
+                apply_one(a.card_name, false, false, 0, false, 0, std::string{}, 0, 0,
+                          -1, -1, 0, std::string{}, 0, false, -1, 0, 0, 0, false,
+                          false, false);
+            }
+        }
         else if (a.kind == Action::Kind::GraveyardPlayAbility)
         {
             // Kaldring: PROBE stranded-ness FIRST (commit=false) so the played card's own cost is
@@ -86153,6 +86226,9 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
             case Action::Kind::DiscardToLandsEdge:
                 w.Begin(kSigL); w.Put(act.card_name); w.Put('#'); w.Int(act.discard_lands); w.End(); break;
             case Action::Kind::Suspend: w.Begin(kSigU); w.Put(act.card_name); w.End(); break;
+            case Action::Kind::CompanionToHand:
+                w.Begin(kSigU); w.Put("COMPANION#"); w.Int(act.sac_source_id);
+                w.Put(act.chosen_x == 1 ? "#CAST" : "#HAND"); w.End(); break;
             case Action::Kind::SacForMana:
                 w.Begin(kSigM); w.Put(act.card_name); w.Put('#'); w.Put(act.chosen_float_color);
                 w.Put('#'); w.Int(act.sac_source_id); w.Put('#'); w.Int(act.ritual_float); w.End(); break;
@@ -91891,6 +91967,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
                 case Action::Kind::Suspend:  u.push_back(act.card_name); break;
+                case Action::Kind::CompanionToHand:
+                    u.push_back("COMPANION#" + std::to_string(act.sac_source_id)
+                                + (act.chosen_x == 1 ? "#CAST" : "#HAND")); break;
                 // SacForMana: distinct colours are DISTINCT plans (different floated colour); keep the
                 // colour in the signature so the dedup never collapses the colour decision (core invariant).
                 case Action::Kind::SacForMana:
@@ -94418,6 +94497,12 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     }
     for (const Action& a : p.actions)
     {
+        // Paying the companion fee makes its selected copy a NEW hand option.
+        // The post-trailing site-9 key sees that transition, and this mask
+        // lets the search choose the subsequent casts rather than accepting
+        // an unchallengeable continuation.
+        if (a.kind == Action::Kind::CompanionToHand && a.chosen_x == 0)
+        { mask |= 1 << 9; }
         if (gy_cast_live && a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
             && a.kind != Action::Kind::PlayLand && a.kind != Action::Kind::ActivateVial)
         { mask |= 1 << 9; }
@@ -110972,8 +111057,16 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
             Fold(k, 0x5B0A);
             Fold(k, static_cast<uint64_t>(p.sideboard.size()));
             uint64_t sb = 0;
-            for (const Card& c : p.sideboard) { sb += c.m_name_hash; }
+            bool selected_kaheera = false;
+            for (const Card& c : p.sideboard)
+            {
+                sb += c.m_name_hash;
+                selected_kaheera |= c.m_number == 300000 && c.m_name == "Kaheera, the Orphanguard";
+            }
             Fold(k, sb);
+            // A wished Kaheera and the selected companion share a name, but only
+            // the selected copy has the {3} outside-the-game special action.
+            if (selected_kaheera) { Fold(k, 0xC0A4E3A); }
         }
         Fold(k, static_cast<uint64_t>(p.library.size()));
         if (!p.library.empty()) { Fold(k, p.library.front().m_name_hash); }
@@ -138737,6 +138830,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                       spec.sf_puts.empty() && spec.jitte_modes.empty() && spec.figure_modes.empty() && spec.equips.empty() &&
                       spec.equip_all_free.empty() &&
                       spec.gy_exiles.empty() && spec.gy_returns.empty() && spec.gy_plays.empty() && spec.channels.empty() &&
+                      spec.companion_hands.empty() && spec.companion_casts.empty() &&
                       spec.cycles.empty() && spec.sac_draws.empty() &&
                       spec.suspends.empty() &&
                       spec.animates.empty() && spec.tap_tokens.empty() &&
@@ -139056,6 +139150,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         std::vector<std::string> sacNamedFetches;
         std::vector<std::string> eternalizeNames;
         std::vector<std::string> unearthNames;
+        std::vector<std::string> companionHandNames, companionCastNames;
         // One entry per blink activation: (outlet name, blinked creature's m_number). Matched
         // against spec.blinks by BlinksMatch below, which honours the 0 wildcard.
         std::vector<LineSpec::BlinkSpec> blinkActs;
@@ -139191,6 +139286,8 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             { eternalizeNames.push_back(a.card_name.str()); continue; }
             if (a.kind == Action::Kind::Unearth)
             { unearthNames.push_back(a.card_name.str()); continue; }
+            if (a.kind == Action::Kind::CompanionToHand)
+            { (a.chosen_x == 1 ? companionCastNames : companionHandNames).push_back(a.card_name.str()); continue; }
             // Blink: matched against its own verb when declared (the target is the decision), else
             // by outlet name in the ordinary cast multiset -- the legacy behaviour every saved
             // reference was written under. sac_victim_id is the blinked creature's m_number.
@@ -139206,6 +139303,15 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             if (a.kind != Action::Kind::CastFromHand) { boardActNames.push_back(a.card_name.str()); }
         }
         if (planLE != spec.lands_edge) { continue; }
+        {
+            std::sort(companionHandNames.begin(), companionHandNames.end());
+            std::sort(companionCastNames.begin(), companionCastNames.end());
+            std::vector<std::string> want_hand = spec.companion_hands;
+            std::vector<std::string> want_cast = spec.companion_casts;
+            std::sort(want_hand.begin(), want_hand.end());
+            std::sort(want_cast.begin(), want_cast.end());
+            if (companionHandNames != want_hand || companionCastNames != want_cast) { continue; }
+        }
         std::sort(topCastNames.begin(), topCastNames.end());
         std::vector<std::string> wantedTop = spec.cast_tops;
         std::sort(wantedTop.begin(), wantedTop.end());
@@ -142460,7 +142566,7 @@ static const char* PlanDumpKindName(Action::Kind k)
         "ActivateLoyalty", "Equip", "GYReturn", "GYPlay", "GYExile", "AttachAllEquipment",
         "PutFromHand", "JitteMode", "RevealTop", "Pump", "AnimateLand", "TapForTokenPay",
         "UntapCreature", "Blink", "ACTIVATE", "Pod", "GYExileGrow", "ComboRoute", "Eternalize",
-        "AttachAllFree", "AuraSwap", "ActivateUntap", "Unearth"
+        "AttachAllFree", "AuraSwap", "ActivateUntap", "Unearth", "CompanionToHand"
     };
     const int i = static_cast<int>(k);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }

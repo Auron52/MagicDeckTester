@@ -153,12 +153,12 @@ public:
     // is no longer carried on MulliganProfile.
     static int DeckVialTargetMv(const Decklist& deck);
 
-    // Deal the OUTSIDE-THE-GAME pool (Player::sideboard) for a wish deck. SetupGame calls this;
+    // Deal the OUTSIDE-THE-GAME pool (Player::sideboard) for a wish deck or eligible Kaheera. SetupGame calls this;
     // every OTHER path that hand-builds a GameState (--scenario) MUST call it too, exactly as it
     // must call StampDeckTraits -- the same hole, and it bit for the same reason. Without it
     // players[0].sideboard is empty, so Living Wish resolves and fetches NOTHING, and a fixture
     // built to exercise a wish chain silently measures a whiff instead. No-op for every deck that
-    // does not wish, so it is safe to call unconditionally.
+    // does not wish or select Kaheera, so it is safe to call unconditionally.
     static void DealWishPool(GameState& state, const Decklist& deck);
 
     // Can this deck mill / exile-from-library / discard the OPPONENT? Gates whether they are dealt

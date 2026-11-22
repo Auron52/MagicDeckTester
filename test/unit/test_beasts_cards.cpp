@@ -20,6 +20,9 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "core/Companion.h"
+#include "deck/DeckLoader.h"
+#include "runner/GoldFishRunner.h"
 #include "mtg_test_seam.h"
 
 #include <algorithm>
@@ -2561,5 +2564,283 @@ TEST_CASE("Woodland Bellower: a put Krosan Warchief's {1} off a later Beast is c
     TurnSolver::ApplyPlan(roll, *both, true);
     CHECK(BeIndexOf(roll, 300) >= 0);
     CHECK(BeIndexOf(roll, 71) >= 0);
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Kaheera companion: starting-deck restriction selects one outside-game copy")
+{
+    Decklist eligible;
+    eligible.mainboard.push_back(BeZone("Krosan Warchief", 1));
+    eligible.sideboard.push_back(BeZone("Kaheera, the Orphanguard", 61));
+    eligible.sideboard.push_back(BeZone("Kaheera, the Orphanguard", 62));
+    CHECK(KaheeraCompanionEligible(eligible.mainboard));
+    GameState s = BeState();
+    GoldFishRunner::DealWishPool(s, eligible);
+    REQUIRE(s.players[0].sideboard.size() == 1);
+    CHECK(s.players[0].sideboard[0].m_number == 300000);
+
+    Decklist ineligible = eligible;
+    ineligible.mainboard.push_back(BeZone("Monastery Swiftspear", 2));
+    CHECK_FALSE(KaheeraCompanionEligible(ineligible.mainboard));
+    GameState no = BeState();
+    GoldFishRunner::DealWishPool(no, ineligible);
+    CHECK(no.players[0].sideboard.empty());
+
+    // A wish deck still gets its sideboard, but that does not grant companion access.
+    ineligible.mainboard.push_back(BeZone("Living Wish", 3));
+    GameState wish = BeState();
+    GoldFishRunner::DealWishPool(wish, ineligible);
+    REQUIRE(wish.players[0].sideboard.size() == 2);
+    CHECK_FALSE(CompanionInSideboard(wish, 0, wish.players[0].sideboard[0].m_number));
+}
+
+TEST_CASE("Kaheera companion: searched hand and same-turn cast choices match executor and rollout")
+{
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    Decklist deck;
+    deck.mainboard.push_back(BeZone("Krosan Warchief", 1));
+    deck.sideboard.push_back(BeZone("Kaheera, the Orphanguard", 61));
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < 6; ++i) { BeAdd(s, "Forest", 10 + i); }
+    GoldFishRunner::DealWishPool(s, deck);
+    s.m_provider = &provider;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    for (int cast = 0; cast < 2; ++cast)
+    {
+        const TurnSolver::Plan* pick = nullptr;
+        for (const TurnSolver::Plan& p : plans)
+        {
+            if (p.actions.size() == 1 && p.actions[0].kind == Action::Kind::CompanionToHand
+                && p.actions[0].chosen_x == cast) { pick = &p; break; }
+        }
+        REQUIRE_MESSAGE(pick != nullptr, "missing companion choice ", cast);
+        TurnSolver::LineSpec spec;
+        if (cast) { spec.companion_casts.push_back("Kaheera, the Orphanguard"); }
+        else { spec.companion_hands.push_back("Kaheera, the Orphanguard"); }
+        const auto check = TurnSolver::CheckLineExact(s, true, spec, &plans);
+        CHECK(check.verdict == TurnSolver::LineCheck::Verdict::Accept);
+
+        GameState roll = s;
+        TurnSolver::ApplyPlan(roll, *pick, true);
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, *pick, true);
+        GameState ex = s;
+        eng.TakeTurn(ex, true, BeResolveAll);
+        CHECK(roll.players[0].sideboard.empty());
+        CHECK(ex.players[0].sideboard.empty());
+        CHECK(BeTappedLands(roll) == (cast ? 6 : 3));
+        CHECK(BeTappedLands(ex) == BeTappedLands(roll));
+        CHECK(BeOnBf(roll, "Kaheera, the Orphanguard") == static_cast<bool>(cast));
+        CHECK(BeOnBf(ex, "Kaheera, the Orphanguard") == static_cast<bool>(cast));
+        CHECK(roll.players[0].hand.size() == static_cast<std::size_t>(cast ? 0 : 1));
+        CHECK(ex.players[0].hand.size() == roll.players[0].hand.size());
+    }
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Kaheera companion: hand entry opens a searched site-9 continuation, replayed by executor")
+{
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    Decklist deck;
+    deck.mainboard.push_back(BeZone("Krosan Warchief", 1));
+    deck.mainboard.push_back(BeZone("Garruk's Packleader", 2));
+    deck.sideboard.push_back(BeZone("Kaheera, the Orphanguard", 61));
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < 9; ++i) { BeAdd(s, "Forest", 10 + i); }
+    BeAdd(s, "Garruk's Packleader", 30);
+    s.players[0].hand.push_back(BeZone("Krosan Warchief", 40));
+    GoldFishRunner::DealWishPool(s, deck);
+    s.m_provider = &provider;
+    std::vector<TurnSolver::Plan> roots = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* hand_only = nullptr;
+    for (const TurnSolver::Plan& p : roots)
+    {
+        if (p.actions.size() == 1 && p.actions[0].kind == Action::Kind::CompanionToHand
+            && p.actions[0].chosen_x == 0) { hand_only = &p; break; }
+    }
+    REQUIRE(hand_only != nullptr);
+    CHECK((TurnSolver::PlanOpensBreakpointForTest(s, *hand_only) & (1 << 9)) != 0);
+    const std::vector<std::uint64_t> pre = TurnSolver::SnapshotActivatableAbilities(s);
+    GameState reached = s;
+    TurnSolver::ApplyPlan(reached, *hand_only, true);
+    REQUIRE(reached.players[0].hand.size() == 2);
+    CHECK(TurnSolver::PostEntryActivationPending(reached, pre));
+    const std::vector<TurnSolver::Plan> continuations = TurnSolver::EnumerateBreakpointPlans(reached, true);
+    const TurnSolver::Plan* both = BeFindCastPlan(continuations,
+        { "Kaheera, the Orphanguard", "Krosan Warchief" });
+    REQUIRE(both != nullptr);
+    TurnSolver::Plan selected = *hand_only;
+    selected.bp_at = 0;
+    selected.bp_choice = static_cast<int>(both - continuations.data());
+    GameState roll = s;
+    TurnSolver::ApplyPlanWithRecordsForTest(roll, selected, true);
+    CHECK(BeOnBf(roll, "Kaheera, the Orphanguard"));
+    CHECK(BeOnBf(roll, "Krosan Warchief"));
+    {
+        const Permanent& warchief = BeNum(roll, 40);
+        CHECK(warchief.EffectivePower()
+              + ComputeLordBonus(warchief.card, roll, 0, warchief.AnimatedAllTypes(), &warchief).first == 3);
+    }
+    CHECK(roll.players[0].hand.size() == 2); // Packleader draws for Kaheera and the 3/3 Warchief.
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, selected, true);
+    GameState ex = s;
+    eng.TakeTurn(ex, true, BeResolveAll);
+    CHECK(BeOnBf(ex, "Kaheera, the Orphanguard"));
+    CHECK(BeOnBf(ex, "Krosan Warchief"));
+    {
+        const Permanent& warchief = BeNum(ex, 40);
+        CHECK(warchief.EffectivePower()
+              + ComputeLordBonus(warchief.card, ex, 0, warchief.AnimatedAllTypes(), &warchief).first == 3);
+    }
+    CHECK(ex.players[0].hand.size() == roll.players[0].hand.size());
+    CHECK(BeTappedLands(ex) == BeTappedLands(roll));
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Kaheera companion: Warchief before fee and another Beast after Kaheera")
+{
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    Decklist deck;
+    deck.mainboard.push_back(BeZone("Krosan Warchief", 1));
+    deck.mainboard.push_back(BeZone("Garruk's Packleader", 2));
+    deck.sideboard.push_back(BeZone("Kaheera, the Orphanguard", 61));
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < 10; ++i) { BeAdd(s, "Forest", 10 + i); }
+    BeAdd(s, "Garruk's Packleader", 30);
+    s.players[0].hand.push_back(BeZone("Krosan Warchief", 40));
+    s.players[0].hand.push_back(BeZone("Krosan Warchief", 41));
+    GoldFishRunner::DealWishPool(s, deck);
+    s.m_provider = &provider;
+    const std::vector<TurnSolver::Plan> roots = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* first = nullptr;
+    for (const TurnSolver::Plan& p : roots)
+    {
+        if (p.actions.size() != 2) { continue; }
+        bool cast_first = false;
+        bool fee = false;
+        for (const Action& a : p.actions)
+        {
+            cast_first |= a.kind == Action::Kind::CastFromHand && a.hand_index == 0
+                && a.card_name == "Krosan Warchief";
+            fee |= a.kind == Action::Kind::CompanionToHand && a.chosen_x == 0;
+        }
+        if (cast_first && fee) { first = &p; break; }
+    }
+    REQUIRE(first != nullptr);
+    GameState reached = s;
+    TurnSolver::ApplyPlan(reached, *first, true);
+    CHECK(BeOnBf(reached, "Krosan Warchief"));
+    CHECK_FALSE(BeOnBf(reached, "Kaheera, the Orphanguard"));
+    REQUIRE(reached.players[0].hand.size() == 2);
+    const std::vector<TurnSolver::Plan> continuations = TurnSolver::EnumerateBreakpointPlans(reached, true);
+    const TurnSolver::Plan* last = BeFindCastPlan(continuations,
+        { "Kaheera, the Orphanguard", "Krosan Warchief" });
+    REQUIRE(last != nullptr);
+    TurnSolver::Plan selected = *first;
+    selected.bp_at = 0;
+    selected.bp_choice = static_cast<int>(last - continuations.data());
+    GameState roll = s;
+    TurnSolver::ApplyPlanWithRecordsForTest(roll, selected, true);
+    CHECK(BeOnBf(roll, "Kaheera, the Orphanguard"));
+    CHECK(BeIndexOf(roll, 40) >= 0);
+    CHECK(BeIndexOf(roll, 41) >= 0);
+    CHECK(roll.players[0].hand.size() == 2); // Kaheera, then the lord-pumped second Warchief.
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, selected, true);
+    GameState ex = s;
+    eng.TakeTurn(ex, true, BeResolveAll);
+    CHECK(BeIndexOf(ex, 40) >= 0);
+    CHECK(BeIndexOf(ex, 41) >= 0);
+    CHECK(BeOnBf(ex, "Kaheera, the Orphanguard"));
+    CHECK(ex.players[0].hand.size() == roll.players[0].hand.size());
+    CHECK(BeTappedLands(ex) == BeTappedLands(roll));
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Kaheera companion: human menu offers fee then an exact ordinary cast")
+{
+    // MTG_HUMAN_PLAY is process static. The normal unit run skips this arm;
+    // run this case again with MTG_HUMAN_PLAY=1 to test the viewer menu.
+    if (!HumanPlayActive()) { return; }
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    Decklist deck;
+    deck.mainboard.push_back(BeZone("Krosan Warchief", 1));
+    deck.sideboard.push_back(BeZone("Kaheera, the Orphanguard", 61));
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < 6; ++i) { BeAdd(s, "Forest", 10 + i); }
+    GoldFishRunner::DealWishPool(s, deck);
+    s.m_provider = &provider;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* fee = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        for (const Action& a : p.actions)
+        {
+            const bool misleading_compound = a.kind == Action::Kind::CompanionToHand && a.chosen_x == 1;
+            CHECK_FALSE(misleading_compound);
+            if (p.actions.size() == 1 && a.kind == Action::Kind::CompanionToHand
+                && a.chosen_x == 0) { fee = &p; }
+        }
+    }
+    REQUIRE(fee != nullptr);
+    TurnSolver::LineSpec hand;
+    hand.companion_hands.push_back("Kaheera, the Orphanguard");
+    CHECK(TurnSolver::CheckLineExact(s, true, hand, &plans).verdict
+          == TurnSolver::LineCheck::Verdict::Accept);
+    TurnSolver::LineSpec compound;
+    compound.companion_casts.push_back("Kaheera, the Orphanguard");
+    CHECK(TurnSolver::CheckLineExact(s, true, compound, &plans).verdict
+          != TurnSolver::LineCheck::Verdict::Accept);
+    GameState after = s;
+    TurnSolver::ApplyPlan(after, *fee, true);
+    REQUIRE(after.players[0].hand.size() == 1);
+    CHECK(after.players[0].hand[0].m_name == "Kaheera, the Orphanguard");
+    const std::vector<TurnSolver::Plan> next = TurnSolver::EnumerateMainPlans(after, true);
+    bool ordinary_cast = false;
+    for (const TurnSolver::Plan& p : next)
+    for (const Action& a : p.actions)
+    { ordinary_cast |= a.kind == Action::Kind::CastFromHand
+          && a.card_name == "Kaheera, the Orphanguard"; }
+    CHECK(ordinary_cast);
+
+    // With only {3}, the fee is still legal, but the next prompt cannot claim
+    // a Kaheera cast. This is the case the old compound button misrepresented.
+    GameState three = s;
+    three.battlefield.resize(3);
+    const std::vector<TurnSolver::Plan> short_menu = TurnSolver::EnumerateMainPlans(three, true);
+    const TurnSolver::Plan* short_fee = nullptr;
+    for (const TurnSolver::Plan& p : short_menu)
+    for (const Action& a : p.actions)
+    {
+        const bool misleading_compound = a.kind == Action::Kind::CompanionToHand && a.chosen_x == 1;
+        CHECK_FALSE(misleading_compound);
+        if (p.actions.size() == 1 && a.kind == Action::Kind::CompanionToHand
+            && a.chosen_x == 0) { short_fee = &p; }
+    }
+    REQUIRE(short_fee != nullptr);
+    GameState three_after = three;
+    TurnSolver::ApplyPlan(three_after, *short_fee, true);
+    CHECK(BeTappedLands(three_after) == 3);
+    REQUIRE(three_after.players[0].hand.size() == 1);
+    const std::vector<TurnSolver::Plan> short_next = TurnSolver::EnumerateMainPlans(three_after, true);
+    bool unaffordable_cast = false;
+    for (const TurnSolver::Plan& p : short_next)
+    for (const Action& a : p.actions)
+    { unaffordable_cast |= a.kind == Action::Kind::CastFromHand
+          && a.card_name == "Kaheera, the Orphanguard"; }
+    CHECK_FALSE(unaffordable_cast);
     ManaCacheClearPerGame();
 }
