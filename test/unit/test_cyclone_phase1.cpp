@@ -265,4 +265,3 @@ TEST_CASE("Cyclone phase 1: CycloneProvider routing signature")
     CHECK(std::string(RouteOf({ "Street Wraith", "Brainsurge", "Watery Grave", "Xander's Lounge",
                                 "Scalding Tarn" })) == "AntiLifegain");
 }
-
