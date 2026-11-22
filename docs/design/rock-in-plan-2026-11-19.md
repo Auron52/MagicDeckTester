@@ -332,3 +332,26 @@ runs in the search window (Extra Turns: 107 K window trials, two work events eac
 at the witness), where only the price applies. The price was calibrated so that the units charged equal the rung's
 window + playout time at each deck's own ns per unit: MILLI = 1000 x (ns per work event) / (ns per unit), median **85**
 (1x, ~970 units per Niv game, ~4.5% of its units); the half price is **43**. `ab2/calib.txt`, `ab2/stats_*.err`.
+
+### Step 3: held-out A/B of the cuts, batch A (seeds searched 780000, d0 790000; one pooled batch, 32/32 busy)
+
+Arms vs `def` (dev binary, default flags; rock rung ON). Searched = play settings. CPU = per-job thread CPU on a shared
+box (noise ~1-2%). net = turns, unwon = max_turns + 1. Full tables: `logs/rock-cpu/cmp_{poff,pnt,price}.txt`.
+
+| deck | pairs | poff f/s | poff net | poff CPU | pnt f/s | pnt net | pnt CPU | price@85 f/s | price net | price units | price CPU |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| niv | 3000 | 10/3 | **-8** | **0.9493** | 3/1 | -3 | 0.9731 | 0/13 | **+13** | 1.1037 | 0.9806 |
+| extraturns | 1500 | 0/0 | 0 | 1.0006 | 0/0 | 0 | 0.9961 | 0/0 | 0 (0 digest diffs) | 1.1083 | **0.8759** |
+| hinata | 1500 | 0/1 | +1 | 0.9795 | 0/1 | +1 | 0.9826 | 4/10 | **+5** | 1.3890 | **1.1982** |
+| dragons | 500 | 0/0 | 0 | 0.9785 | 0/0 | 0 | 0.9773 | 0/0 | 0 | 1.0700 | 0.9969 |
+| fivecolour | 500 | 0/0 | 0 | 1.0026 | 0/0 | 0 | 0.9942 | 0/0 | 0 | 1.0348 | 1.0144 |
+| galadriel | 500 | 0/0 | 0 | 1.0073 | 0/0 | 0 | 1.0099 | 0/0 | 0 | 1.0388 | 1.0230 |
+| merfolkturns | 500 | 0/0 | 0 | 0.9926 | 0/0 | 0 | 1.0005 | 0/0 | 0 | 1.0100 | 0.9978 |
+| stompy | 500 | 0/0 | 0 | 0.9885 | 0/0 | 0 | 0.9899 | 0/0 | 0 | 1.0294 | 0.9841 |
+| stuffy | 500 | 0/0 | 0 | 0.9915 | 0/0 | 0 | 0.9962 | 0/0 | 0 | 1.0046 | 0.9421 |
+| **ALL** | 9000 | 10/4 | **-7** | 0.9772 | 3/2 | -2 | 0.9842 | 4/23 | **+18** | 1.2079 | 1.0608 |
+
+d0 (500 games per deck per arm): **every arm byte-identical to def** (0 faster, 0 slower, 0 digest-only), as built.
+Slower searched games: poff hinata 975, niv 352 / 871 / 1346; pnt hinata 975, niv 871; price 10 hinata + 13 niv (list in
+`cmp_price.txt`). d8 b0 replays queued (`build/scratch/claude_rock_cpu/ab2/d8_ab2.json`, lane, marker `d8_ab2.done`): every
+poff / pnt slower game on both arms, plus two price games as a check that the price is inert at b0.

@@ -1,0 +1,59 @@
+# price vs def  (missing jobs: 0)
+
+## searched (play settings)
+
+| deck | pairs | faster | slower | net turns | digest-only | units ratio | CPU ratio |
+|---|---|---|---|---|---|---|---|
+| dragons | 500 | 0 | 0 | +0 | 0 | 1.0700 | 0.9969 |
+| extraturns | 1500 | 0 | 0 | +0 | 0 | 1.1083 | 0.8759 |
+| fivecolour | 500 | 0 | 0 | +0 | 1 | 1.0348 | 1.0144 |
+| galadriel | 500 | 0 | 0 | +0 | 0 | 1.0388 | 1.0230 |
+| hinata | 1500 | 4 | 10 | +5 | 26 | 1.3890 | 1.1982 |
+| merfolkturns | 500 | 0 | 0 | +0 | 0 | 1.0100 | 0.9978 |
+| niv | 3000 | 0 | 13 | +13 | 58 | 1.1037 | 0.9806 |
+| stompy | 500 | 0 | 0 | +0 | 0 | 1.0294 | 0.9841 |
+| stuffy | 500 | 0 | 0 | +0 | 2 | 1.0046 | 0.9421 |
+| ALL | 9000 | 4 | 23 | +18 | 87 | 1.2079 | 1.0608 |
+
+## d0
+
+| deck | pairs | faster | slower | net turns | digest-only | units ratio | CPU ratio |
+|---|---|---|---|---|---|---|---|
+| dragons | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.7234 |
+| extraturns | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.9874 |
+| fivecolour | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.6864 |
+| galadriel | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.9178 |
+| hinata | 500 | 0 | 0 | +0 | 0 | 1.0000 | 0.8369 |
+| merfolkturns | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.8849 |
+| niv | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.9353 |
+| stompy | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.7882 |
+| stuffy | 500 | 0 | 0 | +0 | 0 | 0.0000 | 1.0599 |
+| ALL | 4500 | 0 | 0 | +0 | 0 | 1.0000 | 0.8756 |
+
+slower hinata s 141 4 5
+slower hinata s 282 5 6
+slower hinata s 515 6 7
+slower hinata s 532 4 5
+slower hinata s 640 5 6
+slower hinata s 847 5 6
+slower hinata s 1134 5 6
+slower hinata s 1165 5 6
+slower hinata s 1366 6 7
+slower hinata s 1476 4 5
+faster hinata s 55 6 5
+faster hinata s 804 8 6
+faster hinata s 1038 7 6
+faster hinata s 1464 8 7
+slower niv s 360 4 5
+slower niv s 516 4 5
+slower niv s 704 4 5
+slower niv s 957 5 6
+slower niv s 1317 4 5
+slower niv s 1612 5 6
+slower niv s 1902 4 5
+slower niv s 1981 4 5
+slower niv s 2437 3 4
+slower niv s 2519 3 4
+slower niv s 2627 4 5
+slower niv s 2876 4 5
+slower niv s 2898 5 6

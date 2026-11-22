@@ -1,0 +1,37 @@
+# pnt vs def  (missing jobs: 0)
+
+## searched (play settings)
+
+| deck | pairs | faster | slower | net turns | digest-only | units ratio | CPU ratio |
+|---|---|---|---|---|---|---|---|
+| dragons | 500 | 0 | 0 | +0 | 0 | 1.0000 | 0.9773 |
+| extraturns | 1500 | 0 | 0 | +0 | 0 | 1.0000 | 0.9961 |
+| fivecolour | 500 | 0 | 0 | +0 | 0 | 1.0000 | 0.9942 |
+| galadriel | 500 | 0 | 0 | +0 | 0 | 1.0000 | 1.0099 |
+| hinata | 1500 | 0 | 1 | +1 | 0 | 1.0009 | 0.9826 |
+| merfolkturns | 500 | 0 | 0 | +0 | 0 | 1.0000 | 1.0005 |
+| niv | 3000 | 3 | 1 | -3 | 27 | 0.9982 | 0.9731 |
+| stompy | 500 | 0 | 0 | +0 | 0 | 1.0000 | 0.9899 |
+| stuffy | 500 | 0 | 0 | +0 | 0 | 1.0000 | 0.9962 |
+| ALL | 9000 | 3 | 2 | -2 | 27 | 0.9999 | 0.9842 |
+
+## d0
+
+| deck | pairs | faster | slower | net turns | digest-only | units ratio | CPU ratio |
+|---|---|---|---|---|---|---|---|
+| dragons | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.7640 |
+| extraturns | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.9693 |
+| fivecolour | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.7058 |
+| galadriel | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.9155 |
+| hinata | 500 | 0 | 0 | +0 | 0 | 1.0000 | 0.8469 |
+| merfolkturns | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.9019 |
+| niv | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.9730 |
+| stompy | 500 | 0 | 0 | +0 | 0 | 0.0000 | 0.7906 |
+| stuffy | 500 | 0 | 0 | +0 | 0 | 0.0000 | 1.0030 |
+| ALL | 4500 | 0 | 0 | +0 | 0 | 1.0000 | 0.8797 |
+
+slower hinata s 975 5 6
+slower niv s 871 4 5
+faster niv s 263 7 5
+faster niv s 967 5 4
+faster niv s 1070 7 6

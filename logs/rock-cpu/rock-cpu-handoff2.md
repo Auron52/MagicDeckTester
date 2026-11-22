@@ -42,6 +42,8 @@ Seeds: searched base 780000 (niv 3000 games, extraturns / hinata 1500, stompy / 
 galadriel / fivecolour 500), d0 base 790000 (500 each). Scripts copied to `logs/rock-cpu/` (run.sh, mk2.py, calib.py,
 identchk.py, perf2.sh).
 
+## Progress since: batch A compared (results in doc), d8 b0 replays queued in the lane: manifest ab2/d8_ab2.json, wrapper `box_lane.sh` PID 914899, out `d8_ab2.out`, logs `logs_d8_ab2/`, marker `d8_ab2.done` (MTG_LKR_PRICE_MILLI=85 set for the price check jobs). Step 1 below is DONE (cmp_*.txt in logs/rock-cpu/), except price05 (needs batch B).
+
 ## Next, in order
 1. When `status` shows `batchA`: `cd .../claude_rock_cpu && for a in poff pnt price; do python3 cmp.py ab2/A.out ab2/logs_A def $a --list > ab2/cmp_$a.txt; done`
    For price05: `cat ab2/A.out ab2/B.out > ab2/AB.out; mkdir -p ab2/logs_AB; ln -sf $PWD/ab2/logs_A/* $PWD/ab2/logs_B/* ab2/logs_AB/;
