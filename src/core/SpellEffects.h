@@ -21032,6 +21032,7 @@ inline bool UnearthExileDeferred(GameState& state, std::size_t idx, const char* 
 inline void FireUnearthedLeaves(GameState& state, const std::vector<Permanent>& left)
 {
     for (const Permanent& p : left) { UnearthedLeftBattlefield(state, p); }
+}
 
 
 // "Exile it at the beginning of the next end step": every unearthed permanent, at the TOP of BOTH

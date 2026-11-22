@@ -24,6 +24,7 @@ import argparse
 import json
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -32,9 +33,7 @@ HEADERS = {"User-Agent": "MagicDeckTester-cost-audit/1.0", "Accept": "applicatio
 
 
 def fetch(name, retries=4):
-    """Fetch a card, retrying with exponential backoff on HTTP 429 (Scryfall
-    rate-limits bursts even under a steady throttle), so a transient limit never
-    masquerades as a missing card."""
+    """Fetch a card, retrying transient rate limits, server errors and timeouts."""
     url = SCRYFALL + urllib.parse.quote(name)
     req = urllib.request.Request(url, headers=HEADERS)
     backoff = 1.0
@@ -43,11 +42,17 @@ def fetch(name, retries=4):
             with urllib.request.urlopen(req, timeout=15) as resp:
                 return json.load(resp)
         except urllib.error.HTTPError as exc:
-            if exc.code == 429 and attempt < retries - 1:
+            if (exc.code == 429 or 500 <= exc.code < 600) and attempt < retries - 1:
                 time.sleep(backoff)
                 backoff *= 2
                 continue
             return {"_error": f"HTTP {exc.code}"}
+        except (TimeoutError, urllib.error.URLError) as exc:
+            if attempt < retries - 1:
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            return {"_error": str(exc)}
         except Exception as exc:  # noqa: BLE001 - report and continue
             return {"_error": str(exc)}
     return {"_error": "HTTP 429 (exhausted retries)"}
