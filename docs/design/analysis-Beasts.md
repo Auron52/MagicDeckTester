@@ -147,7 +147,7 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   (Kaheera gives W devotion); the hold is a payer PREFERENCE (standing mana-payment exemption), so a line needing the
   opposite choice at the first cast is not realised by the walk.
 * **Viewer readiness (USER 2026-11-22 wants to be TOLD when the deck can be played in the viewer, to save references):** needs every mainboard + companion card implemented (batches G Contaminator, H Bellower, I Kaheera companion), then the branch landed on the shared branch and the PRIMARY checkout fast-forwarded (the viewer runs only there). Primary holds an untracked `decks/Beasts/` copy: diff it against the branch's before the pull, move it aside (never delete), and check the primary for uncommitted references + a live viewer game first. Batch J (provider) does not block human play.
-* **Running:** none. NEXT = batch G (Bloated Contaminator).
+* **Running:** integrator G (Bloated Contaminator: toxic + combat-damage proliferate), launched 2026-11-22 ~09:10 UTC. NEXT after it = batch H (Woodland Bellower).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
