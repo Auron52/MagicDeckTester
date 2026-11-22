@@ -190,10 +190,14 @@ fix: opp T1 Haven, T2 Gruul Turf bouncing Haven, PoP hits 2 -- search STILL wins
 Ball Lightning + Fireblast), = the reference's T4. Scoped regression ACCEPTED (33 faster; midrangeburn d5 s2002 gi65 4->5 = churn, recovers 4 at 4x/16x).
 s9 reference PLAY-DRIFT under origin's Karoo fix (recorded T2: opp Gruul Turf + Haven unbounced, PoP 4) -- FIXED by
 origin d0d5f8463 (opponent_land_entry stamp + --legacy-opponent-land-entry), another session. Rebased onto it
-(2026-11-22 ~01:45 UTC). RUNNING: validation round 4 build/scratch/cb-orch/landing4/chain.sh (PID 268953; build, unit,
-scenarios, smoke, check_gt_logs, viewer_protocol_check --strict on Creature_Burn+Midrange_Burn; status landing4/status,
-marker landing4/DONE), BEFORE joining (build+smoke > the 2 h lease). Expect smoke byte-identical to the accepted GT.
-Then join; if origin has not moved, land at once.
+(2026-11-22 ~01:45 UTC). Round 4 PASSED 04:33 (smoke byte-identical 243/243; CB+MB refs 18 ok 2 repaired 0 drift).
+But origin then moved to f9a59b8a7 (periodic overnight accept, burn damage order, Merfolk gate, ...) -> rebased again
+04:45 UTC, DROPPING my two GT commits (regenerate under the rebased binary; backup/cb-pre-rebase4 holds them);
+HeuristicArm.h conflict = both appended a slot (kept both). RUNNING: build_chain landing5 (PID 323234; build, unit,
+scen; status landing5/status, marker landing5/BUILT) outside the lease. THEN: join; under `hold`: fetch (rebase +
+incremental rebuild if origin moved), smoke -> expect ONLY Magma Jet decks to move -> accept; scoped regression
+creatureburn,creatureburn2hg,midrangeburn,midrangeburn2hg (+ any other Magma Jet deck smoke moved) -> accept; check_gt_logs;
+refs --only Creature_Burn,Midrange_Burn; land; CI watch.
 USER QUESTIONS (surface): MTG_SCRY_WIDTH=2 (engine-wide, pre-existing) leaves 3 of 5 two-card-scry dispositions
 unfindable at any budget -- width 5 + a Burn ScryVerdict prune would satisfy completeness; Burn scry heuristic ignores
 lands in hand (provider change, USER's call); Midrange Burn keep table regen after the play change (USER's call).
