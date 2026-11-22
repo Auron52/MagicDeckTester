@@ -32,8 +32,18 @@ branch; never phase-1-2-deck-analyzer). Read /workspaces/MagicDeckTester/CLAUDE.
 - rep1.sh: ro2 (old binary) repros in the lane: rep/j1447_{off,a}.* (Jumbo d0 seed 1311447 gi1447 T3),
   rep/n532_{off,b}.* (Niv d0 seed 1310532 gi532 T3). Output: build/scratch/claude_bruna_ro/rep/, logs in rep/<tag>.logs/.
 
+## Repro findings (ro2 binary, DONE)
+- Jumbo gi1447 T3 board: Forest#24 + Utopia Sprawl, Forest#18, Voyaging Satyr, land drop Forest#23; hand GSZ, Overgrowth,
+  Nylea. Nine mana exactly only if the Satyr untaps the Overgrowth Forest (3). 7a: Overgrowth's {2}{G} took the Satyr ->
+  Nylea dropped (off wins T4, 7a T7).
+- Niv gi532 T3 board: Island, Sulfur Falls, Generator Servant (cast T2), land drop Cascade Bluffs; plan {Signet, Brainstorm,
+  Ponder}. Off: lands pay Signet+Brainstorm, Ponder drops, Servant survives -> T4 hasty Niv (win T5). 7b: Ponder applies
+  by sacrificing the Servant -> no T4 Niv (win T7). The plan itself is the poor choice; the off arm's drop saved it.
+- Unit tests written (test_bruna.cpp, "line-critical land variants" subcases "7a amended" / "7b amended"); NOT yet built.
+
 ## Next, in order
-1. From the repro logs, get the T3 boards; write unit tests in test/unit/test_bruna.cpp next to
+1. (tests written -- verify they pass ON and reproduce OFF after the build; if an OFF check passes, the unit board does
+   not reproduce the drop: adjust the board/scopes.) From the repro logs, get the T3 boards; write unit tests in test/unit/test_bruna.cpp next to
    "Bruna: line-critical land variants" (TEST_CASE pattern there: ArmPin + BoardBr + LineUnpaidCostScope +
    TapForCostShared): gi1447 board with 7a on: amendment ON keeps Satyr untapped / OFF reproduces; gi532 board with 7b:
    amendment ON does not sac Servant for Ponder / OFF reproduces. Add the two new slots to ArmPin.

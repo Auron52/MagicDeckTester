@@ -312,6 +312,13 @@ TEST_CASE("Bruna: line-critical land variants (measurement levers)")
             heurarm::t_arm[heurarm::PAY_LINE_CRIT_LAND]         = -1;
             heurarm::t_arm[heurarm::PAY_LINE_CRIT_OPENER]       = -1;
             heurarm::t_arm[heurarm::PAY_LINE_CRIT_BEHIND_DORKS] = -1;
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_UNTAPPER_LAST] = -1;
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_HASTE_SAC_LAST] = -1;
+        }
+        void Amend(int untapper, int haste_sac)
+        {
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_UNTAPPER_LAST] = static_cast<std::int8_t>(untapper);
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_HASTE_SAC_LAST] = static_cast<std::int8_t>(haste_sac);
         }
     };
     // s30051257 T2 {Sol Ring, Arcanum Wings}: Sol Ring's {1} off Avacyn's Pilgrim keeps Botanical Sanctum's {U}.
@@ -357,6 +364,58 @@ TEST_CASE("Bruna: line-critical land variants (measurement levers)")
         return TapForCostShared(b.s, wish, /*for_creature=*/false, nullptr, true);
     };
     SUBCASE("opener line: Remote Farm pays Sol Ring") { CHECK(sol_wish(true)); CHECK_FALSE(sol_wish(false)); }
+    // 7a AMENDMENT (MTG_PAY_LINE_CRIT_UNTAPPER_LAST). Jumbo Cactuar d0 gi1447 (seed 1311447) T3 {Forest, Overgrowth,
+    // Green Sun's Zenith X=1, Nylea}: nine mana exactly -- Forest + Utopia Sprawl 2, Forest 1, the Overgrowth Forest 3,
+    // and Voyaging Satyr untapping the Overgrowth Forest for 3 more. Under 7a Overgrowth's {2}{G} took the Satyr (a
+    // creature ahead of the critical land), and Nylea was dropped (4 -> 7). Returns whether the Satyr is still untapped.
+    auto satyr_kept = [](bool amend) -> bool
+    {
+        ArmPin pin(0, 0, 1);
+        pin.Amend(amend ? 1 : 0, 0);
+        BoardBr b;
+        const int f24 = b.Put("Forest");
+        const int sprawl = b.Put("Utopia Sprawl", false, false, f24);
+        for (Permanent& q : b.s.battlefield)
+        { if (q.card.m_number == sprawl) { q.chosen_color = static_cast<std::int8_t>(Color::Green); } }
+        b.Put("Forest");
+        b.Put("Forest", false, /*sick=*/true);   // this turn's land drop
+        const int satyr = b.Put("Voyaging Satyr");
+        ManaCost og;   og.generic = 2;  og.green = 1;
+        ManaCost gsz;  gsz.generic = 1; gsz.green = 1;
+        ManaCost nyl;  nyl.generic = 3; nyl.green = 1;
+        ManaCost line = og;
+        AddManaCost(line, gsz);
+        AddManaCost(line, nyl);
+        LineUnpaidCostScope hold(line);
+        if (!TapForCostShared(b.s, og, /*for_creature=*/false, nullptr, true)) { return false; }
+        return !b.ByNum(satyr)->tapped;
+    };
+    SUBCASE("7a amended: Voyaging Satyr is not tapped ahead of the critical land")
+    { CHECK(satyr_kept(true)); CHECK_FALSE(satyr_kept(false)); }
+    // 7b AMENDMENT (MTG_PAY_LINE_CRIT_HASTE_SAC_LAST). NivMizzetCombo d0 gi532 (seed 1310532) T3 {Cascade Bluffs, Izzet
+    // Signet, Brainstorm, Ponder} off Island + Sulfur Falls + Bluffs + Generator Servant: under 7b Signet's {2} came off
+    // the Servant (both lands are critical for the line's {U}{U}), Ponder applied, and T4 had no hasty Niv (5 -> 7).
+    // Returns whether the Servant is still on the battlefield after Signet is paid.
+    auto servant_kept = [](bool amend) -> bool
+    {
+        ArmPin pin(1, 1, 0);
+        pin.Amend(0, amend ? 1 : 0);
+        BoardBr b;
+        b.Put("Island");
+        b.Put("Sulfur Falls");
+        b.Put("Cascade Bluffs", false, /*sick=*/true);
+        const int servant = b.Put("Generator Servant");
+        ManaCost sig; sig.generic = 2;
+        ManaCost bs;  bs.blue = 1;
+        ManaCost pon; pon.blue = 1;
+        ManaCost line = sig;
+        AddManaCost(line, bs);
+        AddManaCost(line, pon);
+        LineUnpaidCostScope hold(line);
+        if (!TapForCostShared(b.s, sig, /*for_creature=*/false, nullptr, true)) { return false; }
+        return b.ByNum(servant) != nullptr;
+    };
+    SUBCASE("7b amended: Generator Servant is not sacrificed for the Signet") { CHECK(servant_kept(true)); CHECK_FALSE(servant_kept(false)); }
 }
 
 TEST_CASE("Bruna: the gather dominance collapse -- one subset, or take/skip for Almost Perfect only")
