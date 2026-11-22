@@ -113,6 +113,12 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   OFF; measure on CYCLONE (USER: "Probably Cyclone is the more relevant deck for that test, since Extra Turns tends
   to get its own turns. It doesn't need the free ones normally."; Cyclone has 161 free-turn games), Extra Turns as a
   secondary check, with the Sire arm in the same pooled batch.
+- USER 2026-11-22 (references under the rule): *"We could correct existing references as needed. I suppose the only
+  change would be that some cases give Free Turns. Perhaps get my approval before changing any, though. I don't want
+  to lose access to the references because of this change. That would be silly."* -- run a flag-ON reference sweep
+  WITHOUT the --legacy-no-free-turns override (diagnostic only) and LIST every reference whose replay changes (gains
+  a free turn / drifts). Change NO reference file; bring the list to the USER for approval first. Keep the legacy
+  replay path so every reference stays replayable.
 - USER 2026-11-22: *"What might be nice is to include the average of the extra turns as a separate number, even if
   we don't optimize for it. This is just informative for agents and users."* -- report the average free turns
   (and extra turns) taken per game as a separate, informational number beside the credited avg (batch per-job
