@@ -6,6 +6,47 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
 `docs/design/analysis-Worldfire.md`. Free-turn design (all USER rulings verbatim):
 `docs/design/opponent-lockdown-free-turns.md`.
 
+## CODEX HANDOFF (2026-11-22 ~11:45 UTC) -- START HERE
+The USER is moving this work from Claude to Codex (out of Claude usage). The Claude session's subagents were each
+asked to stop at a clean step and write a handoff file. Its 2-hourly cron (cf1c0324) dies with that session: SET YOUR
+OWN 2-hourly status timer (CLAUDE.md "Codex IDE equivalent"), and wait on PIDs / DONE markers, never `pgrep -f`.
+The push queue was NOT joined (no stale lease).
+
+### Four change sets, one landing batch
+| set | branch / worktree | state | handoff |
+|---|---|---|---|
+| LTB triggers for Worldfire's mass exile | wip/wfltb, .claude/worktrees/wfltb, 0848f329e | DONE: units, scenarios, smoke 243/243 + regression 389/389 byte-identical, 940 refs 0 drift | (report in the section "LTB: DONE" below) |
+| Cantrip keep order (bucket discard + Brainstorm/Ponder/Preordain rules + deadline order) + box_lane fix 6c5ae8c8d + Worldfire docs | wip/worldfire, this worktree | adoption agent: attribution + blind ensemble + GT accept of worldfire keys in progress | logs/worldfire/adopt-handoff.md |
+| TutorSearchWidth deleted (+ Hinata Gamble merit rule v2, Melira prune, cards.json notes) | wip/tutorwidth, .claude/worktrees/tutorwidth | pass 2: held-out A/B + d8 b0 of its slower games in progress | logs/tutorwidth/handoff2.md (pass 1: handoff.md) |
+| Free turns default ON (+ bounceland opening default ON with stamp/legacy flag, spawn requirement free-turn-SCOPED, MTG_FREE_TURN_REACH stand-down optimization, MTG_OPP_SPAWN_DRAW_T1 default OFF) | wip/freeturn, .claude/worktrees/freeturn | pass 6: validation chain8 (units, reach2 batch, audit must be 0), turn-0 opponent land-drop-on-the-draw investigation | logs/freeturn/handoff7.md (earlier: handoff6.md) |
+
+Each set's bar: LTB byte-identical (met). Cantrip: USER 1a (improvement + no unrecoverable slower game that cannot be
+shown to be clairvoyance). Tutor width: the no-greedy bar (every deck net <= 0 on held-out, every slower game recovers
+at d8 b0; blind arms are never d8-gated). Free turns: USER design, "adoption is not a question" once trait-0 decks are
+byte-identical (bounceland opening excepted, which moves Karoo/Lake-opponent games), refs 0 drift, reach audit == 0.
+
+### Landing procedure (after every set has met its bar)
+1. Integration branch off origin/phase-1-2-deck-analyzer; rebase/cherry-pick in order wfltb -> worldfire -> tutorwidth ->
+   freeturn (no merges). Resolve test/regression_gt.txt + gt_logs by RE-ACCEPTING, never by hand (CLAUDE.md rebase rules).
+2. ./build.sh; units; scenarios; ONE pooled `test/regression.sh --both` under scripts/heavy_run.sh; account for EVERY
+   moved key by one of the four sets (Worldfire keys: cantrip + free turns; Cyclone/Shadowborn/Sea Creatures/Prevent
+   Damage/Elementals/Extra Turns: free turns; Hinata/Goblins/Melira/...: tutor width; Karoo/Lake opponent games:
+   bounceland) -- an unexplained mover is a defect. Accept smoke + regression (overnight waits for its periodic run).
+   `python3 test/check_gt_logs.py`; reference sweep 0 drift; `python3 scripts/check_references_safe.py`.
+3. `python3 scripts/push_queue.py join`, background `wait`, at the lease: fetch + rebase, re-validate if the rebase
+   replayed gated changes (under `push_queue.py hold`), `land`. CI watch `gh run watch <id> --interval 60` in background.
+4. VIEWER READY for USER references (step 2b of "Next, in order"): fast-forward the PRIMARY checkout, rebuild, tell the
+   USER. Untracked decks/Worldfire/Worldfire.cod + two design docs there collide with tracked files: compare first.
+
+### After landing (from "Next, in order")
+Follow-up cantrip A/B (USER 1b/1c list below); re-measure the Worldfire budget curve and re-screen the b0 backstop rows
+(USER Q16: optimize first); write the LTB owed items into a deferred doc; Stage 6 report.
+
+### The ONE open USER decision
+Sire-fair / annihilator-fair lock checks (free-turn doc "USER decisions open after the third pass"): parent recommended
+both ON (consistent with the USER's "underestimation of the effect on the opponent"); they ship OFF until the USER answers.
+Do NOT surface anything else as a question unless it is genuinely blocked on a USER decision (USER 2026-11-22).
+
 ## Done
 - Stage 1 coverage: 6 missing (Worldfire, Keldon Halberdier, Mystical Tutor, Personal Tutor,
   Overmaster, Mistrise Village); rest full.
