@@ -170,6 +170,7 @@ main-2 Browbeat, exactly like every other attacker; whether to attack at all is 
 exemption, unchanged by this batch.
 
 ## CHECKPOINT (orchestrator, updated 2026-11-21 ~22:10 UTC) — resume here after compaction
+**2026-11-22 ~10:50 UTC: HANDED OFF TO CODEX -- read `docs/design/creature-burn-codex-handoff.md` first; it supersedes this section.**
 **2026-11-22 ~07:50 UTC: the USER reloaded VSCode ~06:30-07:45; it killed every process (rebuild, 3 agents + their
 builds, the viewer).** Restarted: viewer (primary, MDT_REFERENCE_BACKUP_DIR set; log build/scratch/cb-orch/viewer.log);
 landing5/rebuild.sh (PID 5322, incremental build + unit + scen of HEAD fc57da098+, marker landing5/BUILT2). The lost
