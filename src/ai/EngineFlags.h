@@ -1078,6 +1078,21 @@ inline bool PayLineCritBehindDorksOn()
     static const bool env_on = EnvOn("MTG_PAY_LINE_CRIT_BEHIND_DORKS");
     return heurarm::Flag(heurarm::PAY_LINE_CRIT_BEHIND_DORKS, env_on);
 }
+// Amendments (MEASUREMENT ONLY, default OFF; USER 2026-11-22). MTG_PAY_LINE_CRIT_UNTAPPER_LAST (7a's): a land-untapping
+// creature (untap_target_land) never pays ahead of a line-critical land the crit rule moved back (Jumbo d0 gi1447,
+// Voyaging Satyr). MTG_PAY_LINE_CRIT_HASTE_SAC_LAST (7b's): a sacrifice-for-mana source with a creature-spell rider
+// (sac_for_mana_grants_haste) is not sacrificed for a noncreature cost ahead of such a land (Niv d0 gi532, Generator
+// Servant). ManaPayment.cpp crit_demote.
+inline bool PayLineCritUntapperLastOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_LINE_CRIT_UNTAPPER_LAST");
+    return heurarm::Flag(heurarm::PAY_LINE_CRIT_UNTAPPER_LAST, env_on);
+}
+inline bool PayLineCritHasteSacLastOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_LINE_CRIT_HASTE_SAC_LAST");
+    return heurarm::Flag(heurarm::PAY_LINE_CRIT_HASTE_SAC_LAST, env_on);
+}
 
 inline bool PayNarrowRestrictedFirstOn()
 {

@@ -2618,6 +2618,13 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         // to the legacy path / backtracker, the complete fallback either way.
         if (TapScarcityEnabled())
         {
+            // LINE-CRITICAL AMENDMENTS (MEASUREMENT ONLY, default OFF; see crit_hold below). crit_demote is this pip's
+            // second-selection switch: set once a source the amendment excludes (crit_excluded) won the pip over a
+            // critical land that would have beaten it at its historical key, so the selection reruns with the
+            // excluded sources behind that land. Declared ABOVE the label so the rerun keeps it; at most once a pip.
+            bool crit_demote = false;
+            const bool crit_amend_live = (PayLineCritLandOn() || PayLineCritBehindDorksOn())
+                                      && (PayLineCritUntapperLastOn() || PayLineCritHasteSacLastOn());
             // MTG_PAY_DEPLETION_HOLD re-selection point (see the check after the selection below): the
             // held-depletion set is computed only once a depletion land is about to WIN a pip against an
             // alternative, and when that land turns out to be held the selection runs once more with the
@@ -2842,6 +2849,20 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 fodder_capped = eaten >= g_pay_fodder_cap;
             }
             int dh_ncand = 0;   // MTG_PAY_DEPLETION_HOLD: candidates this pip compared (>1 -> an alternative exists)
+            // The best HISTORICAL key (crit_hold ignored) of any land the crit rule moved back this pip (amendments only).
+            int crit_base_key[4] = { 1 << 30, 1 << 30, 1 << 30, 1 << 30 };
+            // A source the amendments exclude from out-ranking a moved-back critical land: a land-untapping creature
+            // (untap_target_land: its tap is worth a land's untap, not a pip -- Jumbo d0 gi1447, Voyaging Satyr) and a
+            // sacrifice-for-mana source whose mana carries a creature-spell rider, paying a noncreature cost (the rider
+            // is lost: Niv d0 gi532, Generator Servant's haste for the next turn's Niv). Identified off `real_def`
+            // (a granted mana face carries none of the card's params).
+            auto crit_excluded = [&](const Permanent& q, const CardDefinition* qd, const CardDefinition* qreal) -> bool
+            {
+                if (qreal == nullptr || qd == nullptr) { return false; }
+                if (PayLineCritUntapperLastOn() && qreal->params.untap_target_land && q.card.IsCreature()) { return true; }
+                return PayLineCritHasteSacLastOn() && !for_creature && qreal->params.sac_for_mana_grants_haste
+                    && PaySacSpendableNow(state, q, *qd);
+            };
             for (int i = 0; i < bn; ++i)
             {
                 Permanent& p = state.battlefield[i];
@@ -3557,7 +3578,23 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // Ordering only; outside a plan apply (no traits) nothing is doomed.
                 const int doomed = (kind == 1 && IsDoomedPlanBody(state, active, p)) ? 1 : 0;
                 int key[4];
-                if (crit_hold && crit_behind)
+                if (crit_hold && crit_amend_live)
+                {
+                    const int bk[4] = { 0, harm / kNdScale,
+                                        rank + ((pain || waste) ? kPainBand : 0) + dhold
+                                             + ((cco_hold || ps_hold) ? 2 * kPainBand : 0),
+                                        (harm % kNdScale) * 2 + broad };
+                    int c = 0;
+                    for (int k = 0; k < 4 && c == 0; ++k) { c = (bk[k] < crit_base_key[k]) ? -1 : (bk[k] > crit_base_key[k] ? 1 : 0); }
+                    if (c < 0) { for (int k = 0; k < 4; ++k) { crit_base_key[k] = bk[k]; } }
+                }
+                if (crit_demote && kind == 1 && rank >= 0 && crit_excluded(p, def, real_def))
+                {
+                    // Second selection (crit_demote): behind every source of the moved-back land's tier -- the plain
+                    // tier under MTG_PAY_LINE_CRIT_LAND, the 499 band under _BEHIND_DORKS -- and ahead of the next.
+                    key[0] = PayLineCritBehindDorksOn() ? 499 : 0; key[1] = 1 << 20; key[2] = rank; key[3] = 0;
+                }
+                else if (crit_hold && crit_behind)
                 {
                     // Behind the creature band (64+), ahead of the §2b fodder (500+). MEASUREMENT ONLY (see crit_hold).
                     key[0] = 499; key[1] = harm / kNdScale; key[2] = rank; key[3] = (harm % kNdScale) * 2 + broad;
@@ -3614,6 +3651,21 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 if (dd != nullptr && dd->params.enters_tapped_with_depletion > 0 && DepletionCountersOn(dp) > 0
                     && dep_held(best_i))
                 { goto dh_reselect; }
+            }
+            // LINE-CRITICAL AMENDMENTS: an excluded source won, and a critical land the crit rule moved back would have
+            // beaten it at its historical key -> select once more with the excluded sources behind that land.
+            if (crit_amend_live && !crit_demote && best_i >= 0 && best_kind == 1)
+            {
+                int c = 0;
+                for (int k = 0; k < 4 && c == 0; ++k) { c = (crit_base_key[k] < best_key[k]) ? -1 : (crit_base_key[k] > best_key[k] ? 1 : 0); }
+                if (c < 0)
+                {
+                    const Permanent& bp = state.battlefield[best_i];
+                    const CardDefinition* breal = bp.def_absent ? nullptr : CardDatabase::Instance().LookupCached(bp.card);
+                    // `def` for a granted face is never an excluded card (no untap / sac-for-mana params), so the
+                    // real definition stands in for both.
+                    if (crit_excluded(bp, breal, breal)) { crit_demote = true; goto dh_reselect; }
+                }
             }
             if (best_i < 0) { return false; }
             if (nddbg)
