@@ -14187,8 +14187,9 @@ static bool SeqWalkProvablyShort(const GameState& state, const std::vector<Actio
     if (out_ub != nullptr) { *out_ub = static_cast<int>(ub); }
     return lb > ub;
 }
-// MTG_PAY_CENSUS (diagnostic only): the payment-context globals paymemo::Ctx compares, by CONTENT, for the
-// unlock-order tree's cross-enumeration repeat census (paycensus fn UOT). Pointers are mixed as-is.
+// The payment-context globals paymemo::Ctx compares, by CONTENT: part of MTG_SPS_XMEMO's key (below, which only runs
+// with no plan context / traits live, so the two pointers mixed here are null there) and of MTG_PAY_CENSUS's
+// cross-enumeration repeat census (paycensus fn UOT).
 static std::uint64_t UoTreeCtxSig()
 {
     std::uint64_t h = 0x55AA1234ull;
@@ -14201,57 +14202,57 @@ static std::uint64_t UoTreeCtxSig()
     return h | 1;
 }
 
-// MTG_UOT_XMEMO / MTG_SPS_XMEMO (PROTOTYPES, default OFF). Site 0 (UOT): the enumeration site's unlock-order tree
-// verdict; site 1 (SPS): SubsetPayableSequential's whole verdict. Each memoised ACROSS
-// enumerations inside one decision (TurnSolver::DecisionEpoch), keyed by board CONTENT (BuildSimKey at depth 0 + the
-// zone-order signature), the floating pools, the line's unpaid cost, the payment-context globals (UoTreeCtxSig) and
-// the asked actions in `sel` order (paycensus::ActSig). The census found 65% of these trees repeating inside a decision
-// with no paymemo scope shared. MTG_UOT_XMEMO_VERIFY=1 re-runs the tree on every hit and counts mismatches.
-// Not consulted under the unlock-order price (the tree's charges read the budget) or human play.
-namespace uotx
+// MTG_SPS_XMEMO (DEFAULT ON; =0 -> every SubsetPayableSequential call walks). An EXACT cut: SubsetPayableSequential's
+// verdict memoised ACROSS enumerations inside one decision (TurnSolver::DecisionEpoch). MTG_PAY_CENSUS found 58-69% of
+// these probes repeating inside a decision on the same board content, all EnumeratePlans -> EnumeratePlans with no
+// paymemo scope shared, and the unlock-order lever (MTG_PO_UNLOCK_ORDER) made each repeat an unlock-order tree walk.
+//   KEY (hashed): board content (BuildSimKey at depth 0) + the zone-order signature (FsOrderSig) + the three floating
+//   pools + the line's unpaid cost (g_line_unpaid_cost) + the payment-context globals by content (UoTreeCtxSig) + the
+//   asked actions in `sel` order (paycensus::ActSig).
+//   HIT (compared, never trusted to the hash): every stored Action equals the asked one under WalkSame, i.e. whole
+//   (defaulted operator==) except the fields the walk does not read -- equiv_ord (the subset fold's copy ordinal), eval
+//   (plan scoring), cont_pins (executor / fold), and tutor_target where TutorWalkSame shows the walk reads it the same.
+//   hand_index stays strict (a cast's permanent takes the hand card at that index).
+//   BYPASSED under a live plan context / traits (identified by ADDRESS in paymemo::Ctx, which another context can reuse
+//   later in the decision), the unlock-order price (its charges read the budget) and human play.
+// Inert at every budget by construction (it returns the verdict the walk would return). The memory is bounded per
+// thread (cleared past kMaxBytes; a clear only loses hits). Measured 2026-11-22 (400 Jumbo games, gi 719000+): 179k hits,
+// VERIFY 0 mismatches, play byte-identical; instructions lever-on 349.0G -> 329.6G, lever-off 303.5G -> 293.9G.
+// MTG_SPS_XMEMO_VERIFY=1 re-walks every hit, returns the walk's verdict, and prints hit / mismatch / field-diff counts
+// at exit. docs/design/jumbo-apply-drop-order-2026-11-18.md, "Exact cuts, 2026-11-21/22".
+namespace spsx
 {
-inline bool On(int site)
-{
-    static const bool v0 = EnvOn("MTG_UOT_XMEMO"), v1 = EnvOn("MTG_SPS_XMEMO");
-    return site == 0 ? v0 : v1;
-}
-inline bool Verify() { static const bool v = EnvOn("MTG_UOT_XMEMO_VERIFY"); return v; }
-inline std::atomic<long long> g_hits[2]{}, g_misses[2]{}, g_mismatch[2]{};
-inline std::atomic<long long> g_bypass_ctx[2]{}, g_act_diff[2]{};
+inline bool On() { static const bool v = EnvOn("MTG_SPS_XMEMO", true); return v; }
+inline bool Verify() { static const bool v = EnvOn("MTG_SPS_XMEMO_VERIFY"); return v; }
+inline std::atomic<long long> g_hits{}, g_misses{}, g_mismatch{}, g_bypass_ctx{}, g_act_diff{};
 struct K { std::uint64_t a, b; bool operator==(const K& o) const { return a == o.a && b == o.b; } };
 struct KH { std::size_t operator()(const K& k) const { return static_cast<std::size_t>(k.a ^ (k.b * 0x9E3779B97F4A7C15ull)); } };
-// The asked actions are stored and compared WHOLE (Action's defaulted operator==) on every hit, never trusted to
-// the hash: only the board and the context are hashed.
 struct Entry { bool verdict = false; std::vector<Action> acts; };
-// Diagnostic: on an action difference, which of the fields the walk does not read differed (hand_index is READ --
-// a cast's permanent takes the hand card at that index -- so it is never normalised).
-inline std::atomic<long long> g_diff_field[2][5]{};   // hand_index, equiv_ord, eval, cont_pins, other
-inline bool NormOn() { static const bool v = EnvOn("MTG_XMEMO_NORM", true); return v; }
-// Diagnostic: per-field census of EVERY Action member on an action difference (fields in declaration order).
-#define UOTX_FIELDS(X) X(kind) X(steal_spec) X(card_name) X(hand_index) X(equiv_tag) X(equiv_ord) X(cost) X(sacrifice_land) X(discard_lands) X(vial_bf_index) X(dig_sacrifice) X(land_face) X(land_fetch_target) X(land_rad_mode) X(land_from_top) X(cast_from_top) X(alt_cost) X(awaken) X(alt_lifegain) X(tutor_target) X(ability_mode) X(ritual_float) X(rock_mana) X(chosen_x) X(splice_count) X(chosen_float_color) X(sac_source_id) X(sac_victim_id) X(needs_cast_mask) X(victim_name) X(discard_name) X(sac_count) X(pooled_sac) X(vamp_casts_needed) X(madness_choice) X(madness_arm) X(madness_mv) X(convoke_plan_pip) X(convoke_plan_other) X(player_target) X(dies_tuck) X(legend_keep) X(scry_pin) X(gy_cast_source_id) X(gy_exile_mode) X(loyalty_ability) X(free_cast) X(phyrexian_life) X(twobrid_colored) X(convoke_green) X(convoke_other) X(soulfire_own_targets) X(mint_gain) X(mint_hand_magnet) X(mint_magnet) X(crackle_targets) X(max_casts_after) X(enchant_target) X(trick_hand_target) X(trick_put_target) X(attach_equip_id) X(draw_target) X(attach_equip_hand) X(attach_equip_hand_ord) X(evoke) X(emerge) X(adventure) X(bestow) X(kicked) X(face_down) X(trick_redirect) X(cont_pins) X(ponder_keep) X(devour_count) X(seed_pay_split) X(replicate_count) X(remand_by) X(remand_slot) X(remand_chain_by) X(pitch_name) X(pitch_slot) X(eval) X(direct_damage) X(is_noncreature) X(card_mv) X(vial_attack_power) X(haste_attack_power) X(haste_rider_hand) X(cond_artifact_haste_power) X(adds_durable_artifact) X(haste_prowess) X(is_draw) X(has_spectacle) X(is_draw_until_nonland) X(discard_land_damage) X(ripple_pinned) X(ripple_reveals) X(ripple_take_cap) X(ripple_mask) X(ripple_decline) X(ripple_free_tutor) X(ripple_free_victim) X(ripple_granter_req) X(ripple_chain_float) X(def) X(breakpoint_casts) X(rec_mana_casts) X(rec_pump_target) X(rec_payment_traits) X(rec_line_hold) X(rec_bp_ord)
+constexpr std::size_t kMaxBytes = std::size_t{32} << 20;   // per thread: stored Actions, approximated by sizeof
+// VERIFY diagnostic: per-field census of EVERY Action member on an action difference (declaration order).
+#define SPSX_FIELDS(X) X(kind) X(steal_spec) X(card_name) X(hand_index) X(equiv_tag) X(equiv_ord) X(cost) X(sacrifice_land) X(discard_lands) X(vial_bf_index) X(dig_sacrifice) X(land_face) X(land_fetch_target) X(land_rad_mode) X(land_from_top) X(cast_from_top) X(alt_cost) X(awaken) X(alt_lifegain) X(tutor_target) X(ability_mode) X(ritual_float) X(rock_mana) X(chosen_x) X(splice_count) X(chosen_float_color) X(sac_source_id) X(sac_victim_id) X(needs_cast_mask) X(victim_name) X(discard_name) X(sac_count) X(pooled_sac) X(vamp_casts_needed) X(madness_choice) X(madness_arm) X(madness_mv) X(convoke_plan_pip) X(convoke_plan_other) X(player_target) X(dies_tuck) X(legend_keep) X(scry_pin) X(gy_cast_source_id) X(gy_exile_mode) X(loyalty_ability) X(free_cast) X(phyrexian_life) X(twobrid_colored) X(convoke_green) X(convoke_other) X(soulfire_own_targets) X(mint_gain) X(mint_hand_magnet) X(mint_magnet) X(crackle_targets) X(max_casts_after) X(enchant_target) X(trick_hand_target) X(trick_put_target) X(attach_equip_id) X(draw_target) X(attach_equip_hand) X(attach_equip_hand_ord) X(evoke) X(emerge) X(adventure) X(bestow) X(kicked) X(face_down) X(trick_redirect) X(cont_pins) X(ponder_keep) X(devour_count) X(seed_pay_split) X(replicate_count) X(remand_by) X(remand_slot) X(remand_chain_by) X(pitch_name) X(pitch_slot) X(eval) X(direct_damage) X(is_noncreature) X(card_mv) X(vial_attack_power) X(haste_attack_power) X(haste_rider_hand) X(cond_artifact_haste_power) X(adds_durable_artifact) X(haste_prowess) X(is_draw) X(has_spectacle) X(is_draw_until_nonland) X(discard_land_damage) X(ripple_pinned) X(ripple_reveals) X(ripple_take_cap) X(ripple_mask) X(ripple_decline) X(ripple_free_tutor) X(ripple_free_victim) X(ripple_granter_req) X(ripple_chain_float) X(def) X(breakpoint_casts) X(rec_mana_casts) X(rec_pump_target) X(rec_payment_traits) X(rec_line_hold) X(rec_bp_ord)
 inline constexpr const char* kFieldNames[] = {
-#define UOTX_NAME(f) #f,
-UOTX_FIELDS(UOTX_NAME)
-#undef UOTX_NAME
+#define SPSX_NAME(f) #f,
+SPSX_FIELDS(SPSX_NAME)
+#undef SPSX_NAME
 };
 inline constexpr int kNFields = static_cast<int>(sizeof(kFieldNames) / sizeof(kFieldNames[0]));
-inline std::atomic<long long> g_all_field[2][kNFields]{};
-inline void CensusAll(const Action& a, const Action& b, int site)
+inline std::atomic<long long> g_field[kNFields]{};
+inline void CensusAll(const Action& a, const Action& b)
 {
     int i = 0;
-#define UOTX_CMP(f) if (!(a.f == b.f)) { g_all_field[site][i].fetch_add(1, std::memory_order_relaxed); } ++i;
-    UOTX_FIELDS(UOTX_CMP)
-#undef UOTX_CMP
+#define SPSX_CMP(f) if (!(a.f == b.f)) { g_field[i].fetch_add(1, std::memory_order_relaxed); } ++i;
+    SPSX_FIELDS(SPSX_CMP)
+#undef SPSX_CMP
 }
-// Equal for the walk: the whole Action, with the copy ordinal (equiv_ord, the subset fold's), the valuation scalar
-// (eval, read by plan scoring only) and the continuation pins (cont_pins, read by the executor and the fold) taken
-// from `a`. Counts which fields differed when `site` >= 0.
 // tutor_target as the walk reads it. In the payment walk's cluster (SubsetPayableSequential*, SeqWalkFixedOrder, the
 // unlock-order tree and its helpers) the field is read in exactly four places: the Fireblast / Archive Trap / Walk
 // the Aeons buyback alternative-cost pins (SeqWalkFixedOrder), and TutoredUntapperHostId (a tutor that puts an
-// untapper unlock host onto the battlefield; the host is the FIRST library copy of the named card, so its number
-// identifies the name). So two hand casts of the same card whose targets differ walk identically when neither target
-// is one of those pins and both tutor the same untapper host (or none). Anything else keeps the field strict.
+// untapper unlock host onto the battlefield; the host is the FIRST library copy of the named card, so equal host ids
+// with different names cannot happen -- equal means both 0). So two hand casts of the same card whose targets differ
+// walk identically when neither target is one of those pins and both tutor the same untapper host (or none). Anything
+// else keeps the field strict. (Every other reader of tutor_target is plan-level: signatures, the executor, the
+// enumerator -- grep the field; none is reached from the walk.)
 inline bool TutorWalkSame(const GameState& state, const Action& a, const Action& b)
 {
     if (a.kind != Action::Kind::CastFromHand || b.kind != Action::Kind::CastFromHand || a.def == nullptr
@@ -14265,68 +14266,48 @@ inline bool TutorWalkSame(const GameState& state, const Action& a, const Action&
     }
     return TutoredUntapperHostId(state, a) == TutoredUntapperHostId(state, b);
 }
-inline bool WalkSame(const GameState& state, const Action& a, const Action& b, int site)
+// Equal for the walk (see the block comment): `b` with the unread fields taken from `a`, compared whole.
+inline bool WalkSame(const GameState& state, const Action& a, const Action& b)
 {
     if (a == b) { return true; }
-    if (site >= 0)
-    {
-        if (a.hand_index != b.hand_index) { g_diff_field[site][0].fetch_add(1, std::memory_order_relaxed); }
-        if (a.equiv_ord != b.equiv_ord)   { g_diff_field[site][1].fetch_add(1, std::memory_order_relaxed); }
-        if (a.eval != b.eval)             { g_diff_field[site][2].fetch_add(1, std::memory_order_relaxed); }
-        if (a.cont_pins != b.cont_pins)   { g_diff_field[site][3].fetch_add(1, std::memory_order_relaxed); }
-        CensusAll(a, b, site);
-    }
-    if (!NormOn()) { return false; }
+    if (Verify()) { CensusAll(a, b); }
     Action c = b;
     c.equiv_ord = a.equiv_ord; c.eval = a.eval; c.cont_pins = a.cont_pins;
     if (c.tutor_target != a.tutor_target && TutorWalkSame(state, a, b)) { c.tutor_target = a.tutor_target; }
-    const bool same = a == c;
-    if (!same && site >= 0) { g_diff_field[site][4].fetch_add(1, std::memory_order_relaxed); }
-    return same;
+    return a == c;
 }
 struct Printer
 {
     ~Printer()
     {
-        for (int site = 0; site < 2; ++site)
+        if (!On() || !Verify()) { return; }
+        std::fprintf(stderr, "[sps-xmemo] hits=%lld misses=%lld VERIFY_MISMATCH=%lld act_diff=%lld bypass_ctx=%lld\n",
+                     g_hits.load(), g_misses.load(), g_mismatch.load(), g_act_diff.load(), g_bypass_ctx.load());
+        std::string fl;
+        for (int i = 0; i < kNFields; ++i)
         {
-            if (!On(site)) { continue; }
-            std::fprintf(stderr, "[uot-xmemo] site=%s hits=%lld misses=%lld VERIFY_MISMATCH=%lld act_diff=%lld "
-                         "bypass_ctx=%lld (verify %s)\n", site == 0 ? "UOT" : "SPS", g_hits[site].load(),
-                         g_misses[site].load(), g_mismatch[site].load(), g_act_diff[site].load(),
-                         g_bypass_ctx[site].load(), Verify() ? "on" : "off");
-            std::fprintf(stderr, "[uot-xmemo] site=%s field diffs: hand_index=%lld equiv_ord=%lld eval=%lld cont_pins=%lld "
-                         "other_after_norm=%lld (norm %s)\n", site == 0 ? "UOT" : "SPS", g_diff_field[site][0].load(),
-                         g_diff_field[site][1].load(), g_diff_field[site][2].load(), g_diff_field[site][3].load(),
-                         g_diff_field[site][4].load(), NormOn() ? "on" : "off");
-            std::string fl;
-            for (int i = 0; i < kNFields; ++i)
-            {
-                const long long n = g_all_field[site][i].load();
-                if (n != 0) { fl += ' '; fl += kFieldNames[i]; fl += '='; fl += std::to_string(n); }
-            }
-            std::fprintf(stderr, "[uot-xmemo] site=%s all-field diffs:%s\n", site == 0 ? "UOT" : "SPS", fl.c_str());
+            const long long n = g_field[i].load();
+            if (n != 0) { fl += ' '; fl += kFieldNames[i]; fl += '='; fl += std::to_string(n); }
         }
+        std::fprintf(stderr, "[sps-xmemo] raw field diffs (before the walk fold):%s\n", fl.c_str());
     }
 };
 inline Printer g_printer;
-}   // namespace uotx
+}   // namespace spsx
 template <class F>
-static bool UoTreeXMemo(int site, const GameState& state, const std::vector<Action>& cands, const std::vector<int>& sel,
-                        F&& run)
+static bool SpsCrossEnumMemo(const GameState& state, const std::vector<Action>& cands, const std::vector<int>& sel,
+                             F&& run)
 {
-    if (!uotx::On(site) || HumanPlayActive() || uoprice::PriceOn()) { return run(); }
-    // A live plan context / traits is identified by ADDRESS only (paymemo::Ctx), which cannot be trusted across
-    // enumerations (another context may occupy the same address later in the decision): no memo under one.
+    if (!spsx::On() || HumanPlayActive() || uoprice::PriceOn()) { return run(); }
     if (CurrentPlanContext() != nullptr || CurrentPlanTraits() != nullptr)
-    { uotx::g_bypass_ctx[site].fetch_add(1, std::memory_order_relaxed); return run(); }
-    static thread_local std::uint64_t epoch[2] = { ~0ull, ~0ull };
-    static thread_local std::unordered_map<uotx::K, uotx::Entry, uotx::KH> tables[2];
-    auto& table = tables[site];
-    if (epoch[site] != TurnSolver::DecisionEpoch() || table.size() > (1u << 20))
-    { table.clear(); epoch[site] = TurnSolver::DecisionEpoch(); }
+    { if (spsx::Verify()) { spsx::g_bypass_ctx.fetch_add(1, std::memory_order_relaxed); } return run(); }
+    static thread_local std::uint64_t epoch = ~0ull;
+    static thread_local std::size_t bytes = 0;
+    static thread_local std::unordered_map<spsx::K, spsx::Entry, spsx::KH> table;
+    if (epoch != TurnSolver::DecisionEpoch() || bytes > spsx::kMaxBytes)
+    { table.clear(); bytes = 0; epoch = TurnSolver::DecisionEpoch(); }
     const TranspositionTable::Key bk = BuildSimKey(state, 0, 0, false);
-    std::uint64_t h = 0x7C3Bull + static_cast<std::uint64_t>(site);
+    std::uint64_t h = 0x7C3Bull + 1;
     paycensus::MixA(h, FsOrderSig(state));
     const ManaPool* pools[3] = { &state.floating_mana, &state.floating_creature_mana, &state.floating_bigspell_mana };
     for (const ManaPool* fm : pools)
@@ -14340,48 +14321,40 @@ static bool UoTreeXMemo(int site, const GameState& state, const std::vector<Acti
     paycensus::MixA(h, UoTreeCtxSig());
     for (int j : sel) { paycensus::MixA(h, paycensus::ActSig(cands[static_cast<std::size_t>(j)])); }
     paycensus::MixA(h, sel.size());
-    const uotx::K key{ bk.h1 ^ (h * 0x2545F4914F6CDD1Dull), bk.h2 + h };
+    const spsx::K key{ bk.h1 ^ (h * 0x2545F4914F6CDD1Dull), bk.h2 + h };
+    auto store = [&](bool r)
+    {
+        spsx::Entry& slot = table[key];   // re-looked-up: run() may have nested another probe and rehashed
+        bytes += sel.size() * sizeof(Action);
+        slot.verdict = r;
+        slot.acts.clear();
+        for (int j : sel) { slot.acts.push_back(cands[static_cast<std::size_t>(j)]); }
+    };
     auto it = table.find(key);
     if (it != table.end())
     {
         bool same = it->second.acts.size() == sel.size();
         for (std::size_t i = 0; same && i < sel.size(); ++i)
-        { same = uotx::WalkSame(state, it->second.acts[i], cands[static_cast<std::size_t>(sel[i])], site); }
-        if (!same)
+        { same = spsx::WalkSame(state, it->second.acts[i], cands[static_cast<std::size_t>(sel[i])]); }
+        if (same)
         {
-            uotx::g_act_diff[site].fetch_add(1, std::memory_order_relaxed);
-            const bool r = run();   // may nest another probe: `it` is not used past this point
-            uotx::Entry& slot = table[key];
-            slot.verdict = r;
-            slot.acts.clear();
-            for (int j : sel) { slot.acts.push_back(cands[static_cast<std::size_t>(j)]); }
-            return r;
-        }
-    }
-    if (it != table.end())
-    {
-        uotx::g_hits[site].fetch_add(1, std::memory_order_relaxed);
-        if (uotx::Verify())
-        {
-            const bool memo = it->second.verdict;
+            const bool memo = it->second.verdict;   // `it` is not used past this point (run() may rehash)
+            if (!spsx::Verify()) { return memo; }
+            spsx::g_hits.fetch_add(1, std::memory_order_relaxed);
             const bool r = run();
             if (r != memo)
             {
-                const long long n = uotx::g_mismatch[site].fetch_add(1, std::memory_order_relaxed);
-                if (n < 10) { std::fprintf(stderr, "[uot-xmemo] MISMATCH t=%d memo=%d walk=%d\n", state.turn_number,
+                const long long n = spsx::g_mismatch.fetch_add(1, std::memory_order_relaxed);
+                if (n < 10) { std::fprintf(stderr, "[sps-xmemo] MISMATCH t=%d memo=%d walk=%d\n", state.turn_number,
                                            memo ? 1 : 0, r ? 1 : 0); }
             }
             return r;
         }
-        return it->second.verdict;
+        if (spsx::Verify()) { spsx::g_act_diff.fetch_add(1, std::memory_order_relaxed); }
     }
-    uotx::g_misses[site].fetch_add(1, std::memory_order_relaxed);
+    else if (spsx::Verify()) { spsx::g_misses.fetch_add(1, std::memory_order_relaxed); }
     const bool r = run();
-    uotx::Entry e;
-    e.verdict = r;
-    e.acts.reserve(sel.size());
-    for (int j : sel) { e.acts.push_back(cands[static_cast<std::size_t>(j)]); }
-    table.emplace(key, std::move(e));
+    store(r);
     return r;
 }
 
@@ -14390,7 +14363,7 @@ static bool SubsetPayableSequentialBody(const GameState& state, const std::vecto
 static bool SubsetPayableSequential(const GameState& state, const std::vector<Action>& cands,
                                     const std::vector<int>& sel)
 {
-    return UoTreeXMemo(1, state, cands, sel, [&] { return SubsetPayableSequentialBody(state, cands, sel); });
+    return SpsCrossEnumMemo(state, cands, sel, [&] { return SubsetPayableSequentialBody(state, cands, sel); });
 }
 static bool SubsetPayableSequentialBody(const GameState& state, const std::vector<Action>& cands,
                                         const std::vector<int>& sel)
@@ -14919,9 +14892,8 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
             std::vector<int> uo = order;
             uoprice::Meter meter(uoprice::kEnum, /*cut_allowed=*/true);   // MTG_UO_BUDGET_PRICE
             const unsigned long long uot_t0 = paycensus::On() ? __rdtsc() : 0;
-            const bool uot = UoTreeXMemo(0, state, cands, sel, [&]
-                { return UnlockOrderSearchTree(state, cands, sel, uo, seq_rv_charged, /*nearest=*/false,
-                                               /*include_given=*/true, &meter); });
+            const bool uot = UnlockOrderSearchTree(state, cands, sel, uo, seq_rv_charged, /*nearest=*/false,
+                                                   /*include_given=*/true, &meter);
             // MTG_PAY_CENSUS (diagnostic): this tree's repeats inside the decision, keyed by board + context contents.
             if (paycensus::On())
             {
