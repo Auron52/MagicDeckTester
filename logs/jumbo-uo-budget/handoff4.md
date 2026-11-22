@@ -112,6 +112,13 @@ PID with `kill -0` or on a DONE file). Rebase, never merge. Never touch `referen
 - id1 lane identity, old binary: 59 of 60 decks identical. Extra Turns and Hinata diverged (units, plus one digest).
   The bisect pinned it to the key build (see the update above). The fix is a09bc5dac and is not yet validated.
 
+### id2 lane result (landed 23:12 UTC, binary a09bc5dac = `$S/mtg.id2`)
+Step 1 of Remaining is DONE:
+- The Extra Turns repro gives 733038 **faaf957a** (= OFF).
+- Jumbo memo on vs off is byte-identical.
+- Instructions (Jumbo lever on): memo 329.74G vs off 348.97G, **-5.5%**. The work replay costs about 0.1G more than
+  a27e75565's 329.63G.
+
 ### Running
 - `$S/id2/chain.sh`, PID 1165672 (setsid). Step 1 is the lane job (build plus perf), marker `$S/id2/LANEDONE`. Step 2
   is under the box lock (`$S/id2/big.sh`): the identity slice on/off, VERIFY, regression `--both`, then check_gt.
