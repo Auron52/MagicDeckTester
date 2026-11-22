@@ -185,6 +185,8 @@ enum class DomAxis : std::uint8_t
     // axis inserted mid-list renumbers every existing one. Zero on every permanent that is not an
     // Equipment a hone source has touched, so no other deck moves.
     HoneCounters,        // Permanent::hone_counters     -- Dwalin, Weaponmaster
+    // Appended LAST, same reason. Zero on every permanent but Migloz, Maze Crusher, so no other deck moves.
+    OilCounters,         // Permanent::oil_counters      -- Migloz, Maze Crusher (Beasts E)
     _Count
 };
 
@@ -3125,6 +3127,10 @@ public:
             // perfectly happily, banking the bonus for a later equip, so there is no board shape
             // in which an extra one is a liability.
             case DomAxis::HoneCounters:     return DomDir::MoreDominates;
+            // Oil counters (Migloz) are spent ONLY as activation costs (its pump, its vigilance grant, its
+            // destroy): no upkeep, no cap, nothing reads the count but those costs and nothing rewards having fewer,
+            // so a source with more oil can do everything one with less can.
+            case DomAxis::OilCounters:      return DomDir::MoreDominates;
             // Strictly better with FEWER.
             case DomAxis::MinusOneMinusOne: return DomDir::FewerDominates; // smaller creature
             // Deck-dependent or non-monotone -> exact match (see the note above). PoisonCounter is
@@ -3713,9 +3719,24 @@ public:
     // action per returned target). `legal` = battlefield indices of every legal target, both sides
     // (CounterDestroyLegalTargets). RESTRICT / ORDER only. Base: every legal target (no deck-neutral proof
     // that destroying an own artifact or enchantment never pays). Human play never consults it.
+    // MIGLOZ, MAZE CRUSHER (Beasts E, remove_counter_destroy_art_ench_oil > 0): the base drops our OWN artifacts and
+    // enchantments for an oil-costed source -- a HEURISTIC prune the USER approved (2026-11-21: "For Migloz we should
+    // include the power pump mode for sure. The other two can be heuristically pruned."). In the Beasts list our own
+    // are Utopia Sprawl / Wild Growth (mana) and Urza's Incubator (the Beast discount), and the goldfish opponent holds
+    // none, so the search spends no branch on the destroy. MTG_UNPRUNE=counterdestroy (the Steelbane gate, the same
+    // route) restores every legal target.
+    // Steelbane (a +1/+1-counter source) is unchanged: every legal target (RestrictCounterDestroyTargetsFor).
     virtual std::vector<int> CounterDestroyArtEnchTargets(const GameState& s, int controller, const Permanent& src,
-                                                          const std::vector<int>& legal) const
-    { (void)s; (void)controller; (void)src; return legal; }
+                                                          const std::vector<int>& legal) const;
+
+    // OffersOilVigilanceMenace -- whether the SEARCH is offered Migloz, Maze Crusher's "{1}, Remove an oil counter: It
+    // gains vigilance and menace until end of turn" (ActivatePump mode 8; CardParams::vigilance_menace_cost). The
+    // engine implements and enumerates it; this hook only decides whether autonomous play branches on it. Human play
+    // never consults it (the viewer offers every live mode). ROOT: false -- a HEURISTIC prune the USER approved
+    // (2026-11-21, the ruling quoted above): vs the goldfish nothing blocks (menace is inert), nothing in the list
+    // taps a creature as a cost, and Kaheera already grants Beasts vigilance, so the grant only spends {1} and an oil
+    // counter the pump could use. MTG_UNPRUNE=oilgrant restores it.
+    virtual bool OffersOilVigilanceMenace(const GameState& s, const CardDefinition& src) const;
 
     // EtbFightTargets -- the fight targets the SEARCH is offered for Voracious Hydra's modal ETB ("double the
     // +1/+1 counters on this creature" OR "this creature fights target creature you don't control";

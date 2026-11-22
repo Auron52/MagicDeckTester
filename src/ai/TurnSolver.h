@@ -1046,6 +1046,17 @@ inline ManaCost OutletOwnCost(const Action& a)
 inline int PumpPayableActivations(const GameState& s, int controller, const Action& a)
 {
     const int k = std::max(1, a.chosen_x);
+    // MIGLOZ'S OIL IS A COST TOO (mode 7, Beasts E): "{2}, Remove two oil counters" -- the activations the source's
+    // oil still covers, so an earlier spend of the same oil in this line is never followed by {2} paid for nothing.
+    // Not behind MTG_PUMP_HAND_CAP (that lever is the discard rider's legacy pay-all-K; there is no legacy here).
+    if (a.gy_exile_mode == 7)
+    {
+        const int per = (a.def != nullptr) ? std::max(1, a.def->params.firebreathing_remove_oil_counters) : 2;
+        int oil = 0;
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == controller && p.card.m_number == a.sac_source_id) { oil = p.oil_counters; break; } }
+        return std::min(k, oil / per);
+    }
     static const bool s_on = EnvOn("MTG_PUMP_HAND_CAP", true);
     if (!s_on || a.gy_exile_mode != 1) { return k; }
     return std::min(k, static_cast<int>(s.players[controller].hand.size()));

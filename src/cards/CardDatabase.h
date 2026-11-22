@@ -684,6 +684,20 @@ struct CardParams
     // enchantment." (PermAbilityMode::CounterDestroyArtEnch). No {T}: repeatable, legal while
     // summoning-sick; the counter is part of the COST (CR 602.2b). nullopt = none.
     std::optional<ManaCost> remove_counter_destroy_art_ench_cost;
+    // Migloz, Maze Crusher (Beasts E): "{3}, Remove three oil counters from Migloz: Destroy target artifact or
+    // enchantment." The SAME route (PermAbilityMode::CounterDestroyArtEnch) with the counter half of the cost paid in
+    // OIL: > 0 = remove this many Permanent::oil_counters instead of one +1/+1 counter (CounterDestroyCostPayable).
+    int remove_counter_destroy_art_ench_oil = 0;
+    // Migloz, Maze Crusher (Beasts E): "Migloz enters with five oil counters on it" -- an as-enters put on
+    // Permanent::oil_counters at the universal enter cascade (FireEtbWatchers). 0 = none.
+    int enters_with_oil_counters = 0;
+    // Migloz, Maze Crusher (Beasts E): "{1}, Remove an oil counter from Migloz: It gains vigilance and menace until
+    // end of turn." A main-phase ActivatePump MODE 8 (OilVigilanceActivationLive): temp_vigilance; menace is inert
+    // (no blockers). The AUTONOMOUS SEARCH is not offered it unless the provider says so
+    // (DecisionProvider::OffersOilVigilanceMenace -- the root says no, USER 2026-11-21 "The other two can be
+    // heuristically pruned."; MTG_UNPRUNE=oilgrant restores it); human play always sees it. nullopt = none.
+    std::optional<ManaCost> vigilance_menace_cost;
+    int vigilance_menace_remove_oil = 0;
     // "{4}: Put a +1/+1 counter on this creature." (PermAbilityMode::PayCounterSelf). No {T}: repeatable
     // within a turn, legal while summoning-sick (CR 302.6); a put (PutPlusCounters). nullopt = none.
     std::optional<ManaCost> self_counter_cost;
@@ -4584,6 +4598,13 @@ struct CardParams
     // when the hand is empty. The discarded card is chosen by the provider's cleanup-discard
     // ranking (same doctrine as a cleanup shed). false = a plain mana-only firebreather.
     bool firebreathing_discard = false;
+
+    // Migloz, Maze Crusher (Beasts E): "{2}, Remove two oil counters from Migloz: It gets +2/+2 until end of turn."
+    // Rides firebreathing_cost/_power/_tough with this many OIL counters (Permanent::oil_counters) as an extra cost per
+    // activation. Like firebreathing_discard it is routed OUT of the greedy combat converter (ApplyFirebreathing
+    // cannot price the oil, which also pays Migloz's other two abilities) and INTO a searched main-phase ActivatePump
+    // (MODE 7): K activations, K <= oil / this, in main 1 and any searched main 2. 0 = not oil-costed.
+    int firebreathing_remove_oil_counters = 0;
 
     // Sethron, Hurloon General: "Whenever Sethron OR another nontoken Minotaur you control enters,
     // create a 2/3 red Minotaur creature token." The Lathliss shape

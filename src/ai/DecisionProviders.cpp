@@ -1371,6 +1371,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"heuristicrequired", UnprunedGate::HeuristicRequired},
     {"oppdraw",    UnprunedGate::OpponentDraw},
     {"attackchooselife", UnprunedGate::AttackChooseLife},
+    {"oilgrant",   UnprunedGate::OilGrant},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -1427,23 +1428,33 @@ const char* GateName(UnprunedGate g)
 // short-circuits at the callsites mean the query only fires when the gate's guard condition holds
 // (e.g. Ponder only when a cast_reorder card exists), so "queried" is a faithful "live for this deck".
 static std::atomic<bool>     g_gate_probe{false};
-static std::atomic<std::uint64_t> g_gates_queried{0};
+// One 64-bit word per 64 gates (UnprunedGateMask is 128 bits).
+static std::atomic<std::uint64_t> g_gates_queried[kUnprunedGateBits / 64] = {};
 
-void     SetGateProbe(bool on) { g_gate_probe.store(on); if (on) { g_gates_queried.store(0); } }
-std::uint64_t QueriedGatesMask() { return g_gates_queried.load(); }
+void     SetGateProbe(bool on)
+{
+    g_gate_probe.store(on);
+    if (on) { for (std::atomic<std::uint64_t>& w : g_gates_queried) { w.store(0); } }
+}
+UnprunedGateMask QueriedGatesMask()
+{
+    UnprunedGateMask m;
+    for (int i = 0; i < kUnprunedGateBits; ++i)
+    { if ((g_gates_queried[i / 64].load() >> (i % 64)) & 1u) { m.set(static_cast<std::size_t>(i)); } }
+    return m;
+}
 bool     GateProbeArmed()      { return g_gate_probe.load(std::memory_order_relaxed); }
 
 // Parse MTG_UNPRUNE=<comma/space/;/| separated gate names> once into a bitmask over UnprunedGate.
 // "all" (or the legacy MTG_UNPRUNED) sets every bit. Unknown tokens are ignored. Case-insensitive.
-static std::uint64_t ParseUnpruneMask()
+static UnprunedGateMask ParseUnpruneMask()
 {
     const char* e = std::getenv("MTG_UNPRUNE");
-    if (!e) { return 0; }
+    if (!e) { return UnprunedGateMask{}; }
     std::string s = e;
     for (char& c : s) { c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
                         if (c == ',' || c == ';' || c == '|') { c = ' '; } }
-    auto bit = [](UnprunedGate g) { return std::uint64_t{1} << static_cast<int>(g); };
-    std::uint64_t mask = 0;
+    UnprunedGateMask mask;
     std::size_t pos = 0;
     while (pos < s.size())
     {
@@ -1454,16 +1465,15 @@ static std::uint64_t ParseUnpruneMask()
         pos = end;
         if (tok.empty()) { continue; }
         if (tok == "all")
-        { mask = (static_cast<int>(UnprunedGate::_Count) >= 64) ? ~std::uint64_t{0}
-                 : ((std::uint64_t{1} << static_cast<int>(UnprunedGate::_Count)) - 1u); continue; }
-        for (const auto& n : kGateNames) { if (tok == n.first) { mask |= bit(n.second); break; } }
+        { for (int i = 0; i < static_cast<int>(UnprunedGate::_Count); ++i) { mask.set(static_cast<std::size_t>(i)); } continue; }
+        for (const auto& n : kGateNames) { if (tok == n.first) { mask.set(static_cast<std::size_t>(n.second)); break; } }
     }
     return mask;
 }
 
-static std::uint64_t UnpruneMask()
+static const UnprunedGateMask& UnpruneMask()
 {
-    static const std::uint64_t m = ParseUnpruneMask();
+    static const UnprunedGateMask m = ParseUnpruneMask();
     return m;
 }
 
@@ -1503,12 +1513,12 @@ bool DecisionUnpruned(UnprunedGate g)
     // Gate probe: record that this gate has a REACHABLE callsite for the current deck (see the probe
     // comment above). Cheap relaxed OR, only when probing; normal runs pay one predictable branch.
     if (g_gate_probe.load(std::memory_order_relaxed))
-    { g_gates_queried.fetch_or(std::uint64_t{1} << static_cast<int>(g), std::memory_order_relaxed); }
+    { g_gates_queried[static_cast<int>(g) / 64].fetch_or(std::uint64_t{1} << (static_cast<int>(g) % 64), std::memory_order_relaxed); }
     if (UnpruneHumanExempt(g)) { return false; }     // human play never opens this gate (see above)
     if (g_unpruned_suppressed) { return false; }     // hand-back: shipped gates, mask included
     if (DecisionUnpruned()) { return true; }         // global MTG_UNPRUNED opens every gate
     if (UnpruneHumanSuppressed()) { return false; }  // selective mode honours the same suppression
-    return ((UnpruneMask() >> static_cast<int>(g)) & 1u) != 0;
+    return UnpruneMask().test(static_cast<std::size_t>(g));
 }
 
 // Stuffy Doll step-9b prunes (RedirectWindow / GcHost / EscapeTarget): the MTG_UNPRUNE mask, plus the per-job
@@ -9269,6 +9279,34 @@ void DecisionProvider::AttackChooseOneModes(const GameState& s, int controller, 
 {
     (void)controller; (void)src;
     RestrictAttackChooseOneModesFor(s, modes, DecisionUnpruned(UnprunedGate::AttackChooseLife));
+}
+
+// MIGLOZ, MAZE CRUSHER (Beasts E): the two oil modes the USER ruled "can be heuristically pruned" (2026-11-21). The
+// engine implements and enumerates both; these hooks only remove them from the autonomous search's option list.
+std::vector<int> RestrictCounterDestroyTargetsFor(const GameState& s, int controller, const Permanent& src,
+                                                  const std::vector<int>& legal, bool unpruned)
+{
+    const CardDefinition* d = src.def_absent ? nullptr : CardDatabase::Instance().LookupCached(src.card);
+    if (unpruned || d == nullptr || d->params.remove_counter_destroy_art_ench_oil <= 0) { return legal; }
+    std::vector<int> out;
+    for (int i : legal)
+    {
+        if (i < 0 || i >= static_cast<int>(s.battlefield.size())) { continue; }
+        if (s.battlefield[static_cast<std::size_t>(i)].controller_index != controller) { out.push_back(i); }
+    }
+    return out;
+}
+
+std::vector<int> DecisionProvider::CounterDestroyArtEnchTargets(const GameState& s, int controller, const Permanent& src,
+                                                                const std::vector<int>& legal) const
+{
+    return RestrictCounterDestroyTargetsFor(s, controller, src, legal, DecisionUnpruned(UnprunedGate::CounterDestroy));
+}
+
+bool DecisionProvider::OffersOilVigilanceMenace(const GameState& s, const CardDefinition& src) const
+{
+    (void)s; (void)src;
+    return DecisionUnpruned(UnprunedGate::OilGrant);
 }
 
 static int ManaSourceRankBase(const GameState& s, const CardDefinition& def);
@@ -46807,6 +46845,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
         v.push_back(p.verse_counters); v.push_back(p.lore_counters); v.push_back(p.storage_counters); v.push_back(p.loyalty);
         v.push_back(p.ice_counters); v.push_back(p.age_counters); v.push_back(p.spore_counters); v.push_back(p.fade_counters);
         v.push_back(p.created_by_number); v.push_back(p.quest_counters); v.push_back(p.hone_counters);
+        if (p.oil_counters != 0) { v.push_back(0x011C0); v.push_back(p.oil_counters); }   // Migloz (Beasts E; gated)
         v.push_back(p.linked_exile_number);
         v.push_back(static_cast<long long>(std::hash<std::string>{}(p.copy_printed_name.str())));
         v.push_back(static_cast<long long>(p.counters.size()));
@@ -50345,6 +50384,7 @@ static std::string StateDump(const GameState& s, int me)
            + (p.aura_attached_to != 0 ? "~>" + std::to_string(p.aura_attached_to) : "")
            + (p.charge_counters != 0 ? "{ch" + std::to_string(p.charge_counters) + "}" : "")
            + (p.hone_counters != 0 ? "{hone" + std::to_string(p.hone_counters) + "}" : "")
+           + (p.oil_counters != 0 ? "{oil" + std::to_string(p.oil_counters) + "}" : "")
            + (p.quest_counters != 0 ? "{q" + std::to_string(p.quest_counters) + "}" : "");
         for (std::size_t i = 0; i < p.counters.size(); ++i)
         {
@@ -50573,6 +50613,7 @@ static std::uint64_t RouteStateKey(const GameState& s, int me, bool gy_by_name =
                                   p.loyalty, p.ice_counters, p.age_counters, p.spore_counters,
                                   p.fade_counters, p.quest_counters, p.hone_counters };
         for (const int c : dedicated) { v = v * 37 + static_cast<std::uint64_t>(c + 1); }
+        if (p.oil_counters != 0) { v = v * 37 + 0x011C0ull + static_cast<std::uint64_t>(p.oil_counters); }   // Migloz (gated)
         comboroute::Mix(h, v);
     }
     // The PHASE: the route projects THIS turn's attack, so the same board before combat (lethal) and

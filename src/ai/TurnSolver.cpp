@@ -723,6 +723,7 @@ inline uint64_t FungibilityKey(const Permanent& p)
     Mix(h, static_cast<uint64_t>(p.fade_counters) << 48);
     Mix(h, static_cast<uint64_t>(p.quest_counters) << 32 | static_cast<uint64_t>(p.loyalty));
     if (p.hone_counters != 0) { Mix(h, static_cast<uint64_t>(p.hone_counters) * 0x9E3779B1ull); }
+    if (p.oil_counters != 0)  { Mix(h, 0x011C0ull ^ (static_cast<uint64_t>(p.oil_counters) << 20)); }   // Migloz (gated)
     Mix(h, static_cast<uint64_t>(p.garth_chosen_mask) << 32 | static_cast<uint64_t>(p.chosen_subtype_id));
     Mix(h, static_cast<uint64_t>(p.chosen_color + 1));
     if (p.chosen_keyword_mask != 0) { Mix(h, 0xC4057ull ^ p.chosen_keyword_mask); }   // Rick
@@ -3716,6 +3717,8 @@ static std::string BoardSignature(const GameState& s)
         // bare int, not a CounterList entry, so the generic `/c` field never sees them.
         // Nonzero-gated, so every deck that cannot make one keeps its exact prior signature.
         if (p.hone_counters > 0) { e += "/hn" + std::to_string(p.hone_counters); }
+        // Oil counters (Migloz, Beasts E): spent mid-turn by its activations; a bare int, so keyed here. Gated.
+        if (p.oil_counters > 0) { e += "/oil" + std::to_string(p.oil_counters); }
         e += "/p" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus);
         if (p.temp_haste)   { e += "/h"; }    // Expedite until-EOT haste
         if (p.temp_lifelink){ e += "/ll"; }   // Heliod until-EOT lifelink grant
@@ -7020,7 +7023,7 @@ static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const P
     }
     // Steelbane Hydra: the out-of-band block's condition, mirrored (a counter, the mana, and an ADMITTED target
     // -- the provider's CounterDestroyArtEnchTargets, human play the full legal set). See CollectActions.
-    if (sd.params.remove_counter_destroy_art_ench_cost.has_value() && PlusCountersOn(src) > 0
+    if (sd.params.remove_counter_destroy_art_ench_cost.has_value() && CounterDestroyCostPayable(src, sd)
         && pool.CanPay(EffectiveActivationCost(state, ctrl, src.card, *sd.params.remove_counter_destroy_art_ench_cost))
         && !CounterDestroyAdmittedTargets(state, ctrl, src).empty())
     { bits |= 1ull << static_cast<int>(PermAbilityMode::CounterDestroyArtEnch); }
@@ -20957,7 +20960,7 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     // membership, so UNEQUAL counts still never share a class -- see the note above this function.
     if (!FoldCounterSourcesOn() && (p.spore_counters != 0 || p.quest_counters != 0
                                     || p.hone_counters != 0
-                                    || p.fade_counters != 0))
+                                    || p.fade_counters != 0 || p.oil_counters != 0))
     { return false; }
     why = foldcensus::kTempHasteEtc;
     if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.temp_vigilance || p.exile_at_end
@@ -21852,6 +21855,7 @@ static int ActivationEquivTag(const GameState& state, const Permanent& src, cons
         mix(static_cast<std::uint64_t>(src.fade_counters));
         mix(static_cast<std::uint64_t>(src.quest_counters));
         mix(static_cast<std::uint64_t>(src.hone_counters));
+        if (src.oil_counters != 0) { mix(0x011C0ull + static_cast<std::uint64_t>(src.oil_counters)); }   // Migloz (gated)
     }
     const int t = static_cast<int>(h & 0x7fffffff);
     return t == 0 ? 1 : t;   // never collide with "do not fold"
@@ -27030,7 +27034,7 @@ static int BuildFungibleEquipClasses(const GameState& state,
             // list is "every field that can differentiate two copies" and an incomplete one is the
             // documented failure mode -- keep it exhaustive rather than argue reachability.
             || src->spore_counters != 0 || src->quest_counters != 0
-            || src->fade_counters != 0)
+            || src->fade_counters != 0 || src->oil_counters != 0)
         { continue; }
         // HONE COUNTERS ARE CARRIED IN THE KEY, NOT REFUSED -- and that is the difference between
         // this collapse working on KittyEquipment v2 and finding nothing at all.
@@ -27401,7 +27405,7 @@ static std::string LandHostClassKey(const GameState& state, const LandHostClassC
                     && lp->lore_counters == 0   && lp->storage_counters == 0
                     && lp->ice_counters == 0    && lp->age_counters == 0
                     && lp->spore_counters == 0  && lp->fade_counters == 0
-                    && lp->quest_counters == 0
+                    && lp->quest_counters == 0  && lp->oil_counters == 0
                     && (!LandAuraHostClassFoldOn() || lp->counters.empty());
     if (!plain) { return std::string(); }
     std::string key = lp->card.m_name.str() + (lp->tapped ? "|T" : "|U");
@@ -34054,7 +34058,11 @@ enum : uint64_t {
     // A creature sac outlet that is a PURE mana ability (MTG_S9_MANA_ABILITY_SKIP; S9SacOutletIsPureManaAbility): keyed
     // so a plan that puts one in is still noticed, but a NEW one opens site 9 only where its mana can buy something
     // the board's own mana cannot (S9SacManaDemand, at the gate).
-    kActSacManaOutlet = 222
+    kActSacManaOutlet = 222,
+    // Migloz, Maze Crusher (Beasts E): its oil-costed +2/+2 (ActivatePump mode 7) is payable -- a Migloz the plan CAST
+    // is newly activatable (no {T}, legal while sick), which opens site 9 so the same main can pump it (Garruk,
+    // Primal Hunter's -3 reads the greatest power).
+    kActOilPump = 223
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -34508,6 +34516,11 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     if (pp.self_haste_cost.has_value() && SelfHasteActivationLive(state, ctrl, num)
         && ActAffordable(state, ctrl, p.card, pp.self_haste_cost, total_cache))
     { out.push_back(ActKey(num, kActSelfHaste)); }
+    // Migloz's oil pump: present exactly while the enumerator would emit a K >= 1 variant (oil for one activation and
+    // its {2} within the total), so a Migloz cast mid-plan presents a NEW key and one already out arms nothing.
+    if (pp.firebreathing_remove_oil_counters > 0 && p.oil_counters >= pp.firebreathing_remove_oil_counters
+        && ActAffordable(state, ctrl, p.card, pp.firebreathing_cost, total_cache))
+    { out.push_back(ActKey(num, kActOilPump)); }
     // Raggadragga's cast-trigger untap of a TAPPED mana creature (ResolveUntapPumpTarget bumps the counter only for
     // one that can tap now): the refund is mana nothing in the plan could spend -- every cast was enumerated against
     // the plan-START pool. A new counter value is a new key, so site 9 re-plans the rest of the phase ("End-Raze off
@@ -51172,7 +51185,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // One action per ADMITTED target (CounterDestroyAdmittedTargets: the provider's restriction of the
             // legal set; human play the full legal set), the target pinned on sac_victim_id. Each activation
             // is its own decision (no count axis): the phase re-prompts.
-            if (sd->params.remove_counter_destroy_art_ench_cost.has_value() && PlusCountersOn(src) > 0)
+            // Migloz, Maze Crusher (Beasts E) rides the same route with its counter cost in OIL (CounterDestroyCostPayable).
+            if (sd->params.remove_counter_destroy_art_ench_cost.has_value() && CounterDestroyCostPayable(src, *sd))
             {
                 const int me = state.active_player_index;
                 const ManaCost cost = EffectiveActivationCost(state, me, src.card,
@@ -52065,21 +52079,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             //   mode 2 also covers Vito, Thorn of the Dusk Rose "{3}{B}{B}: Creatures you control
             //           gain lifelink until end of turn" (Prevent Damage) -- the same idempotent
             //           keyword-only team grant; the converter cannot price LIFE either.
+            //   mode 7: Migloz, Maze Crusher "{2}, Remove two oil counters: +2/+2" (Beasts E). Same reason as mode 1 --
+            //           the converter cannot price the OIL, which also pays Migloz's other two abilities. K is capped
+            //           by the oil (each activation removes firebreathing_remove_oil_counters). No {T}, so it is legal
+            //           while summoning-sick and in main 1 or any main 2 the deck opens (a +2/+2 before Garruk,
+            //           Primal Hunter's -3 is worth two cards). Every K is a searched variant; nothing picks one.
+            const bool self_pump_oil = sd->params.firebreathing_remove_oil_counters > 0
+                                    && sd->params.firebreathing_cost.has_value()
+                                    && (sd->params.firebreathing_power > 0 || sd->params.firebreathing_tough > 0);
             const bool team_pump_keyword = (sd->params.team_pump_grants_haste
                                             || sd->params.team_pump_grants_double_strike
                                             || sd->params.team_pump_grants_lifelink
                                             || sd->params.team_pump_mainphase)
                                         && sd->params.team_pump_cost.has_value();
-            if (self_pump_discard || self_pump_lifelink || team_pump_keyword)
+            if (self_pump_discard || self_pump_lifelink || self_pump_oil || team_pump_keyword)
             {
-                const int  mode = self_pump_discard ? 1 : (self_pump_lifelink ? 3 : 2);
-                const ManaCost per = (self_pump_discard || self_pump_lifelink)
+                const int  mode = self_pump_discard ? 1 : (self_pump_lifelink ? 3 : (self_pump_oil ? 7 : 2));
+                const ManaCost per = (self_pump_discard || self_pump_lifelink || self_pump_oil)
                                          ? sd->params.firebreathing_cost.value()
                                          : sd->params.team_pump_cost.value();
                 const int per_mv = per.ManaValue();
                 int kmax = per_mv > 0 ? turn_pool().Total() / per_mv : 1;
                 if (mode == 1)
                 { kmax = std::min<int>(kmax, static_cast<int>(state.players[state.active_player_index].hand.size())); }
+                if (mode == 7)
+                { kmax = std::min(kmax, src.oil_counters / std::max(1, sd->params.firebreathing_remove_oil_counters)); }
                 if (kmax > 3 && !sd->params.team_pump_mainphase) { kmax = 3; }
                 // A KEYWORD-ONLY team grant (Valiant Knight: team_pump_power 0) is IDEMPOTENT -- the
                 // second activation sets an already-set flag and adds no power. Enumerating K>1
@@ -52093,8 +52117,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // here so a future multi-hybrid activation cost cannot silently produce a cost whose
                 // hybrid metadata under-counts its own pips (which would REFUSE a legal payment).
                 if (per.hybrid_count > 0) { kmax = std::min(kmax, 6 / per.hybrid_count); }
-                // mode 3 always benefits its own source (it is a self pump), like mode 1.
-                bool any_beneficiary = (mode == 1 || mode == 3);
+                // mode 3 / 7 always benefit their own source (self pumps), like mode 1.
+                bool any_beneficiary = (mode == 1 || mode == 3 || mode == 7);
                 if (mode == 2)
                 {
                     for (const Permanent& q : state.battlefield)
@@ -52308,6 +52332,29 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.is_noncreature = true;
                     actions.push_back(std::move(a));
                 }
+            }
+            // MIGLOZ, MAZE CRUSHER's "{1}, Remove an oil counter: It gains vigilance and menace until end of turn"
+            // (ActivatePump mode 8, Beasts E). Pre-combat only (a grant after combat changes nothing), and only while
+            // OilVigilanceActivationLive (it can attack, is not already vigilant -- Kaheera -- and has the oil). The
+            // ENGINE implements and offers it; the provider decides whether the SEARCH branches on it (USER 2026-11-21:
+            // "The other two can be heuristically pruned." -- the root's OffersOilVigilanceMenace says no;
+            // MTG_UNPRUNE=oilgrant restores it). Human play always sees it.
+            if (sd->params.vigilance_menace_cost.has_value() && is_pre_combat
+                && OilVigilanceActivationLive(state, state.active_player_index, src.card.m_number)
+                && (HumanPlayActive() || ResolveProvider(state).OffersOilVigilanceMenace(state, *sd)))
+            {
+                Action a;
+                a.kind           = Action::Kind::ActivatePump;
+                a.card_name      = src.card.m_name;
+                a.def            = sd;
+                a.hand_index     = -1;
+                a.sac_source_id  = src.card.m_number;
+                a.chosen_x       = 1;
+                a.gy_exile_mode  = 8;
+                a.cost           = sd->params.vigilance_menace_cost.value();
+                a.eval           = 1;
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
             }
             // THE LOOP-FUNDED TEAM PUMP (mode 5 -- mode 4 is Stromkirk Condemned; AccomplishedAlchemist, USER 2026-10-20: "No ability to activate
             // Ezuri for the win ... you should just be able to pay it as needed"). The same stacking P/T team pump,
@@ -65326,6 +65373,7 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
             }
             if (d->params.firebreathing_cost.has_value() && d->params.firebreathing_power > 0
                 && !d->params.firebreathing_discard && !d->params.firebreathing_grants_lifelink
+                && d->params.firebreathing_remove_oil_counters <= 0   // Migloz: searched main-phase pump (Beasts E)
                 && CanAttackFull(src, state.battlefield, me))
             {
                 const double r = static_cast<double>(d->params.firebreathing_power)
@@ -71919,6 +71967,7 @@ static bool HumanTwinPermanents(const GameState* state, int x, int y)
         && a.loyalty == b.loyalty && a.ice_counters == b.ice_counters && a.age_counters == b.age_counters
         && a.spore_counters == b.spore_counters && a.fade_counters == b.fade_counters
         && a.quest_counters == b.quest_counters && a.hone_counters == b.hone_counters
+        && a.oil_counters == b.oil_counters
         && a.linked_exile_number == b.linked_exile_number && a.copy_printed_name == b.copy_printed_name
         && a.lens_imprinted_land == b.lens_imprinted_land;
 }
@@ -80840,14 +80889,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.gy_exile_mode == 6
                 && !SelfHasteActivationLive(state, state.active_player_index, a.sac_source_id))
             { ++g_trailing_act_skips; continue; }
+            // Migloz's vigilance + menace (mode 8, Beasts E): liveness FIRST (oil, can still attack, not yet vigilant).
+            if (a.gy_exile_mode == 8
+                && !OilVigilanceActivationLive(state, state.active_player_index, a.sac_source_id))
+            { ++g_trailing_act_skips; continue; }
             // Mode 5: the loop-funded team pump (AccomplishedAlchemist) -- fund the real cost with the untap
             // loop, then pay it here. Applies as mode 2 (+P/+T to the subtype).
             ManaCost pump_cost = OutletOwnCost(a);
             bool     pump_ok   = true;
             int      pump_k    = a.chosen_x;
             // Discard rider (mode 1): pay only for the activations the hand can still pay the discard of
-            // (PumpPayableActivations; lockstep with the executor's twin).
-            if (a.gy_exile_mode == 1)
+            // (PumpPayableActivations; lockstep with the executor's twin). Migloz's oil (mode 7) the same way.
+            if (a.gy_exile_mode == 1 || a.gy_exile_mode == 7)
             {
                 const int n = PumpPayableActivations(state, state.active_player_index, a);
                 if (n <= 0) { ++g_trailing_act_skips; continue; }
@@ -93196,6 +93249,8 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
     // T5 at d5 b20, d5 b0 and d8 b0, yet hasted at once when handed the board after the cast. Fixture:
     // test/scenarios/boars_flinthoof_cast_then_haste.json. Only Flinthoof holds self_haste_cost.
     if (pp.self_haste_cost.has_value()) { return true; }
+    // Migloz, Maze Crusher (Beasts E): its oil pump has no {T} and a cast copy enters with oil (kActOilPump).
+    if (pp.firebreathing_remove_oil_counters > 0 && pp.enters_with_oil_counters > 0) { return true; }
     // Stromkirk Condemned's discard pump also has no {T}: a newly cast copy can
     // activate this main phase. Its key already exists in CollectActivationKeys;
     // this predicate must admit the cast plan to the searched site-9 fan.
@@ -107966,6 +108021,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
                               pm.fade_counters, pm.created_by_number, pm.quest_counters, pm.hone_counters,
                               pm.linked_exile_number };
         for (int v : extra) { mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(v))); }
+        if (pm.oil_counters != 0) { mix(0x011C0ull + static_cast<std::uint64_t>(pm.oil_counters)); }   // Migloz (gated)
         if (!pm.copy_printed_name.empty()) { mix(std::hash<std::string>{}(pm.copy_printed_name.str())); }
         if (!pm.lens_imprinted_land.empty()) { mix(std::hash<std::string>{}(pm.lens_imprinted_land.str())); }
     }
@@ -110243,6 +110299,8 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         { Fold(tk, 0xC0E57); Fold(tk, static_cast<uint64_t>(perm.quest_counters)); }
         if (perm.hone_counters > 0)
         { Fold(tk, 0x40E51); Fold(tk, static_cast<uint64_t>(perm.hone_counters)); }
+        if (perm.oil_counters > 0)   // Migloz, Maze Crusher (Beasts E): which activations a later turn can pay
+        { Fold(tk, 0x011C0); Fold(tk, static_cast<uint64_t>(perm.oil_counters)); }
         // Chosen creature type (Urza's Incubator): future-determining -- it decides WHICH spells the
         // permanent discounts. Today it is a deck-constant (DominantCreatureSubtypeId), so folding it
         // cannot actually split any state; it is folded anyway so that making the choice a real

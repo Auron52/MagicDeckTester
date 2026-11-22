@@ -8057,14 +8057,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Flinthoof Boar's self haste (mode 6): liveness first -- lockstep twin of the rollout's.
             if (a.gy_exile_mode == 6
                 && !SelfHasteActivationLive(state, state.active_player_index, a.sac_source_id)) { continue; }
+            // Migloz's vigilance + menace (mode 8, Beasts E): liveness first -- lockstep twin of the rollout's.
+            if (a.gy_exile_mode == 8
+                && !OilVigilanceActivationLive(state, state.active_player_index, a.sac_source_id)) { continue; }
             // Mode 5: the loop-funded team pump (AccomplishedAlchemist; lockstep with ApplyPlanDirect's trailing
             // pass): fund the real cost with the untap loop (FundTeamPumpByLoop, shared), then pay it with this
             // world's payer.
             ManaCost pump_cost = OutletOwnCost(a);
             bool     pump_ok   = true;
             int      pump_k    = a.chosen_x;
-            // Discard rider (mode 1): lockstep twin of ApplyPlanDirect's trailing pass (PumpPayableActivations).
-            if (a.gy_exile_mode == 1)
+            // Discard rider (mode 1) / Migloz's oil (mode 7): lockstep twin of ApplyPlanDirect's trailing pass
+            // (PumpPayableActivations).
+            if (a.gy_exile_mode == 1 || a.gy_exile_mode == 7)
             {
                 const int n = PumpPayableActivations(state, state.active_player_index, a);
                 if (n <= 0) { continue; }
@@ -8095,6 +8099,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (a.gy_exile_mode == 1)      { what = "pump (discard)"; }
                     else if (a.gy_exile_mode == 3) { what = "self pump + lifelink"; }
                     else if (a.gy_exile_mode == 6) { what = "gains haste until end of turn"; }
+                    else if (a.gy_exile_mode == 7)
+                    {
+                        what = "self pump +" + std::to_string((ad ? ad->params.firebreathing_power : 0) * std::max(1, n))
+                             + "/+" + std::to_string((ad ? ad->params.firebreathing_tough : 0) * std::max(1, n))
+                             + " (removed " + std::to_string((ad ? ad->params.firebreathing_remove_oil_counters : 0) * std::max(1, n))
+                             + " oil)";
+                    }
+                    else if (a.gy_exile_mode == 8) { what = "gains vigilance and menace until end of turn (removed 1 oil)"; }
                     else if (a.gy_exile_mode == 4)
                     {
                         // Stromkirk Condemned's discard-cost team pump (Vampires A2).

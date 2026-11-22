@@ -2,13 +2,15 @@
 // reducer, stacking with Urza's Incubator), Questing Beast's duplicate-legend offer, Thragtusk (LTB token),
 // Cragplate Baloth (kicked counters), Kaheera (lord + vigilance). Batch B: Contested Cliffs (TapFight: the
 // searched two-target fight, deathtouch, the SBA death pass). Batch C: Elder Gargaroth (the searched
-// three-mode attack trigger, the provider's life fold). Each test drives the SHARED helpers both worlds
+// three-mode attack trigger, the provider's life fold). Batch D: Garruk's Harbinger. Batch E: Migloz, Maze Crusher
+// (oil counters, the searched oil pump, the pruned vigilance grant and destroy). Each test drives the SHARED helpers both worlds
 // call (FireEtbWatchers / FireOwnEtbTriggers, EffectiveSpellCost, OfferDuplicateLegendCast, ApplyPermAbility,
 // EnumerateMainPlans + ApplyPlan).
 #include <doctest/doctest.h>
 
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
+#include "ai/Dominance.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -17,6 +19,7 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "mtg_test_seam.h"
 
 #include <algorithm>
 #include <initializer_list>
@@ -1128,4 +1131,367 @@ TEST_CASE("Garruk's Harbinger: no dig once the opponent is dead (a lethal combat
     BeFireHarb(t, -1, 4);
     CHECK(t.players[0].hand.empty());
     CHECK(BeLibNums(t) == lib);
+}
+
+// ---- Migloz, Maze Crusher (batch E) ------------------------------------------------------------
+// "Migloz enters with five oil counters on it. {1}, Remove an oil counter: vigilance and menace until end of turn.
+// {2}, Remove two oil counters: +2/+2 until end of turn. {3}, Remove three oil counters: destroy target artifact or
+// enchantment." USER 2026-11-21: "For Migloz we should include the power pump mode for sure. The other two can be
+// heuristically pruned."
+namespace
+{
+constexpr const char* kMig = "Migloz, Maze Crusher";
+// `lands` untapped Forests (10..), the land drop spent, Migloz #60 with `oil` oil counters.
+GameState BeMigBoard(int lands, int oil, bool sick = true)
+{
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    for (int i = 0; i < lands; ++i) { BeAdd(s, "Forest", 10 + i); }
+    const int mi = BeAdd(s, kMig, 60, 0, sick);
+    s.battlefield[static_cast<std::size_t>(mi)].oil_counters = oil;
+    return s;
+}
+const Permanent& BeMigOf(const GameState& s, int num = 60)
+{
+    const int i = BeIndexOf(s, num);
+    REQUIRE(i >= 0);
+    return s.battlefield[static_cast<std::size_t>(i)];
+}
+std::set<int> BeMigPumpKs(const GameState& s, bool pre_combat)
+{
+    std::set<int> out;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, pre_combat))
+    {
+        if (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 7 && a.sac_source_id == 60)
+        {
+            CHECK(a.cost.generic == 2 * a.chosen_x);   // pre-scaled K x {2}
+            out.insert(a.chosen_x);
+        }
+    }
+    return out;
+}
+int BeMigModeCount(const GameState& s, bool pre_combat, int mode)
+{
+    int n = 0;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, pre_combat))
+    { if (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == mode) { ++n; } }
+    return n;
+}
+int BeTappedLands(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield) { if (p.card.IsLand() && p.tapped) { ++n; } }
+    return n;
+}
+void BeResolveAll(GameState& st)
+{
+    while (!st.stack.empty())
+    {
+        const StackEntry e = st.stack.back();
+        st.stack.pop_back();
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.source);
+        if (d != nullptr) { EffectHandler::Resolve(st, e, *d); }
+    }
+}
+// A provider that says YES to the vigilance grant -- the shape a deck provider (or MTG_UNPRUNE=oilgrant) takes.
+struct BeOfferGrantProvider : BoarsProvider
+{
+    bool OffersOilVigilanceMenace(const GameState&, const CardDefinition&) const override { return true; }
+};
+}   // namespace
+
+TEST_CASE("Migloz: card data, and it enters with five oil counters (no +1/+1 counters)")
+{
+    const CardDefinition& d = BeDef(kMig);
+    CHECK(d.card.IsCreature());
+    CHECK(d.card.m_power.value_or(0) == 4);
+    CHECK(d.card.m_toughness.value_or(0) == 4);
+    CHECK(CardHasSubtype(d.card, "Beast"));
+    CHECK(d.params.enters_with_oil_counters == 5);
+    REQUIRE(d.params.firebreathing_cost.has_value());
+    CHECK(d.params.firebreathing_cost->ManaValue() == 2);
+    CHECK(d.params.firebreathing_power == 2);
+    CHECK(d.params.firebreathing_tough == 2);
+    CHECK(d.params.firebreathing_remove_oil_counters == 2);
+    REQUIRE(d.params.vigilance_menace_cost.has_value());
+    CHECK(d.params.vigilance_menace_cost->ManaValue() == 1);
+    CHECK(d.params.vigilance_menace_remove_oil == 1);
+    REQUIRE(d.params.remove_counter_destroy_art_ench_cost.has_value());
+    CHECK(d.params.remove_counter_destroy_art_ench_cost->ManaValue() == 3);
+    CHECK(d.params.remove_counter_destroy_art_ench_oil == 3);
+    CHECK_FALSE(d.params.firebreathing_discard);
+    CHECK_FALSE(d.params.firebreathing_grants_lifelink);
+
+    GameState s = BeState();
+    BeEnter(s, kMig, 60);
+    CHECK(BeMigOf(s).oil_counters == 5);
+    CHECK(PlusCountersOn(BeMigOf(s)) == 0);
+    CHECK(BeMigOf(s).EffectivePower() == 4);
+}
+
+TEST_CASE("Migloz: the pump removes two oil per activation and stops when the oil runs out")
+{
+    GameState s = BeMigBoard(0, 5);
+    CHECK(ApplyActivatePump(s, 0, 60, 7, 2) == 2);
+    CHECK(BeMigOf(s).oil_counters == 1);
+    CHECK(BeMigOf(s).temp_power_bonus == 4);
+    CHECK(BeMigOf(s).temp_tough_bonus == 4);
+    CHECK(ApplyActivatePump(s, 0, 60, 7, 1) == 0);   // one oil left: unpayable
+    CHECK(BeMigOf(s).oil_counters == 1);
+    CHECK(BeMigOf(s).temp_power_bonus == 4);
+
+    GameState t = BeMigBoard(0, 3);
+    CHECK(ApplyActivatePump(t, 0, 60, 7, 3) == 1);   // K=3 asked, the oil covers one
+    CHECK(BeMigOf(t).oil_counters == 1);
+    CHECK(BeMigOf(t).temp_power_bonus == 2);
+
+    // Both pay sites pay only for the activations the oil still covers.
+    Action a;
+    a.kind = Action::Kind::ActivatePump;
+    a.def = &BeDef(kMig);
+    a.sac_source_id = 60;
+    a.gy_exile_mode = 7;
+    a.chosen_x = 3;
+    CHECK(PumpPayableActivations(BeMigBoard(0, 5), 0, a) == 2);
+    CHECK(PumpPayableActivations(BeMigBoard(0, 1), 0, a) == 0);
+    a.chosen_x = 1;
+    CHECK(PumpPayableActivations(BeMigBoard(0, 4), 0, a) == 1);
+}
+
+TEST_CASE("Migloz: the pump is SEARCHED -- one variant per K (oil- and mana-capped), legal while sick, main 1 and main 2")
+{
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    {
+        GameState s = BeMigBoard(4, 5);   // 4 mana, 5 oil -> K = 1, 2
+        s.m_provider = &provider;
+        CHECK(BeMigPumpKs(s, true) == std::set<int>{ 1, 2 });
+        CHECK(BeMigPumpKs(s, false) == std::set<int>{ 1, 2 });   // the same menu in a main 2
+    }
+    {
+        GameState s = BeMigBoard(2, 5);   // 2 mana -> K = 1
+        s.m_provider = &provider;
+        CHECK(BeMigPumpKs(s, true) == std::set<int>{ 1 });
+    }
+    {
+        GameState s = BeMigBoard(6, 3);   // 3 oil -> K = 1 however much mana
+        s.m_provider = &provider;
+        CHECK(BeMigPumpKs(s, true) == std::set<int>{ 1 });
+    }
+    {
+        GameState s = BeMigBoard(6, 1);   // 1 oil -> no pump
+        s.m_provider = &provider;
+        CHECK(BeMigPumpKs(s, true).empty());
+    }
+    // NO GREEDY PICK: the plan menu holds every K side by side. (The no-pump line is not in this list: with the
+    // land drop spent the enumeration offers no empty plan, and the host appends the pass itself -- Solve's
+    // attack-only seed -- so it is searched against both K's.)
+    GameState s = BeMigBoard(4, 5);
+    s.m_provider = &provider;
+    std::set<int> ks;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        int k = 0;
+        for (const Action& a : p.actions)
+        { if (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 7) { k += a.chosen_x; } }
+        if (k != 0) { ks.insert(k); }
+    }
+    CHECK(ks.count(1) == 1);
+    CHECK(ks.count(2) == 1);
+    CHECK(ks.count(3) == 0);   // never more than the oil pays
+}
+
+TEST_CASE("Migloz: executor and rollout apply the searched pump identically (oil, P/T, mana)")
+{
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    GameState s = BeMigBoard(4, 5);
+    s.m_provider = &provider;
+    const TurnSolver::Plan* k2 = nullptr;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.actions.size() == 1 && p.actions[0].kind == Action::Kind::ActivatePump
+            && p.actions[0].gy_exile_mode == 7 && p.actions[0].chosen_x == 2) { k2 = &p; break; }
+    }
+    REQUIRE(k2 != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *k2, true);
+    CHECK(BeMigOf(roll).oil_counters == 1);
+    CHECK(BeMigOf(roll).EffectivePower() == 8);
+    CHECK(BeMigOf(roll).EffectiveToughness() == 8);
+    CHECK(BeTappedLands(roll) == 4);
+
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, *k2, true);
+    GameState ex = s;
+    eng.TakeTurn(ex, true, BeResolveAll);
+    CHECK(BeMigOf(ex).oil_counters == BeMigOf(roll).oil_counters);
+    CHECK(BeMigOf(ex).temp_power_bonus == BeMigOf(roll).temp_power_bonus);
+    CHECK(BeMigOf(ex).temp_tough_bonus == BeMigOf(roll).temp_tough_bonus);
+    CHECK(BeTappedLands(ex) == BeTappedLands(roll));
+
+    // OIL ACCOUNTING: the same K=2 plan on a Migloz that has only two oil left pays {2} for ONE activation in both
+    // worlds -- never {4} for a second activation the oil cannot pay.
+    GameState s2 = s;
+    s2.battlefield[static_cast<std::size_t>(BeIndexOf(s2, 60))].oil_counters = 2;
+    GameState roll2 = s2;
+    TurnSolver::ApplyPlan(roll2, *k2, true);
+    CHECK(BeMigOf(roll2).oil_counters == 0);
+    CHECK(BeMigOf(roll2).temp_power_bonus == 2);
+    CHECK(BeTappedLands(roll2) == 2);
+    AIEngine eng2(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng2, *k2, true);
+    GameState ex2 = s2;
+    eng2.TakeTurn(ex2, true, BeResolveAll);
+    CHECK(BeMigOf(ex2).oil_counters == 0);
+    CHECK(BeMigOf(ex2).temp_power_bonus == 2);
+    CHECK(BeTappedLands(ex2) == 2);
+}
+
+TEST_CASE("Migloz: a plan casting Migloz opens breakpoint site 9 (pump it the same main)")
+{
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    BeAdd(s, "Stomping Ground", 10);
+    for (int i = 0; i < 4; ++i) { BeAdd(s, "Forest", 11 + i); }
+    s.players[0].hand.push_back(BeZone(kMig, 1));
+    TurnSolver::Plan p;
+    Action a;
+    a.kind       = Action::Kind::CastFromHand;
+    a.card_name  = BeDef(kMig).card.m_name;
+    a.def        = &BeDef(kMig);
+    a.hand_index = 0;
+    p.actions.push_back(a);
+    CHECK((TurnSolver::PlanOpensBreakpointForTest(s, p) & (1 << 9)) != 0);
+    const std::vector<std::uint64_t> pre = TurnSolver::SnapshotActivatableAbilities(s);
+    GameState t = s;
+    t.players[0].hand.clear();
+    const int mi = BeAdd(t, kMig, 1, 0, /*sick=*/true);
+    t.battlefield[static_cast<std::size_t>(mi)].oil_counters = 5;
+    CHECK(TurnSolver::PostEntryActivationPending(t, pre));
+}
+
+TEST_CASE("Migloz: vigilance + menace is implemented, live only when it changes something, and pruned from the search")
+{
+    {
+        GameState s = BeMigBoard(2, 5, /*sick=*/false);
+        CHECK(OilVigilanceActivationLive(s, 0, 60));
+        CHECK(ApplyActivatePump(s, 0, 60, 8, 1) == 1);
+        CHECK(BeMigOf(s).temp_vigilance);
+        CHECK(BeMigOf(s).oil_counters == 4);
+        CHECK_FALSE(OilVigilanceActivationLive(s, 0, 60));    // already vigilant: a second grant is a no-op
+        CHECK(ApplyActivatePump(s, 0, 60, 8, 1) == 0);
+        CHECK(BeMigOf(s).oil_counters == 4);
+    }
+    CHECK_FALSE(OilVigilanceActivationLive(BeMigBoard(2, 5, /*sick=*/true), 0, 60));   // cannot attack: nothing gained
+    CHECK_FALSE(OilVigilanceActivationLive(BeMigBoard(2, 0, false), 0, 60));           // no oil
+    {
+        GameState s = BeMigBoard(2, 5, false);
+        BeAdd(s, "Kaheera, the Orphanguard", 61);                                     // Kaheera: Beasts have vigilance
+        CHECK_FALSE(OilVigilanceActivationLive(s, 0, 60));
+    }
+    // The ENGINE offers it; the root provider keeps it out of the autonomous search (USER: heuristically pruned).
+    BeSearchedScope on(true);
+    {
+        BoarsProvider provider;
+        GameState s = BeMigBoard(2, 5, false);
+        s.m_provider = &provider;
+        CHECK_FALSE(provider.OffersOilVigilanceMenace(s, BeDef(kMig)));
+        CHECK(BeMigModeCount(s, true, 8) == 0);
+        CHECK(BeMigModeCount(s, true, 7) == 1);   // the pump is still searched
+    }
+    {
+        BeOfferGrantProvider provider;   // a provider that admits it (what MTG_UNPRUNE=oilgrant does at the root)
+        GameState s = BeMigBoard(2, 5, false);
+        s.m_provider = &provider;
+        CHECK(BeMigModeCount(s, true, 8) == 1);
+        CHECK(BeMigModeCount(s, false, 8) == 0);   // after combat the grant changes nothing
+        GameState t = s;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+        {
+            if (p.actions.size() != 1 || p.actions[0].gy_exile_mode != 8) { continue; }
+            TurnSolver::ApplyPlan(t, p, true);
+            break;
+        }
+        CHECK(BeMigOf(t).temp_vigilance);
+        CHECK(BeMigOf(t).oil_counters == 4);
+        CHECK(BeTappedLands(t) == 1);
+    }
+    CHECK(std::string(GateName(UnprunedGate::OilGrant)) == "oilgrant");
+}
+
+TEST_CASE("Migloz: the destroy is paid in OIL, targets any artifact/enchantment, and the search never hits our own")
+{
+    GameState s = BeMigBoard(3, 5);
+    BeAdd(s, "Urza's Incubator", 70);                  // ours
+    BeAdd(s, "Lightning Greaves", 71, /*controller=*/1);  // theirs
+    const std::vector<int> legal = CounterDestroyLegalTargets(s, 0);
+    CHECK(legal.size() == 2);
+    const Permanent& mig = BeMigOf(s);
+    // The root prune (USER: heuristically pruned): our own artifact/enchantment is never offered; theirs is.
+    const std::vector<int> pruned = RestrictCounterDestroyTargetsFor(s, 0, mig, legal, /*unpruned=*/false);
+    REQUIRE(pruned.size() == 1);
+    CHECK(s.battlefield[static_cast<std::size_t>(pruned[0])].card.m_number == 71);
+    CHECK(RestrictCounterDestroyTargetsFor(s, 0, mig, legal, /*unpruned=*/true) == legal);   // MTG_UNPRUNE=counterdestroy
+    {   // Steelbane Hydra (a +1/+1-counter source) keeps every legal target at the root
+        GameState h = s;
+        BeAdd(h, "Steelbane Hydra", 80);
+        CHECK(RestrictCounterDestroyTargetsFor(h, 0, BeMigOf(h, 80), legal, false) == legal);
+    }
+    // Search enumeration: one destroy action, at their Greaves.
+    BoarsProvider provider;
+    s.m_provider = &provider;
+    BeSearchedScope on(true);
+    int destroys = 0;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, true))
+    {
+        if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::CounterDestroyArtEnch)
+        { continue; }
+        ++destroys;
+        CHECK(a.sac_victim_id == 71);
+    }
+    CHECK(destroys == 1);
+    {   // two oil cannot pay it
+        GameState t = s;
+        t.battlefield[static_cast<std::size_t>(BeIndexOf(t, 60))].oil_counters = 2;
+        int n = 0;
+        for (const Action& a : TurnSolver::CollectActionsForTest(t, true))
+        { if (a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch && a.kind == Action::Kind::ActivatePermAbility) { ++n; } }
+        CHECK(n == 0);
+        const TapTargetPumpPinScope pin(71, 0);
+        CHECK_FALSE(PermAbilitySourceLive(t, 0, 60, PermAbilityMode::CounterDestroyArtEnch, nullptr));
+    }
+    // Resolution: three oil off, the target destroyed, Migloz's P/T untouched (no +1/+1 counter is involved).
+    ResolveCounterDestroyArtEnch(s, 0, 60, 71);
+    CHECK(BeMigOf(s).oil_counters == 2);
+    CHECK(BeMigOf(s).EffectivePower() == 4);
+    CHECK(BeIndexOf(s, 71) < 0);
+    CHECK(PermAbilityLabelFor(PermAbilityMode::CounterDestroyArtEnch, &BeDef(kMig)).find("oil") != std::string::npos);
+}
+
+TEST_CASE("Migloz: oil is state -- the legend copies differ, and more oil dominates less")
+{
+    GameState s = BeMigBoard(0, 5, false);
+    BeAdd(s, kMig, 61);
+    s.battlefield[static_cast<std::size_t>(BeIndexOf(s, 61))].oil_counters = 5;
+    const std::vector<int> dup = { BeIndexOf(s, 60), BeIndexOf(s, 61) };
+    CHECK(LegendCopiesInterchangeable(s, dup));
+    s.battlefield[static_cast<std::size_t>(BeIndexOf(s, 61))].oil_counters = 1;
+    CHECK_FALSE(LegendCopiesInterchangeable(s, dup));   // keeping the 5-oil copy is a real choice
+
+    auto snap = [](int oil)
+    {
+        GameState g = BeMigBoard(0, oil, false);
+        g.step = Step::Untap;
+        return dominance::Build(g, DefaultProvider());
+    };
+    const dominance::DomSnap more = snap(5);
+    const dominance::DomSnap less = snap(2);
+    REQUIRE(more.comparable);
+    REQUIRE(less.comparable);
+    CHECK(dominance::Covers(more, less));
+    CHECK_FALSE(dominance::Covers(less, more));
 }

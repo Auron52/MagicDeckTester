@@ -76,6 +76,7 @@ static void CollectBoardState(const GameState& state,
         // reads a Fungus board by these two numbers, so they must reach the viewer.
         if (p.spore_counters != 0) { snap.counters.push_back({ "spore", p.spore_counters }); }
         if (p.quest_counters != 0) { snap.counters.push_back({ "quest", p.quest_counters }); }
+        if (p.oil_counters != 0)   { snap.counters.push_back({ "oil", p.oil_counters }); }   // Migloz (Beasts E)
 
         if (p.controller_index == state.active_player_index) { battlefield_out.push_back(std::move(snap)); }
         else { opp_battlefield_out.push_back(std::move(snap)); }  // Forbidden Orchard tokens / spawns
