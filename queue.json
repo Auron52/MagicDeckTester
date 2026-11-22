@@ -1,16 +1,8 @@
 {
  "entries": [
   {
-   "branch": "beasts-analysis",
-   "head_since": "2026-11-22T15:47:55Z",
-   "heartbeat": "2026-11-22T16:15:26Z",
-   "host": "67d5329561c0",
-   "id": "67d5329561c0:beasts-analysis",
-   "joined": "2026-11-22T13:32:45Z",
-   "note": ""
-  },
-  {
    "branch": "phase-1-2-deck-analyzer",
+   "head_since": "2026-11-22T16:16:35Z",
    "host": "a7c2d36c718e",
    "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
    "joined": "2026-11-22T14:23:15Z",
@@ -22,6 +14,13 @@
    "id": "8854e545ddab:bloodsun-analysis",
    "joined": "2026-11-22T14:25:44Z",
    "note": "Blood Sun integration, GT accepted; held-out Grim comparison running"
+  },
+  {
+   "branch": "beasts-analysis",
+   "host": "67d5329561c0",
+   "id": "67d5329561c0:beasts-analysis",
+   "joined": "2026-11-22T16:16:35Z",
+   "note": ""
   }
  ]
 }
