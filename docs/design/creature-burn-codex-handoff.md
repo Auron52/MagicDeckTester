@@ -29,21 +29,22 @@ The USER asked: "Please analyze the creature burn deck." That means the full ana
   checkout only, with `MDT_REFERENCE_BACKUP_DIR=/home/vscode/.claude/mdt-reference-backups`.
 - **Mulligan generation** runs alone on the box, on a frozen commit.
 
-## Heavy-lock queue at handoff (all setsid'd, so they survive the Claude session)
-These run in order, one at a time. The Claude agents that queued them are gone: nobody is waiting on the results.
-Nothing runs after the cb-scry build; the next step is yours.
+## Heavy-lock queue at handoff (updated ~11:00 UTC; all detached in their own sessions)
+These run in order, one at a time. The three Claude agents were STOPPED at ~11:00 UTC, so nobody is waiting on the
+results and nothing runs after the last item; the next step is yours. (Two earlier queued entries, cb-bbgap's
+flock 72838 and cb-scry's flock 73036, died while waiting for the lock and were relaunched as below.)
 
-1. **cb-unearth build** (flock PID 72807)
-   - Log: `build/scratch/cb-unearth/build2.log`. It was at 50/367 at 10:45.
+1. **cb-unearth build** (flock PID 72807, running)
+   - Log: `build/scratch/cb-unearth/build2.log`. It was at 140/367 at ~11:00.
    - Output: `.claude/worktrees/cb-unearth/build/Release/` (a symlink onto `build/wt/cb-unearth`).
-2. **cb-bbgap `build/scratch/cb-bbgap/chain1.sh`** (flock PID 72838)
+2. **cb-scry build** (flock PID 79353, waiting)
+   - Log: `build/scratch/cb-scry/build4.log`.
+3. **cb-bbgap `build/scratch/cb-bbgap/chain1.sh`** (flock PID 79554, waiting)
    - Runs build, then unit, then scenarios.
    - Status: `build/scratch/cb-bbgap/status`. Marker: `CHAIN1_DONE`. Logs: `build4.log`, `unit.log`, `scen.log`.
-3. **cb-scry build** (flock PID 73036)
-   - Log: `build/scratch/cb-scry/build3.log`.
 
 Each full build takes about 1-1.5 h on this box. If you would rather integrate first and build once, you may kill
-queues 2 and 3. They are agent experiments, not USER-requested runs. Each worktree's A/B still needs its own binary,
+items 2 and 3. They are agent experiments, not USER-requested runs. Each worktree's A/B still needs its own binary,
 though.
 
 ## The three worktrees
