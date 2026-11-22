@@ -105,6 +105,12 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
 ## Pending for the NEXT free-turn agent (from handoff3.md, plus these USER items given after it)
 - USER 2026-11-22, Sire fairness check: *"Okay, that sounds worth trying."* -- build the "could have deployed a
   creature" check (lever, default OFF), measure on Shadowborn vs Sire-in / Sire-out.
+- USER 2026-11-22: *"If we do that rule for Sire we should also apply the same rule to Annihilator if even just to
+  check if it would make enough sacrifice targets to keep a permanent."* -- same lever family as the Sire check:
+  before an annihilator sacrifice that would leave the opponent locked, add the nonland permanent cards it could
+  have cast from hand (MV <= its lands, colours available) as extra sacrifice targets; if real + virtual permanents
+  exceed the annihilator count, it keeps a permanent and the lock does NOT hold. Check only, no state change; default
+  OFF; measure on Extra Turns (Emrakul / Ulamog) with the Sire arm in the same pooled batch.
 - USER 2026-11-22: *"What might be nice is to include the average of the extra turns as a separate number, even if
   we don't optimize for it. This is just informative for agents and users."* -- report the average free turns
   (and extra turns) taken per game as a separate, informational number beside the credited avg (batch per-job
