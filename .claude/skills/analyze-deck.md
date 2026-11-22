@@ -463,7 +463,7 @@ CLASS. What the core invariant forbids is getting there **by accident**. So:
 
   **WHY THIS RULE EXISTS.** The previous rule was "a deck earns its OWN provider only once it has a
   measured hook to hold". It was protecting something real — do not bolt unmeasured heuristics onto
-  a deck — but it conflated two different things. A **judgement** hook (tutor width, cast order,
+  a deck — but it conflated two different things. A **judgement** hook (a tutor candidate rule, cast order,
   discard buckets) must indeed be measured before adoption. `ProvenWinlessThisTurn` is **not a
   judgement, it is a PROOF**: its contract is one-sided and a correct one cannot change play or
   labels at all, only make the search cheaper. Routing a deck to Generic to decline the first

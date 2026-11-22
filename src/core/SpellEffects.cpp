@@ -97,15 +97,16 @@ static std::vector<std::string> LiveTutorCandidates(const GameState& state, int 
 }
 
 // The menu width of a suspended tutor's fetch at THIS resolution state: the distinct names PerformTutor's scripted
-// index ranks over (LiveTutorCandidates, deduped in list order), capped by the provider's TutorSearchWidth -- the
-// width every tutor axis uses. Read only by the crossing's probe (BoundaryFan), never by play.
+// index ranks over (LiveTutorCandidates, deduped in list order) -- every name, as on every tutor axis (no tutor
+// width; the provider's candidate rule is the breadth). The cap at kLandSearchPinMask + 1 is the ENCODING limit of
+// the packed pin (kLandSearchPinBits per ordinal), not a search width. Read only by the crossing's probe
+// (BoundaryFan), never by play.
 int SuspendTutorPickWidth(const GameState& state, int controller, const CardParams& pp)
 {
     const std::vector<std::string> cands = LiveTutorCandidates(state, controller, pp);
     std::vector<std::string> uniq;
     for (const std::string& c : cands) { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
-    const int w = std::max(1, ResolveProvider(state).TutorSearchWidth());
-    return std::max(1, std::min(static_cast<int>(uniq.size()), std::min(w, kLandSearchPinMask + 1)));
+    return std::max(1, std::min(static_cast<int>(uniq.size()), kLandSearchPinMask + 1));
 }
 
 static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
@@ -414,10 +415,9 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // different board states, so the rank labels refer to candidate lists that never coexist. Any
     // per-rank table built that way mislabels plan changes as ranking misses.
     //
-    // Reading the committed choice has no such confound: run wide (MTG_TUTOR_WIDTH=12) and see which
-    // rank the search commits to. Ranks consistently past the shipped width are a real ranking miss
-    // and the card names are trustworthy; ranks inside it mean the extra width bought plan diversity,
-    // not a better fetch, and no reordering will recover those games.
+    // Reading the committed choice has no such confound: see which rank the search commits to (the
+    // axis scores every candidate since the tutor width was deleted, 2026-11-22). Ranks consistently
+    // far down the list are a real ranking miss and the card names are trustworthy.
     //
     // Ranked over NAMES deduped in list order, because fetching by name always takes the first
     // matching library card -- three copies of Piledriver are one choice, not three, and counting

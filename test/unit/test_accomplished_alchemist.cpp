@@ -738,8 +738,6 @@ TEST_CASE("AccomplishedAlchemistProvider: Sprawl's colours restricted to G/U/W/B
                             static_cast<int>(Color::White) + 1, static_cast<int>(Color::Black) + 1 });
     // Trufflesnout's two modes are untouched by the restriction.
     CHECK(AccomplishedAlchemistProvider().EtbChoiceCandidates(s, 0, DefAa("Trufflesnout")) == std::vector<int>{ 1, 2 });
-    // Elvish Harbinger's five Elf names fit the inherited tutor width.
-    CHECK(AccomplishedAlchemistProvider().TutorSearchWidth() >= 5);
 }
 
 TEST_CASE("Trufflesnout: both modes are searched and resolve identically in executor and rollout")
@@ -2243,7 +2241,6 @@ TEST_CASE("Wish buckets: nothing held -> every bucket, in the USER's order; neve
     // ONE land (MTG_AA_WISH_ONE_LAND, USER 2026-11-12): no Forest held yet -> the Forest, not the Island.
     ExpectWishAa(s, { "Arbor Elf", "Forest", "Accomplished Alchemist", "Brindle Boar",
                       "Galvanic Alchemist", "Scholar of Athreos" });
-    CHECK(AaProv().TutorSearchWidth() >= 7);   // every admitted name is searched (coverage)
 }
 
 TEST_CASE("Wish buckets: ALCHEMIST -- offered only while none is in hand or in play")
@@ -2553,18 +2550,16 @@ struct HarbArmAa
 };
 }   // namespace
 
-TEST_CASE("Wish buckets: =0 restores every name at the base width; a non-wish tutor is untouched")
+TEST_CASE("Wish buckets: =0 restores every name; a non-wish tutor is untouched")
 {
     GameState s = WishAa();
     HandAa(s, "Accomplished Alchemist");
     {
         WishArmAa off(0);
         CHECK(WishCandsAa(s) == kAaSide);
-        CHECK(AaProv().TutorSearchWidth() == 6);
     }
     {
         WishArmAa on(1);
-        CHECK(AaProv().TutorSearchWidth() == 9);
         // Elvish Harbinger's library Elf tutor is not a wish: the generic list (its own rule pinned off).
         HarbArmAa hoff(0);
         GameState h = FreshAa();

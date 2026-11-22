@@ -301,7 +301,6 @@ TEST_CASE("LandfallElementals' tutor width admits every distinct Elemental name"
         ResolveHeuristicDefaultsPath("decks/Landfall Elementals/Landfall Elementals.cod"));
     const DecisionProvider& p = SelectDecisionProvider(deck);
     CHECK(std::string(p.Name()) == "LandfallElementals");
-    CHECK(p.TutorSearchWidth() >= 10);
 }
 
 namespace

@@ -262,7 +262,6 @@ TEST_CASE("Cyclone phase 4: the tutor cast is emitted, its target axis spans eve
     }
     // Rule on: a Cyclone is not held and no Emrakul is in hand -> Cyclone? none left in this library; Emrakul.
     CHECK(RankedTutorCandidates(Prov4(), s, 0, Def4(kLtp).params) == std::vector<std::string>{ kEmrakul });
-    CHECK(Prov4().TutorSearchWidth() >= 8);
 }
 
 TEST_CASE("Cyclone phase 4: human play -- re-asked at resolution; a -1 takes the default")

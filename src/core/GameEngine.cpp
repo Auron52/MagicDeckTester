@@ -649,9 +649,8 @@ std::vector<std::pair<int, std::string>> GameEngine::UpkeepTutorOptions(const Ga
         seen_sources.push_back(c.m_name.str());
         const auto names = RankedTutorCandidates(ResolveProvider(state), state,
                                                    state.active_player_index, d->params);
-        const std::size_t width = HumanPlayActive() ? names.size()
-            : std::min(names.size(), static_cast<std::size_t>(std::max(1, ResolveProvider(state).TutorSearchWidth())));
-        for (std::size_t i = 0; i < width; ++i) { out.emplace_back(c.m_number, names[i]); }
+        // Every name the provider's candidate rule returns (no tutor width -- the rule is the breadth).
+        for (std::size_t i = 0; i < names.size(); ++i) { out.emplace_back(c.m_number, names[i]); }
     }
     return out;
 }
