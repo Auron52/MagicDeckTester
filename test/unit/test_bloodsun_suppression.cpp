@@ -134,6 +134,8 @@ TEST_CASE("blood sun: params as the design states them; City of Brass's ping is 
     // A painland's damage is PART of its mana ability: no projection at all.
     CHECK(DefSun("Sunbaked Canyon").land_ability_loss_twin == nullptr);
     CHECK(DefSun("Swamp").land_ability_loss_twin == nullptr);
+    // Nykthos's devotion mode is still a mana ability, including its {2} activation cost.
+    CHECK(DefSun("Nykthos, Shrine to Nyx").land_ability_loss_twin == nullptr);
 }
 
 TEST_CASE("blood sun inventory: every land param in cards.json is classified exactly once")
@@ -180,6 +182,10 @@ TEST_CASE("blood sun self-guard: the shipped list passes; a synthetic fetchland 
     Decklist side = deck;
     side.sideboard.push_back(CardSun("Mutavault", 0));
     CHECK_FALSE(GoldFishRunner::LandAbilityLossSelfGuard(side).empty());
+    // Contested Cliffs has a separate fight activation, which Blood Sun removes.
+    Decklist cliffs = deck;
+    cliffs.mainboard.push_back(CardSun("Contested Cliffs", 0));
+    CHECK(GoldFishRunner::LandAbilityLossSelfGuard(cliffs).find("[bloodsun] Contested Cliffs has ") == 0);
 }
 
 TEST_CASE("blood sun routing: BloodSunProvider, NotAssessed")

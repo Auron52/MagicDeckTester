@@ -33,6 +33,7 @@ inline constexpr std::string_view kManaKeys[] = {
     "tap_self_damage", "tap_self_damage_any_mode", "tap_is_life_payment",
     "creature_mana_only", "mana_colors_of_controlled_subtype", "mana_colors_of_graveyard_legends",
     "mana_per_other_controlled_subtype", "mana_per_creature_feeder_generic", "mana_per_creature_subtype",
+    "mana_per_devotion",  // Nykthos: the {2}, {T} mode adds mana, so Blood Sun leaves it intact
     "sac_for_mana_amount", "sac_for_mana_color", "sac_for_mana_victim_land_subtype",
     "energy_per_colored_tap", "tap_opponent_lifegain",
     "mdfc_back_name", "mdfc_back_produces",            // which face is played: the card, not a land ability
@@ -65,6 +66,7 @@ inline constexpr std::string_view kSelfGuardKeys[] = {
     "tap_tutor_put_cost", "tap_tutor_put_return_self", "tutor_required_subtype", "tutor_shuffle_after", "tutor_types",
     "alt_win_distinct_named_count", "alt_win_distinct_named_subtype",
     "tap_treasure_cost", "tap_treasure_tap_other_subtype", "tap_damage_cost", "tap_damage_each_opponent",
+    "tap_fight_cost", "tap_fight_requires_subtype",  // Contested Cliffs: a non-mana fight activation
     "tap_blood_cost", "tap_blood_cost_less_per_subtype",
     "team_pump_cost", "team_pump_power", "team_pump_subtypes", "team_pump_taps_source", "team_pump_tough",
     "untap_creature_cost", "untap_creature_subtype", "threshold_loot_cost", "self_bounce_cost",
