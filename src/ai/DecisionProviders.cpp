@@ -72356,7 +72356,7 @@ int BloodSunRole(const GameState& s, const CardDefinition* d, bool sun_out, bool
     if (p.cast_trigger_extra_turns > 0)          { return 24; }   // Emrakul
     if (p.tutor_to_hand || p.look_top_target_player_exile_reorder > 0) { return 25; }   // Grim Tutor, Machinations
     if (p.cast_trigger_exile_target_permanents > 0) { return 26; }   // Ulamog
-    if (p.exile_all_permanents)                  { return 50; }   // Worldfire last (§9.3)
+    if (p.exile_all_permanents_hands_graveyards) { return 50; }   // Worldfire last (§9.3)
     return 30;
 }
 }   // namespace

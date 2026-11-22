@@ -119,9 +119,10 @@ TEST_CASE("bloodsun step 5: card params as the design states them; own death and
     CHECK(dm.targeting == Targeting::Player);
     CHECK(dm.transmute_cost.has_value());
     const CardParams& wf = Def5("Worldfire").params;
-    CHECK(wf.exile_all_permanents);
-    CHECK(wf.exile_all_hands_and_graveyards);
-    CHECK(wf.set_all_life_totals == 1);
+    // Worldfire is the Worldfire deck's card (exile_all_permanents_hands_graveyards / each_player_life_becomes, one
+    // resolver: ResolveExileAllAndSetLife); Blood Sun's step-5 twin params were folded into it at integration.
+    CHECK(wf.exile_all_permanents_hands_graveyards);
+    CHECK(wf.each_player_life_becomes == 1);
 
     const Decklist deck = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Blood Sun/Blood Sun.cod"));
     CHECK(GoldFishRunner::DeckTouchesOpponentZones(deck));

@@ -46,7 +46,7 @@ inline constexpr std::string_view kGatedKeys[] = {
     // G2/G3: the land-entry replacements and enter triggers (PlayLandCore, EnterLand, ResolveLandEnterEtbExtras)
     "etb_replace_sacrifice_land_subtype", "etb_replace_sacrifice_untapped_lands", "etb_sacrifice_lands",
     "etb_optional_tapped_rad", "etb_energy", "etb_sacrifice_unless_pay", "etb_scry", "etb_surveil",
-    "etb_bounce_land", "etb_lifegain",
+    "etb_bounce_land", "etb_lifegain", "etb_target_creature_pump_power",   // Teetering Peaks: ResolveLandEtbTargetPump
     // G5/G6: the tap TRIGGERS
     "taps_spawn_opp_token", "tap_self_damage_is_trigger",
 };
