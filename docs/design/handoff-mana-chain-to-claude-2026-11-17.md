@@ -2,6 +2,50 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
+## CODEX TAKEOVER (Claude usage nearly exhausted, 12:40 UTC 11-22) -- READ THIS FIRST
+
+USER 11-22 12:35: *"Please continue autonomously overnight. Please keep a handoff to codex current if possible, since we
+are down to 5% usage. The intention is to keep running here until the usage runs out."* If you are Codex reading this,
+Claude's session (9ae25e19) has stopped. The latest dated entry in "Live status" below (search `STATE FOR RESUME`, newest
+date first) is the full picture; this section is the short version of how to pick it up.
+
+1. **Verify before acting:** `pgrep -a mtg`, `pgrep -a flock`, `ls -lt build/scratch/claude_*/`, `free -g`, and
+   `MDT_PUSH_QUEUE_ID=839667a3a15d:wip/merfolk-gate python3 scripts/push_queue.py status` (run from
+   `.claude/worktrees/land-1122b`). Detached (setsid) runs keep going after Claude stops; Claude's subagents and
+   `run_in_background` waiters do NOT. Nothing will react to a run finishing unless you look.
+2. **Box rules:** ONE big engine process at a time on `build/scratch/claude_box.lock` with `MTG_RSS_CAP_GB=40`; small jobs
+   via `scripts/box_lane.sh --slots N` (N <= 2); `./build.sh` only; never `timeout`; rebase never merge.
+3. **Push queue:** shared branch `phase-1-2-deck-analyzer` only via `scripts/push_queue.py` (join, wait, validate under
+   `hold`/`keepalive`, `land`). Claude's queue entry is `839667a3a15d:wip/merfolk-gate` (set `MDT_PUSH_QUEUE_ID` to it to
+   act as that entry, e.g. `requeue`/`leave`/`land`). If Claude stopped while HEAD of the queue, either finish its
+   landing (below) or `leave` so other sessions are not blocked; a silent head is reaped after 45 min anyway.
+4. **Merfolk landing (the one pending shared-branch land):** tree `.claude/worktrees/land-1122b` (branch wip/land-1122b,
+   cd330ec5a, queue id above). Build + units passed; `build/scratch/claude_land1122b/validate2.sh` runs smoke
+   (`MTG_PGO=0 MTG_RSS_CAP_GB=40 bash test/regression.sh --smoke`) + `python3 test/check_gt_logs.py` under the box
+   lock; status file `build/scratch/claude_land1122b/status` ends "ALL OK" on success. Then: `git fetch`; if origin moved
+   past 94cd1e06b with gated changes, rebase + rebuild + unit + smoke again; else `push_queue.py land`, then
+   `git -C /workspaces/MagicDeckTester pull --rebase`. On smoke failure: read the audit (an expected Merfolk play change
+   needs its GT accepted -- see the 10:45/12:25 entries), `requeue` while fixing.
+5. **Workstreams (each owns a worktree under `.claude/worktrees/`, has its own `logs/<work>/*handoff*.md`, and lands
+   through the parent via the queue; none pushes the shared branch itself):**
+   | work | worktree / branch | state | next |
+   |---|---|---|---|
+   | Hinata d5E0 | hinata-d4-d5 / wip/hinata-d4-d5 | waits for Merfolk on origin | gate2 + GT accept, wip push, land |
+   | Heath fetch hint | heath-produces, heath-derived / wip/heath-produces | deck-derived fetch hint (shocks+basics, not ETB-tapped) + Orchard-before-fetch ON (USER approved); A/B chain in build/scratch/heath/ | finish A/B (every deck net <= 0, searched first), d8 b0 slower games, GT |
+   | Bruna lord-projection + TOKEN_SELF | bruna-lordproj / wip/bruna-lordproj (b4819189d) | 3-arm A/B build/scratch/bad/a6/lpab/run.sh (off / lord / both) | adopt if all nets <= 0; GT |
+   | Bruna 7a/7b | bruna-ro / wip/bruna-rule-override | searched-focused A/B of 7a/7a-amended/7b/7b-amended | REPORT to USER (USER decides) |
+   | Prepay floating {C} (gi548) | hinata-gi548 / wip/hinata-gi548 | MTG_PREPAY_FLOAT_C_PHYS -> default ON; chain build/scratch/claude_prepayc/chain1.sh | A/B, GT; then remove gi548-base + hinata-gi548 via scripts/safe_worktree_remove.sh |
+   | Sac-fodder pricing | sacfodder-fix / wip/sacfodder-fix | ab2 in build/scratch/claude_sacfodder_fix5 (AB2.DONE; `python3 tools/cmp2.py ab2:off ab2:on ab2:p2x2 ab2:p2x4 ab2:p2skip`) | priced arm nets <= 0 on Goblins+Fungus and cuts CPU -> adopt per logs/sacfodder-fix/handoff4.md; else USER call |
+   | Rock CPU | rock-cpu, rock-cpu-dev / wip/rock-cpu | cut-menu measurement build/scratch/claude_rock_cpu/ab2 | report only |
+   | Maze Summit | maze-summit / wip/maze-summit | repros; handoff file in its logs/ | continue from handoff |
+   | Jumbo unlock price | jumbo-* | its jobs | continue from its handoff |
+   | Maze gate record | batch-1121 | self-yielding filler build/scratch/claude_batch1121/gate_filler.sh, DONE3 in status | commit the mana_clean record |
+6. **Standing USER bars:** every deck net <= 0 (searched AND d0; searched reported first and sized 1-2k games/shape --
+   USER: *"I'm more interested in the impact on searched than d0"*); every slower game recovers at `--depth 8
+   --budget-ms 0` (only CLEAR clairvoyance may stay); GT accepted with every default-ON play change; cut CPU, never
+   justify it by the 3x headroom; USER-owned decisions are surfaced, never settled.
+7. **Open USER decisions:** Bruna 7a/7b (after its A/B reports); sac-fodder CPU-vs-quality (only if no priced arm passes).
+
 ## Live status (Claude), updated 16:50 UTC
 
 **GT RECONCILIATION IN FLIGHT (02:10 UTC 11-18) -- TOP PRIORITY.** USER 11-18 ~02:00, verbatim: *"Can you double check
