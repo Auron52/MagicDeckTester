@@ -209,6 +209,10 @@ TEST_CASE("Blood Sun go-off front: Fastbond buys two drops only with held green 
         { "Time Warp", "Diabolic Revelation", "Fastbond", "Lotus Vale", "Lotus Field" });
     const std::vector<Action> cands = { CastPf("Diabolic Revelation", pkg, 5) };
     CHECK(BloodSunGoOffRank(s, cands, { 0 }) == 1);
+    const std::string larger_pkg = revpkg::EncodePackage(0,
+        { "Time Warp", "Diabolic Revelation", "Fastbond", "Lotus Vale", "Lotus Field", "Ulamog, the Infinite Gyre" });
+    const std::vector<Action> two_packages = { cands[0], CastPf("Diabolic Revelation", larger_pkg, 6) };
+    CHECK(BloodSunGoOffRank(s, two_packages, { 0, 1 }) == 1);
     s.players[0].life = 2;
     CHECK(BloodSunGoOffRank(s, cands, { 0 }) == 0);
     GameState no_green = BasePf(11, 20);

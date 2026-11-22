@@ -74090,6 +74090,7 @@ int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, cons
     }
     bool fetch_emrakul = false, bridge = false, fastbond_bridge = false;
     int bridge_revelation_cost = 1 << 20;
+    int fastbond_bridge_cost = 1 << 20;
     ManaCost fastbond_bridge_bill;
     for (int j : sel)
     {
@@ -74129,12 +74130,16 @@ int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, cons
                 if (fb != nullptr)
                 {
                     fastbond_bridge = true;
-                    fastbond_bridge_bill = a.cost;
-                    const ManaCost& fc = fb->card.m_mana_cost;
-                    fastbond_bridge_bill.generic += fc.generic;
-                    fastbond_bridge_bill.white += fc.white; fastbond_bridge_bill.blue += fc.blue;
-                    fastbond_bridge_bill.black += fc.black; fastbond_bridge_bill.red += fc.red;
-                    fastbond_bridge_bill.green += fc.green; fastbond_bridge_bill.colorless += fc.colorless;
+                    if (a.cost.ManaValue() < fastbond_bridge_cost)
+                    {
+                        fastbond_bridge_cost = a.cost.ManaValue();
+                        fastbond_bridge_bill = a.cost;
+                        const ManaCost& fc = fb->card.m_mana_cost;
+                        fastbond_bridge_bill.generic += fc.generic;
+                        fastbond_bridge_bill.white += fc.white; fastbond_bridge_bill.blue += fc.blue;
+                        fastbond_bridge_bill.black += fc.black; fastbond_bridge_bill.red += fc.red;
+                        fastbond_bridge_bill.green += fc.green; fastbond_bridge_bill.colorless += fc.colorless;
+                    }
                 }
             }
         }
