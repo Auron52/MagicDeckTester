@@ -18,12 +18,14 @@ The push queue was NOT joined (no stale lease).
 | LTB triggers for Worldfire's mass exile | wip/wfltb, .claude/worktrees/wfltb, 0848f329e | DONE: units, scenarios, smoke 243/243 + regression 389/389 byte-identical, 940 refs 0 drift | (report in the section "LTB: DONE" below) |
 | Cantrip keep order (bucket discard + Brainstorm/Ponder/Preordain rules + deadline order) + box_lane fix 6c5ae8c8d + Worldfire docs | wip/worldfire, this worktree | DONE, BAR MET: defaults ON (2f5957f0b), smoke+reg GT accepted for worldfire keys only (27648ff25); 7 A/B + 18 tier slower games all recover (b200 or d8 b0) except s3003 gi54, shown clairvoyant (T2 Ponder shuffle; blind ensemble 5.5 vs 5.5). Creature_Burn/claude_s9_gi8 strict-ref fail is pre-existing, fixed on shared by d0d5f8463 (clears on rebase) | logs/worldfire/adopt-handoff.md |
 | TutorSearchWidth deleted (+ Hinata Gamble merit rule v2, Melira prune, cards.json notes) | wip/tutorwidth, .claude/worktrees/tutorwidth | pass 2: held-out A/B + d8 b0 of its slower games in progress | logs/tutorwidth/handoff2.md (pass 1: handoff.md) |
-| Free turns default ON (+ bounceland opening default ON with stamp/legacy flag, spawn requirement free-turn-SCOPED, MTG_FREE_TURN_REACH stand-down optimization, MTG_OPP_SPAWN_DRAW_T1 default OFF) | wip/freeturn, .claude/worktrees/freeturn | pass 6: validation chain8 (units, reach2 batch, audit must be 0), turn-0 opponent land-drop-on-the-draw investigation | logs/freeturn/handoff7.md (earlier: handoff6.md) |
+| Free turns default ON (+ bounceland opening default ON with stamp/legacy flag, spawn requirement free-turn-SCOPED, MTG_FREE_TURN_REACH stand-down optimization, MTG_OPP_SPAWN_DRAW_T1 default OFF) | wip/freeturn, .claude/worktrees/freeturn, b1b19c0d4 | pass 6 PARKED: reach audit UNSOUND=0, budget-0 pairs identical, 940 refs 0 drift, every trait-0 mover explained by the bounceland opening; turn-0 land drop is NOT a bug (MTG_OPP_SPAWN_DRAW_T1 deleted); chain8 (PID 205142) running its final --both tier -> build/scratch/freeturn/chain8.DONE, log logs/freeturn/both8.log. Remaining: check chain8 move table, write "Fourth pass" doc section, then BUILD the USER fairness ruling below | logs/freeturn/handoff7.md |
 
 Each set's bar: LTB byte-identical (met). Cantrip: USER 1a (improvement + no unrecoverable slower game that cannot be
 shown to be clairvoyance). Tutor width: the no-greedy bar (every deck net <= 0 on held-out, every slower game recovers
 at d8 b0; blind arms are never d8-gated). Free turns: USER design, "adoption is not a question" once trait-0 decks are
 byte-identical (bounceland opening excepted, which moves Karoo/Lake-opponent games), refs 0 drift, reach audit == 0.
+
+Known tooling defect for Codex: scripts/unit_par.sh runs ALL cases in every shard (pass 6: "491652 / 3902"); use the serial unit run until fixed.
 
 ### Landing procedure (after every set has met its bar)
 1. Integration branch off origin/phase-1-2-deck-analyzer; rebase/cherry-pick in order wfltb -> worldfire -> tutorwidth ->
@@ -48,8 +50,8 @@ multiple attacks it should always be possible to get a lock on turns when they d
 So: Sire-fair (MTG_FREE_TURN_SIRE_FAIR or its actual name) and annihilator-fair (MTG_FREE_TURN_ANNIHILATOR_FAIR) go
 DEFAULT ON, with an amendment to annihilator-fair: the virtual "could have cast it" sacrifice targets count only on a
 turn where the opponent plays a land (its mana to cast comes from lands); on a turn it plays NO land, the virtual
-targets are zero, so repeated annihilator attacks can complete the lock on those turns. (Parent's reading, told to the
-USER; correct it if the USER says otherwise.) Re-measure Cyclone (+2HG), Shadowborn (+2HG), Extra Turns in one pooled
+targets are zero, so repeated annihilator attacks can complete the lock on those turns. (Parent's reading, CONFIRMED by the
+USER: *"Yes, that's the ruling."*) Re-measure Cyclone (+2HG), Shadowborn (+2HG), Extra Turns in one pooled
 batch vs the flip without fairness; ride along in the free-turn set of the landing batch (its GT moves are the trait
 decks' anyway).
 Do NOT surface anything else as a question unless it is genuinely blocked on a USER decision (USER 2026-11-22).
