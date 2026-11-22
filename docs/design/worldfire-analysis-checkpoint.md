@@ -110,7 +110,9 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   before an annihilator sacrifice that would leave the opponent locked, add the nonland permanent cards it could
   have cast from hand (MV <= its lands, colours available) as extra sacrifice targets; if real + virtual permanents
   exceed the annihilator count, it keeps a permanent and the lock does NOT hold. Check only, no state change; default
-  OFF; measure on Extra Turns (Emrakul / Ulamog) with the Sire arm in the same pooled batch.
+  OFF; measure on CYCLONE (USER: "Probably Cyclone is the more relevant deck for that test, since Extra Turns tends
+  to get its own turns. It doesn't need the free ones normally."; Cyclone has 161 free-turn games), Extra Turns as a
+  secondary check, with the Sire arm in the same pooled batch.
 - USER 2026-11-22: *"What might be nice is to include the average of the extra turns as a separate number, even if
   we don't optimize for it. This is just informative for agents and users."* -- report the average free turns
   (and extra turns) taken per game as a separate, informational number beside the credited avg (batch per-job
