@@ -153,4 +153,7 @@ does not stage; every variant (all cuts, wave without latents, wave off) misses 
 **Quality (held-out, one pooled batch, gi 640000+/650000+ x5000):** the lever (onP) is ALREADY net negative -- Goblins
 4 faster / 1 slower (**-3**), Fungus 1 / 0 (**-1**); dev seeds +1 / 0. The held-out slower game 640933 recovers at d8 b0
 (3 = 3). d0 is unchanged (the lever is off in the d0 runner). Cost: units x1.107 / x1.041, CPU x1.17 / x1.07. Wave off:
-units x1.076 / x1.025 but Fungus +3 dev and +3 held-out. Pass-2 pricing arms (x2, x4, skip) were queued as ab2.
+units x1.076 / x1.025 but Fungus +3 dev and +3 held-out. Pass-2 pricing arms (x2, x4, skip; ab2): all identical to on -- the
+arm never fires, because every second pass also has a non-fodder (hard) latent: the lever does not OPEN second passes, it
+ENLARGES them (dirty nodes 548 -> 1,880). Line parked for the USER; the CPU decision (held-out bar met at CPU x1.17 /
+x1.07) is theirs.
