@@ -63,6 +63,13 @@ instructions below are retained for context.
    `decks/Beasts/` copy -- diff it against the branch's version, move it aside (never delete), then
    `git -C /workspaces/MagicDeckTester pull --rebase`. It also has a modified `test/ref_bench.json` and
    stray `o1.txt`/`r*.txt` -- leave them alone. Then tell the USER.
+   **Current checkpoint (2026-11-22):** H+I passed the full pre-push regression. Their first
+   queue-head rebase over Worldfire built successfully and passed reference safety, but full units
+   found one combined-counter duplicate (`hone_counters` counted twice). Fixed in `16aa5b628`
+   after the 336-byte combined `Permanent` assertion fix (`98d931190`); Beasts was requeued behind
+   Creature Burn and Blood Sun. Repeat the queue-head build, full units, smoke and GT log check,
+   land, update and rebuild the primary viewer, verify Beasts via its API, then tell the USER
+   immediately. The primary untracked Beasts copy was byte-identical on the last read-only check.
 4. **Batch J, BeastsProvider** (owed list in the ledger Checkpoint, every "Gaps for batch J" bullet):
    route above `boars` + re-pin the routing test; Certificate (must decline when opponent poison or a
    poison source exists); per-turn `ProviderSecondMainLive` gate (combat-time draw/dig/proliferate);
