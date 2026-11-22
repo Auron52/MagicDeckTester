@@ -344,3 +344,106 @@ TEST_CASE("Blood Sun lazy cast-trigger fan: another deck's provider keeps the ea
     CHECK(lazy_n == 0);
     CheckSameListPf(eager, lazy);
 }
+
+// ---- Blood Sun perf part 6: the Grim prune's three AMENDMENT ARMS (DEFAULT OFF; the USER's call). Fixtures are the
+// boards of the four d8 b0 games the prune lost (gi 7 / 277 DROP, gi 141 BOARD, gi 431 TWNEXT).
+namespace
+{
+struct GrimAmend
+{
+    GrimAmend(int drop, int board, int tw)
+    {
+        heurarm::t_arm[heurarm::BLOODSUN_USER_PRUNE]      = 1;
+        heurarm::t_arm[heurarm::BLOODSUN_GRIM_PRUNE]      = 1;
+        heurarm::t_arm[heurarm::BLOODSUN_GRIM_REV_GATE]   = 0;
+        heurarm::t_arm[heurarm::BLOODSUN_GRIM_LAND_DROP]  = static_cast<std::int8_t>(drop);
+        heurarm::t_arm[heurarm::BLOODSUN_GRIM_LAND_BOARD] = static_cast<std::int8_t>(board);
+        heurarm::t_arm[heurarm::BLOODSUN_GRIM_TW_ANY]     = static_cast<std::int8_t>(tw);
+    }
+    ~GrimAmend()
+    {
+        for (int k : { heurarm::BLOODSUN_USER_PRUNE, heurarm::BLOODSUN_GRIM_PRUNE, heurarm::BLOODSUN_GRIM_REV_GATE,
+                       heurarm::BLOODSUN_GRIM_LAND_DROP, heurarm::BLOODSUN_GRIM_LAND_BOARD, heurarm::BLOODSUN_GRIM_TW_ANY })
+        { heurarm::t_arm[k] = -1; }
+    }
+};
+// Blood Sun out, `swamps` untapped Swamps, Grim Tutor in hand, a library holding every B3 target Grim can name here.
+GameState GrimBoardPf(int swamps)
+{
+    GameState s = BasePf(swamps, 20);
+    s.players[0].hand.push_back(CardPf("Grim Tutor", 40));
+    for (const char* n : { "Diabolic Revelation", "Time Warp", "Scorched Ruins", "Lotus Vale" })
+    { s.players[0].library.push_back(CardPf(n, 500 + static_cast<int>(s.players[0].library.size()))); }
+    s.players[0].hand.push_back(CardPf("Diabolic Revelation", 41));   // Revelation not missing
+    return s;
+}
+std::vector<std::string> GrimTargetsPf(const GameState& s)
+{
+    return ProvPf().TutorCandidates(s, 0, DefPf("Grim Tutor").params);
+}
+}   // namespace
+
+TEST_CASE("Blood Sun Grim amendment DROP: a big land at 7+ mana only while a land play is open this turn")
+{
+    // gi 277 / gi 7: 7+ land mana, no land in hand, the drop (or Fastbond's) still open.
+    GameState s = GrimBoardPf(7);
+    {
+        GrimAmend a(0, 0, 0);   // the B12 list: 7 mana closes the big lands
+        CHECK_FALSE(HasPf(GrimTargetsPf(s), "Scorched Ruins"));
+    }
+    GrimAmend a(1, 0, 0);
+    CHECK(HasPf(GrimTargetsPf(s), "Scorched Ruins"));
+    CHECK(HasPf(GrimTargetsPf(s), "Lotus Vale"));
+    s.players[0].lands_played_this_turn = 1;   // the drop is used: closed again
+    CHECK_FALSE(HasPf(GrimTargetsPf(s), "Scorched Ruins"));
+    s.players[0].bonus_land_drops_this_turn = 1;   // Exploration's (or Fastbond's) extra drop: open
+    CHECK(HasPf(GrimTargetsPf(s), "Scorched Ruins"));
+    s.active_player_index = 1;   // not our turn: no land play of ours this turn
+    CHECK_FALSE(BloodSunGrimTargetAdmitted(s, 0, DefPf("Scorched Ruins")));
+}
+
+TEST_CASE("Blood Sun Grim amendment BOARD: the 7-mana test counts battlefield lands only")
+{
+    // gi 141: Blood Sun out, 6 mana of lands on the battlefield (3 Swamps + Lotus Vale), Golgari Rot Farm (2) in hand.
+    GameState s = GrimBoardPf(3);
+    PutPf(s, "Lotus Vale", 120);
+    s.players[0].hand.push_back(CardPf("Golgari Rot Farm", 42));
+    s.players[0].lands_played_this_turn = 2;
+    s.players[0].bonus_land_drops_this_turn = 1;   // both drops used
+    {
+        GrimAmend a(0, 0, 0);   // 6 + the Karoo's 2 = 8 >= 7: closed
+        CHECK_FALSE(HasPf(GrimTargetsPf(s), "Scorched Ruins"));
+    }
+    {
+        GrimAmend a(1, 0, 0);   // DROP alone: no drop is open, still closed
+        CHECK_FALSE(HasPf(GrimTargetsPf(s), "Scorched Ruins"));
+    }
+    GrimAmend a(0, 1, 0);
+    CHECK(HasPf(GrimTargetsPf(s), "Scorched Ruins"));
+    PutPf(s, "Swamp", 121);   // 7 on the battlefield: closed under BOARD too
+    CHECK_FALSE(HasPf(GrimTargetsPf(s), "Scorched Ruins"));
+}
+
+TEST_CASE("Blood Sun Grim amendment TWNEXT: Time Warp whenever none is in hand")
+{
+    // gi 431: 4 lands, no blue -- Grim + Time Warp is not castable this turn, so B12 drops Time Warp.
+    GameState s = GrimBoardPf(4);
+    {
+        GrimAmend a(0, 0, 0);
+        CHECK_FALSE(HasPf(GrimTargetsPf(s), "Time Warp"));
+    }
+    GrimAmend a(0, 0, 1);
+    CHECK(HasPf(GrimTargetsPf(s), "Time Warp"));
+    s.players[0].hand.push_back(CardPf("Time Warp", 43));   // one in hand already: not a target
+    CHECK_FALSE(HasPf(GrimTargetsPf(s), "Time Warp"));
+}
+
+TEST_CASE("Blood Sun Grim amendments are inert while MTG_BLOODSUN_GRIM_PRUNE is off")
+{
+    GameState s = GrimBoardPf(7);
+    GrimAmend a(1, 1, 1);
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_PRUNE] = 0;   // the B3 list: every big land and Time Warp, as before
+    const std::vector<std::string> t = GrimTargetsPf(s);
+    CHECK(HasPf(t, "Scorched Ruins"));
+    CHECK(HasPf(t, "Time Warp"));
+}
