@@ -86,10 +86,11 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
 - Found: scripts/unit_par.sh --first/--last does nothing (every shard runs all 3889 cases) -- deferred tooling fix.
 
 ## Running (2026-11-22 ~02:00 UTC)
-- Cantrip/discard BUCKET agent in THIS worktree (uncommitted src edits are ITS work -- never `commit -a`; commit
-  only named files). Design + all USER amendments: docs/design/worldfire-discard-buckets.md (latest 43b29cca3).
-  Flags default OFF; final arm folds in the USER answers Q1-Q9 + the Mystical Tutor correction. It was also asked
-  to add the gi4 d8 b0 RECOVERS line to the ledger.
+- BUCKET agent DONE (6976574c2; ledger "Consumers ..." section): ON vs OFF -5 / -11 net turns at 0.28x units;
+  ON + MTG_WORLDFIRE_ORDER_DEADLINE -6 / -12. Parent took ON + deadline under the USER's clean-win approval
+  (surfaced to the USER 2026-11-22 ~02:30). ADOPTION agent (fresh) in THIS worktree: attribute ON+deadline's worse
+  games (b200, then d8 b0), flip defaults ON if none persists, units/scenarios/smoke/regression, accept worldfire
+  GT keys, ledger. Handoff: logs/worldfire/adopt-handoff.md. Never `commit -a` here while it runs.
 - FREE-TURN pass 3 agent (fresh) in .claude/worktrees/freeturn from logs/freeturn/handoff3.md (on disk only) +
   the "Pending" section below: build 94b9d46ca (UNCOMPILED), trait-gate verify (trait=0 decks byte-identical),
   MDFC tie -> NONLAND (my change, surfaced), Sire + annihilator fairness arms (Shadowborn; Cyclone then Extra
