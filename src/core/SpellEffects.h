@@ -37816,7 +37816,8 @@ inline void CounterPingKillAt(GameState& state, std::size_t i, const char* why)
 // (toughness <= 0 kills through indestructible, lethal damage does not -- CR 704.5f / 704.5g), every
 // creature dead in one pass erased first (simultaneous deaths), the card into its owner's graveyard
 // (as CounterPingKillAt), Equipment detached (CR 301.5c), then OnCreatureDies per death in battlefield
-// order, repeated until nothing dies (a death trigger can kill). Returns the number that died.
+// order, repeated until nothing dies (a death trigger can kill). Returns the number that LEFT (died, or --
+// unearthed -- exiled instead: CR 702.84a; callers read it as "the board changed").
 inline int SbaKillDeadCreatures(GameState& state, const char* why)
 {
     struct Dead { Card card; int controller; bool was_token; int minus_counters; int total_counters; int owner; };
