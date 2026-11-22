@@ -32,7 +32,10 @@ done
 max=4        # lane size (slot files)
 job_max=2    # per-job limit (see --slots above)
 if [ "$slots" -lt 1 ] || [ "$slots" -gt "$job_max" ]; then echo "box_lane: --slots must be 1..$job_max" >&2; exit 2; fi
-dir=/workspaces/MagicDeckTester/build/scratch/lane
+# All worktrees must contend for the same small-job lane. Resolve it from the
+# shared Git directory instead of a checkout path that differs across machines.
+common_git_dir=$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir) || exit 2
+dir="$(dirname "$common_git_dir")/build/scratch/lane"
 mkdir -p "$dir"
 need_gb=$(( slots * cap + 2 ))
 # A request the box can never satisfy would hold queue.lock forever and block every other lane job (2026-11-22:
