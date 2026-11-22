@@ -2740,11 +2740,6 @@ void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<
     }
     if (equip_nums.empty()) { return; }
 
-    // The searched dig pin belongs to the plan being applied in a MAIN PHASE. This fires in combat,
-    // outside any plan apply, so an inherited pin must not be consumed here -- it would both steal
-    // the pin from the dig it was sized for and desync the memo key from the play. -1 = no pin.
-    ScriptedEtbDig no_inherited_pin(-1);
-
     for (int en : equip_nums)
     {
         const CardDefinition* ed = nullptr;
@@ -2755,6 +2750,12 @@ void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<
             { ed = CardDatabase::Instance().LookupCached(e.card); src_name = e.card.m_name.str(); break; }
         }
         if (ed == nullptr) { continue; }   // the equipment left the battlefield mid-resolution
+        // Attack-step Equipment digs consume the first combat-dig ordinals;
+        // Harbinger's damage-step digs consume the remaining ones. Both use
+        // the same rank pin chosen in main 1, so a shifted library remains legal.
+        const int rank = CombatDigRankAt(state.scripted_combat_dig, 0);
+        state.scripted_combat_dig = CombatDigPinShift(state.scripted_combat_dig);
+        ScriptedEtbDig this_trigger_pin(rank);
         int took = -1;
         PerformLookTakeDig(state, controller, ed->params.attack_dig_hand_count,
                            ed->params.attack_dig_hand_types, /*max_mv=*/-1,

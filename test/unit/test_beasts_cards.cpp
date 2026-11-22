@@ -165,6 +165,59 @@ TEST_CASE("Beasts provider folds same-name dig picks and values poison progress"
     CHECK(provider.NoWinLeafProgress(s) > 0);
 }
 
+TEST_CASE("Beasts winless certificate declines on poison or any reachable action")
+{
+    BeastsProvider provider;
+    GameState s = BeState();
+    s.deck_poison_hit_bound = 0;
+    CHECK(provider.ProvenWinlessThisTurn(s, 0));
+    s.Opponent().poison_counters = 1;
+    CHECK_FALSE(provider.ProvenWinlessThisTurn(s, 0));
+    s.Opponent().poison_counters = 0;
+    s.deck_poison_hit_bound = 2;
+    CHECK_FALSE(provider.ProvenWinlessThisTurn(s, 0));
+    s.deck_poison_hit_bound = 0;
+    s.players[0].hand.push_back(BeZone("Cragplate Baloth", 99));
+    CHECK_FALSE(provider.ProvenWinlessThisTurn(s, 0));
+}
+
+TEST_CASE("Adaptive Omnitool consumes the shared combat dig rank before damage-step Harbinger")
+{
+    BeastsProvider provider;
+    GameState s = BeState();
+    s.m_provider = &provider;
+    s.players[0].library.clear();
+    s.players[0].library.push_back(BeZone("Urza's Incubator", 101));
+    s.players[0].library.push_back(BeZone("Adaptive Omnitool", 102));
+    s.players[0].library.push_back(BeZone("Questing Beast", 103));
+    const int attacker = BeAdd(s, "Questing Beast", 60);
+    const int equip = BeAdd(s, "Adaptive Omnitool", 61);
+    s.battlefield[static_cast<std::size_t>(equip)].equipped_to = 60;
+    const int rank = 1;
+    s.scripted_combat_dig = CombatDigPackRanks(&rank, 1);
+    FireAttackEquipDigHand(s, 0, {attacker}, 1);
+    REQUIRE(s.players[0].hand.size() == 1);
+    CHECK(s.players[0].hand.front().m_number == 102);
+    CHECK(s.scripted_combat_dig == -1);
+
+    GameState head = BeState();
+    head.m_provider = &provider;
+    head.deck_has_attack_dig_hand = true;
+    head.players[0].lands_played_this_turn = 1;
+    head.players[0].library.clear();
+    head.players[0].library.push_back(BeZone("Urza's Incubator", 101));
+    head.players[0].library.push_back(BeZone("Adaptive Omnitool", 102));
+    const int h = BeAdd(head, "Questing Beast", 60);
+    const int e = BeAdd(head, "Adaptive Omnitool", 61);
+    head.battlefield[static_cast<std::size_t>(e)].equipped_to = head.battlefield[static_cast<std::size_t>(h)].card.m_number;
+    BeSearchedScope searched(true);
+    const auto plans = TurnSolver::EnumerateMainPlans(head, true);
+    bool saw_second_rank = false;
+    for (const auto& p : plans)
+    { if (CombatDigRankAt(p.combat_dig_choice, 0) == 1) { saw_second_rank = true; break; } }
+    CHECK(saw_second_rank);
+}
+
 // ---- Garruk's Packleader ------------------------------------------------------------------------
 
 TEST_CASE("Garruk's Packleader: draws for another power-3+ creature of ours, not for a 2/2 Warchief")
@@ -2516,6 +2569,37 @@ TEST_CASE("Woodland Bellower: Packleader draws for Bellower BEFORE the search, a
     REQUIRE(hand.size() == 2);
     CHECK(hand[0].m_number == 200);        // Bellower's own entry: the ordering collapse (draw first)
     CHECK(hand[1].m_number == post_top);   // Harbinger's entry: drawn off the SHUFFLED library
+}
+
+TEST_CASE("Woodland Bellower: human re-chooses when Packleader draws the named target first")
+{
+    BeastsProvider provider;
+    GameState s = BeState();
+    s.m_provider = &provider;
+    BeAdd(s, "Garruk's Packleader", 40);
+    auto& lib = s.players[0].library;
+    lib.insert(lib.begin(), BeZone("Bloated Contaminator", 301));
+    lib.insert(lib.begin(), BeZone("Krosan Warchief", 300));
+    const int idx = BeAdd(s, kBell, 60, 0, true);
+    FireEtbWatchers(s, 0, idx);             // Packleader draws Warchief
+    REQUIRE(s.players[0].hand.front().m_number == 300);
+    int calls = 0;
+    TutorChooser ask = [&](const GameState&, int, const std::string&,
+                           const std::vector<std::string>& choices, int heuristic,
+                           const std::vector<int>&) -> int
+    {
+        ++calls;
+        CHECK(heuristic == -1);
+        CHECK(choices == std::vector<std::string>{"Bloated Contaminator"});
+        return 0;
+    };
+    TutorChooser* saved = g_play_tutor_chooser;
+    g_play_tutor_chooser = &ask;
+    FireOwnEtbTriggers(s, 0, idx, "Krosan Warchief", -1);
+    g_play_tutor_chooser = saved;
+    CHECK(calls == 1);
+    CHECK(BeOnBf(s, "Bloated Contaminator"));
+    CHECK_FALSE(BeOnBf(s, "Krosan Warchief"));
 }
 
 TEST_CASE("Woodland Bellower: every put target is SEARCHED -- one plan per legal name + the decline, no greedy pick")

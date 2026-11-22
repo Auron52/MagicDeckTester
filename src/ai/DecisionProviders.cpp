@@ -9519,6 +9519,18 @@ std::vector<int> BeastsProvider::CounterDestroyArtEnchTargets(const GameState& s
 long long BeastsProvider::NoWinLeafProgress(const GameState& s) const
 { return 2000000LL * std::min(9, s.Opponent().poison_counters); }
 
+bool BeastsProvider::ProvenWinlessThisTurn(const GameState& s, int controller) const
+{
+    // Deliberately narrow: this deck has haste bodies, a tutor-to-battlefield,
+    // creature pumps and toxic/proliferate. Only an empty action state proves
+    // that none can win now. In particular, a life-only bound must never certify
+    // a line with poison already on the opponent or a poison source in the pool.
+    if (controller != s.active_player_index || s.Opponent().poison_counters > 0
+        || s.deck_poison_hit_bound != 0 || !s.battlefield.empty()) { return false; }
+    const Player& ap = s.players[static_cast<std::size_t>(controller)];
+    return ap.hand.empty() && ap.exile.empty() && ap.graveyard.empty() && ap.sideboard.empty();
+}
+
 // Bloated Contaminator's proliferate (see the declaration). The sound one-option collapse: every candidate holds only
 // kinds ProliferateKindsAllBeneficial proves weakly beneficial to add, so the set of ALL candidates dominates every
 // other subset. Anything else (or MTG_UNPRUNE=proliferate) keeps the engine's full searched menu.

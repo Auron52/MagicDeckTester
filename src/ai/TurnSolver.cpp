@@ -8697,7 +8697,18 @@ static void ComputeAvailableColors(const GameState& state, bool have[5], bool pe
                 for (const Card& hc : state.players[p.controller_index].hand)
                 {
                     const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
-                    if (hd != nullptr && CastGrowsDevotion(*hd)) { AddCostDevotion(hd->card.m_mana_cost, dev); }
+                    if (hd == nullptr) { continue; }
+                    if (CastGrowsDevotion(*hd)) { AddCostDevotion(hd->card.m_mana_cost, dev); }
+                    // A cast Bellower can put a coloured creature directly from
+                    // the library before this tap. This is a presence gate, so
+                    // union every legal target's pips and let the payer decide.
+                    if (CastHasEtbLibraryPut(*hd))
+                    {
+                        std::vector<const CardDefinition*> targets;
+                        EtbPutTargetDefs(state, *hd, targets);
+                        for (const CardDefinition* target : targets)
+                        { if (CastGrowsDevotion(*target)) { AddCostDevotion(target->card.m_mana_cost, dev); } }
+                    }
                 }
                 for (int ci = 0; ci < 5; ++ci) { if (dev[ci] >= 1) { have[ci] = true; } }
             }
@@ -100762,7 +100773,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     //     branched. Product over ordinals capped at kCombatDigProductCap (latest ordinals take the front past it).
     // A POST-COMBAT LIST is dead (the pin is read in THIS turn's combat damage) unless an extra combat follows.
     const bool dig_list_dead = !is_pre_combat && CombatPinPrecombatOn() && !state.deck_has_extra_combat;
-    if (!cont_axes_only && !HumanPlayActive() && state.deck_has_combat_damage_dig && !dig_list_dead)
+    if (!cont_axes_only && !HumanPlayActive()
+        && (state.deck_has_combat_damage_dig || state.deck_has_attack_dig_hand) && !dig_list_dead)
     {
         constexpr int kCombatDigPumpSlack  = 2;
         constexpr int kCombatDigProductCap = 27;
@@ -100771,22 +100783,34 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         int n_bf = 0, depth_bf = 0;
         bool haste_bf = state.floating_haste_c > 0;
         std::vector<const std::vector<std::string>*> type_sets;
-        auto note_types = [&](const CardDefinition* d)
+        auto note_types = [&](const CardDefinition* d, bool equipment)
         {
-            const std::vector<std::string>* t = &d->params.combat_damage_dig_types;
+            const std::vector<std::string>* t = equipment ? &d->params.attack_dig_hand_types
+                                                          : &d->params.combat_damage_dig_types;
             if (std::find(type_sets.begin(), type_sets.end(), t) == type_sets.end()) { type_sets.push_back(t); }
         };
         auto is_src = [](const CardDefinition* d)
         { return d != nullptr && d->params.combat_damage_dig_per_damage > 0 && d->card.IsCreature(); };
+        auto is_equip = [](const CardDefinition* d)
+        { return d != nullptr && d->params.attack_dig_hand_count > 0; };
         for (const Permanent& q : state.battlefield)
         {
             if (q.controller_index != me || q.def_absent) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
             if (GrantsHasteToOther(d)) { haste_bf = true; }
+            if (is_equip(d))
+            {
+                // An unattached piece can be equipped by this plan. Counting it
+                // optimistically only creates pins that fold if no host attacks.
+                ++n_bf;
+                note_types(d, true);
+                depth_bf = std::max(depth_bf, d->params.attack_dig_hand_count);
+                continue;
+            }
             if (!is_src(d) || !q.card.IsCreature()) { continue; }
             if (!CanAttackFull(q, state.battlefield, me)) { continue; }
             ++n_bf;
-            note_types(d);
+            note_types(d, false);
             const int pw = q.EffectivePower() + ComputeLordBonus(q.card, state, me, q.AnimatedAllTypes(), &q).first;
             depth_bf = std::max(depth_bf, std::max(0, pw + kCombatDigPumpSlack) * d->params.combat_damage_dig_per_damage);
         }
@@ -100794,6 +100818,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         auto plan_brings = [&](const TurnSolver::Plan& p, int& depth) -> int
         {
             int c = 0;
+            int equip_c = 0;
             bool c_haste = false;
             depth = 0;
             for (const Action& a : p.actions)
@@ -100802,14 +100827,18 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (d == nullptr) { continue; }
                 if (GrantsHasteToOther(d)) { c_haste = true; }
                 if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::PutFromHandAbility) { continue; }
+                if (is_equip(d))
+                { ++equip_c; note_types(d, true); depth = std::max(depth, d->params.attack_dig_hand_count); continue; }
                 if (!is_src(d)) { continue; }
                 ++c;
-                note_types(d);
+                note_types(d, false);
                 if (d->card.HasKeyword(Keyword::Haste)) { c_haste = true; }
                 const int pw = d->card.m_power.value_or(0) + ComputeLordBonus(d->card, state, me).first;
                 depth = std::max(depth, std::max(0, pw + kCombatDigPumpSlack) * d->params.combat_damage_dig_per_damage);
             }
-            return (c > 0 && (haste_bf || c_haste)) ? c : 0;
+            // Equipment may fire from an already attackable host; creature
+            // dig sources still require haste when cast in this plan.
+            return equip_c + ((haste_bf || c_haste) ? c : 0);
         };
         std::vector<int> brings(all.size(), 0), depth_of(all.size(), 0);
         bool any = n_bf > 0;

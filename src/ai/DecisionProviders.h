@@ -674,8 +674,9 @@ public:
     std::vector<int> CounterDestroyArtEnchTargets(const GameState& s, int controller,
         const Permanent& src, const std::vector<int>& legal) const override;
     long long NoWinLeafProgress(const GameState& s) const override;
+    bool ProvenWinlessThisTurn(const GameState& s, int controller) const override;
     CertStance Certificate() const override
-    { return { CertState::NotAssessed, "Beasts' haste, pumps, and toxic/proliferate require a proven turn-win bound." }; }
+    { return { CertState::Implemented, "Only an empty action state without poison reach proves this turn winless." }; }
 };
 
 // =============================================================================================

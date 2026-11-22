@@ -5841,6 +5841,26 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     std::unordered_map<std::string, int> remaining;
     for (const Card& c : ap.library) { if (matches_types(c)) { ++remaining[c.m_name]; } }
 
+    // Bellower's own entry can draw through Packleader BEFORE this tutor resolves.
+    // If that draw took the target named in the human's main-phase plan, the
+    // original choice is no longer legal. Re-ask from the live library here;
+    // silently filling from the provider would play a card the human never chose.
+    if (g_play_tutor_chooser && pp.tutor_optional && pp.tutor_to_battlefield_single
+        && max_puts == 1 && pinned_by_plan && put_pref.size() == 1
+        && remaining.find(put_pref.front()) == remaining.end())
+    {
+        std::vector<std::string> choices;
+        for (const auto& [name, count] : remaining)
+        { if (count > 0) { choices.push_back(name); } }
+        std::sort(choices.begin(), choices.end());
+        const int answer = (*g_play_tutor_chooser)(state, controller,
+            source_name.empty() ? std::string("Woodland Bellower") : source_name,
+            choices, -1, {});
+        if (answer < 0 || answer >= static_cast<int>(choices.size())) { return; } // optional decline: no shuffle
+        put_pref = { choices[static_cast<std::size_t>(answer)] };
+        human_override = true;
+    }
+
     std::vector<std::string> put_names;
     // 1) Honour the provider's EXACT ordered put-list: each entry is one put (multiplicity honoured),
     //    capped by library availability + max_puts. Empty put_pref -> this pass is a no-op.
