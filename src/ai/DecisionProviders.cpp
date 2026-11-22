@@ -63247,16 +63247,43 @@ MeliraPodProvider::TutorCandidates(const GameState& s, int controller, const Car
     // more rarely something that can be podded for more combo pieces ... Recruiter should get a combo
     // piece that you are missing") and the same "narrow them down to just the useful options" line the
     // Pod/Chord fan already draws: the goldfish-dead toolbox bodies (Chupacabra, Rec Sage, Severance
-    // Priest, Scooze), the dorks, Reveillark, a second enabler and a tutor with nothing left to find
-    // are not fetched. Nothing qualifies -> the full ranked list (the tutor keeps its axis).
+    // Priest, Scooze), Reveillark, a second enabler and a tutor with nothing left to find
+    // are not fetched. Dorks join only when a held persist payoff needs more mana.
+    // Nothing qualifies -> the full ranked list (the tutor keeps its axis).
     // MTG_POD_PUT_NARROW=0 (the whitelist's A/B arm) also leaves this list whole.
     const PutPolicy pol = PutTargetPolicy(s, controller);
+    // Recruiter may need to find a dork to cast a persist payoff already in hand. With only
+    // three available sources, fetching Birds is the T5 Redcap line (regression s2002 gi78).
+    // Count the next known land drop once; a source already on the board counts even if tapped
+    // now, because Recruiter puts the dork in hand for a later turn.
+    int next_sources = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && (p.card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock))
+        { ++next_sources; }
+    }
+    for (const Card& c : s.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->card.IsLand()) { ++next_sources; break; }
+    }
+    bool payoff_needs_mana = false;
+    for (const Card& c : s.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.persist && d->card.m_mana_cost.ManaValue() > next_sources)
+        { payoff_needs_mana = true; break; }
+    }
     std::vector<std::string> out;
     out.reserve(ranked.size());
     for (const Ranked& rk : ranked)
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(rk.name);
-        if (!pol.narrow || rk.score > 0 || (d != nullptr && PutTargetOk(pol, *d))) { out.push_back(rk.name); }
+        if (!pol.narrow || rk.score > 0 || (d != nullptr && (PutTargetOk(pol, *d)
+            || (payoff_needs_mana && d->tmpl == CardTemplate::ManaDork))))
+        { out.push_back(rk.name); }
     }
     if (out.empty()) { for (const Ranked& rk : ranked) { out.push_back(rk.name); } }
     return out;
