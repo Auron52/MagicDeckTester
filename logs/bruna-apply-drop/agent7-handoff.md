@@ -113,6 +113,12 @@ Compare arms: `python3 $B/cmp_arms.py <wins_dir> <batch.out> <armA> <armB>` (net
   4. `python3 test/check_gt_logs.py` and `python3 scripts/check_references_safe.py`.
   5. Push wip/bruna-apply-drop only.
 
+## Milestone 23:15 UTC
+- gt.sh: build of 8bd187a38 rc=0, full units rc=0 (Pirates routing passes). The regression stage FAILED to
+  start: `test/regression.sh` is not executable in this worktree (rc=126). Relaunched as `$B/a7/gt2.sh`
+  (PID 1175193), which runs `bash test/regression.sh --both` under the box lock. Status: `$B/a7/gt.status`,
+  log `$B/a7/gt_regr.log`, DONE = `$B/a7/gt2.DONE`. The lock is heavily contended: gt.sh waited 17:13 -> 23:02.
+
 ## Running jobs (all agent-owned, none USER-requested; waiters use DONE files / kill -0, never pgrep -f)
 | job | PID | what | marker / output |
 |---|---|---|---|
