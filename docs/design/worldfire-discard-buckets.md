@@ -51,10 +51,13 @@ Mana detail:
   (no Rift Bolt and no Halberdier pending). **Never more than 10** (USER 2026-11-21: *"In this situation we never
   need more than 10 mana to go off. We don't need extras except perhaps to play a cantrip or Mystical Tutor prior
   to comboing off that turn."*): the only addition is {U} for a cantrip / Personal Tutor we must cast THAT turn to
-  find a piece. **Mystical Tutor usually adds nothing:** it can be cast in the opponent's end step or our upkeep
-  with the blue mana left over from the previous turn (USER: *"Mystical tutor can be cast in the upkeep in
-  situations where we need to use our blue mana from the previous turn."*), so it is charged to the previous
-  turn's spare blue whenever a blue source was left untapped.
+  find a piece. **Mystical Tutor** (USER 2026-11-22, correcting the earlier wording: *"casting it in the upkeep in order to go off
+  on the current turn is a reasonable play, though it has no upside to spending spare blue (not from a depletion
+  land) from the last turn so we have more mana available to go off."*): the best timing is the PREVIOUS turn,
+  paid with spare blue from a non-depletion source (a depletion counter spent then is mana lost from a later turn),
+  which leaves the whole go-off turn's mana for the combo -- the projection charges it nothing on T\* in that case.
+  With no such spare blue, casting it in our upkeep of T\* (the tutored card is drawn that draw step) is still
+  reasonable, and costs {U} of T\*'s mana: the need on T\* rises by 1.
 - **Supply on turn t:**
   - lands on the battlefield (1 each; Sandstone Needle / Saprazzan Skerry 2 while counters remain; Mercadian
     Bazaar = its storage counters plus the turns it can still charge before t);
@@ -140,8 +143,9 @@ FINISHER. **Nothing missing:** DIG first, then the last-needed land, then ritual
    advantage of keeping draw is that it can help get the tutored cards."*). So a tutor-filled piece still counts as
    SHORT for the DIG quota until the piece is in hand: the cantrip that draws the tutored card this turn is what
    removes the tutor's wait.
-4. **Extra mana:** ANSWERED -- none; never more than 10 (plus a same-turn cantrip / Personal Tutor's {U}; Mystical
-   Tutor from the previous turn's spare blue).
+4. **Extra mana:** ANSWERED -- none; never more than 10, plus {U} for a same-turn cantrip / Personal Tutor, and
+   {U} for a Mystical Tutor cast in T\*'s upkeep (nothing when it was cast the turn before with spare
+   non-depletion blue).
 5. **Tapped lands late:** ANSWERED -- judged by when they can be played (above).
 6. **Projection horizon now+4:** ANSWERED -- *"I suppose that makes sense."*
 7. **Ponder shuffle:** ANSWERED -- keep-vs-shuffle stays searched; only the order is fixed by the ranking.
