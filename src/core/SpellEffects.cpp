@@ -1800,7 +1800,8 @@ void ApplyJitteMode(GameState& state, int controller, int jitte_id, int mode, in
                                      t.AnimatedAllTypes(), &t).second
                   + AuraBonusFor(t, state).second
                   + EquipBonusFor(t, state).second;
-        if (tough <= 0)
+        // Unearth's replacement (CR 702.84a): an unearthed creature shrunk to 0 is exiled instead.
+        if (tough <= 0 && !UnearthExileInstead(state, static_cast<std::size_t>(ti), "would die (0 toughness)"))
         {
             const int dead_num = t.card.m_number;
             const bool is_token = t.is_token;

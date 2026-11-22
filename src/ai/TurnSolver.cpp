@@ -79229,7 +79229,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         || !CreatureHasShroud(state.battlefield[picked[0].index], state)))
                 { ci = picked[0].index; }
             }
-            if (ci >= 0)
+            // Unearth's replacement (CR 702.84a): exiled instead -- lockstep with EffectHandler's tuck branch.
+            if (ci >= 0 && !UnearthExileInstead(state, static_cast<std::size_t>(ci), "put into its owner's library"))
             {
                 const Permanent& tgt = state.battlefield[ci];
                 const int  dead_num  = tgt.card.m_number;

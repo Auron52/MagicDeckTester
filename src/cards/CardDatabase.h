@@ -2854,8 +2854,10 @@ struct CardParams
     // cast): Action::Kind::Unearth, one action per graveyard copy (interchangeable copies folded to a
     // canonical prefix), applied by the shared ApplyUnearth (SpellEffects.h) in both worlds. The returned
     // permanent carries Permanent::unearthed: swept to exile at the beginning of the end step
-    // (PerformEndStepUnearthExiles) and exiled INSTEAD at the shared sacrifice chokepoint
-    // (SacrificePermanentAt -- a CR 614 replacement). Unset (nullopt) for every other card.
+    // (PerformEndStepUnearthExiles) and exiled INSTEAD on every other departure -- a CR 614 replacement
+    // routed through every leave site (UnearthExileInstead / UnearthExileDeferred, SpellEffects.h:
+    // sacrifice, destroy, the lethal-damage / toughness-0 SBAs, the legend rule, sweeps, bounce).
+    // Unset (nullopt) for every other card.
     std::optional<ManaCost> unearth_cost;
     // CHAMPION (CR 702.72; Nova Chaser "Champion an Elemental"): "When this enters, sacrifice it unless you
     // exile another <subtype> you control. When this leaves the battlefield, that card returns to the

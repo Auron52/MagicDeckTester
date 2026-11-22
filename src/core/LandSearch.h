@@ -1345,7 +1345,11 @@ inline void ApplyLandSearchActivationPinned(GameState& state, int controller, in
     {
         state.players[static_cast<std::size_t>(controller)].life -= p.land_search_activation_life_cost;
     }
-    if (p.land_search_activation_sacrifice_self)
+    // Unearth's replacement (CR 702.84a): an unearthed source is still sacrificed, but exiled.
+    if (p.land_search_activation_sacrifice_self
+        && UnearthExileInstead(state, static_cast<std::size_t>(src_idx), "sacrificed"))
+    { FireSacrificeWatchers(state, controller); }
+    else if (p.land_search_activation_sacrifice_self)
     {
         const Permanent& sq  = state.battlefield[static_cast<std::size_t>(src_idx)];
         const int        num = sq.card.m_number;

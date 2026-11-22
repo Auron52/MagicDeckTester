@@ -1323,6 +1323,12 @@ inline void FireLeavesBattlefieldTriggers(GameState&, int controller, const Card
 // UnearthedLeftBattlefield. Saproling Burst's LTB body, defined beside the fading upkeep.
 inline void PermanentsLeftBattlefieldTogether(GameState& state, const std::vector<Permanent>& departed);
 inline void DestroyTokensCreatedBy(GameState& state, int source_number);
+// Unearth's leave-the-battlefield replacement (CR 702.84a), routed through every leave site; defined
+// beside SacrificePermanentAt.
+inline bool UnearthExileInstead(GameState& state, std::size_t idx, const char* event);
+inline bool UnearthExileDeferred(GameState& state, std::size_t idx, const char* event,
+                                 std::vector<Permanent>& left);
+inline void FireUnearthedLeaves(GameState& state, const std::vector<Permanent>& left);
 inline void ReturnOrphanedLinkedExiles(GameState& state);
 inline void NormalizeLeftDayboundFace(GameState& state, int controller, const Card& left, const CardDefinition& d);
 inline void DestroyLargestOppCreature(GameState&, int controller);
@@ -14363,6 +14369,7 @@ inline void DrainPendingSelfBounces(GameState& state)
                               "\xF0\x9F\x94\x99 " + q.card.m_name.str()
                               + ": returned to hand (a Dragon entered)");
             }
+            if (UnearthExileInstead(state, i, "returned to hand")) { break; }   // CR 702.84a
             EnterHand(state, q.owner_index, RevealedCard(q.card), HandEntryReason::Bounce);
             if (q.controller_index == state.active_player_index)
             { state.permanent_left_under_control_this_turn = true; }
@@ -20744,10 +20751,12 @@ inline int SweepZeroToughnessSba(GameState& state)
 {
     struct Dead { Card card; int controller; bool was_token; int minus; int total; int owner; };
     std::vector<Dead> died;
+    std::vector<Permanent> unearth_left;   // unearthed: exiled instead (CR 702.84a)
     for (std::size_t i = 0; i < state.battlefield.size(); )
     {
         const Permanent& p = state.battlefield[i];
         if (!p.card.IsCreature() || p.EffectiveToughness() > 0 || LethalToughness(p, state) > 0) { ++i; continue; }
+        if (UnearthExileDeferred(state, i, "would die (0 toughness)", unearth_left)) { continue; }
         died.push_back(Dead{ p.card, p.controller_index, p.is_token, MinusCountersOn(p), DyingCountersTotal(p),
                              p.owner_index });
         state.players[p.owner_index].graveyard.push_back(RevealedCard(p.card));   // OWNER's (CR 400.3)
@@ -20763,9 +20772,10 @@ inline int SweepZeroToughnessSba(GameState& state)
         EmitPlayEvent(state.turn_number, "death", "\xE2\x98\xA0 " + std::to_string(died.size())
                       + " creature(s) die at 0 toughness (a lord left)");
     }
+    FireUnearthedLeaves(state, unearth_left);
     for (const Dead& d : died)
     { OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus, nullptr, d.total, d.owner); }
-    return static_cast<int>(died.size());
+    return static_cast<int>(died.size() + unearth_left.size());
 }
 
 // ==== UNEARTH (CR 702.84a; CardParams::unearth_cost -- Hellspark Elemental) =========================
@@ -20829,9 +20839,12 @@ inline Permanent RemoveUnearthedToExile(GameState& state, int idx)
 }
 // It LEFT the battlefield but did not DIE (it never reached a graveyard): leaves-the-battlefield
 // triggers and the board refreshes fire; dies / morbid watchers do not. Athreos's coin return also
-// covers exile ("dies or is put into exile").
+// covers exile ("dies or is put into exile"). A permanent its controller controlled LEFT, so revolt
+// (Fatal Push) is met exactly as on a death (OnCreatureDies) or a bounce (ReturnPermanentToOwnersHand).
 inline void UnearthedLeftBattlefield(GameState& state, const Permanent& leaving)
 {
+    if (leaving.controller_index == state.active_player_index)
+    { state.permanent_left_under_control_this_turn = true; }
     FireLeavesBattlefieldTriggers(state, leaving.controller_index, leaving.card);
     RefreshDevotionCreatures(state);
     RefreshReconfigureCreatures(state);
@@ -20881,6 +20894,55 @@ inline void PermanentsLeftBattlefieldTogether(GameState& state, const std::vecto
     RefreshDevotionCreatures(state);
     RefreshReconfigureCreatures(state);
 }
+
+// UNEARTH'S LEAVE-THE-BATTLEFIELD REPLACEMENT (CR 702.84a: "If it would leave the battlefield, exile it
+// instead of putting it anywhere else"; a CR 614 replacement, so no stack and no choice). Called by EVERY
+// site that would move a permanent off the battlefield to anywhere but exile, in BOTH worlds: a destroy
+// effect (ResolveCreatureRemovalAt, the ETB / cast-trigger destroys), the lethal-damage and toughness-0
+// state-based actions (GameEngine::CheckStateBasedActions, SbaKillDeadCreatures, CounterPingKillAt,
+// dmgrx::SbaPass, SweepZeroToughnessSba, ShrinkCreatureUntilEot), the symmetric sweeps
+// (PerformDamageAllCreatures, the divided / Crackle / Soulfire damage), the legend rule (EnforceLegendRule),
+// every sacrifice (SacrificePermanentAt, ApplySacCreatureOutlet, PerformSacrificeCreatureCost, devour) and
+// every bounce (ReturnPermanentToOwnersHand, DrainPendingSelfBounces, the tuck to library). The EVENT
+// still happened -- a destroyed permanent was destroyed, a sacrificed one sacrificed (the caller fires its
+// sacrifice watchers) -- but the card goes to EXILE and never DIES (no dies / morbid watchers, no
+// graveyard; leaves-the-battlefield triggers fire: UnearthedLeftBattlefield). A site that itself exiles
+// needs nothing (the replacement changes no destination). Per OBJECT (Permanent::unearthed), so the
+// returning object of a blink / champion is no longer unearthed. One bit test per departure for every
+// deck without unearth (byte-identical).
+// Single form: removes the permanent at `idx` and fires its leave at once. Returns false (nothing done)
+// when it is not unearthed, so the caller's own move runs.
+inline void EmitUnearthReplaced(const GameState& state, const Permanent& p, const char* event)
+{
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      p.card.m_name.str() + " -- " + event + ", EXILED instead (unearth)");
+    }
+}
+inline bool UnearthExileInstead(GameState& state, std::size_t idx, const char* event)
+{
+    if (!state.battlefield[idx].unearthed) { return false; }
+    EmitUnearthReplaced(state, state.battlefield[idx], event);
+    const Permanent leaving = RemoveUnearthedToExile(state, static_cast<int>(idx));
+    UnearthedLeftBattlefield(state, leaving);
+    return true;
+}
+// Deferred form, for the SIMULTANEOUS-removal loops (an SBA pass, a sweep): removes the permanent now and
+// appends the departed object to `left`; the caller fires FireUnearthedLeaves(left) where it fires the
+// pass's deaths, after its erase loop (a leave trigger must not reshape the board mid-scan).
+inline bool UnearthExileDeferred(GameState& state, std::size_t idx, const char* event,
+                                 std::vector<Permanent>& left)
+{
+    if (!state.battlefield[idx].unearthed) { return false; }
+    EmitUnearthReplaced(state, state.battlefield[idx], event);
+    left.push_back(RemoveUnearthedToExile(state, static_cast<int>(idx)));
+    return true;
+}
+inline void FireUnearthedLeaves(GameState& state, const std::vector<Permanent>& left)
+{
+    for (const Permanent& p : left) { UnearthedLeftBattlefield(state, p); }
+
 
 // "Exile it at the beginning of the next end step": every unearthed permanent, at the TOP of BOTH
 // end-step sites in lockstep (GameEngine::EndStep and TurnSolver's SimulateEndAndStartNextTurn), beside
@@ -21385,18 +21447,21 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
     }
 
     // Pass 2 -- one lethality check, then remove the dead together.
+    std::vector<Permanent> unearth_left;   // unearthed: exiled instead (CR 702.84a), fired with the deaths
     for (std::size_t i = state.battlefield.size(); i-- > 0; )
     {
         Permanent& q = state.battlefield[i];
         if (!q.card.IsCreature()) { continue; }
         if (q.damage < LethalToughness(q, state)) { continue; }
         if (q.HasKeyword(Keyword::Indestructible)) { continue; }
+        if (UnearthExileDeferred(state, i, "would die (lethal damage)", unearth_left)) { continue; }
         died.push_back({ q.card, q.controller_index, q.is_token,
                          MinusCountersOn(q), DyingCountersTotal(q), q.owner_index });
         state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
         state.battlefield.erase(state.battlefield.begin()
                                 + static_cast<std::ptrdiff_t>(i));
     }
+    FireUnearthedLeaves(state, unearth_left);
 
     // Equipment falls off a dead host (CR 301.5c). The executor's SBA does this, but an inline
     // prune bypasses SBA and the rollout has no SBA at all -- so it must be done here.
@@ -21598,6 +21663,7 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
                       + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
                       + dead.m_name.str());
     }
+    if (UnearthExileInstead(state, static_cast<std::size_t>(bi), "destroyed")) { return; }   // CR 702.84a
     state.players[q.owner_index].graveyard.push_back(RevealedCard(dead));
     state.battlefield.erase(state.battlefield.begin() + bi);
     for (Permanent& o : state.battlefield)
@@ -21965,6 +22031,7 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
                           + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
                           + dead.m_name.str());
         }
+        if (destroy && UnearthExileInstead(state, static_cast<std::size_t>(bi), "destroyed")) { continue; }   // CR 702.84a
         const Permanent leaving = state.battlefield[bi];
         if (destroy) { state.players[dead_owner].graveyard.push_back(RevealedCard(dead)); }
         else if (!was_token) { state.exile.push_back(RevealedCard(dead)); }   // a token ceases to exist (CR 111.7)
@@ -22490,6 +22557,7 @@ inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, co
     if (hit_numbers.empty()) { return; }
     struct DividedDeath { Card card; int controller; bool was_token; int minus_counters; int total_counters; int owner; };
     std::vector<DividedDeath> died;
+    std::vector<Permanent> unearth_left;   // unearthed: exiled instead (CR 702.84a)
     for (std::size_t i = state.battlefield.size(); i-- > 0; )
     {
         Permanent& q = state.battlefield[i];
@@ -22497,11 +22565,13 @@ inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, co
         if (!(q.card.IsCreature() || q.is_animated)) { continue; }
         if (q.damage < LethalToughness(q, state)) { continue; }
         if (q.HasKeyword(Keyword::Indestructible)) { continue; }
+        if (UnearthExileDeferred(state, i, "would die (lethal damage)", unearth_left)) { continue; }
         died.push_back({ q.card, q.controller_index, q.is_token,
                          MinusCountersOn(q), DyingCountersTotal(q), q.owner_index });
         if (!q.is_token) { state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card)); }
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
     }
+    FireUnearthedLeaves(state, unearth_left);
     for (const DividedDeath& d : died)
     {
         for (Permanent& q : state.battlefield)
@@ -22998,10 +23068,14 @@ inline int ApplyDevourAsEnters(GameState& state, int controller, const CardParam
     // HIGHEST index down so the earlier indices stay valid.
     std::sort(idxs.begin(), idxs.end(), std::greater<int>());
     std::vector<std::string> eaten;
+    std::vector<Permanent> unearth_left;   // devoured unearthed bodies: exiled (fired after the erase loop)
     for (int idx : idxs)
     {
         const Permanent& v = state.battlefield[static_cast<std::size_t>(idx)];
         eaten.push_back(v.card.m_name.str());
+        // Unearth's replacement (CR 702.84a): still DEVOURED (sacrificed -- it counts toward the counters and
+        // the sacrifice watchers below), but exiled and never dies (no deferred death).
+        if (UnearthExileDeferred(state, static_cast<std::size_t>(idx), "devoured", unearth_left)) { continue; }
         deferred.push_back(DevourDeath{ v.card, v.is_token,
                                         MinusCountersOn(v), DyingCountersTotal(v), v.owner_index });
         state.players[v.owner_index].graveyard.push_back(RevealedCard(v.card));   // OWNER's (CR 400.3)
@@ -23023,7 +23097,8 @@ inline int ApplyDevourAsEnters(GameState& state, int controller, const CardParam
         EmitPlayEvent(state.turn_number, "sacrifice", "\xF0\x9F\x8D\xBD " + ev);
     }
     // A sacrifice is a sacrifice, so the "whenever you sacrifice" watchers fire now; only the DEATH
-    // triggers wait for the entrant.
+    // triggers wait for the entrant. A devoured unearthed body left without dying: its leave fires here.
+    FireUnearthedLeaves(state, unearth_left);
     FireSacrificeWatchers(state, controller);
     return p.devour * static_cast<int>(idxs.size());
 }
@@ -24494,6 +24569,8 @@ inline void ShrinkCreatureUntilEot(GameState& state, int target_id, int dp, int 
                     + AuraBonusFor(t, state).second
                     + EquipBonusFor(t, state).second;
     if (tough > 0) { return; }
+    // Unearth's replacement (CR 702.84a): the 0-toughness SBA puts it into exile, not the graveyard.
+    if (UnearthExileInstead(state, static_cast<std::size_t>(ti), "would die (0 toughness)")) { return; }
 
     const Card dead_card   = t.card;               // copied BEFORE the erase invalidates `t`
     const int  dead_num    = t.card.m_number;
@@ -24659,6 +24736,23 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     // (effective power + lord bonus, floored at 0). Only read for that outlet.
     const bool pump_from_victim = op->sac_outlet_self_pump_power_from_victim;
     int victim_lki_power = 0;
+    // Unearth's replacement (CR 702.84a): an unearthed victim is still SACRIFICED (the cost is paid, the
+    // payload resolves, the sacrifice watchers fire) but goes to EXILE and does not die.
+    bool victim_unearthed = false;
+    Permanent victim_leaving;
+    auto take_victim = [&](int at)
+    {
+        victim_owner = state.battlefield[static_cast<std::size_t>(at)].owner_index;
+        if (state.battlefield[static_cast<std::size_t>(at)].unearthed)
+        {
+            EmitUnearthReplaced(state, state.battlefield[static_cast<std::size_t>(at)], "sacrificed");
+            victim_leaving = RemoveUnearthedToExile(state, at);
+            victim_unearthed = true;
+            return;
+        }
+        state.players[victim_owner].graveyard.push_back(RevealedCard(victim));
+        state.battlefield.erase(state.battlefield.begin() + at);
+    };
     auto lki_power = [&state](const Permanent& v) -> int
     {
         int pw = v.EffectivePower()
@@ -24672,9 +24766,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         victim_tok = state.battlefield[hidx].is_token;
         victim_m1  = MinusCountersOn(state.battlefield[hidx]);
         victim_total_counters = DyingCountersTotal(state.battlefield[hidx]);
-        victim_owner = state.battlefield[hidx].owner_index;
-        state.players[victim_owner].graveyard.push_back(RevealedCard(victim));
-        state.battlefield.erase(state.battlefield.begin() + hidx);
+        take_victim(hidx);
     }
     // The baked victim id may be STALE: two outlets (or two activations) enumerated against the
     // same board bake the same canonical victim, and the first apply consumes it -- with tokens
@@ -24710,9 +24802,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             victim = q.card; found = true; victim_tok = q.is_token;
             victim_m1 = MinusCountersOn(q);
             victim_total_counters = DyingCountersTotal(q);
-            victim_owner = q.owner_index;
-            state.players[victim_owner].graveyard.push_back(RevealedCard(q.card));
-            state.battlefield.erase(state.battlefield.begin() + i);
+            take_victim(i);   // victim == q.card
             break;
         }
         if (found || attempt > 0 || !victim_was_token) { break; }
@@ -24934,8 +25024,12 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     const bool outlet_free = !op->sac_creature_cost.has_value()
                           || op->sac_creature_cost->ManaValue() == 0;
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
-    OnCreatureDies(state, controller, victim, victim_tok, victim_m1,
-                   nullptr, victim_total_counters, victim_owner);   // death triggers / persist
+    if (victim_unearthed) { UnearthedLeftBattlefield(state, victim_leaving); }   // left, did not die
+    else
+    {
+        OnCreatureDies(state, controller, victim, victim_tok, victim_m1,
+                       nullptr, victim_total_counters, victim_owner);   // death triggers / persist
+    }
     // The ability's own effects resolve AFTER the death triggers its cost caused (CR 603.3: those
     // triggers go on the stack above it). `op` points into the card DB, unaffected by the cascade.
     // Kami of False Hope: "Prevent all combat damage that would be dealt this turn."
@@ -32251,9 +32345,17 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     // "erase first, then OnCreatureDies" discipline every other death site follows.
     struct DoomedDeath { Card card; int controller; bool token; int minus; int total; int owner; };
     std::vector<DoomedDeath> doomed_creatures;
+    std::vector<Permanent> unearth_left;   // unearthed: put into EXILE instead (CR 702.84a), does not die
     for (int idx : doomed)   // ascending -> graveyard order matches the old scan
     {
         const Permanent& dp = state.battlefield[idx];
+        if (dp.unearthed)
+        {
+            EmitUnearthReplaced(state, dp, "legend rule");
+            state.exile.push_back(RevealedCard(dp.card));
+            unearth_left.push_back(dp);
+            continue;   // erased with the rest below; its leave fires after the board settles
+        }
         if (dp.card.IsCreature())
         { doomed_creatures.push_back({ dp.card, dp.controller_index, dp.is_token,
                                        MinusCountersOn(dp), DyingCountersTotal(dp), dp.owner_index }); }
@@ -32277,6 +32379,7 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     // One SBA batch: every graveyard-shuffle trigger it fires resolves after ALL the deaths (inert elsewhere).
     GyShuffleBatch _gyb(state);
+    FireUnearthedLeaves(state, unearth_left);
     for (const DoomedDeath& dd : doomed_creatures)
     { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus, nullptr, dd.total, dd.owner); }
 }
@@ -35609,12 +35712,16 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
     }
 
     std::sort(dead.begin(), dead.end(), std::greater<int>());   // descending so erase stays valid
+    std::vector<Permanent> unearth_left;   // unearthed: exiled instead (CR 702.84a)
     for (int bi : dead)
     {
+        if (UnearthExileDeferred(state, static_cast<std::size_t>(bi), "would die (lethal damage)", unearth_left))
+        { continue; }
         Permanent& cre = state.battlefield[bi];
         state.players[cre.owner_index].graveyard.push_back(RevealedCard(cre.card));
         state.battlefield.erase(state.battlefield.begin() + bi);
     }
+    FireUnearthedLeaves(state, unearth_left);
 
     if (capture && !flip_nums.empty())
     {
@@ -38760,6 +38867,7 @@ inline bool CounterPingSbaDead(const Permanent& q, const GameState& state)
 // then OnCreatureDies. The caller must hold no saved indices.
 inline void CounterPingKillAt(GameState& state, std::size_t i, const char* why)
 {
+    if (UnearthExileInstead(state, i, why)) { return; }   // unearth's replacement (CR 702.84a)
     const Permanent q = state.battlefield[i];
     const int num = q.card.m_number;
     // EXACTLY GameEngine::CheckStateBasedActions' death: the card -- a token too, the graveyard vector
@@ -38794,16 +38902,20 @@ inline int SbaKillDeadCreatures(GameState& state, const char* why)
     for (;;)
     {
         std::vector<Dead> died;
+        std::vector<Permanent> unearth_left;   // unearthed: exiled instead (lockstep with the executor SBA)
         for (std::size_t i = 0; i < state.battlefield.size(); )
         {
             const Permanent& q = state.battlefield[i];
             if (!CounterPingSbaDead(q, state)) { ++i; continue; }
+            if (UnearthExileDeferred(state, i, why, unearth_left)) { continue; }
             died.push_back({ q.card, q.controller_index, q.is_token, MinusCountersOn(q), DyingCountersTotal(q),
                              q.owner_index });
             state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
             state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
         }
-        if (died.empty()) { break; }
+        FireUnearthedLeaves(state, unearth_left);
+        total += static_cast<int>(unearth_left.size());
+        if (died.empty() && unearth_left.empty()) { break; }
         for (const Dead& d : died)
         {
             for (Permanent& e : state.battlefield)
@@ -46324,12 +46436,16 @@ inline void CrackleHitExtraTargets(GameState& state, int controller, int per_tar
         if (cre.damage >= cre.EffectiveToughness()) { dead.push_back(bi); }
     }
     std::sort(dead.begin(), dead.end(), std::greater<int>());   // descending -> erase stays valid
+    std::vector<Permanent> unearth_left;   // unearthed: exiled instead (CR 702.84a)
     for (int bi : dead)
     {
+        if (UnearthExileDeferred(state, static_cast<std::size_t>(bi), "would die (lethal damage)", unearth_left))
+        { continue; }
         Permanent& cre = state.battlefield[bi];
         state.players[cre.owner_index].graveyard.push_back(RevealedCard(cre.card));
         state.battlefield.erase(state.battlefield.begin() + bi);
     }
+    FireUnearthedLeaves(state, unearth_left);
 }
 
 // Crackle with Power FULL target order, opponent face FIRST (CRACKLE_OPP_FACE), then the extra
@@ -46372,12 +46488,16 @@ inline bool CrackleApplyTargets(GameState& state, int controller, int per_target
         }
     }
     std::sort(dead.begin(), dead.end(), std::greater<int>());   // descending -> erase stays valid
+    std::vector<Permanent> unearth_left;   // unearthed: exiled instead (CR 702.84a)
     for (int bi : dead)
     {
+        if (UnearthExileDeferred(state, static_cast<std::size_t>(bi), "would die (lethal damage)", unearth_left))
+        { continue; }
         Permanent& cre = state.battlefield[bi];
         state.players[cre.owner_index].graveyard.push_back(RevealedCard(cre.card));
         state.battlefield.erase(state.battlefield.begin() + bi);
     }
+    FireUnearthedLeaves(state, unearth_left);
     return hit_opp;
 }
 
@@ -58154,6 +58274,12 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
         }
     }
     if (idx < 0) { return; }   // no legal victim (enumeration should have gated the cast)
+    // Unearth's replacement (CR 702.84a): the cost is still paid (a sacrifice), but the card is exiled.
+    if (UnearthExileInstead(state, static_cast<std::size_t>(idx), (spell_name + " -- sacrificed").c_str()))
+    {
+        FireSacrificeWatchers(state, active);
+        return;
+    }
     const Card dead    = state.battlefield[idx].card;
     const bool was_tok = state.battlefield[idx].is_token;
     const int  dead_m1 = MinusCountersOn(state.battlefield[idx]);
@@ -60572,6 +60698,8 @@ inline bool ReturnPermanentToOwnersHand(GameState& state, int bf_index, const st
                                 : (p.owner_index == p.controller_index ? std::string(" to hand")
                                                                        : std::string(" to its owner's hand"))));
     }
+    // Unearth's replacement (CR 702.84a): an unearthed permanent bounced goes to EXILE, not the hand.
+    if (UnearthExileInstead(state, static_cast<std::size_t>(bf_index), "returned to hand")) { return true; }
     if (p.controller_index == state.active_player_index)
     { state.permanent_left_under_control_this_turn = true; }
     state.battlefield.erase(state.battlefield.begin() + bf_index);
@@ -61370,16 +61498,21 @@ inline void ResolveCreatureRemovalAt(GameState& state, int bi, const CardDefinit
     const int tgt_controller = target.controller_index;
     const int tgt_power      = target.EffectivePower();   // captured before the erase (Swords' rider)
     const int dead_num       = target.card.m_number;
-    if (def.params.damage > 0) { state.exile.push_back(RevealedCard(target.card)); }   // exile
+    // Unearth's replacement (CR 702.84a): a DESTROYED unearthed creature is exiled instead of dying (the
+    // exile branch already exiles -- nothing to replace). It left without dying: its leave triggers fire.
+    const bool unearth_exile = leaving.unearthed && def.params.damage <= 0;
+    if (unearth_exile) { EmitUnearthReplaced(state, leaving, "destroyed"); }
+    if (def.params.damage > 0 || unearth_exile) { state.exile.push_back(RevealedCard(target.card)); }   // exile
     else { state.players[static_cast<std::size_t>(target.owner_index)].graveyard.push_back(RevealedCard(target.card)); }
     state.battlefield.erase(state.battlefield.begin() + bi);
-    if (def.params.damage > 0) { ResolveAthreosExile(state, leaving); }
+    if (def.params.damage > 0 || unearth_exile) { ResolveAthreosExile(state, leaving); }
     RefreshDevotionCreatures(state);   // an own white permanent leaving lowers devotion (Heliod)
     for (Permanent& e : state.battlefield)
     {
         if (e.equipped_to      == dead_num) { e.equipped_to      = 0; }
         if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
     }
+    if (unearth_exile) { FireLeavesBattlefieldTriggers(state, leaving.controller_index, leaving.card); }
     // Reconfigure (Lizard Blades): a piece freed by the detach above is a creature again. After the
     // detach, not before, so the refresh sees the host link already cleared.
     RefreshReconfigureCreatures(state);

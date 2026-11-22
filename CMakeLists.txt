@@ -493,6 +493,7 @@ add_executable(mtg-test
     test/unit/test_prevent_damage_spells.cpp
     test/unit/test_prevent_damage_creatures.cpp
     test/unit/test_red_elementals.cpp
+    test/unit/test_unearth_leave_paths.cpp
     test/unit/test_prevent_damage_discard.cpp
     test/unit/test_prevent_damage_wish.cpp
     test/unit/test_soldiers_cathar.cpp

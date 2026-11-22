@@ -1715,6 +1715,7 @@ void GameEngine::CheckStateBasedActions(GameState& state)
         struct DeadCreature { Card card; int controller; bool was_token; int minus_counters; int total_counters;
                               int owner; };
         std::vector<DeadCreature> died;
+        std::vector<Permanent> unearth_left;   // unearthed: exiled instead (UnearthExileDeferred)
         for (std::vector<Permanent>::iterator it = state.battlefield.begin();
              it != state.battlefield.end(); )
         {
@@ -1750,6 +1751,17 @@ void GameEngine::CheckStateBasedActions(GameState& state)
                 if (p.damage >= tough
                     && !p.HasKeyword(Keyword::Indestructible)) { destroy = true; }
             }
+            if (destroy && p.unearthed)
+            {
+                // Unearth's replacement (CR 702.84a): the SBA still applies, but the card goes to exile and
+                // does not die. Lockstep twin: SbaKillDeadCreatures / CounterPingKillAt (SpellEffects.h).
+                const std::ptrdiff_t at = it - state.battlefield.begin();
+                UnearthExileDeferred(state, static_cast<std::size_t>(at), "would die (state-based action)",
+                                     unearth_left);
+                it = state.battlefield.begin() + at;
+                changed = true;
+                continue;
+            }
             if (destroy)
             {
                 if (is_creature)
@@ -1772,6 +1784,7 @@ void GameEngine::CheckStateBasedActions(GameState& state)
                 if (q.equipped_to == dd.card.m_number) { q.equipped_to = 0; }
             }
         }
+        FireUnearthedLeaves(state, unearth_left);   // empty unless an unearthed permanent left
         for (const DeadCreature& d : died)
         {
             // no-op unless a death-watcher (or persist) is in play

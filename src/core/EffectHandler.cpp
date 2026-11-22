@@ -1123,6 +1123,9 @@ void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
             // Attachments fall off. No exile/graveyard, no lifegain rider. Mirrors the rollout.
             if (def.params.tuck_to_library)
             {
+                // Unearth's replacement (CR 702.84a): exiled instead. Lockstep twin: the rollout's tuck.
+                if (UnearthExileInstead(state, static_cast<std::size_t>(t.permanent_index),
+                                        "put into its owner's library")) { continue; }
                 const int  dead_num = target.card.m_number;
                 const bool is_tok   = target.is_token;
                 const Card tucked   = RevealedCard(target.card);
