@@ -1057,6 +1057,7 @@ enum Slot : int
     MAZE_DISCARD_BURGEONING,  // MTG_MAZE_DISCARD_BURGEONING  sub-lever of MAZE_MANABOND_DISCARD (USER 2026-11-20: "Yes, Burgeoning is probably droppable. It is a bit too unreliable."; "It's a lot better in 2HG, though." -- the 2HG treatment is the USER's call, per-format numbers owed): Burgeoning counts as a droppable accelerator. Default ON (read only under MAZE_MANABOND_DISCARD); =0 -> Burgeoning is a kept card
     CREATURE_LEFTOVER_EXACT,  // MTG_CREATURE_LEFTOVER_EXACT  a creature payment's over-produced unit is creature-only only when the restricted units could not all pay this bill's pips (Bruna mana-clean, Somberwald Sage). =0 -> the legacy min(restricted, leftover) booking
     AURA_HOST_LINE_KEEP,      // MTG_AURA_HOST_LINE_KEEP  a land Aura's host is held while it pays only when the hold does not strand the rest of the line that an unheld payment keeps (Bruna mana-clean, Wild Growth). =0 -> the unconditional hold
+    EVAL_COMBAT_TOKEN_SELF,   // MTG_EVAL_COMBAT_TOKEN_SELF  greedy policy (EvalCard: d0 runner + playout): a creature whose OWN combat damage triggers its token maker (Spawning Kraken, Koma, Millicent) is credited the tokens' power for each of its own attacks in the horizon (Sea d0: Kraken tied a vanilla 6/6 six-drop). Default OFF (heuristic weight, USER call); =1 -> on
     COUNT
 };
 
@@ -2058,6 +2059,7 @@ inline const char* Name(int slot)
         "MTG_MAZE_DISCARD_BURGEONING",
         "MTG_CREATURE_LEFTOVER_EXACT",
         "MTG_AURA_HOST_LINE_KEEP",
+        "MTG_EVAL_COMBAT_TOKEN_SELF",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

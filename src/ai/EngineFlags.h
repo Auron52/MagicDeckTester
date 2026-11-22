@@ -1019,6 +1019,17 @@ inline bool AuraHostLineKeepOn()
     return heurarm::Flag(heurarm::AURA_HOST_LINE_KEEP, env_on);
 }
 
+// MTG_EVAL_COMBAT_TOKEN_SELF (2026-11-22; DEFAULT OFF -- a greedy-policy weight, the USER's call): EvalCard credits a
+// creature whose own connection fires its combat-damage token maker (combat_damage_watch_self, or a watched subtype
+// it has itself: Spawning Kraken, Koma, Millicent) with tokens x token power for each of its own attacks in the
+// horizon. Sea d0 (fix 2 exposure): Spawning Kraken and Serpent of Yawning Depths both scored 6 x attacks, so the
+// tie went to the lower subset mask. Per-job slot.
+inline bool EvalCombatTokenSelfOn()
+{
+    static const bool env_on = EnvOn("MTG_EVAL_COMBAT_TOKEN_SELF", false);
+    return heurarm::Flag(heurarm::EVAL_COMBAT_TOKEN_SELF, env_on);
+}
+
 inline bool PayNarrowRestrictedFirstOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_NARROW_RESTRICTED_FIRST", true);
