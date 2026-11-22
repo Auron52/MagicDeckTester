@@ -263,7 +263,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         // Anything else -- including every param a later Boars card adds -- is unaudited until someone audits it.
         {
             static const char* const kHandAuditedParams[] = {
-                "produces", "hand_fixing_produces", "produces_amount", "produces_one_color", "creature_mana_only", "enters_tapped",
+                "produces", "produces_amount", "produces_one_color", "creature_mana_only", "enters_tapped",
                 "etb_pay_life_to_untap", "checkland_subtypes", "etb_bounce_land",
                 "fetch_land_types", "land_search_count", "land_search_activation_cost", "land_search_activation_taps",
                 "land_search_activation_sacrifice_self", "land_search_activation_life_cost", "fetch_hold_human_only",
@@ -1254,10 +1254,6 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     }
     if (params.contains("self_bounce_cost"))
         p.self_bounce_cost = ManaCostFromString(params["self_bounce_cost"].get<std::string>());
-    for (const std::string& c : params.value("hand_fixing_produces", json::array()))
-    {
-        p.hand_fixing_produces.push_back(ColorFromString(c));
-    }
     p.mdfc_back_name = params.value("mdfc_back_name", std::string{});
     for (const std::string& c : params.value("mdfc_back_produces", json::array()))
     {

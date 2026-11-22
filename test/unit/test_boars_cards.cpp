@@ -95,7 +95,18 @@ TEST_CASE("Windswept Heath is a real battlefield fetchland (the Wooded Foothills
 {
     const CardDefinition& h = BDef("Windswept Heath");
     const CardDefinition& f = BDef("Wooded Foothills");
-    CHECK(h.params.produces.empty());
+    // `produces` is the HAND-only colour hint (the Scalding Tarn / Misty Rainforest shape, restored 2026-11-22):
+    // a Heath in hand is a W/B/R/G fixing source to the land-drop and colour heuristics, as Foothills is.
+    CHECK(h.params.produces == std::vector<Color>{ Color::White, Color::Black, Color::Red, Color::Green });
+    CHECK(f.params.produces == h.params.produces);
+    // On the battlefield a fetchland has no mana ability: the hint never reaches payment.
+    {
+        GameState s = BBase();
+        Permanent& held = BPut(s, "Windswept Heath", 20);
+        CHECK(EffectiveProducesFor(s, 0, h, &held).empty());
+        Permanent& held_f = BPut(s, "Wooded Foothills", 21);
+        CHECK(EffectiveProducesFor(s, 0, f, &held_f).empty());
+    }
     CHECK(h.params.fetch_land_types == std::vector<std::string>{ "Forest", "Plains" });
     CHECK(h.params.land_search_count == f.params.land_search_count);
     CHECK(h.params.land_search_activation_taps == f.params.land_search_activation_taps);
