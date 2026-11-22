@@ -205,8 +205,9 @@ TEST_CASE("CG discard C5: lone Reflecting Pool, Birds already in play, Crop Rota
 }
 
 // Colours first. Board Forest, Temple Garden, Stomping Ground, Overgrown Tomb (W1 B1 R1 G4); 5 - 4 =
-// ONE source owed. The hand's spells need U2 (Phantasm); Breeding Pool (tier 3) makes U, the fetch
-// (tier 2: W/B/R/G) does not -> Breeding Pool 1 is kept and the better-tier Heath 0 is the surplus.
+// ONE source owed. The hand's spells need U2 (Phantasm); Breeding Pool (tier 3) makes U. The fetch (tier 2) reaches U
+// only while a Breeding Pool is left in the library (deck-derived hint, 2026-11-22): with one there the Heath is kept and
+// Breeding Pool 1 is the surplus; without one, Breeding Pool 1 is kept and the Heath 0 is the surplus (order below).
 // The 5 sources are met (4 + Breeding Pool) before the land-tutor slot, so Crop Rotation 7 is
 // SURPLUS MANA (review fix 2026-10-09), shed after the surplus Heath. Ladder L1, Suture 3, Defense 4,
 // Phantasm 2 (U: 1 kept source, deficit 1 -> near). Shed Warden 6, Heath 0, Crop Rotation 7,
@@ -214,21 +215,18 @@ TEST_CASE("CG discard C5: lone Reflecting Pool, Birds already in play, Crop Rota
 TEST_CASE("CG discard C6: a land covering a missing colour beats a better-tier land")
 {
     const GameState s = MakeCg({ kHeath, kBP, kHP, kSP, kDotH, kWR, kEW, kCrop }, { kFor, kTG, kSG, kOT });
+    // The Heath's hand hint is its deck-derived reach (HandFixingProduces, USER 2026-11-22: "They can get any shock in
+    // the deck"). The default library holds a Breeding Pool (Forest Island), so here the Heath DOES reach U: it covers
+    // the missing colour AND is the better tier, so the hand Breeding Pool 1 is the surplus and the Heath 0 is kept.
+    CHECK(Cg(s) == std::vector<int>{ 6, 1, 7, 5, 2, 4, 3, 0 });
     {
-        // EMPTY library: the Heath reaches nothing. Measured order 2026-11-22: "6 1 7 5 2 4 3 0" (the colourless Heath is
-        // KEPT over the U-making Breeding Pool -- an empty-library artifact; owed: confirm against the W/B/R/G-library
-        // variant below and pin the case on the library-backed state).
-        std::string got; for (int v : Cg(s)) { got += std::to_string(v) + " "; }
-        CHECK(got == "6 1 7 5 2 4 3 0 ");
-        GameState t = s;
-        { Card c = CardDatabase::Instance().Lookup("Godless Shrine")->card; c.m_number = 950; t.players[0].library.push_back(c); }
-        { Card c = CardDatabase::Instance().Lookup("Stomping Ground")->card; c.m_number = 951; t.players[0].library.push_back(c); }
-        std::string got2; for (int v : Cg(t)) { got2 += std::to_string(v) + " "; }
-        CHECK(got2 == "6 0 7 5 2 4 3 1 ");   // W/B/R/G reach, no U: the case's original premise
+        // The case's original premise -- a fetch that cannot reach U -- holds with no Breeding Pool left in the library:
+        // then Breeding Pool 1 is kept and the better-tier Heath 0 is the surplus.
+        std::vector<std::string> lib = LibWithDoth();
+        lib.erase(std::find(lib.begin(), lib.end(), std::string(kBP)));
+        const GameState t = MakeCg({ kHeath, kBP, kHP, kSP, kDotH, kWR, kEW, kCrop }, { kFor, kTG, kSG, kOT }, {}, lib);
+        CHECK(Cg(t) == std::vector<int>{ 6, 0, 7, 5, 2, 4, 3, 1 });
     }
-    // The Heath's hand hint is its deck-derived reach (HandFixingProduces, USER 2026-11-22). This state has an EMPTY
-    // library, so the Heath fixes no colour at all (a fortiori not U), which keeps the case's premise.
-    CHECK(Cg(s) == std::vector<int>{ 6, 0, 7, 5, 2, 4, 3, 1 });
     CHECK(Gen(s).front() == 4);       // generic sheds Defense of the Heart (MV 4)
     CHECK(DothLast(s).front() == 2);  // the patch moves it back and sheds Phantasm
 }
