@@ -57,6 +57,25 @@ Compare arms: `python3 $B/cmp_arms.py <wins_dir> <batch.out> <armA> <armB>` (net
   - gi21770 d8 b0 relaunched with --ignore-play-profile (lane PID 986214) -> `$B/a7/g21770/d8.status`.
 - lpab is waiting on the box lock (other sessions hold it).
 
+## Milestone 15:10 UTC
+- gi21770 RECOVERS at d8 b0: exact=1 and exact=0 both win on T3 (a7/g21770/d8.status). Under fix7 the d0 game has
+  no APPLY-DROP at all. The fixes-off arm's T8 d0 win came from a lucky APPLY-DROP of a Sage on T5.
+- Callgrind, EDF d0 40 games (a7/cg), KEEP 1 vs 0: 7.300G vs 6.821G Ir (1.070).
+  - AuraHostHoldKeepsLine is 706.7M inclusive. Almost all of it is called from SeqWalkFixedOrder
+    (OrderPaysSequentially under EldraziFlickerProvider::ArrangeCastOrder).
+  - Its callees: TapForCostShared 544.7M (11,458 calls, ~47.5K Ir each), LineBillPayable 101.9M (6,962),
+    RampScratch 42.5M (11,458). About 59K calls reach it in total; the battlefield prefilter stops ~80% of them.
+  - The per-enumeration memo cannot remove these: they are distinct enumerations.
+  - Cut options, NOT built (a CPU cut is owed under "cut CPU; 3x is not a CPU licence"):
+    (a) Run the HELD payment first and return true as soon as it keeps the rest payable. That needs fewer
+        TapForCostShared calls (est. -150M of the +479M). Verdict-identical by construction: the function is false
+        only when held strands AND unheld keeps.
+    (b) A cross-enumeration memo keyed on the mana-relevant board. Bigger, with soundness risk; it would need a
+        VERIFY counter showing 0 mismatches.
+    (c) A mono-colour dominance gate (helps Jumbo's all-Forest boards). If every untapped source makes the same
+        colours as the host, the held remainder dominates by count.
+    Whatever is built must show identical digests on EDF/Jumbo/Bruna/Sea d0, KEEP-cut on vs off.
+
 ## Running jobs (all agent-owned, none USER-requested; waiters use DONE files / kill -0, never pgrep -f)
 | job | PID | what | marker / output |
 |---|---|---|---|
