@@ -1,4 +1,5 @@
 {
+  "value_play": { "expected_buckets": 21, "mull_gen_depth": 2, "mull_gen_budget_ms": 8 },
   "card_scores": {
     "Brainstorm": [
       -0.03406318911851347,
