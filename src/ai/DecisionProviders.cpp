@@ -2519,7 +2519,7 @@ static Ctx Context(const GameState& s, const std::vector<Card>& looked)
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (d != nullptr && IsFigure(*d)) { x.figure = true; }
         }
-        else if (p.card.IsLand() && !p.card.HasSupertype(Supertype::Basic)) { ++x.opp_nonbasic; }
+        else if (p.card.IsLand() && !IsBasicLandCard(p.card)) { ++x.opp_nonbasic; }   // NonbasicLandDamage's test
     }
     int max_e = 0;
     bool cheap = false;
