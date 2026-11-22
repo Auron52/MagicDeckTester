@@ -62,7 +62,37 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   second-main gate must add that record and its state fold together; (2) the root `EtbDigCandidates` does not merge
   same-name copies, so duplicate names give wasted (identical-state) variants -- add a same-name fold in the provider;
   (3) Adaptive Omnitool's combat dig can now reuse this pin (`docs/design/omnitool-combat-dig-greedy.md`).
-* **Running:** integrator E2 (Migloz, from `logs/beasts/integrator-E-handoff.md`; WIP 95bb47e3b built, tests+smoke owed). NEXT after it = batch F (Nykthos).
+* **Batch E integrated (Migloz, Maze Crusher; integrators E + E2 2026-11-21/22): `7f1a76269`** (replaces the WIP
+  commit 95bb47e3b). NEW `Permanent::oil_counters` (sizeof(Permanent) 328 -> 336, no padding was left), folded
+  nonzero-gated into every sim / board / dominance / legend key, `DomAxis::OilCounters` (MoreDominates), and listed in
+  `ForEachDedicatedCounterField`. DESIGN DEPARTURES from the draft: (1) the pump is ActivatePump **mode 7** (the draft's
+  mode 4 is taken; modes 1-6 are used) and the vigilance grant is **mode 8**; (2) the grant is pruned through a NEW
+  `UnprunedGate::OilGrant` (`MTG_UNPRUNE=oilgrant`, root `OffersOilVigilanceMenace` = no), while the destroy's
+  own-target prune REUSES Steelbane's existing `counterdestroy` gate (same route, same "own targets" restore) instead
+  of a new `oildestroy` gate; (3) UnprunedGate was full at 64, so the gate masks widened to a **128-bit**
+  `std::bitset` (OilGrant = gate 65); (4) **menace is not modelled** (the grant gives temp_vigilance only; inert vs
+  the goldfish, USER-approved 2026-11-22). The pump is SEARCHED (one variant per K <= min(3, oil/2, mana/2), legal while
+  sick, main 1 and any main 2, site-9 key `kActOilPump`, both pay sites oil-capped). NOT in DeckUsesSecondMain.
+  Tests: 8 new Migloz cases (one WIP assertion was wrong -- it expected a pass plan inside EnumerateMainPlans, which
+  offers none once the land drop is spent; the host appends the pass -- fixed in the test); full unit suite
+  3858/3858. audit_card_costs rc 0; audit_card_fields `--update` (232 HTTP 429s, all re-fetched on a per-card retry
+  at 1 s throttle; only Migloz enters the snapshot) + offline rc 0; audit_viewer_decisions `--no-sweep` clean
+  (DECISIONS.md main_phase row covers all three abilities).
+* **Smoke byte-identity (batch E, at 7f1a76269, no accept):** 235/235 PASS, per-game audit 0 configs changed,
+  play-changed 0 (searched and d0); scenarios 596/596. Log `build/scratch/beasts_smokeE.log`. Units are identical to
+  batch D (190,918,240), but CPU is up: smoke makespan 1596 s vs D's 1482 s (+7.7%), summed job CPU +6.6%, on a box
+  with an outside load (load avg ~25 before start, ~40 during). An interleaved D/E A/B (D E D E, 40 mid-size smoke
+  jobs, Release on both arms, same box, digests identical on every arm) measured **CPU +3.9%** (D 2.140M / 2.191M ms,
+  E 2.263M / 2.234M ms) and **wall +3.1%** (183.2 s vs 188.9 s) at identical units; the same-arm spread was 1.3-2.3%.
+  So batch E probably costs ~3-4% per unit of search on EVERY deck. The likely causes are the Permanent growth (every
+  GameState copy) and the 128-bit gate mask. NOT root-caused; owed as a perf follow-up (a Profile-build perf diff).
+  Log `build/scratch/beastsE/ab_summary.txt`.
+* **Owed to batch G (proliferate):** `oil_counters` must be a proliferate kind (it is already in
+  ForEachDedicatedCounterField). **Owed to batch J (BeastsProvider):** the two Migloz prunes live in the ROOT
+  (`OffersOilVigilanceMenace`, the oil branch of `RestrictCounterDestroyTargetsFor`); move them if wanted, and consider
+  a provider prune of the pump when Migloz cannot attack and nothing reads its power (no Garruk -3 live) -- today every
+  K is searched each main.
+* **Running:** none. NEXT = batch F (Nykthos).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
@@ -123,7 +153,7 @@ Bracket notes to re-check for THIS deck:
 | Elder Gargaroth | 3 | integrated (batch C, see Checkpoint) | NEW attack_choose_one 3-mode trigger, searched per-ordinal axis (Tectonic-style, cap 27), shared executor+rollout helper; life mode = root provider fold on deck_life_inert (USER approved); viewer attack_mode widened to 3; 'or blocks' PROVISIONAL deferral; NOT in DeckUsesSecondMain (combat draw waits a turn until the per-turn gate) |
 | Garruk's Harbinger | 3 | integrated afa007b00 (batch D, see Checkpoint) | NEW combat_damage_dig_per_damage + FireCombatDamageDig (both damage-step shapes, shared executor+rollout; count = damage dealt), shared PerformLookTakeDig (Creature/Garruk, random bottom); searched RANK pin per ordinal (cap 27, width min(15, library matches, power+2)); no decline variant (dominated, viewer offers it); NOT in DeckUsesSecondMain (dug card waits a turn until the per-turn gate); hexproof-from-black + PW PROVISIONAL |
 | Kaheera | 2 | lord+vigilance integrated 53e68dcd3; companion pending (batch I) | lord_effect multi-subtype + NEW grants_vigilance; companion: implement (see Q1) |
-| Migloz | 3 | drafted | oil_counters int; searched pump (ActivatePump mode 4); Steelbane destroy w/ oil + own-target provider prune; vig/menace PROVISIONAL |
+| Migloz | 3 | integrated 7f1a76269 (batch E, see Checkpoint) | NEW Permanent::oil_counters (sizeof 328 -> 336), folded into every sim/board/dominance/legend key + DomAxis::OilCounters; pump SEARCHED as ActivatePump mode 7 (one variant per K <= oil/2, mana/2; main 1 + any main 2; site-9 key kActOilPump; both pay sites oil-capped); vigilance grant = mode 8, root-pruned (`MTG_UNPRUNE=oilgrant`, menace unmodelled -- USER approved 2026-11-22); destroy = Steelbane route paid in oil, own targets root-pruned (reused `MTG_UNPRUNE=counterdestroy`); NOT in DeckUsesSecondMain |
 | Cavern of Souls (recheck) | - | no change | exact for this list |
 | Nykthos | 2 | drafted | Three Tree City scaled-land shape + NEW mana_per_devotion (per-colour yield, cache key!) |
 | Bloated Contaminator | 2 (+3) | drafted | NEW toxic + combat_damage_self_proliferate (closed-table dominant set, viewer dragon multi-pick); poison in sim key + no-win bounds; 2HG 15 poison |
