@@ -103,13 +103,13 @@ int BfCount(const GameState& s, const std::string& name)
 }
 
 // The replacement's whole contract for one unearthed Hellspark that just left.
-void CheckExiledNotDied(const GameState& s, int exiled = 1)
+void CheckExiledNotDied(const GameState& s, int exiled = 1, bool another_creature_died = false)
 {
     CHECK(BfCount(s, "Hellspark Elemental") == 0);
     CHECK(CountUe(s.exile, "Hellspark Elemental") == exiled);
     CHECK(CountUe(s.players[0].graveyard, "Hellspark Elemental") == 0);
     CHECK(CountUe(s.players[0].hand, "Hellspark Elemental") == 0);
-    CHECK_FALSE(s.creature_died_this_turn);              // it did not DIE (no morbid)
+    CHECK(s.creature_died_this_turn == another_creature_died);  // unearth itself did not trigger morbid
     CHECK(s.permanent_left_under_control_this_turn);     // it did LEAVE (revolt)
 }
 
@@ -158,9 +158,8 @@ TEST_CASE("Unearth replacement: LETHAL DAMAGE (executor SBA, rollout SBA, pinger
         s.battlefield[static_cast<std::size_t>(i)].damage = 1;
         s.battlefield.back().damage = 1;
         CHECK(SbaKillDeadCreatures(s, "lethal damage") == 2);
-        CheckExiledNotDied(s);
+        CheckExiledNotDied(s, 1, /*another_creature_died=*/true);
         CHECK(CountUe(s.players[0].graveyard, "Spark Elemental") == 1);   // the other one died
-        CHECK(s.creature_died_this_turn);                                  // ...and that one IS a death
     }
     {   // a ping's kill: CounterPingKillAt
         GameState s = BoardUe();
