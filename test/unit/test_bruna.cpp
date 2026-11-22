@@ -6,6 +6,7 @@
 
 #include "ai/DecisionProviders.h"
 #include "ai/ManaPayment.h"
+#include "ai/PlanContext.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -250,6 +251,52 @@ TEST_CASE("Bruna: a creature payment's over-produced unit stays GENERAL when the
         {
             LineUnpaidCostScope hold(wings);
             CHECK(TapForCostShared(b.s, wings, /*for_creature=*/false, nullptr, true));
+        }
+    }
+    // Bruna d0 gi21770 T8: a floating {G} paid one of Bruna's generic pips before the Sages tapped, so the
+    // over-produced Sage unit is swapped for it -- the {G} floats general and feeds Skycloud Expanse for Wings.
+    // Only when the line casts no OTHER creature that could still spend the restricted unit.
+    SUBCASE("gi21770 T8: the drained floating {G} is swapped back when the line's only creature is Bruna")
+    {
+        for (const bool second_creature : { false, true })
+        {
+            CAPTURE(second_creature);
+            BoardBr b;
+            b.Put("Somberwald Sage");
+            b.Put("Somberwald Sage");
+            b.Put("Skycloud Expanse");
+            b.s.floating_mana.green = 1;
+            ManaCost bruna; bruna.generic = 3; bruna.white = 2; bruna.blue = 1;
+            ManaCost wings; wings.generic = 1; wings.blue = 1;
+            ManaCost line = bruna;
+            AddManaCost(line, wings);
+            PlanTraits traits;
+            traits.cast_names[traits.cast_name_count++] =
+                &CardDatabase::Instance().Lookup("Bruna, Light of Alabaster")->card.m_name.str();
+            traits.cast_names[traits.cast_name_count++] =
+                &CardDatabase::Instance().Lookup("Arcanum Wings")->card.m_name.str();
+            if (second_creature)
+            {
+                traits.cast_names[traits.cast_name_count++] =
+                    &CardDatabase::Instance().Lookup("Mother of Runes")->card.m_name.str();
+            }
+            const PlanTraitsScope pts(&traits);
+            {
+                LineUnpaidCostScope hold(line);
+                REQUIRE(TapForCostShared(b.s, bruna, /*for_creature=*/true, nullptr, true));
+            }
+            if (!second_creature)
+            {
+                CHECK(b.s.floating_creature_mana.Total() == 0);
+                CHECK(b.s.floating_mana.green == 1);
+                LineUnpaidCostScope hold(wings);
+                CHECK(TapForCostShared(b.s, wings, /*for_creature=*/false, nullptr, true));
+            }
+            else
+            {
+                CHECK(b.s.floating_creature_mana.Total() == 1);   // a later creature may still want it
+                CHECK(b.s.floating_mana.Total() == 0);
+            }
         }
     }
     SUBCASE("a genuine restricted surplus stays restricted: Sage alone for {1}{W} leaves one creature-only unit")
