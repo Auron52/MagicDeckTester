@@ -27,6 +27,9 @@ Nykthos (63aa2fe6b), G Bloated Contaminator (e2838e47a). Commit list: `git log -
 
 ## Remaining, in order
 
+Batch H is now integrated as `c279a5ff3` and verified (3888/3888 units, 235/235 smoke,
+0 play changes). Its original handoff below is retained as history. Resume at batch I.
+
 1. **Batch H, Woodland Bellower -- IN PROGRESS, start here.** Everything is in WIP commit `f75719a58`
    (ETB Natural-Order put route in `FireOwnEtbTriggersBody` step 4b, `tutor_nonlegendary` +
    `TutorPutTargetMatches`, both decline arms with no shuffle, put-in-line soundness credits in
@@ -106,10 +109,11 @@ Nykthos (63aa2fe6b), G Bloated Contaminator (e2838e47a). Commit list: `git log -
 * Other deferral docs this run created (already committed): `cavern-of-souls-creature-type.md` (Merfolk Turns,
   USER: fix "only when there is time"), `omnitool-combat-dig-greedy.md`, `omnitool-restricted-second-main.md`.
 
-## Open USER questions (surface, never block)
+## Future decisions (no USER reply currently pending)
 
-1. Three Tree City: give it Nykthos's treatment (turn on `MTG_SCALED_LAND_RANK` and make its hold count
-   creatures the line will add)? Moves Goblins / Maze's End / Merfolk Turns play; needs an A/B there.
-2. Bloated Contaminator: proliferate always resolves after the other combat-damage triggers of the step
-   (weakly dominant, fixed order). Search the reverse order too?
-3. Second main and the cast order: numbers / draft still to come (batch J, Stage 4).
+1. Three Tree City: giving it Nykthos's treatment would move Goblins / Maze's End / Merfolk Turns
+   play. Run an A/B before proposing adoption.
+2. Bloated Contaminator: proliferate resolves after the other combat-damage triggers of the step
+   (weakly dominant, fixed order). Investigate whether reverse order has a live benefit.
+3. Second main and the cast order: produce the Stage 4 measurements and batch J draft before
+   asking the USER to choose.

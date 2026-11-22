@@ -230,8 +230,9 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
     set poison (tests set the state directly).
   - Tests: 8 new Contaminator cases in test_beasts_cards.cpp. Units 3878/3878 (8 new). Audits: audit_card_costs 697/697 match; audit_card_fields --update at 1 s throttle (0 HTTP 429; the card enters scryfall_reference.json; the Toxic / Proliferate keyword divergence allowlisted in scryfall_divergences.json) + offline rc 0; audit_viewer_decisions --no-sweep clean (`dragon` now expected).
   - **SMOKE (no accept):** **235/235 PASS, per-game audit 0 configs changed, play-changed 0 (searched and d0), scenarios 596/596**, makespan 702 s; log `build/scratch/beastsG/smoke.log`. Units 190,918,240 = batch F exactly; summed job CPU 15.31M ms vs F 16.83M ms (box less loaded; not a controlled A/B). The new hot-path terms for every other deck are one-byte / one-compare tests (deck_poison_hit_bound == 0, poison_counters > 0, the heads read only at >= 10 poison), so no per-deck cost was expected and none showed.
-* **Viewer readiness (USER 2026-11-22 wants to be TOLD when the deck can be played in the viewer, to save references):** needs every mainboard + companion card implemented (batches G Contaminator, H Bellower, I Kaheera companion), then the branch landed on the shared branch and the PRIMARY checkout fast-forwarded (the viewer runs only there). Primary holds an untracked `decks/Beasts/` copy: diff it against the branch's before the pull, move it aside (never delete), and check the primary for uncommitted references + a live viewer game first. Batch J (provider) does not block human play.
-* **Running:** none -- HANDED OFF TO CODEX (USER 2026-11-22, Claude budget). Batch H is WIP `f75719a58` (UNTESTED; see `logs/beasts/integrator-H-handoff.md`). Resume from `docs/design/beasts-codex-handoff.md`.
+* **Batch H integrated (Woodland Bellower, Codex 2026-11-22): `c279a5ff3`.** Creature ETB uses the shared library-put route with `tutor_nonlegendary`, optional decline (no shuffle), and human `main_phase` named `tutor_target` choices. Soundness: put targets are credited in `DevotionGrowthBound`, `CountSameTurnReducers`, `ManaPruneBound`, `ManaGateWouldHelp` / `BuildManaGateIndex`, both payment walks, and the sequential order domain for a put Warchief before a later Beast cast. The colour gate needs no new credit for the mono-green Bellower targets; poison and lethal projections remain safe for this list. Gaps for J: re-ask if Packleader's pre-search draw takes the human's named target; a later Craterhoof pump omits a put body from damage projection (not live for Beasts); rank Bellower in the Beasts cast order. Bellower tests 10/10; full units 3888/3888; card costs 698/698; offline field and viewer decision audits clean; smoke 235/235, 0 configs changed, 0 play-changed. `build/scratch/beastsH/` holds logs.
+* **Viewer readiness (USER 2026-11-22 wants to be TOLD when the deck can be played in the viewer, to save references):** needs companion batch I, then the branch landed on the shared branch and the PRIMARY checkout fast-forwarded (the viewer runs only there). Primary holds an untracked `decks/Beasts/` copy: diff it against the branch's before the pull, move it aside (never delete), and check the primary for uncommitted references + a live viewer game first. Batch J (provider) does not block human play.
+* **Running:** batch I, Kaheera companion. No question is currently waiting on the USER; the follow-ups below need implementation, measurement, or a concrete draft first.
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
@@ -296,7 +297,7 @@ Bracket notes to re-check for THIS deck:
 | Cavern of Souls (recheck) | - | no change | exact for this list |
 | Nykthos | 2 | integrated 63aa2fe6b (batch F, see Checkpoint) | Three Tree City scaled-land shape + NEW mana_per_devotion (per-colour yield, all five devotions in the mana cache key); per-colour fed faces in the viewer; gate soundness (a)/(b)/(c) fixed; payer hold MTG_DEVOTION_LAND_HOLD (default ON, devotion land only) |
 | Bloated Contaminator | 2 (+3) | integrated e2838e47a (batch G, see Checkpoint) | NEW toxic + combat_damage_self_proliferate; subset SEARCHED on the proliferate half of the combat-time pin, root dominance collapse (MTG_UNPRUNE=proliferate); poison folded into BuildSimKeyBase, lethal-exempt drops poison-aware; 2HG team loses at 15; viewer dragon multi-pick with player tiles; NOT in DeckUsesSecondMain; no deferrals |
-| Woodland Bellower | 2 | drafted | Natural Order put route wired into creature ETB + NEW tutor_nonlegendary + optional decline (no shuffle); fail-to-find + trigger order PROVISIONAL |
+| Woodland Bellower | 2 | integrated c279a5ff3; approved | Natural Order put route wired into creature ETB + NEW tutor_nonlegendary + optional decline (no shuffle); fail-to-find + trigger order approved |
 | Garruk's Packleader | 1 | integrated 375a50399; approved | own_creature_enters_draw + creature_enters_min_power 3; "may" PROVISIONAL |
 
 Drafts: `logs/beasts/drafts/*.md` (gitignored, host drive).
@@ -308,6 +309,8 @@ Drafts: `logs/beasts/drafts/*.md` (gitignored, host drive).
 * Elder Gargaroth (batch C): bucket A (reuse, widened). `attack_mode` with THREE options (0 token, 1 life, 2 draw), asked per declared copy at declare-attackers from `ApplyAttackChooseOneTriggers` over the full legal menu (the search's life fold never narrows the human). `audit_viewer_decisions.py`: `attack_choose_one` -> attack_mode, payload params inert. Registry: tools/play/DECISIONS.md attack_mode Gargaroth row.
 
 * Bloated Contaminator (batch G): bucket A (reuse). The proliferate is the generic `dragon` multi-pick, asked from `FireCombatDamageProliferate` (both damage-step shapes, shared executor+rollout) whenever something has a counter after the hit: EVERY candidate permanent (either side) and PLAYER (a candidate card named `Opponent` / `You`, numbered < 0, rendered as a player tile with its counter label), the pinned subset or the dominant default preselected, an empty reply stands; the search's collapse never narrows the human. Toxic is automatic (no decision). The lifebar shows the opponent's poison (`poison_counters` / `poison_loss_at`, emitted only when nonzero). `audit_viewer_decisions.py`: `combat_damage_self_proliferate` -> dragon, `toxic` inert. Registry: tools/play/DECISIONS.md Bloated Contaminator `dragon` row.
+
+* Woodland Bellower (batch H): bucket A. Human `main_phase` cast variants carry named `tutor_target` choices plus `(decline search)`; the shared ETB put route resolves each. `audit_viewer_decisions.py`: `tutor_to_battlefield_single` and `tutor_optional` -> main_phase, `tutor_nonlegendary` inert. Registry: tools/play/DECISIONS.md optional ETB tutor row.
 
 ## Verification verdicts (Stage 5)
 
@@ -370,15 +373,13 @@ token ONLY when the token provably brings lethal sooner; draw ONLY when we can s
 the game end faster (a sound, conservative test -- e.g. lethal is already on board next turn without it,
 or the game cannot last until the token can attack); otherwise (the typical case) search BOTH.
 
-## Open USER questions (surfaced, not blocking)
+## Decisions and follow-ups (none awaiting a USER reply)
 
 1. **Kaheera companion (sideboard).** The deck MEETS Kaheera's companion condition (every
    creature is a Beast). The simulator has no companion mechanic, so the sideboard Kaheera is
-   currently unreachable (coverage reports `reachable: false`). Ignoring it is NOT provably inert
-   (an extra 3-mana lord for {3}, once per game), so the default taken is to IMPLEMENT companion
+   currently unreachable through the intended mechanism. Batch I is implementing companion
    (CR 702.139: "{3}: put your companion into your hand", sorcery speed, once per game; Tier 3) and
-   teach the coverage scan that a companion makes the sideboard reachable. Say if you would rather
-   it stay unmodelled.
+   teaching the coverage scan that an eligible companion makes the sideboard reachable.
 
 ## Provider routing (Stage 4a, found in Stage 2)
 
