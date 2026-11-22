@@ -611,3 +611,53 @@ TEST_CASE("worldfire keep order: the proposed deadline order puts a go-off Lotus
     CHECK(d.top_order[0] == 1);                              // the Bloom: suspended now, it arrives in time
     CHECK(d.top_order[1] == 0);                              // the Rift Bolt is only needed on the go-off turn
 }
+
+TEST_CASE("worldfire keep order: 9 mana before 10 makes the Halberdier the finisher (USER answer 1)")
+{
+    GameState s = WFTutorBase(9);   // 9 now, never 10: a Rift Bolt line never goes off, a Halberdier line goes off now
+    s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Keldon Halberdier", 32)};
+    const WorldfireKeepRank r = WorldfireKeepRank::Of(s, 0, nullptr, false);
+    CHECK(r.t_star == 0);
+    CHECK(std::string(WFHandEntry(r, 2).bucket) == "finisher");
+    CHECK(std::string(WFHandEntry(r, 1).bucket) == "backup");   // the other-type finisher
+}
+
+TEST_CASE("worldfire keep order: Brainstorm over Ponder only with junk in hand and a shuffle at hand (USER answer 2)")
+{
+    GameState s = WFTutorBase(3);
+    s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Memory Lapse", 32),
+                         WFCard("Brainstorm", 33), WFCard("Ponder", 34), WFCard("Mountain", 35)};
+    const WorldfireKeepRank r = WorldfireKeepRank::Of(s, 0, nullptr, false);
+    REQUIRE(r.dig_quota == 1);
+    CHECK(WFHandEntry(r, 3).quota);                          // junk (Memory Lapse) + a Ponder to shuffle: Brainstorm
+    CHECK_FALSE(WFHandEntry(r, 4).quota);
+
+    GameState t = WFTutorBase(3);
+    t.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Brainstorm", 33),
+                         WFCard("Ponder", 34), WFCard("Mountain", 35)};
+    const WorldfireKeepRank q = WorldfireKeepRank::Of(t, 0, nullptr, false);
+    REQUIRE(q.dig_quota == 1);
+    CHECK(WFHandEntry(q, 3).quota);                          // nothing to put back: Ponder
+    CHECK_FALSE(WFHandEntry(q, 2).quota);
+}
+
+TEST_CASE("worldfire keep order: an enters-tapped land whose drop would be T* itself is overflow (USER answer)")
+{
+    // 9 Mountains, this turn's drop spent: T* = next turn (9 + a land = Worldfire + the Rift Bolt's {R}). The Needle
+    // played next turn taps for nothing on T*; the Mountain takes that drop.
+    GameState s = WFTutorBase(9);
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Sandstone Needle", 32),
+                         WFCard("Mountain", 33)};
+    const WorldfireKeepRank r = WorldfireKeepRank::Of(s, 0, nullptr, false);
+    CHECK(r.t_star == 1);
+    CHECK_FALSE(WFHandEntry(r, 2).quota);
+    CHECK(WFHandEntry(r, 3).quota);
+    // 8 Mountains with this turn's drop open: the Needle played now is ready (RR) on T* = next turn; it keeps its place.
+    GameState o = WFTutorBase(8);
+    o.players[0].hand = s.players[0].hand;
+    const WorldfireKeepRank q = WorldfireKeepRank::Of(o, 0, nullptr, false);
+    CHECK(q.t_star == 1);
+    CHECK(WFHandEntry(q, 2).quota);
+    CHECK(WFHandEntry(q, 3).quota);
+}
