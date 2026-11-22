@@ -1,0 +1,142 @@
+f1t0 vs f0t0
+| deck | pairs | faster | slower | net | digest-only | units A/B | cpu A/B |
+|---|---|---|---|---|---|---|---|
+| sea | 4000 | 0 | 0 | +0 | 3 | 1.0000 | 1.0225 |
+| sea2hg | 1000 | 0 | 0 | +0 | 0 | 1.0006 | 1.0231 |
+| sead0 | 60000 | 0 | 0 | +0 | 46 | nan | 1.0094 |
+| ALL | 65000 | 0 | 0 | +0 | | | |
+f1t1 vs f0t1
+| deck | pairs | faster | slower | net | digest-only | units A/B | cpu A/B |
+|---|---|---|---|---|---|---|---|
+| sea | 4000 | 0 | 0 | +0 | 3 | 1.0000 | 1.0259 |
+| sea2hg | 1000 | 0 | 0 | +0 | 0 | 1.0006 | 1.0239 |
+| sead0 | 60000 | 0 | 0 | +0 | 45 | nan | 1.0058 |
+| ALL | 65000 | 0 | 0 | +0 | | | |
+f1t1 vs f1t0
+| deck | pairs | faster | slower | net | digest-only | units A/B | cpu A/B |
+|---|---|---|---|---|---|---|---|
+| sea | 4000 | 0 | 0 | +0 | 25 | 1.0003 | 1.0043 |
+| sea2hg | 1000 | 2 | 0 | -2 | 28 | 1.0005 | 0.9929 |
+| sead0 | 60000 | 1841 | 114 | -1928 | 8178 | nan | 0.9963 |
+| ALL | 65000 | 1843 | 114 | -1930 | | | |
+slower sead0 481 5 6
+slower sead0 531 5 6
+slower sead0 549 5 6
+slower sead0 627 5 6
+slower sead0 668 6 7
+slower sead0 1002 6 7
+slower sead0 3297 6 7
+slower sead0 3688 6 7
+slower sead0 4034 5 6
+slower sead0 4456 5 6
+slower sead0 4779 6 7
+slower sead0 4794 6 7
+slower sead0 4847 6 7
+slower sead0 5266 6 7
+slower sead0 5373 6 7
+slower sead0 6529 6 7
+slower sead0 6541 6 7
+slower sead0 7145 5 6
+slower sead0 7309 5 6
+slower sead0 7421 5 6
+slower sead0 7505 6 7
+slower sead0 7704 6 7
+slower sead0 8093 5 6
+slower sead0 8237 6 7
+slower sead0 9111 6 7
+slower sead0 9915 5 6
+slower sead0 10179 5 6
+slower sead0 10273 5 6
+slower sead0 11394 6 7
+slower sead0 11683 5 6
+slower sead0 11808 5 6
+slower sead0 12157 6 7
+slower sead0 12293 5 6
+slower sead0 13857 5 6
+slower sead0 14283 6 7
+slower sead0 14480 6 7
+slower sead0 15512 6 7
+slower sead0 16379 5 6
+slower sead0 18001 5 6
+slower sead0 18105 5 6
+slower sead0 19159 6 7
+slower sead0 20555 5 6
+slower sead0 21203 5 6
+slower sead0 22621 5 6
+slower sead0 22701 5 6
+slower sead0 22735 5 6
+slower sead0 23111 6 7
+slower sead0 23675 5 6
+slower sead0 23733 6 7
+slower sead0 24712 6 7
+slower sead0 24833 5 6
+slower sead0 25691 5 6
+slower sead0 25992 6 7
+slower sead0 26988 6 7
+slower sead0 27041 5 6
+slower sead0 27087 5 6
+slower sead0 27174 6 7
+slower sead0 27698 6 7
+slower sead0 28884 5 6
+slower sead0 28913 5 6
+slower sead0 30095 5 6
+slower sead0 30357 6 7
+slower sead0 30447 6 7
+slower sead0 30959 5 6
+slower sead0 31165 6 7
+slower sead0 31314 6 7
+slower sead0 31605 6 7
+slower sead0 34352 6 7
+slower sead0 34381 5 6
+slower sead0 34907 6 7
+slower sead0 36769 6 7
+slower sead0 38963 5 6
+slower sead0 39888 6 7
+slower sead0 40810 5 6
+slower sead0 43080 6 7
+slower sead0 43389 6 7
+slower sead0 43875 5 6
+slower sead0 44987 5 6
+slower sead0 45013 6 7
+slower sead0 45445 5 6
+slower sead0 45448 6 7
+slower sead0 46155 5 6
+slower sead0 46319 5 6
+slower sead0 46402 6 7
+slower sead0 46567 5 6
+slower sead0 48508 6 7
+slower sead0 48807 6 7
+slower sead0 48851 6 7
+slower sead0 48863 6 7
+slower sead0 49237 5 6
+slower sead0 49382 6 7
+slower sead0 50350 6 7
+slower sead0 50843 5 6
+slower sead0 51648 6 7
+slower sead0 52074 6 7
+slower sead0 52770 6 7
+slower sead0 52881 5 6
+slower sead0 53241 5 6
+slower sead0 53414 5 6
+slower sead0 53565 6 7
+slower sead0 53989 5 6
+slower sead0 54019 5 6
+slower sead0 54112 5 6
+slower sead0 54528 6 7
+slower sead0 54654 5 6
+slower sead0 55696 6 7
+slower sead0 56244 6 7
+slower sead0 56579 6 7
+slower sead0 56847 6 7
+slower sead0 56918 6 7
+slower sead0 56988 6 7
+slower sead0 57479 5 6
+slower sead0 58573 6 7
+slower sead0 58657 6 7
+t1 vs t0
+| deck | pairs | faster | slower | net | digest-only | units A/B | cpu A/B |
+|---|---|---|---|---|---|---|---|
+| spirits | 2000 | 0 | 0 | +0 | 2 | 1.0000 | 0.9971 |
+| spiritsd0 | 20000 | 0 | 1 | +1 | 17 | nan | 0.9848 |
+| ALL | 22000 | 0 | 1 | +1 | | | |
+slower spiritsd0 2341 4 5
