@@ -11483,6 +11483,16 @@ struct Entry
         return true;
     }
 };
+// MTG_AURA_HOLD_MEMO (DEFAULT ON; =0 always runs AuraHostHoldKeepsLine): an answered land-Aura host-hold question
+// of the sequential walk (SeqWalkFixedOrder, the SubsetPayableSequential site). See AuraHoldProbe.
+struct AuraEntry
+{
+    std::uint64_t h = 0;
+    std::uint8_t  used = 0, n = 0, verdict = 0, flags = 0;
+    std::int16_t  aura = -1, ids[kMaxIds] = {};
+    int           host = 0, lrc_credit = 0, lrc_mv = 0;
+    ManaCost      bill{}, walk_total{};
+};
 struct Scope;
 inline thread_local Scope* t_top = nullptr;
 inline std::atomic<long long> g_hits[paycensus::kN]{}, g_misses[paycensus::kN]{},
@@ -11499,6 +11509,8 @@ struct Scope
     // MTG_PAY_PROBE_CANON: each candidate's walk-equivalence representative (the lowest equivalent
     // index), built on the scope's first OrderPaysSequentially probe. `acts` is fixed for the scope.
     std::vector<std::int16_t>  canon;
+    std::vector<AuraEntry>     aura_table;   // MTG_AURA_HOLD_MEMO (AuraHoldProbe), same open addressing
+    std::size_t                aura_live = 0;
     bool                       canon_built = false;
     bool                       any_copy = false;   // some candidate has an earlier walk-equivalent twin
     void BuildCanon()
@@ -11618,11 +11630,121 @@ inline bool Probe(int fn, const GameState& s, const std::vector<Action>& acts, c
     ++sc->live;
     return r;
 }
+// ---- MTG_AURA_HOLD_MEMO (DEFAULT ON; =0 always computes) -------------------------------------------------------------
+// THE LAND-AURA HOST-HOLD QUESTION OF THE SEQUENTIAL WALK, ANSWERED ONCE PER ENUMERATION. AuraHostHoldKeepsLine (MTG_AURA_HOST_LINE_KEEP) pays the
+// Aura's bill on scratch boards and runs the complete backtracker over the rest of the line; SeqWalkFixedOrder asks it
+// at the Aura's step of every walked order, and an enumeration walks the same Aura step under the same prefix many times
+// over (EDF d0 callgrind, 400 games: 7.3M calls, 21% of all instructions, +19% cpu). The question is a function of the
+// walk's board at that step and the walk's payment context, and BOTH are fixed by:
+//   * the scope's board and candidates (pointer identity, as for every probe here) with the payment-context globals the
+//     scope captured (Ctx::Same, checked at walk entry, before the walk binds its own line cost);
+//   * the walk's own setup values, all functions of the walked order: its line total (LineUnpaidCostScope), its line-
+//     reducer credit / noncreature MV / keep bound (LineReducerCreditScope) and its unseen-opener flag
+//     (LineOpensUnseenScope) -- stored in the key, compared exactly;
+//   * the PREFIX of casts walked before the Aura, by walk-equivalence representative (WalkEquivalent: the walk never
+//     reads a cast's identity -- the argument the OPS/SPS keys already rest on), every one WalkCanonical (no reveal cast,
+//     so seq_rv_charged cannot touch it), and the Aura's own representative, host and priced bill.
+// A walk whose board is changed by anything else before its casts -- a Vial put's Treasure, a mana-unlock equip, the
+// unlock-order search's resumed prefixes, an in-order Vial -- never consults the table. The key is stored and compared
+// in full, never trusted to the hash. MTG_PAY_PROBE_MEMO_VERIFY=1 re-runs the helper on every hit and counts verdict
+// mismatches (must be 0; printed at exit with the hit counts under MTG_PAY_PROBE_MEMO_STATS).
+inline bool AuraHoldMemoOn() { static const bool v = EnvOn("MTG_AURA_HOLD_MEMO", true); return v; }
+inline std::atomic<long long> g_aura_hits{0}, g_aura_misses{0}, g_aura_mismatch{0};
+// The scope a walk on (s, acts) may use, or nullptr. Call at walk ENTRY (before the walk's LineUnpaidCostScope).
+inline Scope* AuraHoldScopeFor(const GameState& s, const std::vector<Action>& acts)
+{
+    Scope* sc = t_top;
+    if (!AuraHoldMemoOn() || sc == nullptr || sc->s != &s || sc->acts != &acts || !sc->ctx.Same()) { return nullptr; }
+    return sc;
+}
+struct AuraWalkKey
+{
+    int      lrc_credit = 0, lrc_mv = 0;
+    bool     lrc_bound = false, unseen = false;
+    ManaCost walk_total{};
+};
+template <class F>
+inline bool AuraHoldProbe(Scope* sc, const std::vector<Action>& acts, const std::vector<int>& ord, int walk_pos, int j_aura,
+                          const AuraWalkKey& wk, int host, const ManaCost& bill, bool for_creature, F&& compute)
+{
+    if (sc == nullptr || walk_pos < 0 || walk_pos >= kMaxIds || static_cast<std::size_t>(walk_pos) >= ord.size()
+        || ord[static_cast<std::size_t>(walk_pos)] != j_aura)
+    { return compute(); }
+    if (!sc->canon_built) { sc->BuildCanon(); }
+    std::int16_t ids[kMaxIds];
+    for (int k = 0; k <= walk_pos; ++k)
+    {
+        const int j = ord[static_cast<std::size_t>(k)];
+        if (j < 0 || j > 32767 || static_cast<std::size_t>(j) >= acts.size() || !WalkCanonical(acts[static_cast<std::size_t>(j)]))
+        { return compute(); }
+        ids[k] = sc->canon[static_cast<std::size_t>(j)];
+    }
+    const int n = walk_pos;   // ids[0..n-1] = the prefix, ids[n] = the Aura
+    const std::uint8_t flags = static_cast<std::uint8_t>((wk.lrc_bound ? 1u : 0u) | (wk.unseen ? 2u : 0u)
+                                                         | (for_creature ? 4u : 0u));
+    auto same = [&](const AuraEntry& e)
+    {
+        if (e.n != n || e.aura != ids[n] || e.flags != flags || e.host != host || e.lrc_credit != wk.lrc_credit
+            || e.lrc_mv != wk.lrc_mv || !(e.bill == bill) || !(e.walk_total == wk.walk_total)) { return false; }
+        for (int k = 0; k < n; ++k) { if (e.ids[k] != ids[k]) { return false; } }
+        return true;
+    };
+    std::uint64_t h = 0xA7A5E11D0ull ^ static_cast<std::uint64_t>(n);
+    for (int k = 0; k <= n; ++k) { h ^= static_cast<std::uint64_t>(ids[k]) + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2); }
+    h ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(host)) * 0xBF58476D1CE4E5B9ull;
+    h ^= (static_cast<std::uint64_t>(static_cast<std::uint32_t>(wk.walk_total.ManaValue())) << 40)
+         ^ (static_cast<std::uint64_t>(static_cast<std::uint32_t>(bill.ManaValue())) << 48) ^ flags;
+    if (!sc->aura_table.empty())
+    {
+        const std::size_t mask = sc->aura_table.size() - 1;
+        for (std::size_t i = static_cast<std::size_t>(h) & mask;; i = (i + 1) & mask)
+        {
+            const AuraEntry& e = sc->aura_table[i];
+            if (!e.used) { break; }
+            if (e.h == h && same(e))
+            {
+                const bool v = e.verdict != 0;
+                if (StatsOn()) { g_aura_hits.fetch_add(1, std::memory_order_relaxed); }
+                if (VerifyOn() && compute() != v) { g_aura_mismatch.fetch_add(1, std::memory_order_relaxed); }
+                return v;
+            }
+        }
+    }
+    const bool r = compute();
+    if (StatsOn()) { g_aura_misses.fetch_add(1, std::memory_order_relaxed); }
+    if (2 * (sc->aura_live + 1) > sc->aura_table.size())
+    {
+        std::vector<AuraEntry> old;
+        old.swap(sc->aura_table);
+        sc->aura_table.assign(old.empty() ? 64 : old.size() * 2, AuraEntry{});
+        const std::size_t m2 = sc->aura_table.size() - 1;
+        for (const AuraEntry& e : old)
+        {
+            if (!e.used) { continue; }
+            std::size_t i = static_cast<std::size_t>(e.h) & m2;
+            while (sc->aura_table[i].used) { i = (i + 1) & m2; }
+            sc->aura_table[i] = e;
+        }
+    }
+    const std::size_t mask = sc->aura_table.size() - 1;
+    std::size_t i = static_cast<std::size_t>(h) & mask;
+    while (sc->aura_table[i].used) { i = (i + 1) & mask; }
+    AuraEntry& e = sc->aura_table[i];
+    e.used = 1; e.h = h; e.n = static_cast<std::uint8_t>(n); e.verdict = r ? 1 : 0; e.flags = flags;
+    e.aura = ids[n]; e.host = host; e.lrc_credit = wk.lrc_credit; e.lrc_mv = wk.lrc_mv;
+    e.bill = bill; e.walk_total = wk.walk_total;
+    for (int k = 0; k < n; ++k) { e.ids[k] = ids[k]; }
+    ++sc->aura_live;
+    return r;
+}
 struct Dump
 {
     ~Dump()
     {
         if (!StatsOn()) { return; }
+        std::fprintf(stderr, "[pay-memo] AuraHostHoldKeepsLine (MTG_AURA_HOLD_MEMO) hits=%lld misses=%lld%s%lld\n",
+                     g_aura_hits.load(), g_aura_misses.load(), VerifyOn() ? " VERIFY_MISMATCH=" : " (verify off) ",
+                     VerifyOn() ? g_aura_mismatch.load() : 0LL);
         for (int f = 0; f < paycensus::kN; ++f)
         {
             std::fprintf(stderr, "[pay-memo] %-26s hits=%lld misses=%lld bypass=%lld%s%lld\n",
@@ -12929,6 +13051,10 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     // this probe is the same shape -- a full GameState copy on entry, thrown away on return.
     PayScratch _pay_scratch(state);
     GameState& cp = _pay_scratch.Board();
+    // MTG_AURA_HOLD_MEMO: the enumeration scope this walk may answer its land-Aura host-hold question from (checked
+    // HERE, before the walk binds its own line cost; nullptr = always compute). See paymemo::AuraHoldProbe.
+    paymemo::Scope* _ahm_scope = (dfs == nullptr && !vial_in_order) ? paymemo::AuraHoldScopeFor(state, cands) : nullptr;
+    paymemo::AuraWalkKey _ahm_key;
     // Bind the walk's own remaining-cost hold, exactly as both apply paths do (LineUnpaidCostScope
     // at ApplyPlanDirect / the rollout apply), decremented below as each cast pays. Two human-play
     // consumers: the tap-ahead's line-priority colour commit and SpendFloatingTowardCost's
@@ -12943,16 +13069,22 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     LineUnpaidCostScope _luc(_walk_total);
     const int _lrc_credit = LineReducerCredit(cp, cands, ord);   // the apply's twin (MTG_LINE_REDUCER_KEEP)
     const bool _lrc_bound = LineKeepBound(cands, ord);   // MTG_LINE_KEEP_ALL
-    LineReducerCreditScope _lrc(_lrc_credit, (_lrc_credit > 0 || _lrc_bound) ? LineNoncreatureMv(cands, ord) : 0,
-                                _lrc_bound);
+    const int _lrc_mv = (_lrc_credit > 0 || _lrc_bound) ? LineNoncreatureMv(cands, ord) : 0;
+    LineReducerCreditScope _lrc(_lrc_credit, _lrc_mv, _lrc_bound);
     LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
     // ...and whether the walked order casts a breakpoint opener (the twin of both apply paths' scope).
-    LineOpensUnseenScope _lou([&]
+    const bool _lou_flag = [&]
     {
         if (!LineFloatUnseenGuardOn()) { return false; }
         for (int j : ord) { if (CastOpensUnseen(cp, cands[j])) { return true; } }
         return false;
-    }());
+    }();
+    LineOpensUnseenScope _lou(_lou_flag);
+    _ahm_key.walk_total = _walk_total;
+    _ahm_key.lrc_credit = _lrc_credit;
+    _ahm_key.lrc_mv     = _lrc_mv;
+    _ahm_key.lrc_bound  = _lrc_bound;
+    _ahm_key.unseen     = _lou_flag;
     // A Vial-PUT ETB Treasure maker (MTG_ETB_TREASURE_SPEND): its exempt Treasure is on the board for
     // the whole walk, as the payable order hoists the put ahead of the casts it funds (rescue-only
     // walk; IsEtbTreasureMakerCast covers puts).
@@ -12965,6 +13097,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                 || va.def->params.etb_creates_treasures <= 0) { continue; }
             CreateTreasureTokens(cp, cp.active_player_index, va.def->params.etb_creates_treasures,
                                  /*fresh_hold_exempt=*/true);
+            _ahm_scope = nullptr;   // the walk's board is no longer the scope's (MTG_AURA_HOLD_MEMO)
         }
     }
     // MANA-UNLOCK EQUIPS (see SeqWalkUnlockEquip): the subset's unlocks, their pieces, and the firing
@@ -12980,6 +13113,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         unlock_pieces.push_back(ea.sac_source_id);
         unlock_pieces.push_back(ea.sac_victim_id);
     }
+    if (!unlock_acts.empty()) { _ahm_scope = nullptr; }   // an unlock can fire mid-walk (MTG_AURA_HOLD_MEMO)
     auto fire_unlocks = [&]()
     {
         if (unlock_acts.empty()) { return; }
@@ -13155,7 +13289,10 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             int reserved_host = -1;
             if (def.params.is_land_aura && def.params.land_aura_extra_mana > 0
                 && a.enchant_target > 0
-                && AuraHostHoldKeepsLine(cp, def.card, a.enchant_target, ec, def.card.IsCreature()))
+                && paymemo::AuraHoldProbe(_ahm_scope, cands, ord, walk_pos, j, _ahm_key, a.enchant_target, ec,
+                                          def.card.IsCreature(),
+                                          [&] { return AuraHostHoldKeepsLine(cp, def.card, a.enchant_target, ec,
+                                                                             def.card.IsCreature()); }))
             {
                 for (Permanent& lp : cp.battlefield)
                 {
