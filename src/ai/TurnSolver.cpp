@@ -70867,7 +70867,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // committed at spend (USER: no per-colour branching), so booking it `wild` is legal -- and keeping it
     // `colorless` would refuse a line the board pays (Slivers gi1106 T4: Courtyard x2 + Cavern + Hive,
     // the replicate copy's {G} is a Courtyard tap). A land Aura's bonus is not counted (base yield only).
-    // A {C} ALREADY FLOATING AT ENTRY IS PHYSICAL TOO (MTG_PREPAY_FLOAT_C_PHYS, DEFAULT OFF; =1 enables). The
+    // A {C} ALREADY FLOATING AT ENTRY IS PHYSICAL TOO (MTG_PREPAY_FLOAT_C_PHYS, DEFAULT ON; =0 is the A/B lever
+    // that restores the old, illegal booking -- a rules-correctness fix, not a heuristic). The
     // counted float (MTG_PREPAY_FLOAT_POOL) is the joint solve's starting pool (bt_start), and the solve can fund
     // the batch's generic out of it -- but pure_c_tapped() only counts {C} out of sources THIS prepay tapped, so a
     // `colorless` unit that was already floating reads as flexible and is relaunched as `wild`, which then pays a
@@ -70877,7 +70878,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // Ring floating {U}{C}{C} in the ROLLOUT; the next segment's prepay {Ponder, Ornithopter} relaunched Sol Ring's
     // {C}{C} as wild2, and the continuation's Reality Spasm paid {U}{U} with it -> a verified T5 kill the executor
     // (whose prepay tapped Sol Ring fresh and kept {C}{C}) could not cast: committed T5, realised T6.
-    static const bool s_float_c_phys = EnvOn("MTG_PREPAY_FLOAT_C_PHYS");
+    static const bool s_float_c_phys = EnvOn("MTG_PREPAY_FLOAT_C_PHYS", true);   // DEFAULT ON; =0 disables
     auto pure_c_tapped = [&state, &bf_snap, &fm_snap]() -> int
     {
         int pure = s_float_c_phys ? fm_snap.colorless : 0;
