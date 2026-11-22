@@ -182,8 +182,9 @@ credit without the hurdles. One definition of the rule: `src/core/FreeTurns.h`. 
   EchoEdgeFold, FslEdgeNoReach, WinlessCertificate, LastPlyFold, go-off dominance, edge-tail elide; the
   leaf kill-only turn additionally requires `!deck_has_free_turn`. `deck_has_free_turn` (a deck
   constant, `StampDeckTraits`) = `MTG_FREE_TURNS` on AND `GoldFishRunner::DeckMayLockOpponent` (main +
-  sideboard hold a card that strips the opponent's lands or hand: mass exile, Sire of Insanity's
-  end-step discard, combat-damage discard, land destruction, land steal). Gating per deck keeps every
+  sideboard hold a card that strips the opponent's lands or hand; narrowed in the second pass to Worldfire,
+  Sire of Insanity and annihilator, with the sideboard counted only when a main-deck wish reaches it -- see
+  "Second pass" (b)). Gating per deck keeps every
   other deck's search identical; a deck the list misses still receives the credit in play (the rule is
   general), only its edge prunes stay armed, and the batch reports it with `trait=0`.
 * **Keys.** `free_turns_taken` / `in_free_turn` are folded, value-gated, into `BuildSimKey`,
@@ -313,5 +314,96 @@ is the obvious lever; not built.
 
 6. **Raw vs credited tie-break.** The search spends free turns without limit (raw +0.4..+1.3 vs OFF). Keep
    it, cap free turns per game (Q4, default none), or tie-break equal credited rounds on fewer turns taken?
-7. **The cleanup hole** (b): adopt "the passive cleanup discards lands first" under the flag?
-8. **Trait over-reach**: drop `steal_tap_count` (Captivating Vampire) from `DeckMayLockOpponent`?
+7. **The cleanup hole** (b). **BUILT, flag-ON default, USER to confirm** (second pass (c)): not "lands first"
+   but a **two-nonland floor**. The cleanup stays oldest-first and never sheds a nonland that would leave fewer
+   than 2 nonlands; it sheds the oldest land instead. The unconditional lands-first version was built first and
+   measured worse: it moved long games of nearly every deck.
+8. **Trait over-reach.** **BUILT, flag-ON default, USER to confirm** (second pass (b)): `steal_tap_count` is
+   dropped along with four other over-reaching params. `annihilator` is added. The sideboard counts only when a
+   main-deck wish reaches it. Vampires / Sea Creatures units ON/OFF: 3.06 -> 1.000 and 1.257 -> 1.000.
+
+## Second pass (2026-11-21/22, wip/freeturn; flags still DEFAULT OFF)
+
+Three fixes from the first measurement, then one flag-ON regression tier (`reg_on4`). Commits on wip/freeturn
+(rebased onto d0d5f8463): 9791b0c70 (stamps, trait audit, lands-first cleanup), a46be7cb2 (cleanup floor).
+
+### (a) The reference drift was not the flag: recording stamps
+
+`references/Creature_Burn/claude_s9_gi8.json` drifted with the flag OFF too. Bisected to the shared branch's
+opponent land-entry rules (ce5866171): the game was recorded before them, its opponent's Gruul Turf now bounces a
+land, and the recorded Price of Progress line no longer wins T4. Fixed by the repo's recording-stamp pattern:
+* `opponent_land_entry: 1` on new recordings; an unstamped `opponent_land_model` reference replays with
+  `--legacy-opponent-land-entry`, the pre-ce5866171 drop kept verbatim (also the old cross-head legend rule). That
+  part landed on the shared branch separately as **d0d5f8463**.
+* `free_turns: 1` on a recording made with `MTG_FREE_TURNS` on; an unstamped reference replays with
+  `--legacy-no-free-turns` (`g_play_legacy_no_free_turns`, read in `FreeTurnsOn`), so the hurdles cannot change
+  the opponent hand a reference was played against. Consequence: a flag-ON reference sweep replays every existing
+  reference flag-off. On wip/freeturn only.
+* Flag-OFF sweep with the fix: 940 refs, 0 play-drift. Flag-ON sweep (reg_on4): 940 refs, 0 play-drift.
+
+### (b) Lock-trait audit (`GoldFishRunner::DeckMayLockOpponent`)
+
+With the hurdles the opponent holds two lands and two nonlands, plays a land a turn, and never casts, so only a
+card that can strip ALL its lands or ALL its nonland hand cards can earn a free turn. Audit per param:
+* IN `exile_all_permanents_hands_graveyards` (Worldfire): every land and every hand card.
+* IN `endstep_each_player_discards_hand` (Sire of Insanity): the whole hand at the opponent's end step.
+* IN `annihilator` (Emrakul 6, Ulamog the Infinite Gyre 4), NEW: N permanents per attack, oldest first, lands
+  included. This makes Extra Turns trait=1; its free turns are legitimate (s2629 gi627: Emrakul's annihilator 6
+  strips all five opponent permanents, the next attack kills).
+* OUT `combat_damage_each_discards` (Neheb): the engine never makes the passive opponent discard.
+* OUT `steal_tap_count` (Captivating Vampire): steals creatures only.
+* OUT `etb_destroy_nonbasic_land_optional` (White Orchid Phantom): the opponent fetches a basic in return.
+* OUT the one-land removals: `etb_destroy_artifact_enchantment_land` (Acidic Slime),
+  `sac_outlet_destroy_nonbasic_land` (Fulminator Mage), `saga_ch3_gain_control_opp_permanent` (Kiora ch. III),
+  `cast_trigger_destroy_target_permanents` (Ulamog's cast trigger; Ulamog stays IN by annihilator).
+* Sideboard: counted only when a main-deck wish can fetch from it (`DeckWishesFromSideboard`). Vampires holds
+  Worldfire in a wishless sideboard.
+
+### (c) The cleanup hole: the two-nonland floor (replaces lands-first)
+
+Under `FreeTurnHurdlesOn` the passive cleanup (`opponentdeck::EndOfTurnCleanup`, `CleanupShedIndex`) stays
+oldest-first, except it never sheds a NONLAND that would leave fewer than 2 nonlands in hand; it sheds the oldest
+land instead. With the floor the opponent's nonlands fall below two only to one of OUR effects (the USER's "the
+opponent needing to show that they can remove things"). An MDFC spell//land is a nonland in hand.
+
+The first version (9791b0c70) shed lands first unconditionally. It closed the hole but moved long games of nearly
+every deck, because it discards lands the opponent would have played. Readers of opponent lands (Price of Progress,
+fetch life, Burgeoning) move. reg_on3 vs reg_on2 per-game digests: Burn 74 (6 slower), Modern RW Burn 35 (3
+slower), Extra Turns 36, One Drop Burn 18, Maze's End 6 (5 slower), 1-3 in nearly every other deck.
+
+The floor binds only when the hand is at 2 nonlands with a nonland oldest. Burn s3664 gi661 (the first-pass repro)
+gives T4 under the flag, the hole stays closed. **reg_on4 vs reg_on2** (the run before any cleanup change), per-game
+digest: identical in every deck except
+* Burn 6: the 5 trait-0 hole games, now uncredited and equal to the flag-OFF GT (4 lose their credited turn,
+  T3/T4 -> T4/T5; d5 s2002 gi714 keeps T4), plus d0 s2002 gi934 (T4 -> T5, no
+  free turn). gi934 is the floor binding as specified: Goblin Guide's T1 reveal takes the opponent to 8 cards with
+  exactly 2 nonlands, so the floor sheds the oldest land (an Arid Mesa) instead of a nonland. Off the rule the
+  opponent cracks that Mesa for 1 life and T4 is lethal.
+* Modern RW Burn 1: the hole game (d5 s3003 gi51, credited T3 -> T4, correct).
+* Extra Turns 1 (no win-turn change); Vampires 25 / vampires2hg 6: the trait change, prunes re-armed.
+* Maze's End, One Drop Burn, Worldfire, Cyclone, Shadowborn: 0.
+
+So the lands-first long-game slowdowns are gone (Burn 6, Modern RW Burn 3, Maze's End 5 -> 0, apart from
+gi934 above).
+
+### (d) reg_on4 numbers (`MTG_PGO=0 MTG_FREE_TURNS=1 test/regression.sh --regression`, no accept)
+
+Raw output in `build/scratch/freeturn/reg_on4/`, the per-key table in `logs/freeturn/analysis_reg_on4.txt`, the
+run-to-run diffs in `logs/freeturn/diff_on2_on4.txt` and `diff_on3_on4.txt`. 174 pass / 215 fail vs the flag-OFF
+GT (expected under the flag); scenarios 605/605; VPC 940 refs, 0 play-drift.
+
+* **trait=0 free turns: NONE.** Every free turn is trait=1: Worldfire (887 games / 1678 free turns; 2HG 30 / 39),
+  Cyclone 161, Shadowborn 18 (52), Extra Turns 5. Burn and Modern RW Burn: 0.
+* Worldfire credited (vs OFF): d5 s2002 4.500 (5.567), d5 s3003 4.300 (5.483), d3 4.533 (5.533), 2HG 4.633
+  (5.733); raw rounds 6.47 / 6.55 / 6.80 / 5.93 (Q6 unchanged).
+* Units ON/OFF: Worldfire 0.661 / 2HG 0.669; Cyclone 0.947; Shadowborn 1.143 (legitimate stand-down); Extra
+  Turns 0.992; **Vampires 1.000 / 2HG 1.014** (was 3.06 / 2.63); **Sea Creatures 1.000 / 2HG 1.000** (was 1.257 /
+  1.202); every other deck 0.995 - 1.011.
+
+### Agent defaults of the second pass (surfaced to the USER, not settled)
+
+6. The cleanup floor: 2 nonlands, oldest-first otherwise (the agent's version of "discard lands before
+   nonlands"). It binds at exactly 2 nonlands even where shedding to 1 could not lock (gi934).
+7. The lock-trait list as audited in (b), including `annihilator` and the wish-reachable sideboard rule.
+8. `--legacy-no-free-turns`: an unstamped reference replays flag-off, so a flag-ON sweep tests no reference
+   under the rule until references are recorded with it.
