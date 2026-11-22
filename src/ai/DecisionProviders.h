@@ -4431,6 +4431,13 @@ int BloodSunTutorTargetCap(const GameState& s, int controller, const CardDefinit
 // source, the big lands below 7 land mana)?
 bool BloodSunGrimPruneOn();
 bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDefinition& def);
+// The Grim prune's three AMENDMENT ARMS (perf part 6; DEFAULT OFF; inert while MTG_BLOODSUN_GRIM_PRUNE is off), read inside
+// BloodSunGrimTargetAdmitted: MTG_BLOODSUN_GRIM_LAND_DROP (a big land at any mana while a land play is open this turn),
+// MTG_BLOODSUN_GRIM_LAND_BOARD (the 7-mana test counts battlefield lands only), MTG_BLOODSUN_GRIM_TW_ANY (Time Warp
+// whenever none is in hand).
+bool BloodSunGrimLandDropOn();
+bool BloodSunGrimLandBoardOn();
+bool BloodSunGrimTwAnyOn();
 // MTG_BLOODSUN_GRIM_REV_GATE (heurarm BLOODSUN_GRIM_REV_GATE; B12's second gate; DEFAULT OFF until measured): Grim Tutor is not cast
 // while a Revelation is in hand and BloodSunTurnManaEstimate >= MTG_BLOODSUN_GRIM_REV_MANA (default 8). DEFAULT OFF.
 bool BloodSunGrimRevGateOn();

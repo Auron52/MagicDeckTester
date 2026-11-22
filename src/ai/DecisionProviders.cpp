@@ -73255,6 +73255,31 @@ bool BloodSunGrimRevGateOn()
     return heurarm::Flag(heurarm::BLOODSUN_GRIM_REV_GATE, on);
 }
 
+// The three AMENDMENT ARMS of MTG_BLOODSUN_GRIM_PRUNE (Blood Sun perf part 6, docs/design/blood-sun-pipeline.md §14). The
+// d8 b0 recovery check lost 4 games to the Grim prune (gi 7 / 277: Grim -> a big land played THE SAME TURN at 7+ mana;
+// gi 141: the 7-mana test counted a hand land; gi 431: Grim -> Time Warp cast NEXT turn), which the USER anticipated:
+// "We might find some other lines with Grim Tutor that have to do with dropping things this turn." Each arm WIDENS the
+// B12 list back toward the B3 one (every admitted target is still searched); each is DEFAULT OFF (whether one becomes
+// the default is the USER's call) and inert while MTG_BLOODSUN_GRIM_PRUNE is off.
+// MTG_BLOODSUN_GRIM_LAND_DROP: a big land is admitted at any mana while a land play is still open this turn.
+bool BloodSunGrimLandDropOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_LAND_DROP");   // DEFAULT OFF (an A/B arm; the USER's call)
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_LAND_DROP, on);
+}
+// MTG_BLOODSUN_GRIM_LAND_BOARD: the big lands' 7-mana test counts battlefield lands only (no hand land).
+bool BloodSunGrimLandBoardOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_LAND_BOARD");   // DEFAULT OFF (an A/B arm; the USER's call)
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_LAND_BOARD, on);
+}
+// MTG_BLOODSUN_GRIM_TW_ANY: Time Warp is admitted whenever none is in hand (the next-turn Time Warp line).
+bool BloodSunGrimTwAnyOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_TW_ANY");   // DEFAULT OFF (an A/B arm; the USER's call)
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_TW_ANY, on);
+}
+
 namespace
 {
 // B12's land threshold (USER, verbatim: "if you don't have enough land to get to 7 mana").
@@ -73500,10 +73525,25 @@ bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDe
         BsHave(s, controller, [](const CardDefinition& c) { return c.params.tutor_up_to_x; }, rv_bf, rv_hand);
         return !rv_hand;
     }
+    // TWNEXT arm: Time Warp whenever none is in hand (Grim this turn, Time Warp next turn -- gi 431's line).
+    if (p.extra_turns_on_resolve > 0 && BloodSunGrimTwAnyOn())
+    {
+        bool tw_bf = false, tw_hand = false;
+        BsHave(s, controller, [](const CardDefinition& c) { return c.params.extra_turns_on_resolve > 0; }, tw_bf, tw_hand);
+        return !tw_hand;
+    }
     const std::string& nm = d.card.m_name.str();
     if (nm == "Rakdos Carnarium" || nm == "City of Brass") { return true; }   // the cap holds the exception's terms
     if (BsIsBigLand(d))
     {
+        // DROP arm: a land play still open THIS turn (the engine's own test, the one EnumeratePlansWithLand offers the
+        // drop on: lands_played_this_turn < LandDropsAvailable, which carries Exploration's extra and Fastbond's
+        // unlimited drops) -> the fetched land can be played at once, at any mana (gi 7 / 277).
+        if (BloodSunGrimLandDropOn() && controller == s.active_player_index)
+        {
+            const Player& me = s.players[static_cast<std::size_t>(controller)];
+            if (me.lands_played_this_turn < me.LandDropsAvailable()) { return true; }
+        }
         // A land's mana once out, net of the lands it costs (BloodSunRole's reading, through the EFFECTIVE definition).
         auto net = [&](const CardDefinition& ld)
         {
@@ -73526,6 +73566,8 @@ bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDe
             const CardDefinition* ld = CardDatabase::Instance().LookupCached(c);
             if (ld != nullptr && ld->card.IsLand()) { best = std::max(best, net(*ld)); }
         }
+        // BOARD arm: battlefield lands only (gi 141: 6 on the battlefield + a 2-mana Karoo in hand read as "enough").
+        if (BloodSunGrimLandBoardOn()) { best = 0; }
         return mana + best < kBloodSunGrimLandMana;
     }
     return false;   // Time Warp, Emrakul, Fastbond, Exploration: B3 targets Grim Tutor no longer fetches

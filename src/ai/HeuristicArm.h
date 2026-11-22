@@ -1105,6 +1105,9 @@ enum Slot : int
     BLOODSUN_GOOFF,           // MTG_BLOODSUN_GOOFF  Blood Sun perf step ("Combo Off" go-off front, design §5, ORDER only): a plan whose extra turns this round project the kill, or a Revelation package fetching Emrakul with 15 mana left, is tried first (PlanMoveOrderFront). Default ON; =0 the value order alone
     BLOODSUN_GRIM_REV_EXEMPT_MULTI,// MTG_BLOODSUN_GRIM_REV_EXEMPT_MULTI  A/B ARM of MTG_BLOODSUN_GRIM_REV_GATE (ledger B12): two or more Grim Tutors with exactly one Revelation in hand are exempt from the gate, below 8 mana only. Default OFF; inert while the gate is off
     BLOODSUN_GRIM_REV_MANA7,  // MTG_BLOODSUN_GRIM_REV_MANA7  A/B ARM of MTG_BLOODSUN_GRIM_REV_GATE (ledger B12, "after you hit 7 or 8 mana"): the gate's mana threshold is 7 instead of MTG_BLOODSUN_GRIM_REV_MANA (default 8). Default OFF; inert while the gate is off
+    BLOODSUN_GRIM_LAND_DROP,  // MTG_BLOODSUN_GRIM_LAND_DROP  AMENDMENT ARM of MTG_BLOODSUN_GRIM_PRUNE (Blood Sun perf part 6; the USER: "We might find some other lines with Grim Tutor that have to do with dropping things this turn"): a big land (Lotus Vale / Field, Scorched Ruins) is a Grim target at ANY mana while a land play is still open THIS turn (lands_played_this_turn < LandDropsAvailable: the normal drop, Exploration's extra, Fastbond). Default OFF (the USER's call); inert while the Grim prune is off
+    BLOODSUN_GRIM_LAND_BOARD, // MTG_BLOODSUN_GRIM_LAND_BOARD  AMENDMENT ARM of MTG_BLOODSUN_GRIM_PRUNE (perf part 6): the big lands' 7-mana test counts our BATTLEFIELD lands only, not the best land in hand (an alternative reading of the USER's "if you don't have enough land to get to 7 mana"). Default OFF; inert while the Grim prune is off
+    BLOODSUN_GRIM_TW_ANY,     // MTG_BLOODSUN_GRIM_TW_ANY  AMENDMENT ARM of MTG_BLOODSUN_GRIM_PRUNE (perf part 6): Time Warp is a Grim target whenever none is in hand (the next-turn Time Warp line), not only when Grim + Time Warp are both castable this turn. Default OFF; inert while the Grim prune is off
     COUNT
 };
 
@@ -2154,6 +2157,9 @@ inline const char* Name(int slot)
         "MTG_BLOODSUN_GOOFF",
         "MTG_BLOODSUN_GRIM_REV_EXEMPT_MULTI",
         "MTG_BLOODSUN_GRIM_REV_MANA7",
+        "MTG_BLOODSUN_GRIM_LAND_DROP",
+        "MTG_BLOODSUN_GRIM_LAND_BOARD",
+        "MTG_BLOODSUN_GRIM_TW_ANY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
