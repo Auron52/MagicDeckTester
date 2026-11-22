@@ -57134,7 +57134,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // 0 is the untwinned cast (scry_pin -1, the provider's disposition), each k >= 1 pins TopDispositionCandidates[k].
     // NO CLAIRVOYANCE ABOUT THE LOOK: the fan is sized off the look COUNT (every disposition, no width cap), never off the
     // cards now on top; the provider's ScryVerdict prune applies at RESOLUTION on the seen cards, where a pin past the
-    // surviving candidates clamps (the twin then duplicates its base, which is enumerated first and wins the tie).
+    // surviving candidates clamps to the LAST survivor (ChooseTopDisposition), so the twin duplicates a sibling that is
+    // enumerated before it and wins the tie -- the base itself when one candidate survives. Never a lost line; the
+    // waste is a duplicate apply that the post-apply state dedups can drop.
     // A ROLLOUT LEAF emits only the base (beyond the horizon the permitted playout policy is the provider's
     // default). Never under human play (the viewer asks the scry at resolution).
     if (CastScrySearchOn() && !HumanPlayActive() && (g_search_candidate_enum || g_condemn_root_turn < 0)
