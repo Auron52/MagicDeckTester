@@ -45,6 +45,7 @@ declare -A DECK_FILE=(
   [kithkin]=decks/Kithkin/Kithkin.cod
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod
   [hinata]=decks/Hinata/Hinata.cod
+  [beasts]=decks/Beasts/Beasts.cod
   [cyclone]="decks/Unpredictable Cyclone/Unpredictable Cyclone.cod"
   [shadowborn]="decks/Shadowborn Apostle/Shadowborn Apostle.cod"
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.cod
@@ -119,6 +120,7 @@ declare -A DECK_PROF=(
   [kithkin]=decks/Kithkin/Kithkin.profile.json
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json
   [hinata]=decks/Hinata/Hinata.profile.json
+  [beasts]=decks/Beasts/Beasts.profile.json
   [cyclone]="decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json"
   [shadowborn]="decks/Shadowborn Apostle/Shadowborn Apostle.profile.json"
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.profile.json
@@ -371,6 +373,10 @@ SMOKE_CASES=(
   "hinata  0 1001 1000 0"
   "hinata     3  1001    50 10"
   "hinata     5  1001   100 30"
+  # Beasts entry: baseline profile, searched at the admitted d3/b10 and d5/b20 shapes.
+  "beasts 0 1001 1000 0"
+  "beasts 3 1001   30 10"
+  "beasts 5 1001   30 20"
   # Cyclone entry: cost-gated d3/b10 and d5/b20 policy, before its keep table and value leaf.
   "cyclone 0 1001 1000 0"
   "cyclone 3 1001   50 10"
@@ -578,6 +584,7 @@ SMOKE_CASES=(
   # 2026-09-04: d0 "isn't all that useful"; fewer games at search depth instead) -- so a
   # heads-plumbing break in the search/rollout path moves a committed digest too.
   "hinata2hg  5  1001    25 30"
+  "beasts2hg 5  1001    10 20"
   "antilife2hg 5  1001   100 20"
   "minotaur2hg 5  1001   100 20"
   "goblins2hg 5  1001    75 60"
@@ -1137,6 +1144,13 @@ REGRESSION_CASES=(
   "hinata     3  2002    75 10"
   "hinata     5  2002   150 30"
   "hinata     5  3003   150 30"
+  # Beasts: admitted at 2.62x Hinata in the same-run PGO cost gate.
+  "beasts  0  2002 1000  0"
+  "beasts  3  2002   50 10"
+  "beasts  5  2002   50 20"
+  "beasts  5  3003   50 20"
+  "beasts2hg 5 2002 25 20"
+  "beasts2hg 5 3003 25 20"
   # Gods: provisional pre-artifact entry rows for the same-run Hinata cost gate.
   "gods       0  2002  1000  0"
   "gods       3  2002    50 10"
@@ -1807,6 +1821,19 @@ OVERNIGHT_CASES=(
   "hinata     5  5005   425 30"
   "hinata     5  6006   425 30"
   "hinata     5  7007   425 30"
+  # Beasts ENTRY set before a keep table: admitted d3/b10 and d5/b20 play settings.
+  "beasts 0 4004 2000 0"
+  "beasts 0 6006 2000 0"
+  "beasts 0 8008 2000 0"
+  "beasts 0 10010 2000 0"
+  "beasts 3 4004 400 10"
+  "beasts 3 5005 400 10"
+  "beasts 3 6006 400 10"
+  "beasts 3 7007 400 10"
+  "beasts 5 4004 300 20"
+  "beasts 5 5005 300 20"
+  "beasts 5 6006 300 20"
+  "beasts 5 7007 300 20"
   # Cyclone ENTRY set before its keep table (regression-testing skill): deep sample at
   # the shipped d3/b10 and d5/b20 shapes. Expand at keep-table adoption.
   "cyclone 0 4004 2000 0"
@@ -2157,6 +2184,10 @@ OVERNIGHT_CASES=(
   "hinata2hg  5  5005   100 30"
   "hinata2hg  5  6006   100 30"
   "hinata2hg  5  7007   100 30"
+  "beasts2hg 5 4004 50 20"
+  "beasts2hg 5 5005 50 20"
+  "beasts2hg 5 6006 50 20"
+  "beasts2hg 5 7007 50 20"
   "antilife2hg 5  4004   300 20"
   "antilife2hg 5  5005   300 20"
   "antilife2hg 5  6006   300 20"

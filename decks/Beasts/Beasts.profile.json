@@ -87,6 +87,9 @@
   },
   "hand_score_threshold": -1e+18,
   "mulligan": {
+    "bottom_eval_budget_ms": 1,
+    "bottom_eval_depth": 1,
+    "bottom_eval_topk": 5,
     "bottom_order": "count_first",
     "curve_check": "two_drop",
     "max_lands": 5,
