@@ -1317,6 +1317,10 @@ inline void ResolveNonbasicLandDamage(GameState& state, int controller, int mult
 inline void ApplyBlink(GameState&, int controller, int source_id, int target_id,
                        bool returns_tapped, bool permanents_ok);
 inline void FireLeavesBattlefieldTriggers(GameState&, int controller, const Card& left);
+// The SIMULTANEOUS-leave twin of FireLeavesBattlefieldTriggers (Worldfire's mass exile); defined beside
+// UnearthedLeftBattlefield. Saproling Burst's LTB body, defined beside the fading upkeep.
+inline void PermanentsLeftBattlefieldTogether(GameState& state, const std::vector<Permanent>& departed);
+inline void DestroyTokensCreatedBy(GameState& state, int source_number);
 inline void ReturnOrphanedLinkedExiles(GameState& state);
 inline void NormalizeLeftDayboundFace(GameState& state, int controller, const Card& left, const CardDefinition& d);
 inline void DestroyLargestOppCreature(GameState&, int controller);
@@ -6144,10 +6148,17 @@ inline void DestroyAllEnchantments(GameState& state)
 //     and temp bonuses do not follow it). A TOKEN ceases to exist (CR 111.7 / 704.5d): it is dropped,
 //     never filed in exile (tokens carry is_token, or a number in the token / opponent-spawn bands).
 //     Nothing holds a battlefield INDEX across a resolution (attachments, linked exiles and the payment
-//     ledger name card numbers), so an emptied battlefield leaves nothing dangling. Leaves-the-
-//     battlefield TRIGGERS of the exiled permanents are not fired (no such card in the Worldfire pool;
-//     exile is not "dies", so no dies-watcher should fire anyway); a linked "until ~ leaves" exile
-//     whose source just left returns, through the shared ReturnOrphanedLinkedExiles.
+//     ledger name card numbers), so an emptied battlefield leaves nothing dangling. A linked "until ~
+//     leaves" exile whose source just left returns at once (CR 610.3c, not a trigger), through the shared
+//     ReturnOrphanedLinkedExiles.
+//   * LEAVES-THE-BATTLEFIELD TRIGGERS: every exiled permanent (tokens included -- a token's LTB fires
+//     though it has ceased to exist) is handed, as it last existed, to the shared simultaneous-leave tail
+//     PermanentsLeftBattlefieldTogether, which fires each one's own LTB through FireLeavesBattlefieldTriggers
+//     (the hook every single-permanent leave uses), Athreos's exile watcher with the CR 603.10a look-back
+//     (all of them left together, so each sees the others leave), in APNAP order. They resolve AFTER the
+//     whole spell -- after the LIFE clause below, so a Keldon Marauders' LTB ping lands on a player at 1.
+//     (The spell's own move to the graveyard follows this resolver; no modelled LTB reads that graveyard
+//     for a sorcery.) Exile is not "dies": no dies / morbid watcher fires.
 //   * Hands -- ours, the opponent's (players[1].hand), and 2HG's second head (opponent2_hand). A card
 //     the ROLLOUT merged into hand from impulse exile (m_is_staged) is already IN EXILE in reality
 //     (the executor keeps it in Player::staged_cards, which this never touches), so it stays: still
@@ -6163,6 +6174,7 @@ inline void DestroyAllEnchantments(GameState& state)
 // before this could resolve, so the "gain" branch is a plain assignment.
 inline void ResolveExileAllAndSetLife(GameState& state, const CardParams& pp)
 {
+    std::vector<Permanent> departed;
     if (pp.exile_all_permanents_hands_graveyards)
     {
         auto token_number = [](int n)
@@ -6187,6 +6199,7 @@ inline void ResolveExileAllAndSetLife(GameState& state, const CardParams& pp)
             if (p.is_token || token_number(p.card.m_number)) { continue; }
             state.exile.push_back(printed(p.card));
         }
+        departed = std::move(state.battlefield);   // as they last existed, for the LTB pass below
         state.battlefield.clear();
         auto exile_zone = [&](std::vector<Card>& zone, bool keep_staged)
         {
@@ -6229,6 +6242,8 @@ inline void ResolveExileAllAndSetLife(GameState& state, const CardParams& pp)
                           "Each player's life total becomes " + std::to_string(n));
         }
     }
+    // The exiled permanents' leaves-the-battlefield triggers, after the whole spell (see the block note).
+    PermanentsLeftBattlefieldTogether(state, departed);
 }
 
 // ==================== Auras (attach-to-creature enchantments) =========================
@@ -16074,6 +16089,10 @@ inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, cons
                           + std::to_string(state.players[static_cast<std::size_t>(opp)].life) + ")");
         }
     }
+    // Saproling Burst (CardParams::fade_ltb_destroys_created_tokens): "When this enchantment leaves the battlefield,
+    // destroy all tokens created with it." Keyed on the departed Burst's card number (DestroyTokensCreatedBy). Was
+    // open-coded at the fading sacrifice only; here it fires on every leave route. Param-gated (one bool test).
+    if (d && d->params.fade_ltb_destroys_created_tokens) { DestroyTokensCreatedBy(state, left.m_number); }
     if (!d || d->params.ltb_return_creatures <= 0) { return; }
     if (g_play_event_sink && !g_tap_speculating)
     {
@@ -16384,26 +16403,43 @@ inline void ResolveAthreosDeath(GameState& state, const Card& dead_card, bool de
     }
 }
 
-inline void ResolveAthreosExile(GameState& state, const Permanent& leaving)
+// Athreos, Shroud-Veiled: "Whenever a creature with a coin counter on it dies or is put into exile, return that
+// card to the battlefield under your control." The EXILE half (the dies half is ResolveAthreosDeath).
+// `lookback` (optional): permanents that left the battlefield IN THE SAME EVENT as `leaving` (a mass exile --
+// PermanentsLeftBattlefieldTogether). A leaves-the-battlefield trigger looks back in time (CR 603.10a), so an
+// Athreos that left alongside the coin creature still triggers for it; the live battlefield is searched first,
+// then the look-back set. `source_controller` (>= 0, with `lookback`): resolve only a trigger CONTROLLED by that
+// player (the APNAP pass the caller is in); when none is, nothing happens and the coin mark stays for the other
+// pass. Defaults (nullptr, -1) are the single-leave behaviour every other call site has always had.
+inline void ResolveAthreosExile(GameState& state, const Permanent& leaving,
+                                const std::vector<Permanent>* lookback = nullptr, int source_controller = -1)
 {
     auto& marked = state.athreos_coin_ids;
     const auto mark = std::find(marked.begin(), marked.end(), leaving.card.m_number);
     if (mark == marked.end()) { return; }
+    int src_ctrl = -1;
+    auto scan = [&](const std::vector<Permanent>& zone)
+    {
+        for (const Permanent& source : zone)
+        {
+            if (source_controller >= 0 && source.controller_index != source_controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(source.card);
+            if (d && d->params.athreos_shroud) { src_ctrl = source.controller_index; return; }
+        }
+    };
+    scan(state.battlefield);
+    if (src_ctrl < 0 && lookback != nullptr) { scan(*lookback); }
+    if (source_controller >= 0 && src_ctrl < 0) { return; }   // not this pass's trigger
     marked.erase(mark);
     if (!(leaving.card.IsCreature() || leaving.is_animated) || leaving.is_token) { return; }
-    for (const Permanent& source : state.battlefield)
-    {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(source.card);
-        if (!d || !d->params.athreos_shroud) { continue; }
-        auto it = std::find_if(state.exile.begin(), state.exile.end(), [&](const Card& c)
-                       { return c.m_number == leaving.card.m_number; });
-        if (it == state.exile.end()) { return; }
-        Card back = *it;
-        state.exile.erase(it);
-        PutCardOntoBattlefield(state, source.controller_index, back,
-                               "Athreos, Shroud-Veiled", 0, false, leaving.owner_index);
-        break;
-    }
+    if (src_ctrl < 0) { return; }
+    auto it = std::find_if(state.exile.begin(), state.exile.end(), [&](const Card& c)
+                   { return c.m_number == leaving.card.m_number; });
+    if (it == state.exile.end()) { return; }
+    Card back = *it;
+    state.exile.erase(it);
+    PutCardOntoBattlefield(state, src_ctrl, back,
+                           "Athreos, Shroud-Veiled", 0, false, leaving.owner_index);
 }
 
 // ILHARG'S DEATH "MAY" PIN (GameState::dies_tuck_pin, Boars I5b item 3). Installs a searched Action::dies_tuck value
@@ -20276,6 +20312,50 @@ inline void UnearthedLeftBattlefield(GameState& state, const Permanent& leaving)
     RefreshDevotionCreatures(state);
     RefreshReconfigureCreatures(state);
     ResolveAthreosExile(state, leaving);
+}
+
+// MANY permanents left the battlefield in ONE event without dying (Worldfire's "exile all permanents") -- the
+// simultaneous twin of UnearthedLeftBattlefield, running the same pieces: each departed permanent's own
+// leaves-the-battlefield triggers (FireLeavesBattlefieldTriggers: Keldon Marauders' ping, Reveillark's return,
+// Skyclave Apparition's Illusion, champion returns, Saproling Burst's token destruction, a back face re-faced in
+// its new zone), Athreos, Shroud-Veiled's exile watcher, revolt, and the devotion / reconfigure refreshes. No dies
+// or morbid watcher: nothing here went to a graveyard.
+//
+// The caller has ALREADY moved every departed permanent to its new zone (and finished the rest of its effect --
+// Worldfire sets each life total to 1 first); `departed` holds them as they last existed on the battlefield
+// (card, controller, owner, token-ness). That is the CR 603.10a look-back: every departed permanent "sees" the
+// others leave, so an Athreos exiled alongside a coin-marked creature still returns it, and a token's own LTB
+// still fires though the token has ceased to exist (CR 111.7 / 603.6c).
+//
+// ORDER = APNAP (CR 603.3b / 101.4): the active player's triggers go on the stack first, so the NON-active
+// player's resolve first; each player's own triggers in battlefield order (the controller's choice -- every
+// modelled LTB is order-independent within one player). Resolved inline, one after another, like every other
+// leave site in both worlds (the engine resolves triggers at the event; there is no trigger stack to hold).
+inline void PermanentsLeftBattlefieldTogether(GameState& state, const std::vector<Permanent>& departed)
+{
+    if (departed.empty()) { return; }
+    const int ap = state.active_player_index;
+    for (const Permanent& p : departed)
+    { if (p.controller_index == ap) { state.permanent_left_under_control_this_turn = true; break; } }
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        const int who = pass == 0 ? 1 - ap : ap;
+        for (const Permanent& p : departed)
+        { if (p.controller_index == who) { FireLeavesBattlefieldTriggers(state, p.controller_index, p.card); } }
+        if (!state.athreos_coin_ids.empty())
+        { for (const Permanent& p : departed) { ResolveAthreosExile(state, p, &departed, who); } }
+    }
+    // A coin mark whose creature left with no Athreos anywhere: the new object has no counter (CR 400.7).
+    // (Erased directly: an Athreos that ENTERED after the event -- a champion return -- must not trigger for it.)
+    for (const Permanent& p : departed)
+    {
+        auto& marked = state.athreos_coin_ids;
+        if (marked.empty()) { break; }
+        const auto mark = std::find(marked.begin(), marked.end(), p.card.m_number);
+        if (mark != marked.end()) { marked.erase(mark); }
+    }
+    RefreshDevotionCreatures(state);
+    RefreshReconfigureCreatures(state);
 }
 
 // "Exile it at the beginning of the next end step": every unearthed permanent, at the TOP of BOTH
@@ -29235,7 +29315,6 @@ inline void PerformUpkeepFading(GameState& state)
         // Cannot remove one -> sacrifice, then the LTB destroys every token it made.
         const Card dead = state.battlefield[static_cast<std::size_t>(idx)].card;
         const int  dead_owner = state.battlefield[static_cast<std::size_t>(idx)].owner_index;
-        const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead);
         state.battlefield.erase(state.battlefield.begin() + idx);
         if (g_play_event_sink)
         {
@@ -29244,8 +29323,9 @@ inline void PerformUpkeepFading(GameState& state)
                           + ": no fade counter left -- sacrificed");
         }
         state.players[dead_owner].graveyard.push_back(RevealedCard(dead));
-        if (dd && dd->params.fade_ltb_destroys_created_tokens)
-        { DestroyTokensCreatedBy(state, num); }
+        // Its LTB ("destroy all tokens created with it") lives in the shared FireLeavesBattlefieldTriggers,
+        // so every leave route fires it (a bounce, Worldfire's mass exile), not only this sacrifice.
+        FireLeavesBattlefieldTriggers(state, active, dead);
     }
 }
 

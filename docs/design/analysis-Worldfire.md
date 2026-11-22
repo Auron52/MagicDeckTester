@@ -42,7 +42,10 @@ and both graveyards is exiled into `GameState::exile`; the rollout's merged impu
 (`m_is_staged`) stay -- they are in exile already. Untouched: `suspended_cards` (time counters kept),
 `staged_cards`, the shared exile, libraries, floating mana. Worldfire itself is on the stack while it
 resolves and lands in the emptied graveyard. Life: both totals (2HG: the team pool) become 1;
-`opponent_lost_life_this_turn` is set. Leaves-the-battlefield triggers are not fired (none in the pool).
+`opponent_lost_life_this_turn` is set. Leaves-the-battlefield triggers FIRE (2026-11-22, see the rulings): after
+the life clause, every exiled permanent (tokens included) goes to the shared simultaneous-leave tail
+`PermanentsLeftBattlefieldTogether` (each one's own LTB via `FireLeavesBattlefieldTriggers`, Athreos's exile
+watcher with the CR 603.10a look-back, revolt; APNAP order). None in the pool, so play is unchanged.
 
 Life payment at 1: fetchlands pay 1 life at life 1 (the enumerator only refuses `life < cost`), and the
 executor already loses at the turn's end (`GameEngine::PlayOutFrom`, `HasLost`), but the rollout saw our
@@ -148,6 +151,10 @@ The 4 worse games of block 1, attributed by flipping one lever at a time and re-
 - 2026-11-21: INERT_PARAMS for Worldfire's two params -- *"it is true that there are no choices associated
   with the Worldfire card beyond casting it or not."* -> APPROVED.
 - 2026-11-21: the tutors' prune (see Provider below).
+- 2026-11-22: the Worldfire LTB deferral is WITHDRAWN -- *"I don't like the Leave-the-battlefield triggers one as
+  that seems like a future risk even if it doesn't impact this deck, so we should build something there."* Built:
+  Worldfire's mass exile fires LTB triggers through the shared path (`PermanentsLeftBattlefieldTogether`,
+  `test/unit/test_worldfire_ltb.cpp`).
 
 - 2026-11-21: opponent-lockdown FREE TURNS -- see `docs/design/opponent-lockdown-free-turns.md`
   (verbatim proposal + provisional defaults).
@@ -160,7 +167,8 @@ The 4 worse games of block 1, attributed by flipping one lever at a time and re-
   reason; activating it only spends mana and the tap.
 - Keldon Halberdier: "you MAY cast it" off suspend collapsed to CAST (declining gains nothing; the Search
   for Tomorrow / Profane Tutor precedent). First strike inert (no blockers).
-- Worldfire: leaves-the-battlefield triggers of exiled permanents are not fired (no such card in this pool).
+- ~~Worldfire: leaves-the-battlefield triggers of exiled permanents are not fired (no such card in this pool).~~
+  WITHDRAWN 2026-11-22 by the USER (below); now built.
 - Viewer paperwork: `exile_all_permanents_hands_graveyards` / `each_player_life_becomes` added to
   `audit_viewer_decisions.py` INERT_PARAMS (no choice exists).
 
