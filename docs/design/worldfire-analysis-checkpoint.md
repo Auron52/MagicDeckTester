@@ -101,6 +101,14 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   after repeated 9p ENOMEM retries; sharded unit run going. Handoff: logs/wfltb/handoff.md.
 - box_lane admission bug FIXED 6c5ae8c8d (wip/worldfire): a 4-slot job at cap 6 needed 26 GB on a 23 GB box.
 
+## LTB: DONE 2026-11-22 08:50 UTC -- READY TO LAND (wip/wfltb 0848f329e)
+Units (2 pre-existing fails: Thrumming Stone; Prevent Damage useful-mode payment -- order-dependent), scenarios,
+smoke 243/243 + regression 389/389 byte-identical (0 play changes, check_gt_logs consistent), 940 refs 0 drift.
+Owed (agent-side, record in a deferred doc at landing): DestroyAllEnchantments / SweepOrphanedAuras /
+SacrificeDepletedLands bypass LTB (unreachable in current decks); Ilharg exile half, Detention Sphere return, Severance
+Priest Spirit LTB still deferred; opponent-controlled Keldon Marauders ping sets opponent_lost_life_this_turn (bug);
+Skyclave/Wanderwine exile markers share base -0x20000000.
+
 ## Next, in order
 1. Relay each agent's report as it lands; surface its USER questions.
 2. LANDING BATCH via push_queue when ready: cantrip adoption + box_lane fix + worldfire docs, tutor-width (if bar met),
