@@ -179,8 +179,19 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   (iii) "skimp on mana when digging a lot"; (iv) cap kept tutors at 2; plus the 1b arms on a larger set.
 - Still open: 1c4 (next-drop tier after this turn's land), 1c5 (Mystical Tutor free {U}).
 
+## USER rulings 2026-11-22 (~04:00 UTC), VERBATIM
+- 2c (MDFC tie -> NONLAND): *"Sure, that sounds fine."*
+- 2d (free-turn adoption): *"Okay, but this is not a question."* -- i.e. the rule is the USER's design; adopt once the
+  agent's checks (trait=0 byte-identical, fairness arms, reference list) pass, and report.
+- 3 (no ply cost for free turns): *"Let's try it this way for now. If we find this restrictive or troublesome we can
+  re-adjust it."*
+- 4 (deferrals): the Overmaster / Mistrise riders were already approved (2026-11-21). Worldfire LTB triggers: *"I
+  don't like the Leave-the-battlefield triggers one as that seems like a future risk even if it doesn't impact this
+  deck, so we should build something there."* -> LTB agent in .claude/worktrees/wfltb (wip/wfltb, off the shared
+  branch f9a59b8a7): route the mass exile through the shared LTB path, both worlds, unit tests, tiers expected
+  byte-identical. Handoff: logs/wfltb/handoff.md. Parent lands it.
+- The "two Worldfire settings" were the viewer-audit INERT_PARAMS entries (no human-play choice), approved 2026-11-21.
+
 ## Open USER questions (defaults taken)
-- Search depth for free turns: default = no ply cost. USER Q9 said it is primarily a performance question.
-- Integrator #1's: four PROVISIONAL deferrals (Overmaster / Mistrise uncounterable riders inert,
-  Halberdier "may cast" -> cast, Worldfire LTB triggers not fired); INERT_PARAMS for the two Worldfire
-  params; the TutorSearchWidth 32 hook (lossless, default ON).
+- 1c4 (next-drop tier after this turn's land), 1c5 (Mystical Tutor free {U}).
+- 2a tie: exact tie in the majority-kind discard -> discard a land.
