@@ -19,13 +19,11 @@ date first) is the full picture; this section is the short version of how to pic
    `hold`/`keepalive`, `land`). Claude's queue entry is `839667a3a15d:wip/merfolk-gate` (set `MDT_PUSH_QUEUE_ID` to it to
    act as that entry, e.g. `requeue`/`leave`/`land`). If Claude stopped while HEAD of the queue, either finish its
    landing (below) or `leave` so other sessions are not blocked; a silent head is reaped after 45 min anyway.
-4. **Merfolk landing (the one pending shared-branch land):** tree `.claude/worktrees/land-1122b` (branch wip/land-1122b,
-   cd330ec5a, queue id above). Build + units passed; `build/scratch/claude_land1122b/validate2.sh` runs smoke
-   (`MTG_PGO=0 MTG_RSS_CAP_GB=40 bash test/regression.sh --smoke`) + `python3 test/check_gt_logs.py` under the box
-   lock; status file `build/scratch/claude_land1122b/status` ends "ALL OK" on success. Then: `git fetch`; if origin moved
-   past 94cd1e06b with gated changes, rebase + rebuild + unit + smoke again; else `push_queue.py land`, then
-   `git -C /workspaces/MagicDeckTester pull --rebase`. On smoke failure: read the audit (an expected Merfolk play change
-   needs its GT accepted -- see the 10:45/12:25 entries), `requeue` while fixing.
+4. **Merfolk LANDED 14:59 UTC 11-22** as cd330ec5a on phase-1-2-deck-analyzer (smoke 243/243 byte-identical, gt_logs
+   1409 consistent, references safe; origin had not moved from 94cd1e06b). Lease passed to another session
+   (550a08fdc1f3:wip/worldfire-integration). Claude is no longer in the queue. CI not watched (gh unauthed). Primary
+   fast-forwarded. Next land: Hinata d5E0 (agent rebasing + gate2 + GT on wip/hinata-d4-d5), batched with whatever
+   else is GT-accepted by then.
 5. **Workstreams (each owns a worktree under `.claude/worktrees/`, has its own `logs/<work>/*handoff*.md`, and lands
    through the parent via the queue; none pushes the shared branch itself):**
    | work | worktree / branch | state | next |
