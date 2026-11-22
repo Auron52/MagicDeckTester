@@ -109,6 +109,15 @@ SacrificeDepletedLands bypass LTB (unreachable in current decks); Ilharg exile h
 Priest Spirit LTB still deferred; opponent-controlled Keldon Marauders ping sets opponent_lost_life_this_turn (bug);
 Skyclave/Wanderwine exile markers share base -0x20000000.
 
+## FREE TURNS pass 4 DONE 2026-11-22 ~09:20 UTC (wip/freeturn 036445e01, logs/freeturn/handoff5.md); pass 5 RUNNING
+Checks PASS (trait-0 byte-identical, 940 refs 0 drift, reference LIST EMPTY -> nothing for the USER to approve).
+Parent rulings from the USER's standing rules: spawn requirement ships FREE-TURN-SCOPED ("no change to non-locking
+decks"; global = 58 non-trait smoke keys +0.635 via Searing Blaze/Blood, Blasphemous Act, Hinata, DotH, Swords losing
+the T1 creature); 2b cost (Sea Creatures +26% units) -> OPTIMIZE (USER Q16), not a question. Pass 5: Maze gi168 repro,
+bounceland stamp + legacy flag + default ON, MTG_FREE_TURNS default ON (no GT accept: parent accepts on the integrated
+tree), 2b stand-down optimization, optional on-the-draw T1 land lever. GENUINE USER decision surfaced 2026-11-22:
+Sire-fair / annihilator-fair (ship OFF until answered).
+
 ## Next, in order
 1. Relay each agent's report as it lands; surface its USER questions.
 2. LANDING BATCH via push_queue when ready: cantrip adoption + box_lane fix + worldfire docs, tutor-width (if bar met),
