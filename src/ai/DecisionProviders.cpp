@@ -73503,7 +73503,7 @@ bool BloodSunGrimRevGateHolds(const GameState& s, int controller)
 // B12 clarification (USER, verbatim): "At 8 mana the only arguable play that might be better with Grim Tutor we may want
 // to leave on the table is tutoring and playing Time Warp. We probably should not prune that." -> Grim Tutor -> Time Warp
 // stays a target, at every mana level and under the gate, when Grim Tutor and then Time Warp are BOTH castable this turn
-// from our mana, colours included (one exact payability test of the two costs together on the board as it stands).
+// from our mana, colours included. A land still playable from hand counts: Grim can fetch Warp after that drop.
 bool BloodSunGrimTimeWarpCastable(const GameState& s, int controller, const CardDefinition& tw)
 {
     if (tw.params.extra_turns_on_resolve <= 0 || controller != s.active_player_index) { return false; }
@@ -73520,7 +73520,22 @@ bool BloodSunGrimTimeWarpCastable(const GameState& s, int controller, const Card
     ManaCost both = a;
     both.generic += b.generic; both.white += b.white; both.blue += b.blue; both.black += b.black;
     both.red += b.red; both.green += b.green; both.colorless += b.colorless;
-    return TurnSolver::CostPayableExact(s, both, false);
+    if (TurnSolver::CostPayableExact(s, both, false)) { return true; }
+    const Player& me = s.players[static_cast<std::size_t>(controller)];
+    if (me.lands_played_this_turn >= me.LandDropsAvailable()) { return false; }
+    std::vector<std::string> tried;
+    for (std::size_t i = 0; i < me.hand.size(); ++i)
+    {
+        const CardDefinition* land = LandFaceDefOf(CardDatabase::Instance().LookupCached(me.hand[i]));
+        if (land == nullptr || !land->card.IsLand() || me.hand[i].m_impulse_no_land) { continue; }
+        const std::string& name = me.hand[i].m_name.str();
+        if (std::find(tried.begin(), tried.end(), name) != tried.end()) { continue; }
+        tried.push_back(name);
+        GameState probe = s;
+        if (PlayLandFromHand(probe, i, *land, LandPlayOptions{})
+            && TurnSolver::CostPayableExact(probe, both, false)) { return true; }
+    }
+    return false;
 }
 
 // `amend` = the three amendment arms apply (each still gated on its own lever); false = the base B12 list, which
@@ -73720,8 +73735,8 @@ bool BloodSunGoOffOn()
 //     creature we control after the plan attacks (an extra turn untaps everything; Emrakul cast now has been under our
 //     control since that extra turn began, CR 302.6);
 //   * the goldfish opponent never blocks, so power is damage.
-// Rank 2 when that reaches the opponent's life. Rank 1 (stage 1 of §5.3): a Revelation package holding an Emrakul while
-// the plan leaves 15 mana (the turn estimate minus the plan's casts) to hard-cast it -- the continuation's go-off.
+// Rank 2 when that reaches the opponent's life. Rank 1: a Revelation package holding an Emrakul while
+// the plan leaves 15 mana, or the §5.3 canonical two-Lotus Exploration/Time Warp bridge. Both only order.
 int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, const std::vector<int>& sel)
 {
     const int me = s.active_player_index;
@@ -73735,7 +73750,17 @@ int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, cons
         if (!pm.entered_this_turn && !pm.tapped) { now_power += pw; }
     }
     int extra = 0, cast_power = 0, spent = 0;
-    bool fetch_emrakul = false;
+    bool warp_in_hand = false;
+    int revelation_in_hand = 0;
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+        if (hd == nullptr) { continue; }
+        warp_in_hand |= hd->params.extra_turns_on_resolve > 0;
+        revelation_in_hand += hd->params.tutor_up_to_x ? 1 : 0;
+    }
+    bool fetch_emrakul = false, bridge = false;
+    int bridge_revelation_cost = 1 << 20;
     for (int j : sel)
     {
         if (j < 0 || j >= static_cast<int>(cands.size())) { continue; }
@@ -73748,15 +73773,47 @@ int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, cons
         if (d->card.IsCreature()) { cast_power += std::max(0, d->card.m_power.value_or(0)); }
         if (d->params.tutor_up_to_x && revpkg::IsPackage(a.tutor_target.str()))
         {
+            int lotuses = 0;
+            bool warp = false, rev = false, exploration = false;
             for (const std::string& nm : revpkg::DecodePackage(a.tutor_target.str()))
             {
                 const CardDefinition* fd = CardDatabase::Instance().Lookup(nm);
-                if (fd != nullptr && fd->params.cast_trigger_extra_turns > 0) { fetch_emrakul = true; }
+                if (fd == nullptr) { continue; }
+                if (fd->params.cast_trigger_extra_turns > 0) { fetch_emrakul = true; }
+                if (nm == "Lotus Vale" || nm == "Lotus Field") { ++lotuses; }
+                warp |= fd->params.extra_turns_on_resolve > 0;
+                rev |= fd->params.tutor_up_to_x;
+                exploration |= fd->params.static_extra_land_drops > 0 && !fd->params.unlimited_land_plays;
+            }
+            if ((warp || warp_in_hand) && (rev || revelation_in_hand >= 2)
+                && exploration && lotuses >= 2)
+            {
+                bridge = true;
+                bridge_revelation_cost = std::min(bridge_revelation_cost, a.cost.ManaValue());
             }
         }
     }
     if (now_power + extra * (bf_power + cast_power) >= opp_life) { return 2; }
-    if (fetch_emrakul && BloodSunTurnManaEstimate(s, me) - spent >= 15) { return 1; }
+    const int mana = BloodSunTurnManaEstimate(s, me);
+    if (fetch_emrakul && mana - spent >= 15) { return 1; }
+    // With Blood Sun, each Lotus enters untapped for three mana. The first pays Exploration's {G},
+    // granting the second drop; one Lotus pays {U}{U} and the other two floating mana pay Warp's {3}.
+    // The first drop must remain open after paying Revelation, so exclude the best hand land from the
+    // castable pool. Floating mana also expires at turn end, so exclude it from the E1 board floor.
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    int before_revelation = s.floating_mana.Total(), next_turn_board = 0;
+    for (const Permanent& pm : s.battlefield)
+    {
+        if (pm.controller_index != me || pm.def_absent || !pm.card.IsLand()) { continue; }
+        const CardDefinition* ld = CardDatabase::Instance().LookupCached(pm.card);
+        if (ld == nullptr) { continue; }
+        const int amount = std::max(1, EffectiveLandDef(s, *ld).params.produces_amount);
+        next_turn_board += amount;
+        if (!pm.tapped) { before_revelation += amount; }
+    }
+    if (bridge && LandNonManaAbilitiesSuppressed(s) && pl.lands_played_this_turn < pl.LandDropsAvailable()
+        && before_revelation >= bridge_revelation_cost && next_turn_board + 6 >= 16
+        && pl.life > 0) { return 1; }
     return 0;
 }
 

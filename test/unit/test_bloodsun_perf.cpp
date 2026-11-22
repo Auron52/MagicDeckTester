@@ -131,6 +131,22 @@ TEST_CASE("Blood Sun go-off front: a Revelation fetching Emrakul ranks first onl
     }
 }
 
+TEST_CASE("Blood Sun go-off front: Revelation's two-Lotus Exploration bridge needs an open drop")
+{
+    GameState s = BasePf(10, 20);
+    const std::string pkg = revpkg::EncodePackage(0,
+        { "Time Warp", "Diabolic Revelation", "Exploration", "Lotus Vale", "Lotus Field" });
+    const std::vector<Action> cands = { CastPf("Diabolic Revelation", pkg, 5) };
+    CHECK(BloodSunGoOffRank(s, cands, { 0 }) == 1);
+    s.players[0].lands_played_this_turn = s.players[0].LandDropsAvailable();
+    CHECK(BloodSunGoOffRank(s, cands, { 0 }) == 0);
+    s.players[0].lands_played_this_turn = 0;
+    s.players[0].hand.push_back(CardPf("Time Warp", 900));
+    const std::string hand_warp_pkg = revpkg::EncodePackage(0,
+        { "Diabolic Revelation", "Exploration", "Lotus Vale", "Lotus Field" });
+    CHECK(BloodSunGoOffRank(s, { CastPf("Diabolic Revelation", hand_warp_pkg, 4) }, { 0 }) == 1);
+}
+
 TEST_CASE("Blood Sun go-off front: ORDER only, off under MTG_BLOODSUN_GOOFF's human-play guard")
 {
     GameState s = BasePf(25, 15);
@@ -191,6 +207,23 @@ TEST_CASE("Blood Sun B12 second arm: no Grim Tutor at 8+ mana with a Revelation 
         const std::vector<std::string> t = ProvPf().TutorCandidates(s, 0, gp);
         CHECK(HasPf(t, "Time Warp"));
     }
+}
+
+TEST_CASE("Blood Sun Grim -> Time Warp counts a land drop still available from hand")
+{
+    GameState s = BasePf(0, 20);
+    for (int i = 0; i < 7; ++i) { PutPf(s, "City of Brass", 300 + i); }
+    s.players[0].hand.push_back(CardPf("Grim Tutor", 40));
+    s.players[0].hand.push_back(CardPf("City of Brass", 41));
+    s.players[0].library.push_back(CardPf("Time Warp", 500));
+    const CardDefinition& tw = DefPf("Time Warp");
+    CHECK(BloodSunGrimTimeWarpCastable(s, 0, tw));
+    {
+        GrimArms arms(1, 0);
+        CHECK(HasPf(ProvPf().TutorCandidates(s, 0, DefPf("Grim Tutor").params), "Time Warp"));
+    }
+    s.players[0].lands_played_this_turn = s.players[0].LandDropsAvailable();
+    CHECK_FALSE(BloodSunGrimTimeWarpCastable(s, 0, tw));
 }
 
 namespace
