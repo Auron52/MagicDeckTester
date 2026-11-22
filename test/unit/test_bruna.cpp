@@ -377,7 +377,11 @@ TEST_CASE("Bruna: line-critical land variants (measurement levers)")
         const int sprawl = b.Put("Utopia Sprawl", false, false, f24);
         for (Permanent& q : b.s.battlefield)
         { if (q.card.m_number == sprawl) { q.chosen_color = static_cast<std::int8_t>(Color::Green); } }
-        b.Put("Forest");
+        // Forest#18 is Overgrowth's declared host: the executor RESERVES it (taps it) across the Aura's own payment
+        // (AIEngine's reserved_host + ScarceHeldOnlyScope, AuraHostHoldKeepsLine). That reservation is what makes the
+        // other two Forests critical for the line's later {G}{G} -- without it the host's {G} counts as supply and
+        // neither Forest is critical (the first version of this board left the host untapped and never reproduced).
+        b.Put("Forest", /*tapped=*/true);
         b.Put("Forest", false, /*sick=*/true);   // this turn's land drop
         const int satyr = b.Put("Voyaging Satyr");
         ManaCost og;   og.generic = 2;  og.green = 1;
@@ -387,23 +391,29 @@ TEST_CASE("Bruna: line-critical land variants (measurement levers)")
         AddManaCost(line, gsz);
         AddManaCost(line, nyl);
         LineUnpaidCostScope hold(line);
+        ScarceHeldOnlyScope host_reserved(true);
         if (!TapForCostShared(b.s, og, /*for_creature=*/false, nullptr, true)) { return false; }
         return !b.ByNum(satyr)->tapped;
     };
     SUBCASE("7a amended: Voyaging Satyr is not tapped ahead of the critical land")
     { CHECK(satyr_kept(true)); CHECK_FALSE(satyr_kept(false)); }
-    // 7b AMENDMENT (MTG_PAY_LINE_CRIT_HASTE_SAC_LAST). NivMizzetCombo d0 gi532 (seed 1310532) T3 {Cascade Bluffs, Izzet
-    // Signet, Brainstorm, Ponder} off Island + Sulfur Falls + Bluffs + Generator Servant: under 7b Signet's {2} came off
-    // the Servant (both lands are critical for the line's {U}{U}), Ponder applied, and T4 had no hasty Niv (5 -> 7).
-    // Returns whether the Servant is still on the battlefield after Signet is paid.
-    auto servant_kept = [](bool amend) -> bool
+    // 7b AMENDMENT (MTG_PAY_LINE_CRIT_HASTE_SAC_LAST). Built for NivMizzetCombo d0 gi532 (seed 1310532) T3, but that game
+    // does NOT exercise it: lands pay Signet and Brainstorm under 7b with or without it, and the Servant is sacrificed
+    // for Ponder, the line's last cast, where no land is critical (the cause is the d0 plan, not the payment). In the
+    // 2026-11-22 A/B (127,000 paired games) ba was byte-identical to b everywhere, and the reason is structural: the
+    // amendment's predicate (crit_excluded) needs PaySacSpendableNow, which is IsPaySacSource -- a ONE-unit,
+    // produces-nothing pay-sac source (Treasure). Generator Servant (sac_for_mana_amount 2) never is: its {C}{C}
+    // reaches the payer as FLOATING mana from a plan SacForMana action, never as a selection candidate. So the
+    // amendment cannot fire for any card in the pool, under 7b or behind the creature band.
+    // Board: {Izzet Signet, Brainstorm, Ponder} off Island + Sulfur Falls + Generator Servant (both lands critical for
+    // the line's {U}{U}). Returns whether the Servant is still on the battlefield after Signet is paid.
+    auto servant_kept = [](bool behind, bool amend) -> bool
     {
-        ArmPin pin(1, 1, 0);
+        ArmPin pin(behind ? 0 : 1, behind ? 0 : 1, behind ? 1 : 0);
         pin.Amend(0, amend ? 1 : 0);
         BoardBr b;
         b.Put("Island");
         b.Put("Sulfur Falls");
-        b.Put("Cascade Bluffs", false, /*sick=*/true);
         const int servant = b.Put("Generator Servant");
         ManaCost sig; sig.generic = 2;
         ManaCost bs;  bs.blue = 1;
@@ -415,7 +425,17 @@ TEST_CASE("Bruna: line-critical land variants (measurement levers)")
         if (!TapForCostShared(b.s, sig, /*for_creature=*/false, nullptr, true)) { return false; }
         return b.ByNum(servant) != nullptr;
     };
-    SUBCASE("7b amended: Generator Servant is not sacrificed for the Signet") { CHECK(servant_kept(true)); CHECK_FALSE(servant_kept(false)); }
+    SUBCASE("7b amended: inert -- Generator Servant is never a pay-sac selection candidate")
+    {
+        BoardBr b;
+        const int servant = b.Put("Generator Servant");
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(b.ByNum(servant)->card);
+        REQUIRE(sd != nullptr);
+        CHECK(sd->params.sac_for_mana_grants_haste);
+        CHECK_FALSE(PaySacSpendableNow(b.s, *b.ByNum(servant), *sd));
+        for (const bool behind : { false, true })
+        { CHECK(servant_kept(behind, true)); CHECK(servant_kept(behind, false)); }
+    }
 }
 
 TEST_CASE("Bruna: the gather dominance collapse -- one subset, or take/skip for Almost Perfect only")

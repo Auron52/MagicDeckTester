@@ -2851,6 +2851,31 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             int dh_ncand = 0;   // MTG_PAY_DEPLETION_HOLD: candidates this pip compared (>1 -> an alternative exists)
             // The best HISTORICAL key (crit_hold ignored) of any land the crit rule moved back this pip (amendments only).
             int crit_base_key[4] = { 1 << 30, 1 << 30, 1 << 30, 1 << 30 };
+            // LINE-CRITICAL LAND supply (crit_hold below): one source's untapped unrestricted units per colour, and
+            // their board total, filled lazily on the first land the crit test reaches this pip.
+            bool crit_sup_ready = false;
+            int crit_sup_tot[5] = { 0, 0, 0, 0, 0 };
+            auto crit_share = [&](int q, int out[5])
+            {
+                for (int ci = 0; ci < 5; ++ci) { out[ci] = 0; }
+                const Permanent& o = state.battlefield[q];
+                if (o.controller_index != active || o.tapped || o.def_absent) { return; }
+                const CardDefinition* od = CardDatabase::Instance().LookupCached(o.card);
+                if (od == nullptr || od->params.creature_mana_only || od->params.colored_creature_only
+                    || BigSpellOnlySource(od->params)) { return; }
+                const bool dork = od->tmpl == CardTemplate::ManaDork && CanTapNow(o, state.battlefield);
+                if (!dork && !o.card.IsLand() && !od->params.mana_rock) { return; }
+                int seen = 0, n = 0;
+                for (Color c : EffectiveProduces(state, active, *od))
+                {
+                    const int ci = static_cast<int>(c);
+                    if (ci >= 0 && ci < 5 && !(seen & (1 << ci))) { seen |= 1 << ci; ++n; }
+                }
+                if (n == 0) { return; }
+                const int amt = std::max(1, ManaProducedPerTap(*od));
+                const int each = n == 1 ? amt : std::max(1, amt / n);
+                for (int ci = 0; ci < 5; ++ci) { if (seen & (1 << ci)) { out[ci] = each; } }
+            };
             // A source the amendments exclude from out-ranking a moved-back critical land: a land-untapping creature
             // (untap_target_land: its tap is worth a land's untap, not a pip -- Jumbo d0 gi1447, Voyaging Satyr) and a
             // sacrifice-for-mana source whose mana carries a creature-spell rider, paying a noncreature cost (the rider
@@ -3500,27 +3525,17 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         const ManaPool& fl = state.floating_mana;
                         int sup[5] = { fl.white + floating.white, fl.blue + floating.blue, fl.black + floating.black,
                                        fl.red + floating.red, fl.green + floating.green };
-                        for (int q = 0; q < bn; ++q)
+                        // The other sources' supply = the board total (computed once per pip selection: neither
+                        // the board nor `floating` changes inside it) minus this land's own share.
+                        if (!crit_sup_ready)
                         {
-                            if (q == i) { continue; }
-                            const Permanent& o = state.battlefield[q];
-                            if (o.controller_index != active || o.tapped || o.def_absent) { continue; }
-                            const CardDefinition* od = CardDatabase::Instance().LookupCached(o.card);
-                            if (od == nullptr || od->params.creature_mana_only || od->params.colored_creature_only
-                                || BigSpellOnlySource(od->params)) { continue; }
-                            const bool dork = od->tmpl == CardTemplate::ManaDork && CanTapNow(o, state.battlefield);
-                            if (!dork && !o.card.IsLand() && !od->params.mana_rock) { continue; }
-                            int seen = 0, n = 0;
-                            for (Color c : EffectiveProduces(state, active, *od))
-                            {
-                                const int ci = static_cast<int>(c);
-                                if (ci >= 0 && ci < 5 && !(seen & (1 << ci))) { seen |= 1 << ci; ++n; }
-                            }
-                            if (n == 0) { continue; }
-                            const int amt = std::max(1, ManaProducedPerTap(*od));
-                            const int each = n == 1 ? amt : std::max(1, amt / n);
-                            for (int ci = 0; ci < 5; ++ci) { if (seen & (1 << ci)) { sup[ci] += each; } }
+                            for (int q = 0; q < bn; ++q)
+                            { int sh[5]; crit_share(q, sh); for (int ci = 0; ci < 5; ++ci) { crit_sup_tot[ci] += sh[ci]; } }
+                            crit_sup_ready = true;
                         }
+                        int own[5];
+                        crit_share(i, own);
+                        for (int ci = 0; ci < 5; ++ci) { sup[ci] += crit_sup_tot[ci] - own[ci]; }
                         const int left = std::max(0, ManaProducedPerTap(*def) - 1);   // what the tap floats past the pip
                         for (int ci = 0; ci < 5 && !crit_hold; ++ci)
                         { if ((mine & (1 << ci)) && need[ci] > 0 && sup[ci] + left < need[ci]) { crit_hold = 1; } }
