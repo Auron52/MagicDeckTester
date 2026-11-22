@@ -99485,8 +99485,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
 
     // PER-CAST NAMED TUTOR AXIS (DecisionProvider::TutorCastTimeAxis; Blood Sun step 5, design §9.1). For a to-hand
     // tutor the provider opts in, EVERY cast of the plan carries its own searched target (Action::tutor_target): the
-    // cross product over the distinct names TutorCandidates ranks (TutorAxisWidth of them -- the opting provider makes
-    // it complete), so two Grim Tutors in one plan search both picks (the index axis above varies ONE tutor per plan).
+    // cross product over every distinct name TutorCandidates ranks, so two Grim Tutors in one plan search both
+    // picks (the index axis above varies ONE tutor per plan).
     // Emitted POST-dedup like the index axis (the cast-name signature would fold the names together), on base plans
     // only (one axis at a time; a variant of another axis resolves its tutor to the provider's front at resolution,
     // exactly as an index-axis plan's later axes do). The first combination is written in place, so the base IS a
@@ -99524,7 +99524,6 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     std::vector<std::string> uniq;
                     for (const std::string& c : RankedTutorCandidates(tprov, state, state.active_player_index, d->params))
                     { if (!c.empty() && std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
-                    if (uniq.size() > TutorAxisWidth(state)) { uniq.resize(TutorAxisWidth(state)); }
                     it = nm_cache.emplace(act.card_name, std::move(uniq)).first;
                 }
                 if (it->second.empty()) { continue; }   // nothing to find: the empty target whiffs (and shuffles)

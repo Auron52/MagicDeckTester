@@ -4358,10 +4358,7 @@ public:
                "package axis makes the reachable damage depend on the library. ProvenNoWinThisRound (one-sided, "
                "round-aware) is design step 9." }; }
     const char* Name() const override { return "BloodSun"; }
-    // GRIM TUTOR (design §9.1): COMPLETE, not a heuristic. Every distinct library name is a searched target (64 >=
-    // the distinct names of any 60-card list), and every to-hand tutor cast of a plan carries its own target (the
-    // per-cast named axis), closing the one-tutor-per-plan gap for this deck. Order: TutorCandidates' generic order.
-    int  TutorSearchWidth() const override { return 64; }
+    // GRIM TUTOR (design §9.1): every TutorCandidates name is searched by the per-cast named axis.
     // Diabolic Revelation (tutor_up_to_x) is NOT a single-target tutor: its package rides its own cast-time axis.
     bool TutorCastTimeAxis(const CardParams& p) const override
     { return p.tutor_to_hand && !p.wish_from_sideboard && !p.tutor_up_to_x; }

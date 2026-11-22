@@ -3637,9 +3637,7 @@ public:
     // (Plan::tutor_choice), which varies ONE tutor per plan -- a second tutor of the same plan takes the provider's
     // front at resolution (audit gap A4/C6, docs/design/no-greedy-in-search-window.md). TRUE: every such cast of a
     // plan gets its own target (Action::tutor_target) from the post-dedup cross product over the distinct names
-    // TutorCandidates ranks (TutorSearchWidth of them; the Transmute / Tooth and Nail named shape), so a plan with
-    // two copies searches both picks. A provider sets it only where the width is COMPLETE (every distinct name), or
-    // the named axis would cut lines the index axis reached.
+    // TutorCandidates ranks, so a plan with two copies searches both picks. The axis searches every distinct name.
     virtual bool TutorCastTimeAxis(const CardParams& p) const { (void)p; return false; }
 
     // RevelationClassOrder -- the ORDER (never a restriction) in which Diabolic Revelation's package enumeration
