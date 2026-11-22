@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 5f0a60fed  date 2026-11-22
+# Regression ground truth -- commit ec279ce78  date 2026-11-22
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
@@ -603,10 +603,10 @@ elementals_regression_d3_s2002=4.3800/fcd127baf81d3bce
 elementals_regression_d5_s2002=4.2800/336a7cfce85b243c
 elementals_regression_d5_s3003=4.2333/4bd6920d1bf087d1
 midrangeburn_regression_d0_s2002=5.0780/01d8ed92d7f3aca4
-midrangeburn_regression_d3_s2002=4.4800/8d1d41538eae794c
-midrangeburn_regression_d5_s2002=4.3933/0ebb81ee6fd16590
-midrangeburn_regression_d5_s3003=4.2733/36467e294daee3c9
-midrangeburn2hg_regression_d5_s2002=5.6267/55faa8c65fae3625
+midrangeburn_regression_d3_s2002=4.4667/2727528f092e3d65
+midrangeburn_regression_d5_s2002=4.3933/efae4b0d36a6d1a7
+midrangeburn_regression_d5_s3003=4.2667/bb000c2346e40cb1
+midrangeburn2hg_regression_d5_s2002=5.5733/9eefe37435e91b6a
 onedropburn_regression_d0_s2002=4.2120/24eff8a9f63a16fe
 onedropburn_regression_d3_s2002=3.6400/d1d3e98ca928d8d4
 onedropburn_regression_d5_s2002=3.7133/a2f87b6ba16fa9d8
@@ -618,10 +618,10 @@ modernrwburn_regression_d5_s2002=3.8133/8e961664b65ff930
 modernrwburn_regression_d5_s3003=3.8667/9e67ad30e9d02d7c
 modernrwburn2hg_regression_d5_s2002=4.7733/58546348dc3bbf52
 creatureburn_regression_d0_s2002=5.8930/31917e1e3cbc0e45
-creatureburn_regression_d3_s2002=4.8400/3571ffe17b48d6d0
-creatureburn_regression_d5_s2002=4.7667/f690987c3a103408
-creatureburn_regression_d5_s3003=4.7733/a980ec0d1104f6aa
-creatureburn2hg_regression_d5_s2002=6.0400/132d48fdba1a59b2
+creatureburn_regression_d3_s2002=4.7733/6a3e3e49e99f6522
+creatureburn_regression_d5_s2002=4.7200/1001879d1f7aed64
+creatureburn_regression_d5_s3003=4.7267/6ba59258741df8ec
+creatureburn2hg_regression_d5_s2002=5.9333/c5c5747c979b3d78
 merfolk_regression_d0_s2002=4.4250/45e1a1931cd57acf
 merfolk_regression_d3_s2002=4.2000/aa0993fd7345115f
 merfolk_regression_d5_s2002=4.1733/b2c627a1859df763
