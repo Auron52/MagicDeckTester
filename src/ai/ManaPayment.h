@@ -1079,6 +1079,13 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts);
 // and the payability walks), same nesting contract; false everywhere else.
 extern thread_local bool g_line_opens_unseen;
 
+// THE PAY-FIRST KEEP SET (Maze's End's Guild Summit, MTG_MAZE_SUMMIT_PAY_FIRST; definition in ManaPayment.cpp): of the
+// candidate sources `cands` (card numbers, tap-first order), which ones a real, colour-aware payment of `bill` on `s`
+// needs once every other source is spent. keep[i] = 1 for those; returns how many, or -1 when even all of them cannot
+// pay `bill`. `unavailable` (card numbers) are treated as tapped.
+int LinePayKeepSet(const GameState& s, const ManaCost& bill, const std::vector<int>& cands,
+                   const std::vector<int>& unavailable, std::vector<char>& keep);
+
 // Does this line cast a breakpoint opener (see g_line_opens_unseen)? Defined in TurnSolver.cpp beside
 // LineCastCostTotal. Returns false without looking unless MTG_LINE_FLOAT_UNSEEN_GUARD's rung is live
 // (LineFloatUnseenGuardOn), so a flag-off binary never pays for the scan.

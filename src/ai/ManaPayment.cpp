@@ -11295,6 +11295,40 @@ bool AuraHostHoldKeepsLine(const GameState& s, const Card& aura, int host_num, c
     return LineBillPayable(a, rest, false);
 }
 
+// ---- THE PAY-FIRST KEEP SET (Maze's End Guild Summit, MTG_MAZE_SUMMIT_PAY_FIRST; ManaPayment.h) ----------------------
+// Which of `cands` (card numbers, TAP-FIRST order: the first is the least worth keeping) a real payment of `bill` on `s`
+// needs, every other source of ours (floating mana, non-candidate lands, rocks, Treasures) spent first. `unavailable`
+// (card numbers) are treated as tapped throughout (a source the line needs for something other than mana). The judge
+// is the complete backtracker on a scratch board (LineBillPayableOn), each candidate left out by tapping it there --
+// PayHolding's mechanic. -1 when the bill is unpayable even with every candidate; else keep[i] = 1 for each candidate
+// the payment keeps, an inclusion-minimal set found by leaving candidates out in `cands` order while the bill stays
+// payable (so the order is only the tie-break where the payment has a genuinely free choice), and the count kept.
+int LinePayKeepSet(const GameState& s, const ManaCost& bill, const std::vector<int>& cands,
+                   const std::vector<int>& unavailable, std::vector<char>& keep)
+{
+    const std::size_t n = cands.size();
+    keep.assign(n, 0);
+    if (bill.ManaValue() <= 0) { return 0; }
+    auto payable = [&]() {
+        RampScratch sc(s);
+        GameState& b = sc.Board();
+        for (int num : unavailable) { if (Permanent* p = PermByNumber(b, num)) { p->tapped = true; } }
+        for (std::size_t i = 0; i < n; ++i)
+        { if (keep[i] == 0) { if (Permanent* p = PermByNumber(b, cands[i])) { p->tapped = true; } } }
+        return LineBillPayableOn(b, bill, /*for_creature=*/false);
+    };
+    if (payable()) { return 0; }   // the other sources pay it all: every candidate is free
+    keep.assign(n, 1);
+    if (n == 0 || !payable()) { return -1; }
+    int kept = static_cast<int>(n);
+    for (std::size_t i = 0; i < n && kept > 0; ++i)
+    {
+        keep[i] = 0;
+        if (payable()) { --kept; } else { keep[i] = 1; }
+    }
+    return kept;
+}
+
 // Make the oracle-table option `opt` for `cost_in` on `b` (PayRefineAfter's procedure): its taps, its set-aside units
 // held off the bill, the bill paid float-only by the shared payer, the set-aside units back in the float.
 static bool MakeLineKeepOption(GameState& b, const manaoracle::PayOption& opt, const ManaCost& cost_in, bool for_creature,

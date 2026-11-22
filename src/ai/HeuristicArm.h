@@ -1133,6 +1133,7 @@ enum Slot : int
     PREPAY_FLOAT_C_PHYS,      // MTG_PREPAY_FLOAT_C_PHYS  the whole-turn prepay (BatchPrepayMainCasts) counts a {C} ALREADY FLOATING at entry as physical {C}, never relaunched as wild (CR 106.1b: colourless cannot pay a coloured pip). Hinata s63003 gi548 d8 b0: a failed tap-ahead left Sol Ring floating {C}{C}, the next prepay booked it wild2 and paid Reality Spasm {U}{U} -> a verified T5 the executor could not cast. A rules-correctness fix. Default ON; =0 -> the old illegal booking (A/B lever only)
     UO_BUDGET_PRICE,          // MTG_UO_BUDGET_PRICE  the unlock-order search's walks (MTG_PO_UNLOCK_ORDER: the enumeration site's tree beyond the given order's own path, the apply site's given walk and search) are CHARGED to the decision budget (unitsite unlock_order): one unit per MTG_UO_BUDGET_PRICE_W cast steps, the equip route's shape (inert at an unlimited budget: DecisionBudget() is nullptr). The USER's option (a), 2026-11-20 -- PROPOSED, DEFAULT OFF until the USER rules. docs/design/jumbo-apply-drop-order-2026-11-18.md
     UO_BUDGET_CUT,            // MTG_UO_BUDGET_CUT  with UO_BUDGET_PRICE on, the ENUMERATION site's search also STOPS (no other order admitted) once the decision budget is Exhausted() or Overrun() -- the equip route's per-link cut test, read at each charge. The apply site is charged, never cut. DEFAULT ON (inert while the price is off); =0 -> charge only (the reflection fans' shape)
+    MAZE_SUMMIT_PAY_FIRST,    // MTG_MAZE_SUMMIT_PAY_FIRST  Maze's End (USER 2026-11-22: "We can just pay our mana costs and then tap the rest."): Guild Summit's tap set is a mana-payment consequence of the line -- at resolution a real colour-aware payment of the rest of the applying line (g_line_unpaid_cost, plus Maze's End's {3} reserve) is found with every non-Gate source spent first (LinePayKeepSet), and EVERY Gate it does not use is tapped (MazesEndProvider::EtbTapSubtypePayFirst); the searched menu is {all unneeded, none}. The fixed Gate order is only the tie-break. Default OFF until measured; =0 -> the {rest-of-line, 0, all} mana-value menu
     COUNT
 };
 
@@ -2210,6 +2211,7 @@ inline const char* Name(int slot)
         "MTG_PREPAY_FLOAT_C_PHYS",
         "MTG_UO_BUDGET_PRICE",
         "MTG_UO_BUDGET_CUT",
+        "MTG_MAZE_SUMMIT_PAY_FIRST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

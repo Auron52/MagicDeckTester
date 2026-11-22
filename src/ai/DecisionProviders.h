@@ -5319,6 +5319,10 @@ public:
     // unpinned cast, resolved by EtbTapSubtypeDrawDefault (also the beyond-horizon default). MTG_MAZE_SUMMIT_COUNT.
     std::vector<int> EtbChoiceCandidates(const GameState& s, int controller, const CardDefinition& def) const override;
     int EtbTapSubtypeDrawDefault(const GameState& s, int controller, const CardDefinition& def, int avail) const override;
+    // USER 2026-11-22 (MTG_MAZE_SUMMIT_PAY_FIRST, default OFF until measured): pay the rest of the line, tap every Gate
+    // that payment does not use; the menu becomes {all unneeded, none}.
+    int EtbTapSubtypePayFirst(const GameState& s, int controller, const CardDefinition& def,
+                              std::vector<int>& elig) const override;
     // P1d item 5 (USER A4): MTG_MAZE_ACTIVATE_FIRST (DEFAULT OFF) -- with no land left to play, a plan activating
     // Maze's End is tried first (a move-order tier; ORDER only).
     bool PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
