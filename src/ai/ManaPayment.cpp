@@ -2624,7 +2624,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             // excluded sources behind that land. Declared ABOVE the label so the rerun keeps it; at most once a pip.
             bool crit_demote = false;
             const bool crit_amend_live = (PayLineCritLandOn() || PayLineCritBehindDorksOn())
-                                      && PayLineCritUntapperLastOn();
+                                      && (PayLineCritUntapperLastOn() || PayLineCritReserveLastOn());
             // MTG_PAY_DEPLETION_HOLD re-selection point (see the check after the selection below): the
             // held-depletion set is computed only once a depletion land is about to WIN a pip against an
             // alternative, and when that land turns out to be held the selection runs once more with the
@@ -2876,13 +2876,17 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 const int each = n == 1 ? amt : std::max(1, amt / n);
                 for (int ci = 0; ci < 5; ++ci) { if (seen & (1 << ci)) { out[ci] = each; } }
             };
-            // A source the amendment excludes from out-ranking a moved-back critical land: a land-untapping creature
-            // (untap_target_land: its tap is worth a land's untap, not a pip -- Jumbo d0 gi1447, Voyaging Satyr).
-            // Identified off `real_def` (a granted mana face carries none of the card's params).
-            auto crit_excluded = [&](const Permanent& q, const CardDefinition* qreal) -> bool
+            // A source the amendments exclude from out-ranking a moved-back critical land: a land-untapping creature
+            // (MTG_PAY_LINE_CRIT_UNTAPPER_LAST; untap_target_land: its tap is worth a land's untap, not a pip -- Jumbo d0
+            // gi1447, Voyaging Satyr), and a NONCREATURE source of the held tiers (MTG_PAY_LINE_CRIT_RESERVE_LAST; rank
+            // 60..499 -- 7a's 499 band is meant to sit behind the dorks, not behind every held land: Dragonstorm gi679,
+            // Mercadian Bazaar's storage over Sandstone Needle). Identified off `real_def` (a granted mana face carries
+            // none of the card's params).
+            auto crit_excluded = [&](const Permanent& q, const CardDefinition* qreal, int q_rank) -> bool
             {
-                return qreal != nullptr && PayLineCritUntapperLastOn() && qreal->params.untap_target_land
-                    && q.card.IsCreature();
+                if (qreal == nullptr) { return false; }
+                if (PayLineCritUntapperLastOn() && qreal->params.untap_target_land && q.card.IsCreature()) { return true; }
+                return PayLineCritReserveLastOn() && !q.card.IsCreature() && q_rank >= 60 && q_rank < 499;
             };
             for (int i = 0; i < bn; ++i)
             {
@@ -3510,7 +3514,24 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     LineOwedAfterOwnPips(later);
                     int need[5], mine = 0;
                     bool any_need = false;
-                    for (int ci = 0; ci < 5; ++ci) { need[ci] = later[ci] + nd_left[ci]; }
+                    // MTG_PAY_LINE_CRIT_RITUAL_CREDIT: the spell being paid is a ritual whose float pays the line's LATER
+                    // pips of its colour (any colour for an unrestricted float), so those pips do not make a land
+                    // critical; this payment's own pips (nd_left) still do. Dragonstorm gi679 (Desperate Ritual {1}{R},
+                    // RRR) and the Cyclone d3/d5 slower games (Seething Song {2}{R}, RRRRR).
+                    int credit[5] = { 0, 0, 0, 0, 0 };
+                    if (PayLineCritRitualCreditOn())
+                    {
+                        const Card* pc = PayingSpellCard();
+                        const CardDefinition* rd = pc != nullptr ? CardDatabase::Instance().LookupCached(*pc) : nullptr;
+                        if (rd != nullptr && rd->params.ritual_floating_mana > 0)
+                        {
+                            const std::string& rc = rd->params.ritual_float_color;
+                            static const char kWubrg[] = "WUBRG";
+                            for (int ci = 0; ci < 5; ++ci)
+                            { if (rc.empty() || rc[0] == kWubrg[ci]) { credit[ci] = rd->params.ritual_floating_mana; } }
+                        }
+                    }
+                    for (int ci = 0; ci < 5; ++ci) { need[ci] = std::max(0, later[ci] - credit[ci]) + nd_left[ci]; }
                     for (Color c : pay_produces(*def, &p))
                     {
                         const int ci = static_cast<int>(c);
@@ -3599,7 +3620,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     for (int k = 0; k < 4 && c == 0; ++k) { c = (bk[k] < crit_base_key[k]) ? -1 : (bk[k] > crit_base_key[k] ? 1 : 0); }
                     if (c < 0) { for (int k = 0; k < 4; ++k) { crit_base_key[k] = bk[k]; } }
                 }
-                if (crit_demote && kind == 1 && rank >= 0 && crit_excluded(p, real_def))
+                if (crit_demote && kind == 1 && rank >= 0 && crit_excluded(p, real_def, rank))
                 {
                     // Second selection (crit_demote): behind every source of the moved-back land's tier -- the plain
                     // tier under MTG_PAY_LINE_CRIT_LAND, the 499 band under _BEHIND_DORKS -- and ahead of the next.
@@ -3673,7 +3694,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 {
                     const Permanent& bp = state.battlefield[best_i];
                     const CardDefinition* breal = bp.def_absent ? nullptr : CardDatabase::Instance().LookupCached(bp.card);
-                    if (crit_excluded(bp, breal)) { crit_demote = true; goto dh_reselect; }
+                    if (crit_excluded(bp, breal, best_rank)) { crit_demote = true; goto dh_reselect; }
                 }
             }
             if (best_i < 0) { return false; }

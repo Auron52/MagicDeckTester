@@ -1086,6 +1086,25 @@ inline bool PayLineCritUntapperLastOn()
     static const bool env_on = EnvOn("MTG_PAY_LINE_CRIT_UNTAPPER_LAST");
     return heurarm::Flag(heurarm::PAY_LINE_CRIT_UNTAPPER_LAST, env_on);
 }
+// MTG_PAY_LINE_CRIT_RESERVE_LAST (MEASUREMENT ONLY, default OFF; 7a's second amendment, 2026-11-23): a NONCREATURE source
+// of the held tiers (ManaSourceRank 60..499: manland 60, storage land 62, sole-colour/burst 63) never pays ahead of a
+// line-critical land 7a moved behind the creature band -- 7a's tier is meant to put the land behind the DORKS, and
+// without this it also lands behind every held land. Dragonstorm gi679: Desperate Ritual's {1} came off Mercadian
+// Bazaar's storage instead of Sandstone Needle (T5 kill -> T6). ManaPayment.cpp crit_demote.
+// MTG_PAY_LINE_CRIT_RITUAL_CREDIT (MEASUREMENT ONLY, default OFF; amends BOTH 7a and 7b's critical-land test,
+// 2026-11-23): when the spell being paid is a mana ritual, its float (ritual_floating_mana of ritual_float_color, or
+// any colour) is credited against the line's LATER pips, so a land is not "the last source" of a colour the ritual
+// itself is about to make. ManaPayment.cpp crit_hold.
+inline bool PayLineCritRitualCreditOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_LINE_CRIT_RITUAL_CREDIT");
+    return heurarm::Flag(heurarm::PAY_LINE_CRIT_RITUAL_CREDIT, env_on);
+}
+inline bool PayLineCritReserveLastOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_LINE_CRIT_RESERVE_LAST");
+    return heurarm::Flag(heurarm::PAY_LINE_CRIT_RESERVE_LAST, env_on);
+}
 
 inline bool PayNarrowRestrictedFirstOn()
 {

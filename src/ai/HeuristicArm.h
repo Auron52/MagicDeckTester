@@ -1088,6 +1088,8 @@ enum Slot : int
     PAY_LINE_CRIT_OPENER,     // MTG_PAY_LINE_CRIT_OPENER  MEASUREMENT ONLY: the line-critical land rule is live in a line that casts a breakpoint opener (tutor) too. Default OFF; read only with PAY_LINE_CRIT_LAND or PAY_LINE_CRIT_BEHIND_DORKS
     PAY_LINE_CRIT_BEHIND_DORKS, // MTG_PAY_LINE_CRIT_BEHIND_DORKS  MEASUREMENT ONLY (overrides "no creature ever ranks ahead of any land"): a line-critical land ranks behind the creature band. Default OFF
     PAY_LINE_CRIT_UNTAPPER_LAST, // MTG_PAY_LINE_CRIT_UNTAPPER_LAST  MEASUREMENT ONLY, amendment to PAY_LINE_CRIT_BEHIND_DORKS (USER 2026-11-22 "7a ... along with the amendment"): a land-untapping creature (untap_target_land: Voyaging Satyr) is not one of the creatures a line-critical land ranks behind -- when it would win a pip only because a critical land was moved back, it pays after that land. Default OFF; read only with a crit lever
+    PAY_LINE_CRIT_RESERVE_LAST,  // MTG_PAY_LINE_CRIT_RESERVE_LAST  MEASUREMENT ONLY, second amendment to PAY_LINE_CRIT_BEHIND_DORKS (2026-11-23): a noncreature source of the held tiers (rank 60..499: manland, storage land, burst land) pays after a line-critical land 7a moved back (Dragonstorm gi679, Mercadian Bazaar vs Sandstone Needle)
+    PAY_LINE_CRIT_RITUAL_CREDIT, // MTG_PAY_LINE_CRIT_RITUAL_CREDIT  MEASUREMENT ONLY (2026-11-23), amends PAY_LINE_CRIT_LAND / _BEHIND_DORKS: a ritual being paid credits its float against the line's later pips in the critical-land test (Dragonstorm gi679, Cyclone d3/d5)
     COUNT
 };
 
@@ -2120,6 +2122,8 @@ inline const char* Name(int slot)
         "MTG_PAY_LINE_CRIT_OPENER",
         "MTG_PAY_LINE_CRIT_BEHIND_DORKS",
         "MTG_PAY_LINE_CRIT_UNTAPPER_LAST",
+        "MTG_PAY_LINE_CRIT_RESERVE_LAST",
+        "MTG_PAY_LINE_CRIT_RITUAL_CREDIT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

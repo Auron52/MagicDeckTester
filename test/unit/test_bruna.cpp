@@ -313,10 +313,13 @@ TEST_CASE("Bruna: line-critical land variants (measurement levers)")
             heurarm::t_arm[heurarm::PAY_LINE_CRIT_OPENER]       = -1;
             heurarm::t_arm[heurarm::PAY_LINE_CRIT_BEHIND_DORKS] = -1;
             heurarm::t_arm[heurarm::PAY_LINE_CRIT_UNTAPPER_LAST] = -1;
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_RESERVE_LAST] = -1;
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_RITUAL_CREDIT] = -1;
         }
-        void Amend(int untapper)
+        void Amend(int untapper, int reserve = 0)
         {
             heurarm::t_arm[heurarm::PAY_LINE_CRIT_UNTAPPER_LAST] = static_cast<std::int8_t>(untapper);
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_RESERVE_LAST]  = static_cast<std::int8_t>(reserve);
         }
     };
     // s30051257 T2 {Sol Ring, Arcanum Wings}: Sol Ring's {1} off Avacyn's Pilgrim keeps Botanical Sanctum's {U}.
@@ -395,6 +398,40 @@ TEST_CASE("Bruna: line-critical land variants (measurement levers)")
     };
     SUBCASE("7a amended: Voyaging Satyr is not tapped ahead of the critical land")
     { CHECK(satyr_kept(true)); CHECK_FALSE(satyr_kept(false)); }
+    // 7a SECOND AMENDMENT (MTG_PAY_LINE_CRIT_RESERVE_LAST). Dragonstorm gi679 (seed 1810679): on a T3 search board
+    // {Desperate Ritual, Desperate Ritual, Scourge of Valkas} off Mercadian Bazaar (storage counters) + Sandstone Needle
+    // + Mountain, 7a moved the Needle (critical for the line's later {R}s) behind the creature band -- and so behind the
+    // Bazaar's held tier (62): the Ritual's {1} spent a storage counter, the Bazaar-first opening lost its value and the
+    // search played Needle first (T5 kill -> T6, every depth d1..d8). Returns whether the Bazaar keeps its counters.
+    // mode 0 = 7a alone, 1 = + MTG_PAY_LINE_CRIT_RESERVE_LAST, 2 = + MTG_PAY_LINE_CRIT_RITUAL_CREDIT (the Ritual being
+    // paid floats {R}{R}{R}, which covers the line's later {R}s, so the Needle is not critical at all).
+    auto bazaar_kept = [](int mode) -> bool
+    {
+        ArmPin pin(0, 0, 1);
+        pin.Amend(0, mode == 1 ? 1 : 0);
+        heurarm::t_arm[heurarm::PAY_LINE_CRIT_RITUAL_CREDIT] = static_cast<std::int8_t>(mode == 2 ? 1 : 0);
+        const Card ritual = CardBr("Desperate Ritual", 90);
+        SpellSubtypePayScope paying(&ritual);
+        BoardBr b;
+        const int bazaar = b.Put("Mercadian Bazaar");
+        const int needle = b.Put("Sandstone Needle");
+        for (Permanent& q : b.s.battlefield)
+        {
+            if (q.card.m_number == bazaar) { q.storage_counters = 2; }
+            if (q.card.m_number == needle) { q.counters.Add(Counter::Type::Depletion, 2); }
+        }
+        b.Put("Mountain", false, /*sick=*/true);
+        ManaCost rit; rit.generic = 1; rit.red = 1;
+        ManaCost sco; sco.generic = 2; sco.red = 2;
+        ManaCost line = rit;
+        AddManaCost(line, rit);
+        AddManaCost(line, sco);
+        LineUnpaidCostScope hold(line);
+        if (!TapForCostShared(b.s, rit, /*for_creature=*/false, nullptr, true)) { return false; }
+        return b.ByNum(bazaar)->storage_counters == 2 && !b.ByNum(bazaar)->tapped;
+    };
+    SUBCASE("7a second amendment: Mercadian Bazaar's storage is not spent ahead of the critical Needle")
+    { CHECK(bazaar_kept(1)); CHECK(bazaar_kept(2)); CHECK_FALSE(bazaar_kept(0)); }
 }
 
 TEST_CASE("Bruna: the gather dominance collapse -- one subset, or take/skip for Almost Perfect only")
