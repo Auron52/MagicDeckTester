@@ -48,6 +48,18 @@
    "shortfalls": [],
    "src": "587dcce678b33e6a61d28b2760d0c11a8f693f79"
   },
+  "beasts": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 5.2,
+   "max_turns": 8,
+   "n": 10,
+   "policy": "committed value_play",
+   "search": 5.1,
+   "short": 0,
+   "shortfalls": [],
+   "src": "f5fcba769b80137301b1334ca9b8ba85c46edad4"
+  },
   "breachingdragonstorm": {
    "hand_mismatch": 0,
    "hand_mismatch_games": [],
