@@ -51,3 +51,33 @@ dominant engine function. The largest exclusive samples were `CollectActions`
 (4.3%), `BuildSimKeyBase` (3.7%), plan enumeration (3.0%), and `memmove`
 (2.6%); `WorldfireKeepRank::Of` was 1.9%. The cost is spread across search
 work, so a small local rewrite is unlikely to change the generation bill.
+
+## Full-run checkpoint, 2026-11-23
+
+The `fast` R30 run resumed 38,097 scout cell-sides under fresh PGO+LTO and ran
+for 5 h 54 min before it was stopped to investigate the multi-day estimate.
+Its size-seven floor had completed 1,465,811 rollouts, still with 0% worker
+idle time and no sub-table batches started. The R2 floor covers 1,124,766
+play/draw cell-sides, hence about 2.25 million rollouts; the observed rate
+ranged from 50 to 104 rollouts/s as hand composition changed. The journal is
+durable at `Worldfire.keepmodel.exhaustive.raw.json.journal` (801,871 records,
+40 MB) and the driver can resume it with the same `fast` recipe.
+
+The long tail is not the main cost. Of the 1.47 million rollouts, 519 exceeded
+30 s, 39 exceeded 60 s, and three exceeded 120 s (maximum 200 s). Their
+combined time was 5.96 core-hours, about 3% of the run's CPU time. The slowest
+hands vary: two Rift Bolts plus two Memory Lapses and Mystical Tutor; a
+Worldfire/Seething Song/Personal Tutor/Lotus Bloom hand; or four Rift Bolts
+with Mystical Tutor. None points to one recurring runaway. The PGO perf samples
+likewise spread cost across action collection, state-key construction, plan
+application, and search.
+
+Comparison runs give an order-of-magnitude total estimate, not a reliable ETA:
+EDF's `fast` R30 run took 61.5 h for 773,890 size-seven cell-sides at d1/b1;
+Worldfire has 1,124,766 at d2/b8. Scaling by cell count and current throughput
+suggests roughly 3–4 days, subject to how adaptive bottoming and keep refinement
+freeze Worldfire's cells. The low-R alternative still owes the same R2 floor.
+The discovery cache's closest non-fetchland pair is Personal Tutor/Mystical
+Tutor at 0.1475 mean win turns per probe, far beyond the 0.01 merge threshold;
+the next closest is Mistrise Village/Island at 0.1825. There is no measured
+near-equivalent bucket to merge safely.
