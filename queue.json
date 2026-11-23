@@ -1,16 +1,8 @@
 {
  "entries": [
   {
-   "branch": "wip/worldfire-mullperf",
-   "head_since": "2026-11-22T23:33:22Z",
-   "heartbeat": "2026-11-23T00:06:39Z",
-   "host": "550a08fdc1f3",
-   "id": "550a08fdc1f3:wip/worldfire-mullperf",
-   "joined": "2026-11-22T23:25:26Z",
-   "note": ""
-  },
-  {
    "branch": "phase-1-2-deck-analyzer",
+   "head_since": "2026-11-23T00:06:53Z",
    "host": "a7c2d36c718e",
    "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
    "joined": "2026-11-22T23:33:22Z",
