@@ -1,0 +1,617 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [25] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "opponent_land_entry": 1, "free_turns": 1, "opponent_spawn_land": 1, "opponent_bounce_opening": 1, "opponent_shuffle_ordinal": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 9, "name": "Burgeoning" }, { "num": 45, "name": "Lotus Vale" }, { "num": 27, "name": "Exploration" }, { "num": 11, "name": "City of Brass" }, { "num": 25, "name": "Emrakul, the Aeons Torn" }, { "num": 5, "name": "Blooming Marsh" }, { "num": 58, "name": "Time Warp" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 2, "name": "Blood Sun" }, { "num": 55, "name": "Scorched Ruins" }, { "num": 26, "name": "Emrakul, the Aeons Torn" }, { "num": 25, "name": "Emrakul, the Aeons Torn" }, { "num": 33, "name": "Golgari Rot Farm" }, { "num": 18, "name": "Copperline Gorge" }, { "num": 9, "name": "Burgeoning" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 2, "name": "Blood Sun", "win_optimal": true }, { "num": 55, "name": "Scorched Ruins", "win_optimal": true }, { "num": 26, "name": "Emrakul, the Aeons Torn", "win_optimal": true }, { "num": 25, "name": "Emrakul, the Aeons Torn", "win_optimal": true }, { "num": 33, "name": "Golgari Rot Farm", "win_optimal": true }, { "num": 18, "name": "Copperline Gorge", "win_optimal": true }, { "num": 9, "name": "Burgeoning", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 55, "name": "Scorched Ruins" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Copperline Gorge", "cast=Burgeoning"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Diabolic Revelation" }],
+  "events": [{ "turn": 0, "kind": "land", "text": "opponent plays Seraph Sanctuary" }, { "turn": 0, "kind": "lifegain", "text": "＋ opponent +1 life (Seraph Sanctuary)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Sun", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 9, "name": "Burgeoning", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 18, "name": "Copperline Gorge", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Diabolic Revelation", "cost": "{X}{3}{B}{B}", "mv": 5, "kind": "nonpermanent" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Golgari Rot Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 53, "hand_size": 6, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Copperline Gorge; cast: Burgeoning", "declared_order_payability": "not_verified", "land": "Copperline Gorge", "casts": ["Burgeoning"], "actions": [{ "card": "Burgeoning" }] },
+    { "index": 1, "summary": "land=Golgari Rot Farm; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Golgari Rot Farm", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Copperline Gorge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Copperline Gorge", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Scorched Ruins; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Scorched Ruins", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 1, "num": 18, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Sun", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 22, "name": "Diabolic Revelation", "cost": "{X}{3}{B}{B}", "mv": 5, "kind": "nonpermanent" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Golgari Rot Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 53, "hand_size": 6, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 1, "num": 18, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Sun", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 22, "name": "Diabolic Revelation", "cost": "{X}{3}{B}{B}", "mv": 5, "kind": "nonpermanent" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Golgari Rot Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 53, "hand_size": 6, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "type": "dig",
+  "source": "Burgeoning (opponent played a land)",
+  "turn": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Burgeoning", "idx": 3, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 2, "num": 18, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Sun", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 22, "name": "Diabolic Revelation", "cost": "{X}{3}{B}{B}", "mv": 5, "kind": "nonpermanent" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Golgari Rot Farm", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 6, "graveyard": [] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Scorched Ruins" }, { "index": 1, "legal": true, "name": "Golgari Rot Farm" }],
+  "note": "reply an examined index to put that land card from your hand onto the battlefield, or -1 to put nothing. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "type": "bounce",
+  "source": "Golgari Rot Farm",
+  "turn": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Burgeoning", "idx": 3, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 2, "num": 18, "tapped": true, "is_land": true }, { "name": "Golgari Rot Farm", "idx": 4, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Sun", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 22, "name": "Diabolic Revelation", "cost": "{X}{3}{B}{B}", "mv": 5, "kind": "nonpermanent" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 6, "graveyard": [] },
+  "heuristic_default": 0,
+  "allow_decline": false,
+  "options": [{ "index": 0, "perm_index": 2, "tapped": true, "name": "Copperline Gorge", "label": "Copperline Gorge" }, { "index": 1, "perm_index": 4, "tapped": true, "name": "Golgari Rot Farm", "label": "Golgari Rot Farm" }],
+  "note": "reply an option index -- the land to return to your hand. Default = the AI's pick. An UNTAPPED land you return is first tapped for mana in response (it floats until the phase ends), unless tapping it has a cost or side effect (pain, energy, a depletion counter) or its mana is spend-restricted."
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Copperline Gorge", "cast=Blood Sun"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Rakdos Carnarium" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Plains" }, { "turn": 1, "kind": "land", "text": "Burgeoning puts Golgari Rot Farm" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "is_land": true, "taps": "BG" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Sun", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 18, "name": "Copperline Gorge", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Diabolic Revelation", "cost": "{X}{3}{B}{B}", "mv": 5, "kind": "nonpermanent" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rakdos Carnarium", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 6, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Copperline Gorge; cast: Blood Sun", "declared_order_payability": "not_verified", "land": "Copperline Gorge", "casts": ["Blood Sun"], "actions": [{ "card": "Blood Sun" }] },
+    { "index": 1, "summary": "land=Copperline Gorge (after Blood Sun); cast: Blood Sun", "declared_order_payability": "not_verified", "land": "Copperline Gorge", "land_slot": 1, "casts": ["Blood Sun"], "actions": [{ "card": "Blood Sun" }] },
+    { "index": 2, "summary": "land=Rakdos Carnarium; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Rakdos Carnarium", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Copperline Gorge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Copperline Gorge", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Scorched Ruins; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Scorched Ruins", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Blooming Marsh" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "tapped": true, "is_land": true }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Diabolic Revelation", "cost": "{X}{3}{B}{B}", "mv": 5, "kind": "nonpermanent" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rakdos Carnarium", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 6, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "tapped": true, "is_land": true }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Diabolic Revelation", "cost": "{X}{3}{B}{B}", "mv": 5, "kind": "nonpermanent" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rakdos Carnarium", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 6, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "City of Brass" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "is_land": true, "taps": "BG" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Diabolic Revelation", "cost": "{X}{3}{B}{B}", "mv": 5, "kind": "nonpermanent" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rakdos Carnarium", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Rakdos Carnarium; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Rakdos Carnarium", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Rakdos Carnarium; cast: Diabolic Revelation (X=0)", "declared_order_payability": "not_verified", "land": "Rakdos Carnarium", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation" }] },
+    { "index": 2, "summary": "land=Blooming Marsh; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Scorched Ruins; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Scorched Ruins", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=City of Brass; cast: (nothing)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "is_land": true, "taps": "BG" }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Diabolic Revelation", "cost": "{X}{3}{B}{B}", "mv": 5, "kind": "nonpermanent" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rakdos Carnarium", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "is_land": true, "taps": "BG" }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Diabolic Revelation", "cost": "{X}{3}{B}{B}", "mv": 5, "kind": "nonpermanent" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rakdos Carnarium", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 4, "cast_order": ["**", "land=Rakdos Carnarium", "cast=Diabolic Revelation"], "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Scorched Ruins" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "is_land": true, "taps": "BG" }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Diabolic Revelation", "cost": "{X}{3}{B}{B}", "mv": 5, "kind": "nonpermanent" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rakdos Carnarium", "cost": "", "mv": 0, "kind": "land" }, { "num": 56, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=Rakdos Carnarium; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Rakdos Carnarium", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Rakdos Carnarium; cast: Diabolic Revelation (X=0)", "declared_order_payability": "not_verified", "land": "Rakdos Carnarium", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation" }] },
+    { "index": 2, "summary": "land=Rakdos Carnarium; cast: Diabolic Revelation (X=1)", "declared_order_payability": "not_verified", "land": "Rakdos Carnarium", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation", "x": 1 }] },
+    { "index": 3, "summary": "land=Rakdos Carnarium; cast: Diabolic Revelation (X=2)", "declared_order_payability": "not_verified", "land": "Rakdos Carnarium", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation", "x": 2 }] },
+    { "index": 4, "summary": "land=Rakdos Carnarium; cast: Diabolic Revelation (X=3)", "declared_order_payability": "not_verified", "land": "Rakdos Carnarium", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation", "x": 3 }] },
+    { "index": 5, "summary": "land=Rakdos Carnarium; cast: Diabolic Revelation (X=4)", "declared_order_payability": "not_verified", "land": "Rakdos Carnarium", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation", "x": 4 }] },
+    { "index": 6, "summary": "land=Blooming Marsh; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Blooming Marsh; cast: Diabolic Revelation (X=0)", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation" }] },
+    { "index": 8, "summary": "land=Blooming Marsh; cast: Diabolic Revelation (X=1)", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation", "x": 1 }] },
+    { "index": 9, "summary": "land=Blooming Marsh; cast: Diabolic Revelation (X=2)", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation", "x": 2 }] },
+    { "index": 10, "summary": "land=Blooming Marsh; cast: Diabolic Revelation (X=3)", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation", "x": 3 }] },
+    { "index": 11, "summary": "land=City of Brass; cast: (nothing)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=City of Brass; cast: Diabolic Revelation (X=0)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation" }] },
+    { "index": 13, "summary": "land=City of Brass; cast: Diabolic Revelation (X=1)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation", "x": 1 }] },
+    { "index": 14, "summary": "land=City of Brass; cast: Diabolic Revelation (X=2)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation", "x": 2 }] },
+    { "index": 15, "summary": "land=City of Brass; cast: Diabolic Revelation (X=3)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Diabolic Revelation"], "actions": [{ "card": "Diabolic Revelation", "x": 3 }] },
+    { "index": 16, "summary": "land=Scorched Ruins; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Scorched Ruins", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0], "decision": {
+  "decision_index": 15,
+  "type": "dragon",
+  "source": "Diabolic Revelation: up to 3 cards to HAND",
+  "turn": 4,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "max_puts": 3,
+  "ai_set": [],
+  "candidates": [{ "index": 0, "def": false, "name": "Blood Sun" }, { "index": 1, "def": false, "name": "Blood Sun" }, { "index": 2, "def": false, "name": "Blood Sun" }, { "index": 3, "def": false, "name": "Blooming Marsh" }, { "index": 4, "def": false, "name": "Blooming Marsh" }, { "index": 5, "def": false, "name": "Blooming Marsh" }, { "index": 6, "def": false, "name": "Burgeoning" }, { "index": 7, "def": false, "name": "City of Brass" }, { "index": 8, "def": false, "name": "City of Brass" }, { "index": 9, "def": false, "name": "City of Brass" }, { "index": 10, "def": false, "name": "Copperline Gorge" }, { "index": 11, "def": false, "name": "Copperline Gorge" }, { "index": 12, "def": false, "name": "Copperline Gorge" }, { "index": 13, "def": false, "name": "Diabolic Revelation" }, { "index": 14, "def": false, "name": "Diabolic Revelation" }, { "index": 15, "def": false, "name": "Diabolic Revelation" }, { "index": 16, "def": false, "name": "Dimir Machinations" }, { "index": 17, "def": false, "name": "Dimir Machinations" }, { "index": 18, "def": false, "name": "Emrakul, the Aeons Torn" }, { "index": 19, "def": false, "name": "Exploration" }, { "index": 20, "def": false, "name": "Exploration" }, { "index": 21, "def": false, "name": "Exploration" }, { "index": 22, "def": false, "name": "Exploration" }, { "index": 23, "def": false, "name": "Fastbond" }, { "index": 24, "def": false, "name": "Golgari Rot Farm" }, { "index": 25, "def": false, "name": "Golgari Rot Farm" }, { "index": 26, "def": false, "name": "Golgari Rot Farm" }, { "index": 27, "def": false, "name": "Graven Cairns" }, { "index": 28, "def": false, "name": "Graven Cairns" }, { "index": 29, "def": false, "name": "Grim Tutor" }, { "index": 30, "def": false, "name": "Grim Tutor" }, { "index": 31, "def": false, "name": "Grim Tutor" }, { "index": 32, "def": false, "name": "Grim Tutor" }, { "index": 33, "def": false, "name": "Lotus Field" }, { "index": 34, "def": false, "name": "Lotus Field" }, { "index": 35, "def": false, "name": "Lotus Field" }, { "index": 36, "def": false, "name": "Lotus Vale" }, { "index": 37, "def": false, "name": "Lotus Vale" }, { "index": 38, "def": false, "name": "Lotus Vale" }, { "index": 39, "def": false, "name": "Lotus Vale" }, { "index": 40, "def": false, "name": "Overgrown Tomb" }, { "index": 41, "def": false, "name": "Rakdos Carnarium" }, { "index": 42, "def": false, "name": "Rakdos Carnarium" }, { "index": 43, "def": false, "name": "Rakdos Carnarium" }, { "index": 44, "def": false, "name": "Scorched Ruins" }, { "index": 45, "def": false, "name": "Scorched Ruins" }, { "index": 46, "def": false, "name": "Time Warp" }, { "index": 47, "def": false, "name": "Time Warp" }, { "index": 48, "def": false, "name": "Ulamog, the Ceaseless Hunger" }],
+  "note": "reply one 0/1 flag per candidate (1 = put this card into your hand), up to max_puts total (any number, none included). Then the library is shuffled. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 64,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 4, "source": "Diabolic Revelation (searched)", "cards": [{ "name": "Fastbond", "disposition": "to hand" }, { "name": "Lotus Field", "disposition": "to hand" }, { "name": "Time Warp", "disposition": "to hand" }] }],
+  "events": [{ "turn": 4, "kind": "tutor", "text": "🔍 Fastbond -- searched to hand (Diabolic Revelation)" }, { "turn": 4, "kind": "tutor", "text": "🔍 Lotus Field -- searched to hand (Diabolic Revelation)" }, { "turn": 4, "kind": "tutor", "text": "🔍 Time Warp -- searched to hand (Diabolic Revelation)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Fastbond", "cost": "{G}", "mv": 1, "kind": "permanent", "grants_land_drops": 64 }, { "num": 42, "name": "Lotus Field", "cost": "", "mv": 0, "kind": "land" }, { "num": 56, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Time Warp", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }], "graveyard": ["Diabolic Revelation"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Fastbond", "declared_order_payability": "not_verified", "land": null, "casts": ["Fastbond"], "actions": [{ "card": "Fastbond" }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Lotus Field", "need=U"], "decision": {
+  "decision_index": 65,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "tapped": true, "is_land": true }, { "name": "Fastbond", "idx": 8, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Lotus Field", "cost": "", "mv": 0, "kind": "land" }, { "num": 56, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Time Warp", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }], "graveyard": ["Diabolic Revelation"], "library_size": 46, "land_drops_left": 64 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=Lotus Field; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Lotus Field", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Blooming Marsh; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=City of Brass; cast: (nothing)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Scorched Ruins; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Scorched Ruins", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Scorched Ruins", "need=U"], "decision": {
+  "decision_index": 66,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "lifeloss", "text": "🩸 Fastbond deals 1 damage to you (a land played after the first this turn)" }],
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "tapped": true, "is_land": true }, { "name": "Fastbond", "idx": 8, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Lotus Field", "idx": 9, "num": 42, "is_land": true, "taps": "WUBRG" }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Scorched Ruins", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Time Warp", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }], "graveyard": ["Diabolic Revelation"], "library_size": 46, "land_drops_left": 63 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=Scorched Ruins; cast: Time Warp", "declared_order_payability": "not_verified", "land": "Scorched Ruins", "casts": ["Time Warp"], "actions": [{ "card": "Time Warp" }] },
+    { "index": 1, "summary": "land=Blooming Marsh; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=City of Brass; cast: (nothing)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Scorched Ruins; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Scorched Ruins", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 4, "cast_order": ["**", "land=City of Brass", "need=U"], "decision": {
+  "decision_index": 67,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "lifeloss", "text": "🩸 Fastbond deals 1 damage to you (a land played after the first this turn)" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "tapped": true, "is_land": true }, { "name": "Fastbond", "idx": 8, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Lotus Field", "idx": 9, "num": 42, "is_land": true, "taps": "WUBRG" }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 10, "num": 56, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Time Warp", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }], "graveyard": ["Diabolic Revelation"], "library_size": 46, "land_drops_left": 62 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=Blooming Marsh; cast: Time Warp", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": ["Time Warp"], "actions": [{ "card": "Time Warp" }] },
+    { "index": 1, "summary": "land=City of Brass; cast: Time Warp", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Time Warp"], "actions": [{ "card": "Time Warp" }] },
+    { "index": 2, "summary": "land=none; cast: Time Warp", "declared_order_payability": "not_verified", "land": null, "casts": ["Time Warp"], "actions": [{ "card": "Time Warp" }] },
+    { "index": 3, "summary": "land=Blooming Marsh; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=City of Brass; cast: (nothing)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Blooming Marsh", "cast=Time Warp"], "decision": {
+  "decision_index": 68,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "lifeloss", "text": "🩸 Fastbond deals 1 damage to you (a land played after the first this turn)" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "City of Brass", "idx": 11, "num": 13, "is_land": true, "taps": "WUBRG" }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "tapped": true, "is_land": true }, { "name": "Fastbond", "idx": 8, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Lotus Field", "idx": 9, "num": 42, "is_land": true, "taps": "WUBRG" }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 10, "num": 56, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Time Warp", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }], "graveyard": ["Diabolic Revelation"], "library_size": 46, "land_drops_left": 61 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=Blooming Marsh; cast: Time Warp", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": ["Time Warp"], "actions": [{ "card": "Time Warp" }] },
+    { "index": 1, "summary": "land=none; cast: Time Warp", "declared_order_payability": "not_verified", "land": null, "casts": ["Time Warp"], "actions": [{ "card": "Time Warp" }] },
+    { "index": 2, "summary": "land=Blooming Marsh; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 69,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "lifeloss", "text": "🩸 Fastbond deals 1 damage to you (a land played after the first this turn)" }, { "turn": 4, "kind": "trigger", "text": "⏳ Time Warp: take an extra turn after this one (1 pending)" }],
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Blooming Marsh", "idx": 12, "num": 7, "is_land": true, "taps": "BG" }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "City of Brass", "idx": 11, "num": 13, "is_land": true, "taps": "WUBRG" }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "tapped": true, "is_land": true }, { "name": "Fastbond", "idx": 8, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Lotus Field", "idx": 9, "num": 42, "tapped": true, "is_land": true }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 10, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }], "graveyard": ["Diabolic Revelation", "Time Warp"], "library_size": 46, "land_drops_left": 60, "floating_mana": {"C": 2} },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 70,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Blooming Marsh", "idx": 12, "num": 7, "is_land": true, "taps": "BG" }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "City of Brass", "idx": 11, "num": 13, "is_land": true, "taps": "WUBRG" }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "tapped": true, "is_land": true }, { "name": "Fastbond", "idx": 8, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Lotus Field", "idx": 9, "num": 42, "tapped": true, "is_land": true }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 10, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }], "graveyard": ["Diabolic Revelation", "Time Warp"], "library_size": 46, "land_drops_left": 60 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 71,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 4,
+  "extra_turn": 1,
+  "turn_seq": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Time Warp" }],
+  "events": [{ "turn": 4, "kind": "extra_turn", "turn_seq": 5, "text": "⏳ Extra turn begins (turn 4, extra 1)" }],
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Blooming Marsh", "idx": 12, "num": 7, "is_land": true, "taps": "BG" }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "City of Brass", "idx": 11, "num": 13, "is_land": true, "taps": "WUBRG" }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Fastbond", "idx": 8, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "is_land": true, "taps": "BG" }, { "name": "Lotus Field", "idx": 9, "num": 42, "is_land": true, "taps": "WUBRG" }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "is_land": true, "taps": "BR" }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "is_land": true, "taps": "C" }, { "name": "Scorched Ruins", "idx": 10, "num": 56, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 26, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Time Warp", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }], "graveyard": ["Diabolic Revelation", "Time Warp"], "library_size": 45, "land_drops_left": 65 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Emrakul, the Aeons Torn", "declared_order_payability": "not_verified", "land": null, "casts": ["Emrakul, the Aeons Torn"], "actions": [{ "card": "Emrakul, the Aeons Torn" }] },
+    { "index": 1, "summary": "land=none; cast: Time Warp", "declared_order_payability": "not_verified", "land": null, "casts": ["Time Warp"], "actions": [{ "card": "Time Warp" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 72,
+  "type": "main_phase",
+  "turn": 4,
+  "extra_turn": 1,
+  "turn_seq": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "trigger", "turn_seq": 5, "text": "⏳ Emrakul, the Aeons Torn: take an extra turn after this one (1 pending)" }],
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Blooming Marsh", "idx": 12, "num": 7, "is_land": true, "taps": "BG" }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "City of Brass", "idx": 11, "num": 13, "is_land": true, "taps": "WUBRG" }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Emrakul, the Aeons Torn", "idx": 13, "num": 26, "sick": true, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Fastbond", "idx": 8, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Lotus Field", "idx": 9, "num": 42, "tapped": true, "is_land": true }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 10, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 58, "name": "Time Warp", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }], "graveyard": ["Diabolic Revelation", "Time Warp"], "library_size": 45, "land_drops_left": 65 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 73,
+  "type": "main_phase",
+  "turn": 4,
+  "extra_turn": 1,
+  "turn_seq": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Blooming Marsh", "idx": 12, "num": 7, "is_land": true, "taps": "BG" }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "City of Brass", "idx": 11, "num": 13, "is_land": true, "taps": "WUBRG" }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Emrakul, the Aeons Torn", "idx": 13, "num": 26, "sick": true, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Fastbond", "idx": 8, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Lotus Field", "idx": 9, "num": 42, "tapped": true, "is_land": true }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 10, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 58, "name": "Time Warp", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }], "graveyard": ["Diabolic Revelation", "Time Warp"], "library_size": 45, "land_drops_left": 65 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 18, "decision": {
+  "decision_index": 74,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 4,
+  "extra_turn": 2,
+  "turn_seq": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Grim Tutor" }],
+  "events": [{ "turn": 4, "kind": "extra_turn", "turn_seq": 6, "text": "⏳ Extra turn begins (turn 4, extra 2)" }],
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Blooming Marsh", "idx": 12, "num": 7, "is_land": true, "taps": "BG" }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "City of Brass", "idx": 11, "num": 13, "is_land": true, "taps": "WUBRG" }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Emrakul, the Aeons Torn", "idx": 13, "num": 26, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Fastbond", "idx": 8, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "is_land": true, "taps": "BG" }, { "name": "Lotus Field", "idx": 9, "num": 42, "is_land": true, "taps": "WUBRG" }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "is_land": true, "taps": "BR" }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "is_land": true, "taps": "C" }, { "name": "Scorched Ruins", "idx": 10, "num": 56, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 40, "name": "Grim Tutor", "cost": "{1}{B}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 58, "name": "Time Warp", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }], "graveyard": ["Diabolic Revelation", "Time Warp"], "library_size": 44, "land_drops_left": 65 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Grim Tutor → Blooming Marsh, Time Warp", "declared_order_payability": "not_verified", "land": null, "casts": ["Grim Tutor", "Time Warp"], "cast_order_canonical": ["Grim Tutor", "Time Warp"], "actions": [{ "card": "Grim Tutor", "tutor_target": "Blooming Marsh" }, { "card": "Time Warp" }] },
+    { "index": 18, "summary": "land=none; cast: Time Warp", "declared_order_payability": "not_verified", "land": null, "casts": ["Time Warp"], "actions": [{ "card": "Time Warp" }] },
+    { "index": 19, "summary": "land=none; cast: Grim Tutor → Blooming Marsh", "declared_order_payability": "not_verified", "land": null, "casts": ["Grim Tutor"], "actions": [{ "card": "Grim Tutor", "tutor_target": "Blooming Marsh" }] },
+    { "index": 37, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 34,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 75,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 4,
+  "extra_turn": 2,
+  "turn_seq": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "trigger", "turn_seq": 6, "text": "⏳ Time Warp: take an extra turn after this one (1 pending)" }],
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Blood Sun", "idx": 5, "num": 2, "is_land": false }, { "name": "Blooming Marsh", "idx": 12, "num": 7, "is_land": true, "taps": "BG" }, { "name": "Burgeoning", "idx": 2, "num": 9, "is_land": false }, { "name": "City of Brass", "idx": 11, "num": 13, "is_land": true, "taps": "WUBRG" }, { "name": "Copperline Gorge", "idx": 4, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Emrakul, the Aeons Torn", "idx": 13, "num": 26, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Fastbond", "idx": 8, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 3, "num": 33, "is_land": true, "taps": "BG" }, { "name": "Lotus Field", "idx": 9, "num": 42, "tapped": true, "is_land": true }, { "name": "Rakdos Carnarium", "idx": 7, "num": 50, "is_land": true, "taps": "BR" }, { "name": "Scorched Ruins", "idx": 6, "num": 55, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 10, "num": 56, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 40, "name": "Grim Tutor", "cost": "{1}{B}{B}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Diabolic Revelation", "Time Warp", "Time Warp"], "library_size": 44, "land_drops_left": 65, "floating_mana": {"C": 2} },
+  "opponent": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 109000, "is_land": true }, { "name": "Seraph Sanctuary", "idx": 0, "num": 100052, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Grim Tutor → Blooming Marsh", "declared_order_payability": "not_verified", "land": null, "casts": ["Grim Tutor"], "actions": [{ "card": "Grim Tutor", "tutor_target": "Blooming Marsh" }] },
+    { "index": 18, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 17,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 76,
+  "main_ordinal": 12,
+  "type": "main_phase",
+  "turn": 4,
+  "extra_turn": 2,
+  "turn_seq": 6,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "trigger", "turn_seq": 6, "text": "🌀 annihilator 6 (Emrakul, the Aeons Torn): the opponent sacrifices Seraph Sanctuary, Plains" }, { "turn": 4, "kind": "combat", "turn_seq": 6, "text": "⚔ attacked: Emrakul, the Aeons Torn (15) — 15 to opponent (21→6)" }],
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Blood Sun", "idx": 3, "num": 2, "is_land": false }, { "name": "Blooming Marsh", "idx": 10, "num": 7, "is_land": true, "taps": "BG" }, { "name": "Burgeoning", "idx": 0, "num": 9, "is_land": false }, { "name": "City of Brass", "idx": 9, "num": 13, "is_land": true, "taps": "WUBRG" }, { "name": "Copperline Gorge", "idx": 2, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Emrakul, the Aeons Torn", "idx": 11, "num": 26, "tapped": true, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Fastbond", "idx": 6, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 1, "num": 33, "is_land": true, "taps": "BG" }, { "name": "Lotus Field", "idx": 7, "num": 42, "tapped": true, "is_land": true }, { "name": "Rakdos Carnarium", "idx": 5, "num": 50, "is_land": true, "taps": "BR" }, { "name": "Scorched Ruins", "idx": 4, "num": 55, "tapped": true, "is_land": true }, { "name": "Scorched Ruins", "idx": 8, "num": 56, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 40, "name": "Grim Tutor", "cost": "{1}{B}{B}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Diabolic Revelation", "Time Warp", "Time Warp"], "library_size": 44, "land_drops_left": 65 },
+  "opponent": { "life": 6, "battlefield": [], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor", "Plains", "Seraph Sanctuary"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Grim Tutor → Blooming Marsh", "declared_order_payability": "not_verified", "land": null, "casts": ["Grim Tutor"], "actions": [{ "card": "Grim Tutor", "tutor_target": "Blooming Marsh" }] },
+    { "index": 18, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 17,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 77,
+  "main_ordinal": 13,
+  "type": "main_phase",
+  "turn": 4,
+  "extra_turn": 3,
+  "turn_seq": 7,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Blooming Marsh" }],
+  "events": [{ "turn": 4, "kind": "extra_turn", "turn_seq": 7, "text": "⏳ Extra turn begins (turn 4, extra 3)" }],
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Blood Sun", "idx": 3, "num": 2, "is_land": false }, { "name": "Blooming Marsh", "idx": 10, "num": 7, "is_land": true, "taps": "BG" }, { "name": "Burgeoning", "idx": 0, "num": 9, "is_land": false }, { "name": "City of Brass", "idx": 9, "num": 13, "is_land": true, "taps": "WUBRG" }, { "name": "Copperline Gorge", "idx": 2, "num": 18, "is_land": true, "taps": "RG" }, { "name": "Emrakul, the Aeons Torn", "idx": 11, "num": 26, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Fastbond", "idx": 6, "num": 31, "is_land": false }, { "name": "Golgari Rot Farm", "idx": 1, "num": 33, "is_land": true, "taps": "BG" }, { "name": "Lotus Field", "idx": 7, "num": 42, "is_land": true, "taps": "WUBRG" }, { "name": "Rakdos Carnarium", "idx": 5, "num": 50, "is_land": true, "taps": "BR" }, { "name": "Scorched Ruins", "idx": 4, "num": 55, "is_land": true, "taps": "C" }, { "name": "Scorched Ruins", "idx": 8, "num": 56, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 8, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 40, "name": "Grim Tutor", "cost": "{1}{B}{B}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Diabolic Revelation", "Time Warp", "Time Warp"], "library_size": 43, "land_drops_left": 65 },
+  "opponent": { "life": 6, "battlefield": [], "library_size": 50, "hand_size": 7, "graveyard": ["Lightstall Inquisitor", "Plains", "Seraph Sanctuary"] },
+  "plans": [
+    { "index": 0, "summary": "land=Blooming Marsh; cast: Grim Tutor → Grim Tutor", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": ["Grim Tutor"], "actions": [{ "card": "Grim Tutor", "tutor_target": "Grim Tutor" }] },
+    { "index": 18, "summary": "land=none; cast: Grim Tutor → Grim Tutor", "declared_order_payability": "not_verified", "land": null, "casts": ["Grim Tutor"], "actions": [{ "card": "Grim Tutor", "tutor_target": "Grim Tutor" }] },
+    { "index": 36, "summary": "land=Blooming Marsh; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Blooming Marsh", "casts": [], "actions": [] },
+    { "index": 37, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 34,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "trigger", "turn_seq": 7, "text": "🌀 annihilator 6 (Emrakul, the Aeons Torn): the opponent sacrifices nothing (no permanents)" },
+    { "turn": 4, "kind": "combat", "turn_seq": 7, "text": "⚔ attacked: Emrakul, the Aeons Torn (15) — 15 to opponent (6→-9)" }
+  ]
+}
