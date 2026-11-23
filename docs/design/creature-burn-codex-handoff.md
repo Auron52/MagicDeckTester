@@ -2,6 +2,16 @@
 
 ## Codex continuation (2026-11-22 ~21:50 UTC)
 
+**2026-11-23 07:38 UTC d0 audit:** Across the final smoke the score changes sum to -1
+loss-penalized turn overall (searched play-setting +9, explicit d3 +14, d0 -24). The 13 d0
+win-to-unwon games are Creature Burn 9 and Midrange Burn 4. Each was replayed with
+`test/explain_game.py` against the pre-change smoke snapshot: every one has a Magma Jet before
+the first divergent draw, and all 13 draw sequences diverge. These are changed scry outcomes,
+not an identical-draws missed line. The new scry policy is net faster on Creature Burn d0
+(-50 turns across 1,000 games) but slower on Midrange Burn d0 (+23 turns across 1,000); the
+shipped searched Midrange Burn smoke d5 and 2HG cells are faster. The pooled scoped regression
+is still running and will decide the play-setting baseline on its own seeds.
+
 **2026-11-23 06:37 UTC final-smoke update:** The Beasts-integrated full smoke completed all 247 cases
 in 100m03s. Scenario sanity passed. No `[nonconv]` or `[fd-diverge]` diagnostic was emitted. All 243
 cases shared with the pre-Beasts full smoke were byte-for-byte identical; the four new Beasts cases
