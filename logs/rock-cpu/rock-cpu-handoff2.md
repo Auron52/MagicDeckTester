@@ -92,3 +92,6 @@ Out `hc/H.out`, logs `hc/logs/`, perf `hc/perf/` (first chunk, 12-20 games/arm),
 Next: `python3 cmp.py hc/H.out hc/logs def poff --list` (use `--mt` = the deck's max_turns if any game is unwon), d8 b0
 replays of slower games (`mkd8.py`, but with the shape's seed base and, for 2HG rows, add starting_life / opponent_heads
 to the jobs), then the doc + handoff.
+Confirm DONE 02:11 UTC (table in doc): hinata 4000 net 0, hinata d3 net 0, niv2hg net -1 (CPU -5.7%, instr -11.4%),
+et2hg net 0. d8 b0 replays of hinatad3 gi146 and niv2hg gi522 queued: lane wrapper PID 1251598, manifest hc/d8.json,
+out $S/d8_hc.out, logs $S/logs_d8_hc/, marker $S/d8_hc.done. Compare the .wins per game (equal turn = recovered).

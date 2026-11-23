@@ -1,0 +1,23 @@
+# poff vs def  (missing jobs: 0)
+
+## searched (play settings)
+
+| deck | pairs | faster | slower | net turns | digest-only | units ratio | CPU ratio |
+|---|---|---|---|---|---|---|---|
+| extraturns2hg | 1000 | 0 | 0 | +0 | 0 | 1.0000 | 0.9986 |
+| hinata | 4000 | 0 | 0 | +0 | 1 | 0.9998 | 0.9937 |
+| hinatad3 | 1000 | 1 | 1 | +0 | 3 | 1.0014 | 0.9880 |
+| niv2hg | 1000 | 2 | 1 | -1 | 14 | 0.9946 | 0.9429 |
+| ALL | 7000 | 3 | 2 | -1 | 18 | 0.9996 | 0.9896 |
+
+## d0
+
+| deck | pairs | faster | slower | net turns | digest-only | units ratio | CPU ratio |
+|---|---|---|---|---|---|---|---|
+| ALL | 0 | 0 | 0 | +0 | 0 | 0.0000 | 0.0000 |
+
+slower hinatad3 s 146 6 7
+faster hinatad3 s 3 5 4
+slower niv2hg s 522 4 5
+faster niv2hg s 307 5 4
+faster niv2hg s 451 7 6

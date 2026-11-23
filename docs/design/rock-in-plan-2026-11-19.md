@@ -435,3 +435,19 @@ documented negative).
 Extra Turns' window cost (3-4%) and Hinata's remain. No cut here reaches them without cutting the in-window rung, which
 is the play the rung exists for. The next candidate there is a per-unit (exact) speedup of the window trials: Extra
 Turns averages 2 work events per trial and never reaches the table, so its cost is the trial payment plus the witness.
+
+### Confirmatory re-measure of MTG_LKR_PLAYOUT_OFF (fresh seeds; one pooled batch, 32/32 busy; `mtg.dev2`)
+
+Parent's brief: Hinata failed the every-deck bar only by +1 (one slower game, which recovers), so re-measure Hinata at
+4,000 pairs on fresh seeds, plus Niv 2HG and Extra Turns 2HG at 1,000 pairs. `build/scratch/claude_rock_cpu/hc/`,
+`logs/rock-cpu/cmp_hc_poff.txt`. No game unwon on either arm.
+
+| shape | seeds | pairs | faster / slower | net | digest-only | CPU | instr (perf, 12-20 g, start-up subtracted) |
+|---|---|---|---|---|---|---|---|
+| hinata, play settings (d5 b30) | 800000 | 4000 | 0 / 0 | **0** | 1 | 0.9937 | 0.9989 (same games) |
+| hinata d3 b10 | 805000 | 1000 | 1 / 1 | **0** | 3 | 0.9880 | 1.0223 (games differ) |
+| niv 2HG d5 b20 | 810000 | 1000 | 2 / 1 | **-1** | 14 | **0.9429** | **0.8862** (same games) |
+| extraturns 2HG d5 b20 | 812000 | 1000 | 0 / 0 | **0** | 0 | 0.9986 | 0.9960 (same games) |
+
+Slower games, queued for d8 b0 (lane, `hc/d8.json`, marker `d8_hc.done`): hinata d3 gi 146 (T6 -> T7), niv 2HG
+gi 522 (T4 -> T5).
