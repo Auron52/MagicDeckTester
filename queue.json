@@ -2,11 +2,10 @@
  "entries": [
   {
    "branch": "phase-1-2-deck-analyzer",
-   "head_since": "2026-11-23T05:12:56Z",
-   "heartbeat": "2026-11-23T06:58:20Z",
+   "head_since": "2026-11-23T06:59:13Z",
    "host": "a7c2d36c718e",
    "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
-   "joined": "2026-11-23T05:12:56Z",
+   "joined": "2026-11-23T06:59:13Z",
    "note": "Creature Burn final validation and fast mulligan profile"
   }
  ]
