@@ -1,0 +1,12 @@
+{
+  "merge": [
+    {
+      "cards": ["Mystical Tutor", "Personal Tutor"],
+      "why": "At mulligan time both supply Worldfire or another sorcery; actual member copies remain distinct in rollouts. When both are in a hand, keep Mystical Tutor because it also finds Seething Song and can be cast during upkeep. The profile's bucket_bottom_keep_order preserves that choice when bottoming."
+    },
+    {
+      "cards": ["Ponder", "Preordain"],
+      "why": "Both fill the one-mana blue cantrip role at mulligan time. Their 400 discovery probes have a near-zero signed mean difference (+0.025 turns), and merged-bucket rollouts sample their actual four-to-one copy mix. They remain distinct cards during play."
+    }
+  ]
+}
