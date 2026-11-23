@@ -19,7 +19,7 @@ Last commit before this file: c3eb0a931.
 - gate3 (`build/scratch/claude_hinata_d4d5/gate3/`): 8 FAIL, all Hinata. cls3: 21 churn. pers3: reg d5 s3003 gi20 T5 at
   32x and d8 b0; gi128 T4 at 64x/128x and d8 b0. Smoke d3 s1001 5.50->5.52 is the only worse aggregate (gi46 churn).
 - Accepted with the note. check_gt_logs clean (1409). Doc section 5 updated.
-- Left: check_references_safe exit 0, then push wip/hinata-d4-d5. The coordinator lands it via the queue.
+- check_references_safe exit 0; wip pushed. DONE; the coordinator lands it via the queue.
 
 ## Next commands, in order
 1. Wait until origin has the Merfolk fix:
