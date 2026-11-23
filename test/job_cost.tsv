@@ -122,7 +122,7 @@ beasts2hg_overnight_d5_s6006	90463
 beasts2hg_overnight_d5_s7007	78027
 beasts2hg_regression_d5_s2002	149390
 beasts2hg_regression_d5_s3003	160993
-beasts2hg_smoke_d5_s1001	128541
+beasts2hg_smoke_d5_s1001	135957
 beasts_overnight_d0_s10010	1
 beasts_overnight_d0_s4004	1
 beasts_overnight_d0_s6006	1
@@ -140,8 +140,8 @@ beasts_regression_d3_s2002	64308
 beasts_regression_d5_s2002	85881
 beasts_regression_d5_s3003	63702
 beasts_smoke_d0_s1001	1
-beasts_smoke_d3_s1001	80810
-beasts_smoke_d5_s1001	96128
+beasts_smoke_d3_s1001	84250
+beasts_smoke_d5_s1001	100376
 boars2hg_overnight_d5_s4004	15136
 boars2hg_overnight_d5_s5005	16558
 boars2hg_overnight_d5_s6006	17880

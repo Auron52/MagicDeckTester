@@ -21,6 +21,8 @@ For the shipped list, Utopia Sprawl's white, blue, and black mana can only pay g
 
 The current cost gate measured 33,682.880 core-ms per Beasts game in its worst searched shape and 18,918.940 for Hinata in the same Release run. The earlier 2.62-times ratio used a different PGO build and run; the paired deterministic-unit comparison above isolates the pruning effect more directly.
 
+After rebasing over the Creature Burn batch, full Release smoke matched 246 of 247 accepted rows. The one difference was Beasts depth three seed 1001, whose per-game log already had the upstream result: one game won on turn five instead of four after a different turn-one land choice and fetch/draw path. The fresh result was accepted, and all GT logs are consistent. The overnight pruning comparison above was measured before that upstream code change.
+
 ## Implementation and verification
 
 This run implemented or completed Herald of Ilharg, Thragtusk, Contested Cliffs, Garruk's Packleader, Cragplate Baloth, Krosan Warchief, Questing Beast, Elder Gargaroth, Garruk's Harbinger, Kaheera, Migloz, Nykthos, Bloated Contaminator, and Woodland Bellower, with their relevant mana, combat, trigger, tutor, poison, and play-viewer paths. The ledger gives each card's exact modeled clauses and approved exceptions.
