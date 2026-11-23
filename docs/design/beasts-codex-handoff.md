@@ -129,18 +129,20 @@ instructions below are retained for context.
 * Other deferral docs this run created (already committed): `cavern-of-souls-creature-type.md` (Merfolk Turns,
   USER: fix "only when there is time"), `omnitool-combat-dig-greedy.md`, `omnitool-restricted-second-main.md`.
 
-## Latest checkpoint (Codex, 2026-11-22 22:58 UTC)
+## Latest checkpoint (Codex, 2026-11-23 00:50 UTC)
 
-Beasts is playable in the primary viewer at `http://localhost:8080`; the USER was told. Batch J
-and the seed-221122 baseline profile remain local in the Beasts worktree. The official PGO+LTO
-admission cost gate now **passes at 2.62× Hinata** after a measured Beasts profile bottoming policy
-(`bottom_eval_depth=1`, `bottom_eval_budget_ms=1`, `bottom_eval_topk=5`). It preserved all 215 paired
-win turns across the admission and independent quality screens. Smoke and regression Beasts rows
-have been accepted with no existing play changes; the overnight Beasts entry tier is running under
-`BOX.lock`, output `build/scratch/beastsJ-overnight-entry.out`. Continue with its inspection and
-filtered accept, then Stage 5 verification, viewer audit, queue-head rebase/push. The authoritative
-details and measured costs are in `analysis-Beasts.md` Checkpoint. There is **no question waiting on
-the USER**.
+Beasts is playable in the primary viewer at `http://localhost:8080`; the USER was told. Batch J,
+the seed-221122 baseline profile, and all three accepted Beasts/2HG regression tiers remain local
+in the Beasts worktree. The official PGO+LTO admission cost gate **passes at 2.62× Hinata** after
+the measured bottoming policy (`bottom_eval_depth=1`, `bottom_eval_budget_ms=1`,
+`bottom_eval_topk=5`), with all 215 paired quality-screen win turns preserved. Full Stage 5 deck
+verification passed, including mismatch harnesses, dynamic viewer decisions, and the 15-game
+Codex-play sweep. The full 40-game viewer audit also passed. The unpruned oracle found no earlier
+win; the cast-order oracle found one earlier win that the shipped search reaches with more budget,
+and its broader order worsened two games at the fixed budget. The experimental Incubator-first
+cast rank was removed. Final reference/GT checks and queue-head rebase/push remain. The
+authoritative details and measured costs are in `analysis-Beasts.md` Checkpoint. There is **no
+question waiting on the USER**.
 
 ## Future decisions (no USER reply currently pending)
 
