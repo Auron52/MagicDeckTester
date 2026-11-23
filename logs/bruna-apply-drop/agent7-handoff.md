@@ -119,7 +119,21 @@ Compare arms: `python3 $B/cmp_arms.py <wins_dir> <batch.out> <armA> <armB>` (net
   (PID 1175193), which runs `bash test/regression.sh --both` under the box lock. Status: `$B/a7/gt.status`,
   log `$B/a7/gt_regr.log`, DONE = `$B/a7/gt2.DONE`. The lock is heavily contended: gt.sh waited 17:13 -> 23:02.
 
-## Running jobs (all agent-owned, none USER-requested; waiters use DONE files / kill -0, never pgrep -f)
+## Milestone 02:45 UTC 11-23: GT DONE (line complete except the CPU cut)
+- regression --both on 8bd187a38:
+  - smoke: 0 slower, 1 faster d0, 3 searched play-changed at the same score.
+  - regression: 0 slower, 4 faster d0, 8 searched play-changed at the same score (bruna, edf).
+  - No slower games, so nothing needed recovery.
+- Accepted as baff64089, with the note recorded. check_gt_logs: 1409 consistent, 0 stale. check_references_safe: OK.
+- Pushed wip/bruna-apply-drop = baff64089 (rebased on origin/phase-1-2-deck-analyzer cd330ec5a). It is ready for
+  the parent to land through the push queue.
+- STILL OWED:
+  - The MTG_AURA_HOST_LINE_KEEP CPU cut (EDF d0 1.0575, Jumbo d0 1.0294 Ir). See the callgrind milestone above for
+    the options.
+  - The USER decisions: LORD_CAST and TOKEN_SELF (both OFF; numbers above), and 7a/7b (handoff6).
+- No jobs of mine are running.
+
+## Running jobs (all finished) (all agent-owned, none USER-requested; waiters use DONE files / kill -0, never pgrep -f)
 | job | PID | what | marker / output |
 |---|---|---|---|
 | lock7 (agent 6) | 858877 | waits on the box lock, then: full build of bruna-apply-drop -> $B/fix7, Bruna units, gi21770 swap 1/0, perf instructions:u (EDF/Jumbo/Sea/Bruna d0, fixes on/off), swap A/B | `$B/a6/lock7.DONE`, `$B/a6/lock7.status`, `$B/a6/swap/cmp.txt` |
