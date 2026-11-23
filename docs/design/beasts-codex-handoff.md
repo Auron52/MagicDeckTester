@@ -141,7 +141,8 @@ Codex-play sweep. The full 40-game viewer audit also passed. The unpruned oracle
 win; the cast-order oracle found one earlier win that the shipped search reaches with more budget,
 and its broader order worsened two games at the fixed budget. The experimental Incubator-first
 cast rank was removed. Final reference/GT checks and queue-head rebase/push remain. The
-authoritative details and measured costs are in `analysis-Beasts.md` Checkpoint. There is **no
+authoritative details and measured costs are in `analysis-Beasts.md` Checkpoint; the reviewable
+results and heuristic disclosure are in `beasts-analysis-report.md`. There is **no
 question waiting on the USER**.
 
 ## Future decisions (no USER reply currently pending)
