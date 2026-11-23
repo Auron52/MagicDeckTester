@@ -2,6 +2,18 @@
 
 ## Codex continuation (2026-11-22 ~21:50 UTC)
 
+**2026-11-23 08:21 UTC regression update:** The final Beasts-integrated scoped regression
+completed all 113 cases and 27,968 games in 102m34s. Strict viewer replay: 940 references,
+zero play drift or contract failure; both required suboptimal references were beaten. 68 cases
+matched GT and 45 moved. Per-game loss-penalized score changes total 148 slower turns and 157
+faster turns (net nine turns faster): searched d5 +9 turns, d3 -1, and d0 -17. The audit lists
+35 searched slower, 23 searched faster, and 296 searched same-score play changes. A pooled
+4x/16x classifier is running under the heavy lock (`postbeasts-regression-classify.log`).
+The final full smoke already ran with `MTG_FLAG_NONCONV=1 MTG_FD_ORACLE=1` and emitted zero
+diagnostics. The full reference safety scan passed across 11 available checkouts/worktrees.
+Next: inspect classifier and concerning own-seed cases, accept audited GT, land, then launch
+fast mullgen on the landed commit.
+
 **2026-11-23 07:38 UTC d0 audit:** Across the final smoke the score changes sum to -1
 loss-penalized turn overall (searched play-setting +9, explicit d3 +14, d0 -24). The 13 d0
 win-to-unwon games are Creature Burn 9 and Midrange Burn 4. Each was replayed with
