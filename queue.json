@@ -1,16 +1,8 @@
 {
  "entries": [
   {
-   "branch": "phase-1-2-deck-analyzer",
-   "head_since": "2026-11-23T06:59:13Z",
-   "heartbeat": "2026-11-23T08:21:35Z",
-   "host": "a7c2d36c718e",
-   "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
-   "joined": "2026-11-23T06:59:13Z",
-   "note": "Creature Burn final validation and fast mulligan profile"
-  },
-  {
    "branch": "beasts-analysis",
+   "head_since": "2026-11-23T08:30:35Z",
    "host": "67d5329561c0",
    "id": "67d5329561c0:beasts-analysis",
    "joined": "2026-11-23T07:48:39Z",
