@@ -2,6 +2,22 @@
 
 ## Codex continuation (2026-11-22 ~21:50 UTC)
 
+**2026-11-23 03:15 UTC validation update:** The final post-Worldfire Release smoke completed all 243 cases
+and scenario sanity in 86m28s (`final-integrated-smoke.log`, `FINAL_SMOKE_AFTER_BUILD_DONE=1` because
+206 cases match GT and 37 require review). The per-game audit found 31 searched slower, 13 searched
+faster, and 124 searched play changes at the same score. `final-smoke-classify.log` classified 29 of
+the 31 searched slowdowns as budget churn at 4x/16x. The persistent pair is Creature Burn d5 gi98
+(changed kept hand, previously deep-replayed) and 1 Drop Burn d5 gi87 (the user-requested
+anticipating Vexing Devil opponent model, previously deep-replayed). The required reference safety
+scan passed. At 02:00:30 we yielded the push-queue head to Beasts and are now number 1 behind it.
+A single pooled scoped regression for all 25 deck variants with moved smoke cases is running under
+the heavy lock (`final-scoped-regression.log`, 109 cases/26,818 games,
+`FINAL_SCOPED_REGRESSION_DONE`). Its strict viewer replay gate finished successfully at 02:59 UTC;
+the batch is still running. `run-final-regression-classify.sh` automatically starts the searched
+slowdown classifier after that batch completes. Do not accept GT before reviewing its full audit.
+Next: audit regression, run the large-change legality sweep on the same moved-deck manifest, accept
+audited GT, land at our queue turn, then start fast mullgen on the frozen landed commit.
+
 **23:15 UTC integration update:** The detached full smoke finished all 243 cases (206 matched the prior GT,
 37 moved; `PREQUEUE_SMOKE_DONE=1` reflects expected GT drift). Blood Sun then landed as `249db2aa7` with
 substantial `src/` and GT changes, invalidating that smoke as a final landing gate. Our 18 local commits were
