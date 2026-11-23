@@ -1105,6 +1105,7 @@ enum Slot : int
     BLOODSUN_LOTUS_SAC_PRUNE, // MTG_BLOODSUN_LOTUS_SAC_PRUNE  SUB-LEVER of MTG_BLOODSUN_USER_PRUNE (ledger B13, USER 2026-11-21, decided): the Lotus Vale / Scorched Ruins / Lotus Field sacrifice (no Blood Sun) collapses to ONE pair -- keep the Karoos (regular lands go first), then keep 1 R, 1 G, 2 B sources (a Lotus = one any-colour source), then tapped before untapped (F-L1). Default ON; inert while the prune is off
     BLOODSUN_ROUND_WIN_STOP,  // MTG_BLOODSUN_ROUND_WIN_STOP  Blood Sun perf step (DecisionProvider::NestedRoundWinStop, a sound identity fold): a NESTED candidate list (inside a rollout) stops before charging or applying the next candidate once the pass already wins this round. Default ON; =0 the old order of work (the A/B arm)
     BLOODSUN_GOOFF,           // MTG_BLOODSUN_GOOFF  Blood Sun perf step ("Combo Off" go-off front, design §5, ORDER only): a plan whose extra turns this round project the kill, or a Revelation package fetching Emrakul with 15 mana left, is tried first (PlanMoveOrderFront). Default ON; =0 the value order alone
+    BLOODSUN_REV_PRIORITY,    // MTG_BLOODSUN_REV_PRIORITY  Blood Sun's reference go-off bridges enter Revelation wave 0; admit a narrow high-life Exploration bridge, and skip ordinary-wave twins. Current real-play decision turn only. Default ON; =0 old order
     BLOODSUN_GRIM_REV_EXEMPT_MULTI,// MTG_BLOODSUN_GRIM_REV_EXEMPT_MULTI  A/B ARM of MTG_BLOODSUN_GRIM_REV_GATE (ledger B12): two or more Grim Tutors with exactly one Revelation in hand are exempt from the gate, below 8 mana only. Default OFF; inert while the gate is off
     BLOODSUN_GRIM_REV_MANA7,  // MTG_BLOODSUN_GRIM_REV_MANA7  A/B ARM of MTG_BLOODSUN_GRIM_REV_GATE (ledger B12, "after you hit 7 or 8 mana"): the gate's mana threshold is 7 instead of MTG_BLOODSUN_GRIM_REV_MANA (default 8). Default OFF; inert while the gate is off
     BLOODSUN_GRIM_LAND_DROP,  // MTG_BLOODSUN_GRIM_LAND_DROP  AMENDMENT ARM of MTG_BLOODSUN_GRIM_PRUNE (Blood Sun perf part 6; the USER: "We might find some other lines with Grim Tutor that have to do with dropping things this turn"): a big land (Lotus Vale / Field, Scorched Ruins) is a Grim target at ANY mana while a land play is still open THIS turn (lands_played_this_turn < LandDropsAvailable: the normal drop, Exploration's extra, Fastbond). Default OFF (the USER's call); inert while the Grim prune is off
@@ -2169,6 +2170,7 @@ inline const char* Name(int slot)
         "MTG_BLOODSUN_LOTUS_SAC_PRUNE",
         "MTG_BLOODSUN_ROUND_WIN_STOP",
         "MTG_BLOODSUN_GOOFF",
+        "MTG_BLOODSUN_REV_PRIORITY",
         "MTG_BLOODSUN_GRIM_REV_EXEMPT_MULTI",
         "MTG_BLOODSUN_GRIM_REV_MANA7",
         "MTG_BLOODSUN_GRIM_LAND_DROP",

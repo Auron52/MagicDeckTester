@@ -73224,6 +73224,21 @@ bool BloodSunMachinationsCastPruneOn()
     return heurarm::Flag(heurarm::BLOODSUN_PRUNE_MACHINATIONS_CAST, on);
 }
 
+bool BloodSunRevPriorityOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_REV_PRIORITY", true);
+    return heurarm::Flag(heurarm::BLOODSUN_REV_PRIORITY, on);
+}
+
+bool BloodSunRevPriorityThisTurn(const GameState& s)
+{
+    // Package priority helps the decision being made now. Letting it change hypothetical
+    // later turns or mulligan-bottom trial games changes setup choices before the actual
+    // Revelation turn through lookahead and can bottom a needed Lotus or Emrakul.
+    return BloodSunRevPriorityOn() && turncensus::t_probe == 0 && (!TurnSolver::DecisionRootOpen()
+        || s.TurnSeq() == TurnSolver::DecisionRootTurn());
+}
+
 // MTG_BLOODSUN_GRIM_PRUNE: the SUB-LEVER of the prune that narrows Grim Tutor's OWN targets (ledger B12, USER 2026-11-21,
 // verbatim): "Grim Tutor should also be handily pruned if it hasn't been. There are few targets worth getting with it
 // except Blood Sun and Diabolic Revelation when those are missing." -- amended: "I'm not entirely sure how confident I
@@ -73421,6 +73436,55 @@ void BloodSunProvider::RevelationClassOrder(const GameState& s, const std::vecto
                      { return key[static_cast<std::size_t>(a)] < key[static_cast<std::size_t>(b)]; });
 }
 
+bool BloodSunRevExplorationBridge(const GameState& s, int controller);
+
+// The first four rank-lex packages of each X are usually all big-land combinations. Two saved
+// first-turn wins need a different package before that expansion: a held Emrakul plus Fastbond,
+// Lotus and Warp (seed 1), and the Revelation/Exploration/two-Lotus/Warp bridge (seed 7).
+// The emitter validates these against the ordinary restrictions and removes their later-wave twins.
+std::vector<std::vector<std::string>> BloodSunProvider::RevelationPriorityPackages(const GameState& s) const
+{
+    if (!BloodSunRevPriorityThisTurn(s) || HumanPlayActive() || !LandNonManaAbilitiesSuppressed(s)) { return {}; }
+    const int me = s.active_player_index;
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    int fb = 0, warp = 0, rev = 0, exp = 0, vale = 0, field = 0;
+    for (const Card& c : pl.library)
+    {
+        const std::string& nm = c.m_name.str();
+        fb += nm == "Fastbond"; warp += nm == "Time Warp";
+        rev += nm == "Diabolic Revelation"; exp += nm == "Exploration";
+        vale += nm == "Lotus Vale"; field += nm == "Lotus Field";
+    }
+    std::vector<std::string> lotuses;
+    for (int k = 0; k < vale && k < 2; ++k) { lotuses.push_back("Lotus Vale"); }
+    for (int k = 0; k < field && static_cast<int>(lotuses.size()) < 2; ++k)
+    { lotuses.push_back("Lotus Field"); }
+    if (!warp || lotuses.empty()) { return {}; }
+    std::vector<std::vector<std::string>> out;
+    bool emrakul_held = false;
+    int land_mana = 0, hand_lands = 0;
+    for (const Permanent& pm : s.battlefield)
+    {
+        if (pm.controller_index != me || pm.def_absent || !pm.card.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+        if (d != nullptr) { land_mana += std::max(1, EffectiveLandDef(s, *d).params.produces_amount); }
+    }
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        emrakul_held |= d->params.cast_trigger_extra_turns > 0;
+        if (d->card.IsLand())
+        { ++hand_lands; land_mana += std::max(1, EffectiveLandDef(s, *d).params.produces_amount); }
+    }
+    if (emrakul_held && fb && hand_lands >= 2 && pl.life > hand_lands
+        && land_mana + 3 >= 15)
+    { out.push_back({ "Fastbond", lotuses[0], "Time Warp" }); }
+    if (rev && exp && lotuses.size() >= 2 && BloodSunRevExplorationBridge(s, me))
+    { out.push_back({ "Diabolic Revelation", "Exploration", lotuses[0], lotuses[1], "Time Warp" }); }
+    return out;
+}
+
 // B14 (USER 2026-11-22): cleanup is a set of keep buckets, re-evaluated after each shed.
 // A card filling no slot goes first; then surplus lands that supply no missing colour,
 // a second drop-maker, the remaining lands, the first drop-maker, Time Warp,
@@ -73587,6 +73651,40 @@ std::vector<int> BloodSunProvider::CleanupDiscardCandidates(
 // City of Brass"; Exploration "when life is looking dicey ... It doesn't help once fastbond is out".
 // A RESTRICTION of the search's targets, never a pick: every admitted target (and every multiset of them) is still
 // searched. Blood Sun and Fastbond cap at ONE copy (the second is the "once we have one" case); the rest are uncapped.
+bool BloodSunRevExplorationBridge(const GameState& s, int controller)
+{
+    if (!BloodSunRevPriorityThisTurn(s) || !LandNonManaAbilitiesSuppressed(s)) { return false; }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    if (pl.life <= 2 || pl.lands_played_this_turn >= pl.LandDropsAvailable()) { return false; }
+    bool fb_bf = false, fb_hand = false;
+    BsHave(s, controller, BsIsFastbond, fb_bf, fb_hand);
+    if (fb_bf || fb_hand) { return false; }
+    int warp = 0, rev = 0, exploration = 0, lotus = 0;
+    for (const Card& c : pl.library)
+    {
+        const std::string& nm = c.m_name.str();
+        warp += nm == "Time Warp";
+        rev += nm == "Diabolic Revelation";
+        exploration += nm == "Exploration";
+        lotus += nm == "Lotus Vale" || nm == "Lotus Field";
+    }
+    if (!warp || !rev || !exploration || lotus < 2) { return false; }
+    int board_mana = 0, best_hand_land = 0;
+    for (const Permanent& pm : s.battlefield)
+    {
+        if (pm.controller_index != controller || pm.def_absent || !pm.card.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+        if (d != nullptr) { board_mana += std::max(1, EffectiveLandDef(s, *d).params.produces_amount); }
+    }
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand())
+        { best_hand_land = std::max(best_hand_land, std::max(1, EffectiveLandDef(s, *d).params.produces_amount)); }
+    }
+    return board_mana + best_hand_land + 6 >= 16;
+}
+
 int BloodSunTutorTargetCap(const GameState& s, int controller, const CardDefinition& def, bool transmute)
 {
     const CardParams& p = def.params;
@@ -74019,7 +74117,13 @@ void BloodSunProvider::RevelationPackageRestrict(const GameState& s, int hand_in
     const int me = s.active_player_index;
     for (std::size_t k = 0; k < class_defs.size() && k < caps.size(); ++k)
     {
-        const int cap = class_defs[k] != nullptr ? BloodSunTutorTargetCap(s, me, *class_defs[k], false) : 0;
+        int cap = class_defs[k] != nullptr ? BloodSunTutorTargetCap(s, me, *class_defs[k], false) : 0;
+        // The owner's two-Lotus bridge uses Exploration even at high life. Admit it only
+        // for Revelation's package axis on a board where that bridge can fund the next turn;
+        // Grim Tutor's narrower target rule stays unchanged.
+        if (cap == 0 && class_defs[k] != nullptr && class_defs[k]->card.m_name.str() == "Exploration"
+            && BloodSunRevExplorationBridge(s, me))
+        { cap = kBloodSunAnyCopies; }
         caps[k] = std::min(caps[k], cap);
     }
     bool another = x_afford >= 2;   // more than 6 mana: the X = 1 floor does not apply (USER: "for when you have 6 mana")
@@ -74101,15 +74205,17 @@ int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, cons
     }
     int extra = 0, cast_power = 0, spent = 0;
     bool warp_in_hand = false;
+    bool emrakul_in_hand = false;
     int revelation_in_hand = 0;
     for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
     {
         const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
         if (hd == nullptr) { continue; }
         warp_in_hand |= hd->params.extra_turns_on_resolve > 0;
+        emrakul_in_hand |= hd->params.cast_trigger_extra_turns > 0;
         revelation_in_hand += hd->params.tutor_up_to_x ? 1 : 0;
     }
-    bool fetch_emrakul = false, bridge = false, fastbond_bridge = false;
+    bool fetch_emrakul = false, bridge = false, fastbond_bridge = false, held_emrakul_bridge = false;
     int bridge_revelation_cost = 1 << 20;
     int fastbond_bridge_cost = 1 << 20;
     ManaCost fastbond_bridge_bill;
@@ -74163,6 +74269,8 @@ int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, cons
                     }
                 }
             }
+            if (BloodSunRevPriorityThisTurn(s) && emrakul_in_hand && warp && fastbond && lotuses >= 1)
+            { held_emrakul_bridge = true; }
         }
     }
     if (now_power + extra * (bf_power + cast_power) >= opp_life) { return 2; }
@@ -74190,6 +74298,17 @@ int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, cons
     // pay its cast after Revelation, and both non-first land plays must leave us alive.
     if (fastbond_bridge && LandNonManaAbilitiesSuppressed(s) && next_turn_board + 6 >= 16
         && pl.life > 2 && TurnSolver::CostPayableExact(s, fastbond_bridge_bill, false)) { return 1; }
+    if (held_emrakul_bridge && LandNonManaAbilitiesSuppressed(s) && pl.life > 4)
+    {
+        int held_lands = 0;
+        for (const Card& c : pl.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->card.IsLand())
+            { held_lands += std::max(1, EffectiveLandDef(s, *d).params.produces_amount); }
+        }
+        if (next_turn_board + held_lands + 3 >= 15) { return 1; }
+    }
     return 0;
 }
 

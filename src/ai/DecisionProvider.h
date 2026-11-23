@@ -3652,6 +3652,11 @@ public:
     virtual void RevelationClassOrder(const GameState& s, const std::vector<const CardDefinition*>& class_defs,
                                       std::vector<int>& order) const
     { (void)s; (void)class_defs; (void)order; }
+    // Priority packages move a few provider-recognised combinations into Revelation's opening wave.
+    // The emitter checks every name against its restricted class caps and removes the package from
+    // its ordinary wave, so this changes order only; no package is added or removed from the search.
+    virtual std::vector<std::vector<std::string>> RevelationPriorityPackages(const GameState&) const
+    { return {}; }
 
     // CleanupDiscardSearchWidth -- how many of CleanupDiscardCandidates' ranked cards the ROLLOUT's
     // end-of-turn cleanup branches over (1 == the ranked pick only, byte-identical to no branch).

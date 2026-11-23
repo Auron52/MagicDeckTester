@@ -13,6 +13,7 @@
 #include "core/SpellEffects.h"
 
 #include <algorithm>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -104,6 +105,13 @@ struct BucketArmPf
     heurarm::Arm saved;
     BucketArmPf() : saved(heurarm::t_arm) { heurarm::t_arm[heurarm::BLOODSUN_BUCKET_DISCARD] = 1; }
     ~BucketArmPf() { heurarm::t_arm = saved; }
+};
+struct PriorityArmPf
+{
+    heurarm::Arm saved;
+    explicit PriorityArmPf(bool on) : saved(heurarm::t_arm)
+    { heurarm::t_arm[heurarm::BLOODSUN_REV_PRIORITY] = on ? 1 : 0; }
+    ~PriorityArmPf() { heurarm::t_arm = saved; }
 };
 std::string FirstShedPf(const GameState& s)
 {
@@ -225,6 +233,47 @@ TEST_CASE("Blood Sun go-off front: ORDER only, off under MTG_BLOODSUN_GOOFF's hu
     GameState s = BasePf(25, 15);
     const std::vector<Action> cands = { CastPf("Emrakul, the Aeons Torn") };
     CHECK(ProvPf().PlanMoveOrderFront(s, cands, { 0 }, false) == BloodSunGoOffOn());
+}
+
+TEST_CASE("Blood Sun Revelation priority reaches the saved bridges at high life without duplicate wave-0 actions")
+{
+    GameState s = BasePf(10, 20);
+    s.players[0].hand.push_back(CardPf("Diabolic Revelation", 300));
+    s.players[0].hand.push_back(CardPf("Scorched Ruins", 301));
+    const std::vector<std::string> lib = { "Scorched Ruins", "Scorched Ruins", "Scorched Ruins",
+        "Scorched Ruins", "Diabolic Revelation", "Exploration", "Lotus Vale", "Lotus Vale",
+        "Time Warp", "Fastbond" };
+    int num = 400;
+    for (const std::string& nm : lib) { s.players[0].library.push_back(CardPf(nm, num++)); }
+    const std::vector<std::string> bridge = { "Diabolic Revelation", "Exploration",
+        "Lotus Vale", "Lotus Vale", "Time Warp" };
+    auto wave0 = [&](const GameState& x)
+    {
+        std::set<std::string> enc;
+        std::set<std::vector<std::string>> packs;
+        for (const Action& a : TurnSolver::CollectActionsForTest(x, true))
+        {
+            if (a.card_name.str() != "Diabolic Revelation" || !revpkg::IsPackage(a.tutor_target.str()))
+            { continue; }
+            CHECK(revpkg::PackageWave(a.tutor_target.str()) == 0);
+            CHECK(enc.insert(a.tutor_target.str()).second);
+            packs.insert(revpkg::DecodePackage(a.tutor_target.str()));
+        }
+        return packs;
+    };
+    {
+        const PriorityArmPf off(false);
+        CHECK(wave0(s).count(bridge) == 0);
+    }
+    {
+        const PriorityArmPf on(true);
+        CHECK(wave0(s).count(bridge) == 1);
+        GameState held = s;
+        held.players[0].hand.push_back(CardPf("Emrakul, the Aeons Torn", 302));
+        held.players[0].hand.push_back(CardPf("Blooming Marsh", 303));
+        const std::vector<std::string> hold = { "Fastbond", "Lotus Vale", "Time Warp" };
+        CHECK(wave0(held).count(hold) == 1);
+    }
 }
 
 TEST_CASE("Blood Sun B12 arm: Grim Tutor's own targets (lever on) vs the B3 list (lever off)")

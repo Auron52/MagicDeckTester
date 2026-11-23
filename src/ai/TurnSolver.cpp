@@ -44511,6 +44511,43 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 const long long end = revpkg::WaveEnd(revwave::g_state.wave);
                 std::vector<int> c;
                 long long dg_emit = 0, dg_trav = 0, dg_xd = 0;   // perf diagnosis (s_rollout_stats only)
+                // Provider-recognised bridges belong to wave 0 even when rank-lex enumeration would
+                // put them much later. Validate them against the SAME caps and group restrictions as
+                // ordinary packages. Re-emit them on every wave pass (tagged wave 0) so they can pair
+                // with a later-wave cast; skip their rank-lex occurrence while preserving its ordinal.
+                std::set<std::vector<int>> priority_counts;
+                for (const std::vector<std::string>& want : rprov.RevelationPriorityPackages(state))
+                {
+                    const int xv = static_cast<int>(want.size());
+                    if (xv < x_min || xv > xmax) { continue; }
+                    std::vector<int> pc(ranked.size(), 0);
+                    bool valid = true;
+                    for (const std::string& nm : want)
+                    {
+                        bool found = false;
+                        for (std::size_t k = 0; k < ranked.size() && !found; ++k)
+                        {
+                            const revpkg::Class& cls = classes[static_cast<std::size_t>(ranked[k])];
+                            for (const auto& member : cls.members)
+                            {
+                                if (member.first != nm) { continue; }
+                                found = pc[k] < caps[k];
+                                if (found) { ++pc[k]; }
+                                break;
+                            }
+                        }
+                        if (!found) { valid = false; break; }
+                    }
+                    if (!valid || over_group_cap(pc) || rprov.RevelationPackageRefused(state, gdefs, pc))
+                    { continue; }
+                    if (!priority_counts.insert(pc).second) { continue; }
+                    const std::string key = revpkg::EncodePackage(0, revpkg::PackageNames(classes, ranked, pc));
+                    int ev = 0;
+                    for (std::size_t k = 0; k < pc.size(); ++k) { ev += pc[k] * cls_eval[k]; }
+                    emit(xv, key, ev);
+                    ++revwave::g_state.admitted;
+                    ++dg_emit;
+                }
                 for (int xv = xmax; xv >= x_min; --xv)
                 {
                     if (!revpkg::FirstFill(c, caps, xv)) { continue; }
@@ -44524,6 +44561,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (rprov.RevelationPackageRefused(state, gdefs, c)) { continue; }
                         if (o >= end) { revwave::g_state.pending = true; break; }
                         if (o == 0) { ++dg_xd; }
+                        if (!priority_counts.empty() && priority_counts.find(c) != priority_counts.end())
+                        {
+                            ++o; continue;
+                        }
                         ++dg_emit;
                         int ev = 0;
                         for (std::size_t r = 0; r < c.size(); ++r) { ev += c[r] * cls_eval[r]; }

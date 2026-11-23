@@ -4367,6 +4367,7 @@ public:
     // (when none is out), Emrakul, the other tutors, Ulamog, Worldfire last.
     void RevelationClassOrder(const GameState& s, const std::vector<const CardDefinition*>& class_defs,
                               std::vector<int>& order) const override;
+    std::vector<std::vector<std::string>> RevelationPriorityPackages(const GameState& s) const override;
     // ---- STEP 6c: the USER's RESTRICTIONS (ledger B3 / B4, USER 2026-11-20), one lever MTG_BLOODSUN_USER_PRUNE
     // (heurarm BLOODSUN_USER_PRUNE, DEFAULT ON; =0 -> the unrestricted step-6b search). Restrict / order only; every
     // hook answers the default in human play and under the unpruned gate.
