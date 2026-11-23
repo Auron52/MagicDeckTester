@@ -4335,6 +4335,14 @@ function handleVerdict(v, line) {
     commitLine();
     return;
   }
+  const dropRoute=LB.grantedDropRoute(v.decision, S.plan, v.verdict, v.reason, v.failed_action);
+  if (dropRoute) {
+    const land=(dropRoute.find(p=>p.kind==='land'&&p.defer)||{}).name||'the land';
+    S.plan=dropRoute; hideVerdict(); renderBoard();
+    flashHint(`Casting the drop-maker first. ${land} will play from the next decision, after its extra land drops become available.`);
+    commitLine();
+    return;
+  }
   // REJECT (illegal / legal_not_enumerated / unsupported): the committed line did NOT play, so a
   // pending "Pass turn" skip (S.commitTurn, set by the Commit-turn button) must be dropped -- otherwise
   // picking an ALTERNATE plan from the menu below inherits the skip and auto-passes the rest of THIS

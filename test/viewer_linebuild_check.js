@@ -771,6 +771,23 @@ function checkLandAfterCastRoute() {
   r = LB.queueCard(dec, r, 'Simic Guildgate', 'land');
   if (LB.planLands(r).length !== 1 || LB.planLands(r)[0].name !== 'Simic Guildgate')
     fails.push('without a queued grant the second land no longer replaces the first');
+  // Blood Sun s1 T4: all old drops spent, Fastbond is offered now, and the
+  // Lotus Field becomes playable only at the following main-phase decision.
+  const bs = { me: { land_drops_left: 0, hand: [
+    { name: 'Fastbond', kind: 'permanent', grants_land_drops: 64 },
+    { name: 'Lotus Field', kind: 'land' }, { name: 'Scorched Ruins', kind: 'land' } ] } };
+  const fb = { name: 'Fastbond', kind: 'permanent' };
+  const lotus = { name: 'Lotus Field', kind: 'land' };
+  const ruins = { name: 'Scorched Ruins', kind: 'land' };
+  const denied = "can't play land 'Lotus Field' after the casts (land drop unavailable, or it is not a land in hand)";
+  const split = LB.grantedDropRoute(bs, [fb, lotus, ruins], 'illegal', denied, 'landafter=Lotus Field');
+  if (!split || JSON.stringify(LB.encodeSegments(split)) !== JSON.stringify([
+      'cast=Fastbond', 'land=Lotus Field', 'land=Scorched Ruins']))
+    fails.push(`Fastbond's new drops did not split the queue: ${split && JSON.stringify(LB.encodeSegments(split))}`);
+  if (lotus.defer || LB.grantedDropRoute(bs, [fb, lotus], 'illegal', denied, 'landafter=City of Brass') !== null
+      || LB.grantedDropRoute({ me:{ land_drops_left:0, hand:bs.me.hand.slice(1) } }, [fb, lotus],
+          'illegal', denied, 'landafter=Lotus Field') !== null)
+    fails.push('the granted-drop route changed the queue or split without its named land and drop-maker');
   return fails;
 }
 

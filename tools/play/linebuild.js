@@ -336,6 +336,23 @@
     return plan.map(p => (p === land ? Object.assign({}, p, { defer: true }) : p));
   }
 
+  // A drop-maker can make a land legal only AFTER its cast resolves. The current
+  // main-phase menu cannot combine those two decisions when every old drop is
+  // spent. Commit the prefix first, then validate the land on the new board.
+  function grantedDropRoute(decision, plan, verdict, reason, failedAction) {
+    if (verdict !== 'illegal' || landDropsLeft(decision) !== 0
+        || !/land drop unavailable/i.test(reason || '')
+        || !/^landafter=/.test(failedAction || '')) return null;
+    const seg = segmentParts(plan || [])[0] || [];
+    const li = seg.findIndex(p => p.kind === 'land');
+    if (li <= 0 || isDeferred(seg[li])
+        || failedAction !== 'landafter=' + seg[li].name
+        || queuedLandGrants(decision, seg.slice(0, li)) <= 0) return null;
+    const hand = (decision && decision.me && decision.me.hand) || [];
+    if (!hand.some(h => h.name === seg[li].name && h.kind === 'land')) return null;
+    return plan.map(p => p === seg[li] ? Object.assign({}, p, { defer: true }) : p);
+  }
+
   // Repeat plan entries [from, to) `n` times in total (n=1 is a no-op), returning the new plan.
   // Each repetition after the first begins with a DEFERRED copy, so the repetitions commit as
   // consecutive segments -- exactly the sequence the human would have produced by clicking the
@@ -1191,7 +1208,8 @@
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.
-           segmentParts, isDeferred, fetchSuspendRoute, fetchAutoRoute, landAfterCastRoute, repeatBlock, loopBlock,
+           segmentParts, isDeferred, fetchSuspendRoute, fetchAutoRoute, landAfterCastRoute, grantedDropRoute,
+           repeatBlock, loopBlock,
            segmentLoopable,
            untapNeed, untapNeedToken,
            fusedInvestigateEntries, removeFusedAt, CLUE_TOKEN,
