@@ -70,3 +70,10 @@ illegal win removed, not a regression); classify each slower game via d8b0/escal
   legal T4. So that slower game is the illegal win removed (same gi in niv d3/2hg presumably).
 - hinata d5 gi518 (5->6): diverges T3 (ON plays Mountain + one Preordain; OFF plays Preordain, Orchard, Preordain).
   Classification pending d8b0/escalation (sg/slow.json, lane, started 14:17 UTC 11-23 after 14 h lane queue).
+## d8 b0 / escalation results (sg/slow.out, DONE 11-23)  off->on shipped; ON at x4/x16/x64 ; d8b0 off/on
+- RECOVER: hinata2hg gi160 6->7 (esc 6; d8b0 5/5); hinata2hg gi746 5->6 (x4 5); hinata d3 gi1152 4->5 (x4 4);
+  hinata d3 gi746 5->6 (esc 6, d8b0 ON 5); hinata d5 gi746 5->6 (x4 5); niv d3 gi1492 6->7 (x4 6; d8b0 6/6).
+- NOT RECOVERED: hinata gi518 (d3,d5) 5->6 (esc 6; d8b0 off 5 / on 6); hinata d3 gi1979 4->5 (esc 5; d8b0 4/5);
+  niv2hg gi86 4->5 (esc 5; d8b0 4/5); niv gi207 3->4 everywhere (d8b0 3/4) -- OFF's T3 PROVEN ILLEGAL (see above).
+- Probe running: OFF executor MTG_PREPAY_C_TRACE on h518 (T5), h1979 d3 (T4), niv2hg gi86 (T4): sg/pc/run.sh via lane,
+  DONE marker sg/pc/DONE, traces sg/pc/tr, stderr t5.err / t4.err. Goal: show OFF's realised win used a floating {C} as wild.
