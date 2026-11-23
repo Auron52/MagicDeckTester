@@ -18,6 +18,14 @@ to keep the head lease within the 1–2 hour validation window; the old heartbea
 continues locally (`POSTBLOOD_BUILD_DONE` still pending). A fresh `run-queue-wait-profile.sh` waiter is active;
 the old `QUEUE_PROFILE_READY` marker was archived as `.previous`.
 
+**2026-11-23 00:10 UTC update:** Worldfire landed `122db56b7` and this session is queue head again, with Beasts
+behind it. Worldfire changed only `src/core/SpellEffects.cpp` for the human Worldfire tutor-menu default, plus
+its profile/docs and PGO training manifest. The integrated build had already compiled that source file, so it
+continues its ~390-step test target; rebase onto `122db56b7`, then run an incremental rebuild before final gates.
+`run-postblood-gates.sh` waits on `POSTBLOOD_BUILD_DONE` and will run unit plus scenarios under the heavy lock;
+those results are prevalidation until the incremental rebuild. A new detached queue hold heartbeats in
+`queue-hold-postworldfire.log`. Requeue behind Beasts before the head window is exhausted if smoke is still running.
+
 The previous full smoke was interrupted when its attached tool session stopped, and the queue lease passed to
 Blood Sun. No user decision is pending. Rejoined the queue as number 1 behind Blood Sun; a detached waiter
 tracks `build/scratch/cb-integrated/QUEUE_PROFILE_READY`. A detached prequeue full smoke is now running under
