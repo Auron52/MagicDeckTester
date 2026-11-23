@@ -99,3 +99,5 @@ illegal win removed, not a regression); classify each slower game via d8b0/escal
 ## APPROVED by coordinator 11-23 (accept as rules-correctness fix)
 - chain2 RUNNING: build/scratch/claude_prepayc/chain2.sh PID 1572902 (box lock -> build -> --both; log regr2.log; DONE marker chain2.DONE).
 - Then: --both --accept-with-regressions note, check_gt_logs, check_references_safe, push wip.
+
+## DONE 11-23: GT accepted (smoke+regression) on 26d1a31e8 run regr2.log (same failset as chain1); check_gt_logs OK, references safe.
