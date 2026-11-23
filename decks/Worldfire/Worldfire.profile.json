@@ -1,5 +1,5 @@
 {
-  "value_play": { "expected_buckets": 21, "mull_gen_depth": 2, "mull_gen_budget_ms": 8 },
+  "value_play": { "expected_buckets": 19, "mull_gen_depth": 2, "mull_gen_budget_ms": 8 },
   "card_scores": {
     "Brainstorm": [
       -0.03406318911851347,
@@ -82,6 +82,7 @@
   "hand_score_threshold": -1e+18,
   "mulligan": {
     "bottom_order": "count_first",
+    "bucket_bottom_keep_order": [["Mystical Tutor", "Personal Tutor"]],
     "curve_check": "two_drop",
     "max_lands": 5,
     "min_color_sources": {},
