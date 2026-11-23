@@ -21,6 +21,7 @@
 
 #include <string>
 #include <vector>
+#include <algorithm>
 
 namespace
 {
@@ -111,4 +112,66 @@ TEST_CASE("MTG_BOTTOM_PREF_ORDER: the bottomed cards and the win turn are unchan
         }
     }
     CHECK(compared == 12);
+}
+
+TEST_CASE("Merged mulligan buckets bottom the weaker physical card")
+{
+    EnsureCardsBpo();
+    const Decklist deck = DeckLoader::LoadFromFile(
+        ResolveHeuristicDefaultsPath("decks/Worldfire/Worldfire.cod"));
+    const MulliganProfile base = LoadDeckProfile(
+        ResolveHeuristicDefaultsPath("decks/Worldfire/Worldfire.profile.json"));
+    const std::vector<std::string> tutor_order{ "Mystical Tutor", "Personal Tutor" };
+    REQUIRE(base.bucket_bottom_keep_order.size() == 1);
+    CHECK(base.bucket_bottom_keep_order[0] == tutor_order);
+
+    auto bottom_one = [&](const std::vector<std::string>& names,
+                          const std::vector<int>& target, bool reverse_tutor_scores)
+    {
+        GameState s = GoldFishRunner::SetupGame(deck, 71123);
+        auto& ap = s.ActivePlayer();
+        ap.hand.clear();
+        for (const std::string& name : names)
+        {
+            auto it = std::find_if(ap.library.begin(), ap.library.end(),
+                                   [&](const Card& c) { return c.m_name == name; });
+            REQUIRE(it != ap.library.end());
+            ap.hand.push_back(*it);
+            ap.library.erase(it);
+        }
+        ExhaustiveKeepPolicy ek;
+        ek.buckets = { {"Mystical Tutor", "Personal Tutor"}, {"Ponder", "Preordain"},
+                       {"Island"}, {"Mountain"}, {"Worldfire"} };
+        ek.max_mull = 1;
+        ek.bottoming_enabled = true;
+        ek.Index();
+        std::vector<int> comp;
+        REQUIRE(ek.Composition(names, comp));
+        ek.keep[comp] = { 1, 1, 1, 1 };
+        ek.bottom_keep[comp] = { {}, {}, target, target };
+        MulliganProfile prof = base;
+        if (reverse_tutor_scores)
+        {
+            // The explicit rule must win even when a later score update reverses the ranking.
+            prof.card_scores["Mystical Tutor"] = { 0.0 };
+            prof.card_scores["Personal Tutor"] = { 1.0 };
+        }
+        prof.exhaustive_keep = std::make_shared<const ExhaustiveKeepPolicy>(std::move(ek));
+        AIEngine eng(prof, 0, 1);
+        eng.RolloutKeepWinTurn(s, 1, 1);
+        REQUIRE(eng.LastBottomedNumbers().size() == 1);
+        for (const Card& c : ap.hand)
+            if (c.m_number == eng.LastBottomedNumbers()[0]) { return c.m_name.str(); }
+        return std::string();
+    };
+
+    CHECK(bottom_one({"Mystical Tutor", "Personal Tutor", "Ponder", "Preordain",
+                      "Island", "Mountain", "Worldfire"}, { 1, 2, 1, 1, 1 }, true)
+          == "Personal Tutor");
+    CHECK(bottom_one({"Mystical Tutor", "Personal Tutor", "Personal Tutor", "Ponder",
+                      "Island", "Mountain", "Worldfire"}, { 2, 1, 1, 1, 1 }, true)
+          == "Personal Tutor");
+    CHECK(bottom_one({"Ponder", "Ponder", "Preordain", "Mystical Tutor",
+                      "Island", "Mountain", "Worldfire"}, { 1, 2, 1, 1, 1 }, false)
+          == "Ponder");
 }

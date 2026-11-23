@@ -2328,9 +2328,12 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
         std::vector<int> target;
         if (m_profile.exhaustive_keep->DecideBottom(names, count, state.on_the_play, target))
         {
-            // Bottom `count` cards, each time removing one physical card from a bucket that is over
-            // its target count. Members of a bucket are equivalent by construction, so any over-target
-            // card is an equally-optimal removal; picking the first is deterministic.
+            // The table chooses how many cards to keep from each bucket. When a bucket contains
+            // different card names, an explicit per-deck order wins (e.g. Mystical Tutor over
+            // Personal Tutor). Otherwise bottom its least valuable physical member by marginal
+            // card score, then a duplicate before a singleton when scores tie (the lone
+            // Preordain can be useful alongside Ponder), then first-copy score. No scores or
+            // order => original hand order.
             const auto& n2b = m_profile.exhaustive_keep->name_to_bucket;
             for (int i = 0; i < count && !ap.hand.empty(); ++i)
             {
@@ -2338,12 +2341,53 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                 for (const Card& c : ap.hand)
                 { auto it = n2b.find(c.m_name.str()); if (it != n2b.end()) { comp[it->second]++; } }
                 int pick = -1;
+                int pick_bucket = -1;
                 for (int j = 0; j < static_cast<int>(ap.hand.size()); ++j)
                 {
                     auto it = n2b.find(ap.hand[j].m_name.str());
-                    if (it != n2b.end() && comp[it->second] > target[it->second]) { pick = j; break; }
+                    if (it != n2b.end() && comp[it->second] > target[it->second])
+                    { pick = j; pick_bucket = it->second; break; }
                 }
                 if (pick < 0) { break; }   // already at target (shouldn't happen for a tabled hand)
+                bool distinct_names = false;
+                for (int j = pick + 1; j < static_cast<int>(ap.hand.size()); ++j)
+                {
+                    auto it = n2b.find(ap.hand[j].m_name.str());
+                    if (it == n2b.end() || it->second != pick_bucket) { continue; }
+                    distinct_names |= ap.hand[j].m_name != ap.hand[pick].m_name;
+                }
+                // An explicit profile policy opts a deck into physical-member selection.
+                // Existing merged tables retain their original first-card behavior.
+                if (distinct_names && !m_profile.bucket_bottom_keep_order.empty())
+                {
+                    std::map<std::string, int> copies;
+                    for (const Card& c : ap.hand) { ++copies[c.m_name.str()]; }
+                    double best_marginal = CardScore(ap.hand[pick].m_name, copies[ap.hand[pick].m_name.str()] - 1);
+                    double best_first = CardScore(ap.hand[pick].m_name, 0);
+                    int best_copies = copies[ap.hand[pick].m_name.str()];
+                    for (int j = pick + 1; j < static_cast<int>(ap.hand.size()); ++j)
+                    {
+                        auto it = n2b.find(ap.hand[j].m_name.str());
+                        if (it == n2b.end() || it->second != pick_bucket) { continue; }
+                        const double marginal = CardScore(ap.hand[j].m_name, copies[ap.hand[j].m_name.str()] - 1);
+                        const double first = CardScore(ap.hand[j].m_name, 0);
+                        const int n_copies = copies[ap.hand[j].m_name.str()];
+                        int order_cmp = 0;
+                        for (const auto& group : m_profile.bucket_bottom_keep_order)
+                        {
+                            auto a = std::find(group.begin(), group.end(), ap.hand[j].m_name.str());
+                            auto b = std::find(group.begin(), group.end(), ap.hand[pick].m_name.str());
+                            if (a != group.end() && b != group.end())
+                            { order_cmp = a < b ? 1 : (a > b ? -1 : 0); break; }
+                        }
+                        if (order_cmp < 0 || (order_cmp == 0 &&
+                            (marginal < best_marginal || (marginal == best_marginal &&
+                            (n_copies > best_copies || (n_copies == best_copies && first < best_first))))))
+                        { pick = j; best_marginal = marginal; best_first = first; best_copies = n_copies; }
+                    }
+                }
+                if (!m_profile.bucket_bottom_keep_order.empty())
+                { m_last_bottomed_numbers.push_back(ap.hand[pick].m_number); }
                 if (m_logger) { m_logger->LogBottomed(ap.hand[pick].m_number, ap.hand[pick].m_name); }
                 ap.library.push_back(ap.hand[pick]);
                 ap.library.NoteBottomed();

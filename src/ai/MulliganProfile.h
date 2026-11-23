@@ -253,6 +253,11 @@ struct MulliganProfile
     // Computed by the deck analyzer from empirical game data; empty = scoring disabled.
     std::map<std::string, std::vector<double>> card_scores;
 
+    // Within a merged exhaustive bucket, preserve this order of card names when bottoming
+    // (best to worst). The table still chooses the bucket count. Only a group containing both
+    // candidate names applies; other merged buckets fall back to marginal card_scores.
+    std::vector<std::vector<std::string>> bucket_bottom_keep_order;
+
     // Minimum hand score to keep without mulliganing (after hard filters pass).
     // hand_score = sum of marginal values for all cards in hand.
     // 0.0 with empty card_scores = scoring disabled.
