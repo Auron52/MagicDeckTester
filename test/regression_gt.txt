@@ -1,9 +1,11 @@
-# Regression ground truth -- commit f76dcc605  date 2026-11-22
+# Regression ground truth -- commit b5397b997  date 2026-11-23
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk Turns City/Pilgrimage Main 2 split: held-out searched 5 faster and 1 slower (d5 s4004 gi180 T5 to T6 after a different bottom choice), net four turns faster; d0 unchanged. See docs/design/analysis-Merfolk-Turns.md.
 # accepted-with-regressions (overnight, 2026-11-21): Periodic overnight 2026-11-20 (since 1443eeba0, 320 src commits). Every searched PERSISTS game outside MB/Spirits (158) plus 10+10 sampled was replayed on both arms at d8 b0 (178): 76 recover, 9 same turn on both arms (old GT was budget luck), 2 new better (Mill), 59 slower but explained, 31 slower and unattributed at replay time (12 since attributed below), 1 new deck (Red Elemental). Explained: Gods 24 = USER strict dredge MTG_GODS_RETRIEVAL_DREDGE (c39c1da1a/6cb9a7c85; blind -0.13; lever=0 restores 27/27). Hinata = USER d5 floor restore da17c0bbf (new binary + old value.json = old GT; d5 costs ~+0.08/game at b30). Cyclone: all 53 recover at d8 b0 (Ponder-first 7b95d828b + churn). Midrange Burn 24 = USER opponent-lands model c9022b11d (legacy lands restores 25/25). Spirits 10 = keep table a05ac4395. REAL, owed fixes: (1) Windswept Heath card data in 9344fa594 (Boars I1) dropped its produces W/B/R/G hand hint (hand_fixing_produces is read only by Creature Giving's discard), so Heath counts as colourless in hand: Five Colour d0 +0.005/game (T1 holds Heath; reverting the Heath record restores 6/6), Antilife s6006 gi117 x2 and 10 of 20 Creature Giving games restored by the same swap. Fix candidate: restore produces as the hand hint like Scalding Tarn/Misty Rainforest, A/B on the five Heath decks. (2) PD s6006 gi47 T8 -> unwon from MTG_PD_LATER_HAND_HOLD (636910330) skipping T4/T5 land drops; =0 restores. Unattributed, d8 b0-stable, net-faster/neutral decks (owed follow-ups): Creature Giving 10, Galadriel 5, Hinata 2 (s5005 gi384, s6006 gi156), Minotaur 1 (s6006 gi937), Alchemist 1 (s6006 gi318). Mill caveat: s5005 gi3/gi4 old GT wins do not replay from 1443eeba0 (old binary loses both at case settings and d8 b0); new wins them T6/T7. See docs/design/overnight-accept-2026-11-20.md (branch wip/overnight-accept-1120).
+# accepted-with-regressions (smoke, 2026-11-23): Hinata d5E0 ship (0c993e9a9: emulated ladder + escalation beam off at d5, USER 2026-11-22), re-gated on 138f60c83: only Hinata cases move; every aggregate equal or better except smoke d3 s1001 5.50->5.52 (gi46 5->6, churn: 5 at 4x/16x); 23 searched slower games: 21 churn at 4x/16x, 2 recover by escalating budget (reg d5 s3003 gi20 T5 at 32x and d8 b0, gi128 T4 at 64x and d8 b0); held-out b30 n=2399 -0.0734 at 0.74x CPU
+# accepted-with-regressions (regression, 2026-11-23): Hinata d5E0 ship (0c993e9a9: emulated ladder + escalation beam off at d5, USER 2026-11-22), re-gated on 138f60c83: only Hinata cases move; every aggregate equal or better except smoke d3 s1001 5.50->5.52 (gi46 5->6, churn: 5 at 4x/16x); 23 searched slower games: 21 churn at 4x/16x, 2 recover by escalating budget (reg d5 s3003 gi20 T5 at 32x and d8 b0, gi128 T4 at 64x and d8 b0); held-out b30 n=2399 -0.0734 at 0.74x CPU
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -94,8 +96,8 @@ antilife_smoke_d0_s1001=4.9170/c6b67744a608a874
 antilife_smoke_d3_s1001=4.0400/d4e8e35aba4106fc
 antilife_smoke_d5_s1001=4.2031/5929c71b149c658e
 hinata_smoke_d0_s1001=6.7410/7d8764c3fef56872
-hinata_smoke_d3_s1001=5.5000/0798cc26e055bc74
-hinata_smoke_d5_s1001=5.5000/4dea3ada85697c9c
+hinata_smoke_d3_s1001=5.5200/69a99787d660839c
+hinata_smoke_d5_s1001=5.4200/5635f2a00e625fce
 cyclone_smoke_d0_s1001=8.2690/61f54a19f9adfd61
 cyclone_smoke_d3_s1001=4.7800/af794c06a7b4f6ea
 cyclone_smoke_d5_s1001=4.6600/1f647e39f6b14842
@@ -152,7 +154,7 @@ melira_smoke_d5_s1001=4.6300/afcba1b83f5f1573
 angels_smoke_d0_s1001=5.2510/d745ab1ec5f6a7d9
 angels_smoke_d3_s1001=4.5200/a575e53e018b55db
 angels_smoke_d5_s1001=4.6092/a8e06a07767d779d
-hinata2hg_smoke_d5_s1001=5.3200/7b5daa6b35dde87c
+hinata2hg_smoke_d5_s1001=5.2800/4ec54e6155495fee
 antilife2hg_smoke_d5_s1001=3.9500/f0255a9bb8db7604
 minotaur2hg_smoke_d5_s1001=5.3000/35d347aa75d70cb5
 goblins2hg_smoke_d5_s1001=3.9867/7ed9172b7e4d0654
@@ -364,7 +366,7 @@ giants_regression_d5_s30001=6.0000/6a10ac3e5874bf43
 goblins_regression_d3_s30001=3.7500/b457e40d96edb746
 goblins_regression_d5_s30001=3.7500/b457e40d96edb746
 hinata_regression_d3_s30001=5.2500/ce9c505b3c5b7b98
-hinata_regression_d5_s30001=5.2000/c3a0091c7ed1c70e
+hinata_regression_d5_s30001=5.2000/e7881af533a8a74b
 jumbo_regression_d3_s30001=4.2500/d60a77e40ddf7cac
 jumbo_regression_d5_s30001=4.2500/633df8fb1a4174b9
 kittyv3_regression_d3_s30301=3.4000/0f4881fa90eaaceb
@@ -442,9 +444,9 @@ antilife_regression_d3_s2002=4.2100/aa285ff564dedbbf
 antilife_regression_d5_s2002=4.2480/e84c74caf691cd1a
 antilife_regression_d5_s3003=4.1900/04069917e5cbaa3d
 hinata_regression_d0_s2002=6.7880/e9c94826ecf28e5d
-hinata_regression_d3_s2002=5.5867/9e386a65ab2dbb8d
-hinata_regression_d5_s2002=5.4067/24d767110fb873b0
-hinata_regression_d5_s3003=5.7467/a6483258d26ded05
+hinata_regression_d3_s2002=5.5867/65c06477bde94529
+hinata_regression_d5_s2002=5.4000/6349c83a45776aa6
+hinata_regression_d5_s3003=5.6867/2636054951ea89a3
 gods_regression_d0_s2002=8.7520/f67a02d99da9e61d
 gods_regression_d3_s2002=5.7200/e40841e635ca338c
 gods_regression_d5_s2002=5.7600/97ba3012e1a3d1cd
@@ -523,7 +525,7 @@ angels_regression_d0_s2002=5.2480/5d32a7a0ef367bd3
 angels_regression_d3_s2002=4.6400/6ff4b64e4be14b21
 angels_regression_d5_s2002=4.5960/136be949dd07fea5
 angels_regression_d5_s3003=4.6140/8498371c5106a061
-hinata2hg_regression_d5_s2002=5.3733/ffa8754a109cc60d
+hinata2hg_regression_d5_s2002=5.3333/1464ed61fd84d590
 antilife2hg_regression_d5_s2002=4.2400/318b9daa1aee16a5
 minotaur2hg_regression_d5_s2002=5.3667/3822f674cc39044d
 goblins2hg_regression_d5_s2002=4.0133/2393464e4a3b2ff7
