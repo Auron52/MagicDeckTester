@@ -451,3 +451,7 @@ Parent's brief: Hinata failed the every-deck bar only by +1 (one slower game, wh
 
 Slower games, queued for d8 b0 (lane, `hc/d8.json`, marker `d8_hc.done`): hinata d3 gi 146 (T6 -> T7), niv 2HG
 gi 522 (T4 -> T5).
+**Both recover, byte-identically** at d8 b0 (same win turn and digest on both arms): hinata d3 gi 146 T6/T6, niv 2HG
+gi 522 T4/T4. So `MTG_LKR_PLAYOUT_OFF` now meets the every-deck bar on every shape measured. Searched net: Niv -8,
+Niv 2HG -1, Hinata (play) 0 at 4,000 fresh pairs, Hinata d3 0, Hinata at 780000 +1 (recovers), Extra Turns and
+Extra Turns 2HG 0, the six +1-2% decks 0. d0 is byte-identical. Every slower game recovers at d8 b0.

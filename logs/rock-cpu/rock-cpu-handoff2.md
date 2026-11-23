@@ -95,3 +95,4 @@ to the jobs), then the doc + handoff.
 Confirm DONE 02:11 UTC (table in doc): hinata 4000 net 0, hinata d3 net 0, niv2hg net -1 (CPU -5.7%, instr -11.4%),
 et2hg net 0. d8 b0 replays of hinatad3 gi146 and niv2hg gi522 queued: lane wrapper PID 1251598, manifest hc/d8.json,
 out $S/d8_hc.out, logs $S/logs_d8_hc/, marker $S/d8_hc.done. Compare the .wins per game (equal turn = recovered).
+d8_hc DONE 16:23 UTC: both recover byte-identically. All work DONE; nothing running. USER decides MTG_LKR_PLAYOUT_OFF.
