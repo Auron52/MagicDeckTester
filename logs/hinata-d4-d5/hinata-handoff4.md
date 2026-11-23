@@ -15,16 +15,17 @@ Last commit before this file: c3eb0a931.
 3. 2026-11-22 12:35 (via coordinator): "Claude usage is at 5%, so keep running until it runs out, but keep a Codex
    handoff current."
 
-## Status (21:20 UTC): REDO on origin 138f60c83 (Worldfire + Beasts integrations moved Hinata GT)
-- The earlier accept (a579747bf, on cd330ec5a) is VOID. Origin's Worldfire GT accept 9575556d5 changed six Hinata gt_logs.
-  On the rebase I took origin's side for ALL of test/gt_logs, test/job_cost.tsv and test/regression_gt.txt, and kept only
-  the doc change (87e70386b). test/ is identical to origin; check_gt_logs is clean. The ship (beam_width 0, emulated) is intact.
-- gate3 launched 21:19 UTC, PID 1126869, on the box lock (long queue: Bruna-RO A/B + ~6 waiters). Output in
-  `/workspaces/MagicDeckTester/build/scratch/claude_hinata_d4d5/gate3/` (status, DONE, build/unit/regression.log).
-- Next: step 4 below, against gate3. The "before" values are now origin's GT, so re-derive the table with
-  `grep 'FAIL ' gate3/regression.log`. Classify every slower game NOT in handoff3's 23 with
-  `bash test/classify_turn_later.sh smoke|regression` (under the box lock), escalating any that persist.
-  Then run step 5's accept (change "re-gated on cd330ec5a" to "re-gated on 138f60c83"), steps 6 and 8, and commit GT + handoff.
+## Status (01:40 UTC 11-23): gate3 DONE on 138f60c83; classifier cls3 running
+- gate3 (`build/scratch/claude_hinata_d4d5/gate3/`): build 0, units 0, `--both` 624 passed, 8 FAIL, ALL Hinata.
+  Origin GT -> got: smoke d3 s1001 5.50->5.52 (WORSE by one game: gi46 5->6, recovered at 128x in handoff3);
+  smoke d5 s1001 5.50->5.42; 2hg smoke d5 5.32->5.28; reg d5 s30001 5.20 (play differs); reg d3 s2002 5.5867 (play
+  differs); reg d5 s2002 5.4067->5.40; reg d5 s3003 5.7467->5.6867; 2hg reg d5 s2002 5.3733->5.3333.
+- 23 slower games, 3 of them NEW vs handoff3's 23: 2hg reg d5 s2002 gi21 (5->6), reg d5 s2002 gi21 (5->6), reg d5
+  s3003 gi6 (4->5).
+- cls3 = `test/classify_turn_later.sh smoke` + `regression` under the box lock, PID 1239903. Output in
+  `build/scratch/claude_hinata_d4d5/cls3/` (smoke.log, regression.log, status, DONE).
+- Next: any NEW game that PERSISTS gets escalating-budget single-game reruns (32x/64x/128x, then d8 b0), the same method
+  as handoff3. Then accept (step 5, with the note re-dated to 138f60c83), run steps 6 and 8, and commit GT + handoff.
 
 ## Next commands, in order
 1. Wait until origin has the Merfolk fix:
