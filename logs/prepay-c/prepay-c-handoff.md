@@ -77,3 +77,21 @@ illegal win removed, not a regression); classify each slower game via d8b0/escal
   niv2hg gi86 4->5 (esc 5; d8b0 4/5); niv gi207 3->4 everywhere (d8b0 3/4) -- OFF's T3 PROVEN ILLEGAL (see above).
 - Probe running: OFF executor MTG_PREPAY_C_TRACE on h518 (T5), h1979 d3 (T4), niv2hg gi86 (T4): sg/pc/run.sh via lane,
   DONE marker sg/pc/DONE, traces sg/pc/tr, stderr t5.err / t4.err. Goal: show OFF's realised win used a floating {C} as wild.
+## Legality audit of the 4 unrecovered games (OFF arm realised wins; sg/pc traces)
+- niv gi207 T3: needs {R}{R}, only 1 red source -> ILLEGAL (airtight).
+- niv2hg gi86 T4: Niv-Mizzet, Parun {U}{U}{U}{R}{R}{R} + Generator Servant {1}{R} = 7 coloured pips; coloured sources
+  Spirebluff, Sulfur Falls, Island, Ferrous Lake = 4 (Sol Ring, Servant colourless) -> ILLEGAL (airtight).
+- hinata d3 gi1979 T4: coloured pips 9 (RS 2, Soulfire 3, Ponder 1, Soulfire 3) vs coloured supply <= 7 (Monastery,
+  2 Orchard, re-untapped once by RS, + Reflecting Pool) -> ILLEGAL (pip count).
+- hinata gi518 T5: total demand ~31 vs supply ~28 by pip count, and the executor's final prepay trace shows the bug firing
+  (float0 c1, pure_c=2, c_keep=1 wild=2: a floating {C} relaunched as wild) -> ILLEGAL (strong, not airtight).
+## Verdict (step 3): bar FAILS STRICTLY only on niv d3 (+0.0010 raw; +0.0005 = gi1492 6->7 after excluding the illegal
+  gi207), and gi1492 recovers at x4 (churn). Every other unrecovered slower game is an illegal OFF win removed.
+  Per brief, NOT accepted; reported to parent with recommendation to accept as a rules-correctness fix.
+## CPU: units ON/OFF hinata d3 1.0018, d5 1.0015, 2hg 1.0041; niv ~1.000; edf identical. Searched core-s 44,575 vs
+  43,607 (1.022x; noise ~+-5% per row: edf d3 identical play read +3.4%). d8b0 units where the illegal kill had stopped the
+  search: niv gi207 32.7K->683K (20.8x), niv2hg gi86 18.1K->338K (18.6x), hinata gi1979 33.9K->339K (10x), gi518 31.3K->162K (5.2x).
+## Remaining: GT accept (if parent/USER approves): `MTG_PGO=0 bash test/regression.sh --both --accept="<note>"` from the
+  hinata-gi548 worktree -- the last --both run (chain1) was at 628fcc728; 26d1a31e8 only adds the heurarm slot (env-default
+  identical), but re-run --both before accepting to be safe. Then check_gt_logs.py, check_references_safe.py, push wip.
+  Step 5 (Soulfire follow-up sim/real mismatch) NOT started.
