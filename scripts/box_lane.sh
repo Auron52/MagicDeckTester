@@ -71,4 +71,4 @@ done
 
 exec {qfd}>&-   # admitted: let the next waiter try
 echo "box_lane: $(date -u +%H:%M) running on ${slots} slot(s), MTG_RSS_CAP_GB=$(( slots * cap )): $*" >&2
-env MTG_RSS_CAP_GB=$(( slots * cap )) MTG_BUILD_JOBS="$slots" MTG_LANE_SLOTS="$slots" "$@"
+env MTG_RSS_CAP_GB=$(( slots * cap )) MTG_BUILD_JOBS="$slots" "$@"
