@@ -150,29 +150,36 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
     { uniq.push_back(baked); }
     if (uniq.empty()) { return TutorAskResult::NoCandidates; }
 
+    // A viewer plan is enumerated with wide tutor gates. Its baked target can be
+    // outside the shipped candidate set (Blood Sun s5: City of Brass with a Sun
+    // already out). Preserve the human's full grid, but badge a shipped target.
+    std::vector<std::string> ranked;
+    {
+        ExecutorMenuScope shipped;
+        ranked = LiveTutorCandidates(state, controller_index, pp);
+    }
+    const bool baked_ranked = baked_live && std::find(ranked.begin(), ranked.end(), baked) != ranked.end();
     int def = -1;   // baked-but-gone -> DECLINE, reproducing the old silent whiff
-    if (baked_live)
+    if (baked_ranked)
     {
         for (int k = 0; k < static_cast<int>(uniq.size()); ++k)
         { if (uniq[k] == baked) { def = k; break; } }
     }
-    else if (baked.empty())
+    else if (baked.empty() || !ranked.empty())
     {
         // The badged "AI pick" must be the provider's RANKED pick, not uniq[0] (viewer issue #7).
         // --claude-play forces MTG_UNPRUNED, and an archetype TutorCandidates returns the UNRANKED
         // GenericProvider list under that gate -- so `cands` above is raw ZONE ORDER and the old
         // hard-coded default of 0 badged whatever happened to be first (Goblins s22: Stingscourger,
-        // over Krenko / Muxus / every lord). Re-ask the provider inside a HumanPlaySuppress scope,
-        // which is exactly the guard that makes DecisionUnpruned() false, to get the real ranking.
+        // over Krenko / Muxus / every lord). The ExecutorMenuScope above closes
+        // both the human-play and MTG_UNPRUNED gates to recover the real ranking.
         //
         // Only the DEFAULT INDEX changes -- the offered list keeps zone order. Reordering it would
         // silently re-point every `tutor_etb` index already recorded under references/ (s22 recorded
         // 11 = Goblin Chieftain), so the human still sees the same grid in the same places and only
-        // the badge moves. Falls back to 0 if the ranked pick is somehow absent.
-        def = 0;
-        HumanPlaySuppress pruned;   // ranked (pruned) view; restores on scope exit
-        const std::vector<std::string> ranked =
-            LiveTutorCandidates(state, controller_index, pp);
+        // the badge moves. If the executor has no target, recommend declining
+        // this optional search instead of badging the first card in zone order.
+        def = ranked.empty() ? -1 : 0;
         if (!ranked.empty())
         {
             auto it = std::find(uniq.begin(), uniq.end(), ranked.front());
@@ -187,7 +194,7 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
     std::vector<int> suggested;
     if (ResolveProvider(state).TutorMarksSuggested(pp))
     {
-        HumanPlaySuppress pruned;   // the autonomous (pruned) view; restores on scope exit
+        ExecutorMenuScope pruned;   // close both the human and unpruned tutor gates
         const std::vector<std::string> narrowed =
             LiveTutorCandidates(state, controller_index, pp);
         for (int k = 0; k < static_cast<int>(uniq.size()); ++k)

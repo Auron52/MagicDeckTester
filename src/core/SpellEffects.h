@@ -56620,8 +56620,21 @@ inline void ResolveBurgeoningTriggers(GameState& state)
         {
             std::vector<int> legal;
             for (int i = 0; i < static_cast<int>(human_cards.size()); ++i) { legal.push_back(i); }
+            // The human sees every land, but the AI badge must respect the
+            // shipped land gate. In particular a pre-Sun Lotus is offered only
+            // when its entry can enable casting the Blood Sun in hand.
+            int heuristic_pick = -1;
+            {
+                ExecutorMenuScope shipped;
+                for (int i = 0; i < static_cast<int>(human_cards.size()); ++i)
+                {
+                    const CardDefinition* cand = CardDatabase::Instance().LookupCached(human_cards[static_cast<std::size_t>(i)]);
+                    if (cand != nullptr && ResolveProvider(state).LandPlayOffered(state, me, *cand))
+                    { heuristic_pick = i; break; }
+                }
+            }
             const int r = (*g_play_dig_chooser)(state, me, "Burgeoning (opponent played a land)",
-                                                human_cards, legal, 0);
+                                                human_cards, legal, heuristic_pick);
             number = -1; def = nullptr; pin = -1;
             if (r >= 0 && r < static_cast<int>(human_cards.size()))
             {
