@@ -575,6 +575,20 @@ forced-draw divergence, and play invariants held for eight games and 174 decisio
 follows. The temporary opponent and legacy-scry A/B levers have been removed. Regression landing and the fast
 mulligan profile remain pending.
 
+**Final Beasts-integrated landing gates (2026-11-23).** A clean Release build passed all 390 targets,
+then the integrated unit suite passed 4,153 tests and 3,667,878 assertions. Full smoke completed 247
+cases with both nonconvergence and forced-draw oracles enabled; both emitted zero diagnostics. The
+113-case scoped regression completed 27,968 games and passed 940 strict viewer references with zero
+play drift; both required suboptimal references were beaten. The smoke score was one loss-penalized
+turn faster overall, and regression was nine turns faster. The searched regression audit found 35
+slower games: 28 recover at 4x/16x budget, two persistent games draw different cards after a changed
+line (Niv 2HG gi13 and Shadowborn gi73), and five persistent 1 Drop Burn cases follow the requested
+Vexing Devil opponent-choice model. Shadowborn gi73 is the only searched win-to-unwon case; it has
+different Lake of the Dead timing and draws. All eleven greedy regression win-to-unwon games cast
+Magma Jet before their first divergent draw. Representative same-score line changes were replayed.
+Both tiers' ground truth was accepted with provenance notes; all 1,435 per-game GT logs are
+consistent. The reference safety check passed across 11 available checkouts/worktrees.
+
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-11-22)
 

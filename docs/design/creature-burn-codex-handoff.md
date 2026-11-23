@@ -2,6 +2,20 @@
 
 ## Codex continuation (2026-11-22 ~21:50 UTC)
 
+**2026-11-23 08:29 UTC GT acceptance:** The regression classifier found 28/35 searched slowdowns
+recover at 4x/16x, including all three Creature Burn cases. Of the seven persistent cases,
+Niv 2HG d5 gi13 and Shadowborn d3 gi73 have divergent draws; Shadowborn's T8-to-unwon case
+changes the Lake of the Dead timing and is a different physical game. Five 1 Drop Burn cases
+have identical hands/draws but choose the Vexing Devil early under the user-requested
+visible-damage opponent policy; the old opponent choice is no longer the baseline to target.
+All eleven d0 regression win-to-unwon cases were individually replayed: each casts Magma Jet
+before its first divergent draw. Representative same-score searched line changes were also
+replayed (Creature Burn/2HG, Midrange Burn, Anti-Life); they showed changed scry or bottom
+choices, draw divergence, or a different legal line with the same turn score. Full smoke and
+scoped regression GT were accepted with provenance notes. `test/check_gt_logs.py` reports
+1,435 consistent logs, zero stale/missing. Next: commit GT and report, land via push queue,
+launch fast mullgen on landed commit.
+
 **2026-11-23 08:21 UTC regression update:** The final Beasts-integrated scoped regression
 completed all 113 cases and 27,968 games in 102m34s. Strict viewer replay: 940 references,
 zero play drift or contract failure; both required suboptimal references were beaten. 68 cases
