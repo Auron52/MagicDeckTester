@@ -420,3 +420,12 @@ recommendation.
   alone cannot remove most of this cost. The next technical experiment should stage nested plan generation or use
   a verified same-round witness before constructing the full list. Preserve unlimited-budget coverage; do not use a
   hard candidate cap.
+- A final source review ruled out simply turning on Extra Turns' existing pre-list chain trial for Blood Sun. In
+  `SimulateToEndImpl`, its `chain_only` fallback calls `EnumeratePlansWithLand` for the full legal list whenever the
+  depth-zero choice does not secure another turn; that is the same materialization bottleneck. The ET trial is also
+  gated on draw-engine permanents that Blood Sun does not use. A Blood Sun witness needs its own cheaply bounded plan
+  constructor or a staged enumeration, followed by an actual replay proof before skipping the full list.
+- Cleanup validation: Release `mtg` + `mtg-test` built; `mtg-test --test-case='Blood Sun*'` passed 45 cases / 1,790
+  assertions. `viewer_protocol_check.py --only Blood_Sun --threads 2` against the rebuilt binary: 11 exact, one
+  repaired older seed-6 bounce prompt, zero drift/gap/fail, zero stateless fallback across 415 steps. Reference
+  safety scan passed over 107 checkouts/worktrees. Primary viewer returned HTTP 200 on port 8080.
