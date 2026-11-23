@@ -41,11 +41,11 @@
   },
   "beasts": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
-   "cost_per_game_ms": 27896.42,
+   "cost_per_game_ms": 33682.88,
    "jobs": 6,
    "key": "beasts",
    "tier": "regression",
-   "total_core_ms": 3344693,
+   "total_core_ms": 3855720,
    "worst_case": "beasts2hg_regression_d5_b20"
   },
   "boars": {
@@ -240,11 +240,11 @@
   },
   "hinata": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
-   "cost_per_game_ms": 10660.45,
+   "cost_per_game_ms": 18918.94,
    "jobs": 7,
    "key": "hinata",
    "tier": "regression",
-   "total_core_ms": 4765284,
+   "total_core_ms": 8287550,
    "worst_case": "hinata_regression_d5_b30"
   },
   "hydras": {

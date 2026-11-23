@@ -9,7 +9,7 @@ The analyzed list is [`decks/Beasts/Beasts.cod`](../../decks/Beasts/Beasts.cod),
 | Standard overnight, depth 5 / budget 20, four seeds | 1,192 wins / 1,200 games (99.33%); 4.951 turns among wins |
 | Two headed overnight, depth 5 / budget 20, four seeds | 200 wins / 200 games; 5.280 turns |
 | Standard regression, depth 5 / budget 20, two seeds | 100 wins / 100 games; 4.960 turns |
-| Official cost gate before the color prune, worst searched two headed shape | 2.62 times same-run Hinata, below the 3 times limit |
+| Current official cost gate, worst searched two headed shape, Release | 1.78 times same-run Hinata, below the 3 times limit |
 
 The profile was generated from 1,000 card-score games at seed 221122. It keeps one to five lands, has no required card, and uses depth 1 / 1 ms evaluation for mulligan bottoms, refining five finalists. That policy preserved all 215 paired win turns in admission and fresh-seed screens. An exhaustive keep and bottom table is a separate future profile stage.
 
@@ -18,6 +18,8 @@ The profile was generated from 1,000 card-score games at seed 221122. It keeps o
 A three-game Release depth-5/budget-20 branch census recorded 7,260,504 raw plan combinations. Utopia Sprawl was the largest option group in 73.4% of those combinations, Wild Growth in 8.9%, and Kaheera's companion action in 8.8%. These are branch attributions, not isolated CPU shares. The slowest 10% of decisions used 79.5% of search units, and aborted iterative-deepening passes used 47.4% of units. The ledger records the capture and other candidate prunes that lacked a safe dominance proof.
 
 For the shipped list, Utopia Sprawl's white, blue, and black mana can only pay generic costs; green can pay those costs and the deck's green or green/white-hybrid costs. The Beasts provider therefore searches green and red Sprawl choices. The full legal color menu remains available to a human player and to the unpruned audit. On 65 fresh paired standard and two-headed games, this reduced deterministic search units by 36.0% and 36.3%, respectively, without changing a win turn. The full overnight tier had 34 earlier and zero later loss-penalized outcomes in 3,000 searched games. Its 8,000 depth-zero games had 237 earlier and 14 later outcomes, improving the net loss-penalized score. The ledger records the per-tier evidence.
+
+The current cost gate measured 33,682.880 core-ms per Beasts game in its worst searched shape and 18,918.940 for Hinata in the same Release run. The earlier 2.62-times ratio used a different PGO build and run; the paired deterministic-unit comparison above isolates the pruning effect more directly.
 
 ## Implementation and verification
 
