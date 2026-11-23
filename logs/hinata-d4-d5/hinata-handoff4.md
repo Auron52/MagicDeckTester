@@ -15,17 +15,11 @@ Last commit before this file: c3eb0a931.
 3. 2026-11-22 12:35 (via coordinator): "Claude usage is at 5%, so keep running until it runs out, but keep a Codex
    handoff current."
 
-## Status (01:40 UTC 11-23): gate3 DONE on 138f60c83; classifier cls3 running
-- gate3 (`build/scratch/claude_hinata_d4d5/gate3/`): build 0, units 0, `--both` 624 passed, 8 FAIL, ALL Hinata.
-  Origin GT -> got: smoke d3 s1001 5.50->5.52 (WORSE by one game: gi46 5->6, recovered at 128x in handoff3);
-  smoke d5 s1001 5.50->5.42; 2hg smoke d5 5.32->5.28; reg d5 s30001 5.20 (play differs); reg d3 s2002 5.5867 (play
-  differs); reg d5 s2002 5.4067->5.40; reg d5 s3003 5.7467->5.6867; 2hg reg d5 s2002 5.3733->5.3333.
-- 23 slower games, 3 of them NEW vs handoff3's 23: 2hg reg d5 s2002 gi21 (5->6), reg d5 s2002 gi21 (5->6), reg d5
-  s3003 gi6 (4->5).
-- cls3 = `test/classify_turn_later.sh smoke` + `regression` under the box lock, PID 1239903. Output in
-  `build/scratch/claude_hinata_d4d5/cls3/` (smoke.log, regression.log, status, DONE).
-- Next: any NEW game that PERSISTS gets escalating-budget single-game reruns (32x/64x/128x, then d8 b0), the same method
-  as handoff3. Then accept (step 5, with the note re-dated to 138f60c83), run steps 6 and 8, and commit GT + handoff.
+## Status (11-23): GT ACCEPTED on 138f60c83 -- b37ea538d
+- gate3 (`build/scratch/claude_hinata_d4d5/gate3/`): 8 FAIL, all Hinata. cls3: 21 churn. pers3: reg d5 s3003 gi20 T5 at
+  32x and d8 b0; gi128 T4 at 64x/128x and d8 b0. Smoke d3 s1001 5.50->5.52 is the only worse aggregate (gi46 churn).
+- Accepted with the note. check_gt_logs clean (1409). Doc section 5 updated.
+- Left: check_references_safe exit 0, then push wip/hinata-d4-d5. The coordinator lands it via the queue.
 
 ## Next commands, in order
 1. Wait until origin has the Merfolk fix:
