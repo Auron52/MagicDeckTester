@@ -2618,13 +2618,13 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         // to the legacy path / backtracker, the complete fallback either way.
         if (TapScarcityEnabled())
         {
-            // LINE-CRITICAL AMENDMENTS (MEASUREMENT ONLY, default OFF; see crit_hold below). crit_demote is this pip's
+            // LINE-CRITICAL AMENDMENT (MEASUREMENT ONLY, default OFF; see crit_hold below). crit_demote is this pip's
             // second-selection switch: set once a source the amendment excludes (crit_excluded) won the pip over a
             // critical land that would have beaten it at its historical key, so the selection reruns with the
             // excluded sources behind that land. Declared ABOVE the label so the rerun keeps it; at most once a pip.
             bool crit_demote = false;
             const bool crit_amend_live = (PayLineCritLandOn() || PayLineCritBehindDorksOn())
-                                      && (PayLineCritUntapperLastOn() || PayLineCritHasteSacLastOn());
+                                      && PayLineCritUntapperLastOn();
             // MTG_PAY_DEPLETION_HOLD re-selection point (see the check after the selection below): the
             // held-depletion set is computed only once a depletion land is about to WIN a pip against an
             // alternative, and when that land turns out to be held the selection runs once more with the
@@ -2876,17 +2876,13 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 const int each = n == 1 ? amt : std::max(1, amt / n);
                 for (int ci = 0; ci < 5; ++ci) { if (seen & (1 << ci)) { out[ci] = each; } }
             };
-            // A source the amendments exclude from out-ranking a moved-back critical land: a land-untapping creature
-            // (untap_target_land: its tap is worth a land's untap, not a pip -- Jumbo d0 gi1447, Voyaging Satyr) and a
-            // sacrifice-for-mana source whose mana carries a creature-spell rider, paying a noncreature cost (the rider
-            // is lost: Niv d0 gi532, Generator Servant's haste for the next turn's Niv). Identified off `real_def`
-            // (a granted mana face carries none of the card's params).
-            auto crit_excluded = [&](const Permanent& q, const CardDefinition* qd, const CardDefinition* qreal) -> bool
+            // A source the amendment excludes from out-ranking a moved-back critical land: a land-untapping creature
+            // (untap_target_land: its tap is worth a land's untap, not a pip -- Jumbo d0 gi1447, Voyaging Satyr).
+            // Identified off `real_def` (a granted mana face carries none of the card's params).
+            auto crit_excluded = [&](const Permanent& q, const CardDefinition* qreal) -> bool
             {
-                if (qreal == nullptr || qd == nullptr) { return false; }
-                if (PayLineCritUntapperLastOn() && qreal->params.untap_target_land && q.card.IsCreature()) { return true; }
-                return PayLineCritHasteSacLastOn() && !for_creature && qreal->params.sac_for_mana_grants_haste
-                    && PaySacSpendableNow(state, q, *qd);
+                return qreal != nullptr && PayLineCritUntapperLastOn() && qreal->params.untap_target_land
+                    && q.card.IsCreature();
             };
             for (int i = 0; i < bn; ++i)
             {
@@ -3603,7 +3599,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     for (int k = 0; k < 4 && c == 0; ++k) { c = (bk[k] < crit_base_key[k]) ? -1 : (bk[k] > crit_base_key[k] ? 1 : 0); }
                     if (c < 0) { for (int k = 0; k < 4; ++k) { crit_base_key[k] = bk[k]; } }
                 }
-                if (crit_demote && kind == 1 && rank >= 0 && crit_excluded(p, def, real_def))
+                if (crit_demote && kind == 1 && rank >= 0 && crit_excluded(p, real_def))
                 {
                     // Second selection (crit_demote): behind every source of the moved-back land's tier -- the plain
                     // tier under MTG_PAY_LINE_CRIT_LAND, the 499 band under _BEHIND_DORKS -- and ahead of the next.
@@ -3677,9 +3673,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 {
                     const Permanent& bp = state.battlefield[best_i];
                     const CardDefinition* breal = bp.def_absent ? nullptr : CardDatabase::Instance().LookupCached(bp.card);
-                    // `def` for a granted face is never an excluded card (no untap / sac-for-mana params), so the
-                    // real definition stands in for both.
-                    if (crit_excluded(bp, breal, breal)) { crit_demote = true; goto dh_reselect; }
+                    if (crit_excluded(bp, breal)) { crit_demote = true; goto dh_reselect; }
                 }
             }
             if (best_i < 0) { return false; }

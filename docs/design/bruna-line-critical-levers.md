@@ -11,8 +11,8 @@ That seems fine, except I'm more interested in the impact on searched than d0.")
 | a (7a) | `MTG_PAY_LINE_CRIT_BEHIND_DORKS` | a land that is the last source of a colour the rest of the line owes ranks behind the creature band for a GENERIC pip (Bruna s30051257 T2: Pilgrim, not the only {U} land, pays Sol Ring) |
 | aa (7a-amended) | a + `MTG_PAY_LINE_CRIT_UNTAPPER_LAST` | a land-untapping creature (`untap_target_land`, Voyaging Satyr) does not win a pip over such a land (Jumbo d0 gi1447) |
 | b (7b) | `MTG_PAY_LINE_CRIT_LAND` + `MTG_PAY_LINE_CRIT_OPENER` | the critical land taps after every other land (still ahead of creatures), opener lines included (Bruna s30051968 T2) |
-| ba (7b-amended) | b + `MTG_PAY_LINE_CRIT_HASTE_SAC_LAST` | a `sac_for_mana_grants_haste` source (Generator Servant) paying a noncreature cost does not win over such a land (built for Niv d0 gi532) |
-| h | `MTG_D0_HASTE_SAC_CHARGE` | greedy (d0 / horizon) plan score charges a plan that casts no creature for each haste-rider sac source it must sacrifice |
+| ba (7b-amended, **DELETED**) | b + `MTG_PAY_LINE_CRIT_HASTE_SAC_LAST` | a `sac_for_mana_grants_haste` source (Generator Servant) paying a noncreature cost does not win over such a land (built for Niv d0 gi532) |
+| h (**DELETED**) | `MTG_D0_HASTE_SAC_CHARGE` | greedy (d0 / horizon) plan score charges a plan that casts no creature for each haste-rider sac source it must sacrifice |
 | bh | b + h | |
 
 The crit supply (the other sources' units per colour) is computed once per pip selection and the candidate's own share
@@ -71,10 +71,9 @@ units 1.0000), measured BEFORE the supply hoist above.
   predicate (`crit_excluded`) requires `PaySacSpendableNow`, i.e. `IsPaySacSource` -- a one-unit, produces-nothing
   pay-sac source (Treasure). Generator Servant (`sac_for_mana_amount` 2) never qualifies: its {C}{C} reaches the payer
   as FLOATING mana from a plan SacForMana action, never as a selection candidate. And in gi532 the Servant is
-  sacrificed for Ponder with no land left at all. Recommendation to the USER: delete
-  `MTG_PAY_LINE_CRIT_HASTE_SAC_LAST`.
+  sacrificed for Ponder with no land left at all. **Deleted 2026-11-22** (dead code; default OFF, so play is unchanged).
 * **The d0 haste-sac charge is clearly worse** (Niv d0 +60, 36 faster / 69 slower; searched +6). It does not even fix
-  gi532 (7b + charge = T7 either way). Recommendation: delete `MTG_D0_HASTE_SAC_CHARGE`.
+  gi532 (7b + charge = T7 either way). **Deleted 2026-11-22** (our own failed experiment; default OFF).
 
 ## Slower games at --depth 8 --budget-ms 0 (treatment arm)
 
@@ -110,13 +109,10 @@ the payer is still OWED (which payment of T2-T5 7a orders differently on this bo
 * 7a amended (Jumbo gi1447 T3): the first board left Overgrowth's host Forest untapped, so its {G} counted as supply and
   no Forest was critical -- the OFF half could not reproduce. The executor RESERVES the declared host across a land
   Aura's own payment (AIEngine `reserved_host` + `ScarceHeldOnlyScope`); the board now does the same.
-* 7b amended: gi532 does not exercise the amendment, and no board can: the subcase now pins the structural reason
-  (`PaySacSpendableNow` is false for Generator Servant) and that the Servant is kept with and without the amendment,
-  under 7b and behind the creature band alike.
+* 7b amended: deleted with the lever (it was pinned as structurally inert before the deletion).
 
 ## Open USER decisions
 
 1. 7a / 7a-amended: neither clears the bar (a searched +3; aa d0 Selesnya +2 / Stompy +1). Default stays OFF unless the
    USER rules otherwise.
 2. 7b: best overall (searched -2, d0 -7) but Cyclone searched +6 and Niv / Mirrorwing / Worldfire d0 +2 / +1 / +2.
-3. Delete the inert 7b amendment and the losing d0 haste-sac charge (recommended).

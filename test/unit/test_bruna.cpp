@@ -313,12 +313,10 @@ TEST_CASE("Bruna: line-critical land variants (measurement levers)")
             heurarm::t_arm[heurarm::PAY_LINE_CRIT_OPENER]       = -1;
             heurarm::t_arm[heurarm::PAY_LINE_CRIT_BEHIND_DORKS] = -1;
             heurarm::t_arm[heurarm::PAY_LINE_CRIT_UNTAPPER_LAST] = -1;
-            heurarm::t_arm[heurarm::PAY_LINE_CRIT_HASTE_SAC_LAST] = -1;
         }
-        void Amend(int untapper, int haste_sac)
+        void Amend(int untapper)
         {
             heurarm::t_arm[heurarm::PAY_LINE_CRIT_UNTAPPER_LAST] = static_cast<std::int8_t>(untapper);
-            heurarm::t_arm[heurarm::PAY_LINE_CRIT_HASTE_SAC_LAST] = static_cast<std::int8_t>(haste_sac);
         }
     };
     // s30051257 T2 {Sol Ring, Arcanum Wings}: Sol Ring's {1} off Avacyn's Pilgrim keeps Botanical Sanctum's {U}.
@@ -371,7 +369,7 @@ TEST_CASE("Bruna: line-critical land variants (measurement levers)")
     auto satyr_kept = [](bool amend) -> bool
     {
         ArmPin pin(0, 0, 1);
-        pin.Amend(amend ? 1 : 0, 0);
+        pin.Amend(amend ? 1 : 0);
         BoardBr b;
         const int f24 = b.Put("Forest");
         const int sprawl = b.Put("Utopia Sprawl", false, false, f24);
@@ -397,45 +395,6 @@ TEST_CASE("Bruna: line-critical land variants (measurement levers)")
     };
     SUBCASE("7a amended: Voyaging Satyr is not tapped ahead of the critical land")
     { CHECK(satyr_kept(true)); CHECK_FALSE(satyr_kept(false)); }
-    // 7b AMENDMENT (MTG_PAY_LINE_CRIT_HASTE_SAC_LAST). Built for NivMizzetCombo d0 gi532 (seed 1310532) T3, but that game
-    // does NOT exercise it: lands pay Signet and Brainstorm under 7b with or without it, and the Servant is sacrificed
-    // for Ponder, the line's last cast, where no land is critical (the cause is the d0 plan, not the payment). In the
-    // 2026-11-22 A/B (127,000 paired games) ba was byte-identical to b everywhere, and the reason is structural: the
-    // amendment's predicate (crit_excluded) needs PaySacSpendableNow, which is IsPaySacSource -- a ONE-unit,
-    // produces-nothing pay-sac source (Treasure). Generator Servant (sac_for_mana_amount 2) never is: its {C}{C}
-    // reaches the payer as FLOATING mana from a plan SacForMana action, never as a selection candidate. So the
-    // amendment cannot fire for any card in the pool, under 7b or behind the creature band.
-    // Board: {Izzet Signet, Brainstorm, Ponder} off Island + Sulfur Falls + Generator Servant (both lands critical for
-    // the line's {U}{U}). Returns whether the Servant is still on the battlefield after Signet is paid.
-    auto servant_kept = [](bool behind, bool amend) -> bool
-    {
-        ArmPin pin(behind ? 0 : 1, behind ? 0 : 1, behind ? 1 : 0);
-        pin.Amend(0, amend ? 1 : 0);
-        BoardBr b;
-        b.Put("Island");
-        b.Put("Sulfur Falls");
-        const int servant = b.Put("Generator Servant");
-        ManaCost sig; sig.generic = 2;
-        ManaCost bs;  bs.blue = 1;
-        ManaCost pon; pon.blue = 1;
-        ManaCost line = sig;
-        AddManaCost(line, bs);
-        AddManaCost(line, pon);
-        LineUnpaidCostScope hold(line);
-        if (!TapForCostShared(b.s, sig, /*for_creature=*/false, nullptr, true)) { return false; }
-        return b.ByNum(servant) != nullptr;
-    };
-    SUBCASE("7b amended: inert -- Generator Servant is never a pay-sac selection candidate")
-    {
-        BoardBr b;
-        const int servant = b.Put("Generator Servant");
-        const CardDefinition* sd = CardDatabase::Instance().LookupCached(b.ByNum(servant)->card);
-        REQUIRE(sd != nullptr);
-        CHECK(sd->params.sac_for_mana_grants_haste);
-        CHECK_FALSE(PaySacSpendableNow(b.s, *b.ByNum(servant), *sd));
-        for (const bool behind : { false, true })
-        { CHECK(servant_kept(behind, true)); CHECK(servant_kept(behind, false)); }
-    }
 }
 
 TEST_CASE("Bruna: the gather dominance collapse -- one subset, or take/skip for Almost Perfect only")
