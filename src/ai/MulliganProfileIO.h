@@ -356,6 +356,8 @@ inline nlohmann::json MulliganProfileToJsonObj(const MulliganProfile& profile)
     m["stop_at"]      = profile.stop_at;
     m["curve_check"]  = CurveCheckToString(profile.curve_check);
     m["bottom_order"] = BottomOrderToString(profile.bottom_order);
+    if (!profile.bucket_bottom_keep_order.empty())
+    { m["bucket_bottom_keep_order"] = profile.bucket_bottom_keep_order; }
     // Bottoming-eval policy: emitted only when set, so decks without one round-trip unchanged
     // (and a regeneration of a deck that HAS one preserves it rather than dropping the keys).
     if (profile.bottom_eval_depth     >= 0) { m["bottom_eval_depth"]     = profile.bottom_eval_depth; }
@@ -604,6 +606,10 @@ inline MulliganProfile ParseDeckProfileJson(const std::string& json_str, const E
     if (m.contains("bottom_order"))
     {
         profile.bottom_order = BottomOrderFromString(m["bottom_order"].get<std::string>());
+    }
+    if (m.contains("bucket_bottom_keep_order"))
+    {
+        profile.bucket_bottom_keep_order = m["bucket_bottom_keep_order"].get<std::vector<std::vector<std::string>>>();
     }
 
     // Per-deck bottoming-eval policy (see MulliganProfile). Absent => -1/-1/0 => byte-identical.
