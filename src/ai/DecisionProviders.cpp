@@ -73325,6 +73325,11 @@ bool BloodSunGrimV2OnlyMissing()
     static const bool on = EnvOn("MTG_BLOODSUN_GRIM_V2_ONLY_MISSING");
     return heurarm::Flag(heurarm::BLOODSUN_GRIM_V2_ONLY_MISSING, on);
 }
+bool BloodSunGrimV2Rescue()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_V2_RESCUE");   // DEFAULT OFF; B12-bis lost-line repair arm
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_V2_RESCUE, on);
+}
 
 namespace
 {
@@ -73733,7 +73738,8 @@ bool BloodSunGrimTimeWarpCastable(const GameState& s, int controller, const Card
 
 // `amend` = the three amendment arms apply (each still gated on its own lever); false = the base B12 list, which
 // MTG_BLOODSUN_GRIM_AMEND_LATE reads to rank an amendment-only target after it.
-static bool BloodSunGrimAdmitImpl(const GameState& s, int controller, const CardDefinition& d, bool amend)
+static bool BloodSunGrimAdmitImpl(const GameState& s, int controller, const CardDefinition& d,
+                                 bool amend, bool rescue = false)
 {
     const CardParams& p = d.params;
     if (p.lands_lose_nonmana_abilities) { return true; }   // the cap already requires none out / in hand
@@ -73744,7 +73750,7 @@ static bool BloodSunGrimAdmitImpl(const GameState& s, int controller, const Card
         return !rv_hand;
     }
     // TWNEXT arm: Time Warp whenever none is in hand (Grim this turn, Time Warp next turn -- gi 431's line).
-    if (amend && p.extra_turns_on_resolve > 0 && BloodSunGrimTwAnyOn())
+    if (amend && p.extra_turns_on_resolve > 0 && (BloodSunGrimTwAnyOn() || rescue))
     {
         bool tw_bf = false, tw_hand = false;
         BsHave(s, controller, [](const CardDefinition& c) { return c.params.extra_turns_on_resolve > 0; }, tw_bf, tw_hand);
@@ -73757,7 +73763,7 @@ static bool BloodSunGrimAdmitImpl(const GameState& s, int controller, const Card
         // DROP arm: a land play still open THIS turn (the engine's own test, the one EnumeratePlansWithLand offers the
         // drop on: lands_played_this_turn < LandDropsAvailable, which carries Exploration's extra and Fastbond's
         // unlimited drops) -> the fetched land can be played at once, at any mana (gi 7 / 277).
-        if (amend && BloodSunGrimLandDropOn() && controller == s.active_player_index)
+        if (amend && (BloodSunGrimLandDropOn() || rescue) && controller == s.active_player_index)
         {
             const Player& me = s.players[static_cast<std::size_t>(controller)];
             if (me.lands_played_this_turn < me.LandDropsAvailable()) { return true; }
@@ -73785,7 +73791,7 @@ static bool BloodSunGrimAdmitImpl(const GameState& s, int controller, const Card
             if (ld != nullptr && ld->card.IsLand()) { best = std::max(best, net(*ld)); }
         }
         // BOARD arm: battlefield lands only (gi 141: 6 on the battlefield + a 2-mana Karoo in hand read as "enough").
-        if (amend && BloodSunGrimLandBoardOn()) { best = 0; }
+        if (amend && (BloodSunGrimLandBoardOn() || rescue)) { best = 0; }
         return mana + best < kBloodSunGrimLandMana;
     }
     return false;   // Time Warp, Emrakul, Fastbond, Exploration: B3 targets Grim Tutor no longer fetches
@@ -73937,6 +73943,21 @@ std::vector<std::string> BloodSunProvider::TutorCandidates(const GameState& s, i
     if (grim && BloodSunGrimV2On())
     {
         std::vector<std::string> v2 = BloodSunGrimV2Candidates(s, controller, all);
+        // The hard v2 list lost gi7/290/411/431/518 even at d8 b0. Preserve its front,
+        // then offer the three previously validated B12 amendment classes as a final
+        // fallback. This arm is measured separately; the default remains the shipped list.
+        const bool rescue = BloodSunGrimV2Rescue();
+        if (rescue)
+        {
+            for (const std::string& nm : all)
+            {
+                const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+                if (d == nullptr || BloodSunTutorTargetCap(s, controller, *d, false) <= 0
+                    || !BloodSunGrimAdmitImpl(s, controller, *d, true, true)
+                    || std::find(v2.begin(), v2.end(), nm) != v2.end()) { continue; }
+                v2.push_back(nm);
+            }
+        }
         if (rev_gate)
         {
             v2.erase(std::remove_if(v2.begin(), v2.end(), [&](const std::string& nm)

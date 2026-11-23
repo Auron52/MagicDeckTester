@@ -1118,6 +1118,7 @@ enum Slot : int
     BLOODSUN_GRIM_V2_FB_T2,   // MTG_BLOODSUN_GRIM_V2_FB_T2  require two surplus hand lands. Default OFF (one)
     BLOODSUN_GRIM_V2_LAND_CUT,// MTG_BLOODSUN_GRIM_V2_LAND_CUT  Fastbond alone when the surplus has a big land. Default OFF
     BLOODSUN_GRIM_V2_ONLY_MISSING,// MTG_BLOODSUN_GRIM_V2_ONLY_MISSING  Sun/Revelation targets first. Default OFF
+    BLOODSUN_GRIM_V2_RESCUE,    // MTG_BLOODSUN_GRIM_V2_RESCUE  B12-bis repair arm: keep v2 first, then admit the three B12 amendments as fallback targets. Default OFF; inert without v2
     BLOODSUN_BUCKET_DISCARD,    // MTG_BLOODSUN_BUCKET_DISCARD  B14 USER cleanup buckets. Default OFF pending A/B
     COUNT
 };
@@ -2181,6 +2182,7 @@ inline const char* Name(int slot)
         "MTG_BLOODSUN_GRIM_V2_FB_T2",
         "MTG_BLOODSUN_GRIM_V2_LAND_CUT",
         "MTG_BLOODSUN_GRIM_V2_ONLY_MISSING",
+        "MTG_BLOODSUN_GRIM_V2_RESCUE",
         "MTG_BLOODSUN_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
