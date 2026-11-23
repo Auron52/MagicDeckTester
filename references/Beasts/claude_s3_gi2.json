@@ -1,0 +1,503 @@
+{
+  "seed": 3, "game_index": 2, "win_turn": 5, "won": true,
+  "mulligan": { "count": 1, "bottom": [31] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "opponent_land_entry": 1, "free_turns": 1, "opponent_spawn_land": 1, "opponent_bounce_opening": 1, "opponent_shuffle_ordinal": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 8, "name": "Elder Gargaroth" }, { "num": 19, "name": "Garruk's Packleader" }, { "num": 36, "name": "Questing Beast" }, { "num": 45, "name": "Utopia Sprawl" }, { "num": 12, "name": "Forest" }, { "num": 13, "name": "Forest" }, { "num": 21, "name": "Garruk, Primal Hunter" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 27, "name": "Kaheera, the Orphanguard" }, { "num": 31, "name": "Krosan Warchief" }, { "num": 18, "name": "Garruk's Harbinger" }, { "num": 3, "name": "Cavern of Souls" }, { "num": 49, "name": "Wild Growth" }, { "num": 56, "name": "Wooded Foothills" }, { "num": 32, "name": "Migloz, Maze Crusher" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 27, "name": "Kaheera, the Orphanguard", "win_optimal": true }, { "num": 31, "name": "Krosan Warchief", "win_optimal": true }, { "num": 18, "name": "Garruk's Harbinger", "win_optimal": true }, { "num": 3, "name": "Cavern of Souls", "win_optimal": true }, { "num": 49, "name": "Wild Growth", "win_optimal": true }, { "num": 56, "name": "Wooded Foothills", "win_optimal": true }, { "num": 32, "name": "Migloz, Maze Crusher", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 27, "name": "Kaheera, the Orphanguard" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Wooded Foothills", "cast=Wild Growth"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Wooded Foothills" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Garruk's Harbinger", "cost": "{1}{G}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Wild Growth", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 56, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Wild Growth → #39", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Wild Growth"], "actions": [{ "card": "Wooded Foothills", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Wild Growth", "enchant_target": 39, "enchant_target_name": "#39" }] },
+    { "index": 1, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Wild Growth → #16", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Wild Growth"], "actions": [{ "card": "Wooded Foothills", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Wild Growth", "enchant_target": 16, "enchant_target_name": "#16" }] },
+    { "index": 2, "summary": "land=Cavern of Souls; cast: Wild Growth → Cavern of Souls", "declared_order_payability": "known_drops", "land": "Cavern of Souls", "drops": ["Wild Growth"], "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 3, "enchant_target_name": "Cavern of Souls" }] },
+    { "index": 3, "summary": "land=Wooded Foothills; cast: Wild Growth → #39", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 39, "enchant_target_name": "#39" }] },
+    { "index": 4, "summary": "land=Wooded Foothills; cast: Wild Growth → #16", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 16, "enchant_target_name": "#16" }] },
+    { "index": 5, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills"], "actions": [{ "card": "Wooded Foothills", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 6, "summary": "land=Cavern of Souls; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 19, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Garruk's Harbinger", "cost": "{1}{G}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Wild Growth", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 57, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 17, "battlefield": [{ "name": "Stomping Ground", "idx": 2, "num": 39, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Wild Growth", "idx": 3, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 2, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Garruk's Harbinger", "cost": "{1}{G}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 17, "battlefield": [{ "name": "Stomping Ground", "idx": 2, "num": 39, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Wild Growth", "idx": 3, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 2, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Garruk's Harbinger", "cost": "{1}{G}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 12, "cast_order": ["**", "land=Wooded Foothills", "cast=Garruk's Harbinger"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Herald of Ilharg" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Brushland" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 17, "battlefield": [{ "name": "Stomping Ground", "idx": 3, "num": 39, "is_land": true, "taps": "RG", "yield": 2 }, { "name": "Wild Growth", "idx": 4, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 3, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Garruk's Harbinger", "cost": "{1}{G}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Garruk's Harbinger", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Garruk's Harbinger"], "actions": [{ "card": "Wooded Foothills", "src_num": 57, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Garruk's Harbinger" }] },
+    { "index": 1, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Migloz, Maze Crusher"], "actions": [{ "card": "Wooded Foothills", "src_num": 57, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Migloz, Maze Crusher" }] },
+    { "index": 6, "summary": "land=Cavern of Souls; cast: Garruk's Harbinger", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Garruk's Harbinger"], "actions": [{ "card": "Garruk's Harbinger" }] },
+    { "index": 7, "summary": "land=Cavern of Souls; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 8, "summary": "land=Wooded Foothills; cast: Garruk's Harbinger", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Garruk's Harbinger"], "actions": [{ "card": "Garruk's Harbinger" }] },
+    { "index": 9, "summary": "land=Wooded Foothills; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 10, "summary": "land=Wooded Foothills; cast: Garruk's Harbinger", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": ["Garruk's Harbinger"], "actions": [{ "card": "Garruk's Harbinger" }] },
+    { "index": 11, "summary": "land=Wooded Foothills; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 12, "summary": "land=Wooded Foothills; cast: Garruk's Harbinger", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Garruk's Harbinger"], "actions": [{ "card": "Garruk's Harbinger" }] },
+    { "index": 13, "summary": "land=Wooded Foothills; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 14, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Kaheera, the Orphanguard"], "actions": [{ "card": "Wooded Foothills", "src_num": 57, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Kaheera, the Orphanguard" }] },
+    { "index": 17, "summary": "land=Cavern of Souls; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 18, "summary": "land=Wooded Foothills; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 19, "summary": "land=Wooded Foothills; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 20, "summary": "land=Wooded Foothills; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 21, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Wooded Foothills", "src_num": 57, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 24, "summary": "land=Cavern of Souls; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 25, "summary": "land=Wooded Foothills; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 26, "summary": "land=Wooded Foothills; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 27, "summary": "land=Wooded Foothills; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 28, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills"], "actions": [{ "card": "Wooded Foothills", "src_num": 57, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 29, "summary": "land=Cavern of Souls; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": [], "actions": [] },
+    { "index": 30, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 31, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": [], "actions": [] },
+    { "index": 32, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 33, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 34, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 92,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 8,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 16, "battlefield": [{ "name": "Stomping Ground", "idx": 3, "num": 39, "is_land": true, "taps": "RG", "yield": 2 }, { "name": "Wild Growth", "idx": 4, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 3, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Garruk's Harbinger", "cost": "{1}{G}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Garruk's Harbinger", "idx": 8, "num": 18, "sick": true, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Stomping Ground", "idx": 3, "num": 39, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Stomping Ground", "idx": 7, "num": 38, "tapped": true, "is_land": true }, { "name": "Wild Growth", "idx": 4, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 3, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Garruk's Harbinger", "idx": 8, "num": 18, "sick": true, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Stomping Ground", "idx": 3, "num": 39, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Stomping Ground", "idx": 7, "num": 38, "tapped": true, "is_land": true }, { "name": "Wild Growth", "idx": 4, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 3, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 7, "cast_order": ["**", "land=Cavern of Souls", "cast=Herald of Ilharg"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Gruul Turf" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Garruk's Harbinger", "idx": 8, "num": 18, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Stomping Ground", "idx": 3, "num": 39, "is_land": true, "taps": "RG", "yield": 2 }, { "name": "Stomping Ground", "idx": 7, "num": 38, "is_land": true, "taps": "RG" }, { "name": "Wild Growth", "idx": 4, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 3, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "land=Gruul Turf; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 1, "summary": "land=Gruul Turf (before Migloz, Maze Crusher); cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Gruul Turf", "karoo_before": 1, "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 2, "summary": "land=Cavern of Souls; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 3, "summary": "land=none; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": null, "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 4, "summary": "land=Gruul Turf; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 5, "summary": "land=Gruul Turf (before Kaheera, the Orphanguard); cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Gruul Turf", "karoo_before": 1, "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 6, "summary": "land=Cavern of Souls; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 7, "summary": "land=Cavern of Souls; cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 8, "summary": "land=none; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": null, "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 9, "summary": "land=Gruul Turf; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 10, "summary": "land=Cavern of Souls; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 11, "summary": "land=none; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 12, "summary": "land=Gruul Turf; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Cavern of Souls; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 42,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Cavern of Souls", "idx": 11, "num": 3, "tapped": true, "is_land": true }, { "name": "Garruk's Harbinger", "idx": 8, "num": 18, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Herald of Ilharg", "idx": 12, "num": 25, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Stomping Ground", "idx": 3, "num": 39, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Stomping Ground", "idx": 7, "num": 38, "tapped": true, "is_land": true }, { "name": "Wild Growth", "idx": 4, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 3, "is_land": false }], "vial_counters": [], "hand": [{ "num": 22, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 13,
+  "type": "dig",
+  "source": "Garruk's Harbinger (combat damage dig)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Cavern of Souls", "idx": 11, "num": 3, "tapped": true, "is_land": true }, { "name": "Garruk's Harbinger", "idx": 8, "num": 18, "tapped": true, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Herald of Ilharg", "idx": 12, "num": 25, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Stomping Ground", "idx": 3, "num": 39, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Stomping Ground", "idx": 7, "num": 38, "tapped": true, "is_land": true }, { "name": "Wild Growth", "idx": 4, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 3, "is_land": false }], "vial_counters": [], "hand": [{ "num": 22, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "heuristic_default": 2,
+  "examined": [{ "index": 0, "legal": false, "name": "Utopia Sprawl" }, { "index": 1, "legal": false, "name": "Utopia Sprawl" }, { "index": 2, "legal": true, "name": "Herald of Ilharg" }, { "index": 3, "legal": true, "name": "Craterhoof Behemoth" }],
+  "note": "reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Garruk's Harbinger (4) — 4 to opponent (20→16)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Cavern of Souls", "idx": 11, "num": 3, "tapped": true, "is_land": true }, { "name": "Garruk's Harbinger", "idx": 8, "num": 18, "tapped": true, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Herald of Ilharg", "idx": 12, "num": 25, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Stomping Ground", "idx": 3, "num": 39, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Stomping Ground", "idx": 7, "num": 38, "tapped": true, "is_land": true }, { "name": "Wild Growth", "idx": 4, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 3, "is_land": false }], "vial_counters": [], "hand": [{ "num": 22, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 5, "cast_order": ["**", "cast=Herald of Ilharg", "land=Gruul Turf"], "decision": {
+  "decision_index": 15,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Forest" }],
+  "events": [{ "turn": 3, "kind": "land", "text": "opponent plays Razorverge Thicket" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Cavern of Souls", "idx": 12, "num": 3, "is_land": true, "taps": "C" }, { "name": "Garruk's Harbinger", "idx": 9, "num": 18, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Herald of Ilharg", "idx": 13, "num": 25, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Stomping Ground", "idx": 4, "num": 39, "is_land": true, "taps": "RG", "yield": 2 }, { "name": "Stomping Ground", "idx": 8, "num": 38, "is_land": true, "taps": "RG" }, { "name": "Wild Growth", "idx": 5, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "land=Gruul Turf; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 1, "summary": "land=Gruul Turf (before Migloz, Maze Crusher); cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Gruul Turf", "karoo_before": 1, "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 2, "summary": "land=Forest; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 3, "summary": "land=none; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": null, "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 4, "summary": "land=Gruul Turf; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 5, "summary": "land=Gruul Turf; cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 6, "summary": "land=Gruul Turf (before Kaheera, the Orphanguard); cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Gruul Turf", "karoo_before": 1, "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 7, "summary": "land=Gruul Turf (before Herald of Ilharg); cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Gruul Turf", "karoo_before": 1, "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 8, "summary": "land=Forest; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 9, "summary": "land=Forest; cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 10, "summary": "land=none; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": null, "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 11, "summary": "land=none; cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": null, "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 12, "summary": "land=Gruul Turf; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 13, "summary": "land=Forest; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 14, "summary": "land=none; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 15, "summary": "land=Gruul Turf; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 42,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 16,
+  "type": "bounce",
+  "source": "Gruul Turf",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Cavern of Souls", "idx": 12, "num": 3, "tapped": true, "is_land": true }, { "name": "Garruk's Harbinger", "idx": 9, "num": 18, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Gruul Turf", "idx": 15, "num": 22, "tapped": true, "is_land": true }, { "name": "Herald of Ilharg", "idx": 13, "num": 25, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Herald of Ilharg", "idx": 14, "num": 23, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Stomping Ground", "idx": 4, "num": 39, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Stomping Ground", "idx": 8, "num": 38, "tapped": true, "is_land": true }, { "name": "Wild Growth", "idx": 5, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "heuristic_default": 1,
+  "allow_decline": false,
+  "options": [{ "index": 0, "perm_index": 4, "tapped": true, "name": "Stomping Ground", "label": "Stomping Ground" }, { "index": 1, "perm_index": 8, "tapped": true, "name": "Stomping Ground", "label": "Stomping Ground" }, { "index": 2, "perm_index": 12, "tapped": true, "name": "Cavern of Souls", "label": "Cavern of Souls" }, { "index": 3, "perm_index": 15, "tapped": true, "name": "Gruul Turf", "label": "Gruul Turf" }],
+  "note": "reply an option index -- the land to return to your hand. Default = the AI's pick. An UNTAPPED land you return is first tapped for mana in response (it floats until the phase ends), unless tapping it has a cost or side effect (pain, energy, a depletion counter) or its mana is spend-restricted."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "ability", "text": "Herald of Ilharg (Herald of Ilharg): 2 +1/+1 counters" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Garruk's Harbinger", "idx": 9, "num": 18, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Gruul Turf", "idx": 14, "num": 22, "tapped": true, "is_land": true }, { "name": "Herald of Ilharg", "idx": 12, "num": 25, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Herald of Ilharg", "idx": 13, "num": 23, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Stomping Ground", "idx": 4, "num": 39, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Stomping Ground", "idx": 8, "num": 38, "tapped": true, "is_land": true }, { "name": "Wild Growth", "idx": 5, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "type": "dig",
+  "source": "Garruk's Harbinger (combat damage dig)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Garruk's Harbinger", "idx": 9, "num": 18, "tapped": true, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Gruul Turf", "idx": 14, "num": 22, "tapped": true, "is_land": true }, { "name": "Herald of Ilharg", "idx": 12, "num": 25, "tapped": true, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Herald of Ilharg", "idx": 13, "num": 23, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Stomping Ground", "idx": 4, "num": 39, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Stomping Ground", "idx": 8, "num": 38, "tapped": true, "is_land": true }, { "name": "Wild Growth", "idx": 5, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 43, "land_drops_left": 0 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Thragtusk" }, { "index": 1, "legal": false, "name": "Stomping Ground" }, { "index": 2, "legal": true, "name": "Krosan Warchief" }, { "index": 3, "legal": false, "name": "Nykthos, Shrine to Nyx" }],
+  "note": "reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Garruk's Harbinger (4), Herald of Ilharg (5) — 9 to opponent (16→7)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Garruk's Harbinger", "idx": 9, "num": 18, "tapped": true, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Gruul Turf", "idx": 14, "num": 22, "tapped": true, "is_land": true }, { "name": "Herald of Ilharg", "idx": 12, "num": 25, "tapped": true, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Herald of Ilharg", "idx": 13, "num": 23, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Stomping Ground", "idx": 4, "num": 39, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Stomping Ground", "idx": 8, "num": 38, "tapped": true, "is_land": true }, { "name": "Wild Growth", "idx": 5, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Thragtusk", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 15, "cast_order": ["**", "land=Cavern of Souls", "cast=Thragtusk"], "decision": {
+  "decision_index": 20,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Windswept Heath" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Garruk's Harbinger", "idx": 9, "num": 18, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Gruul Turf", "idx": 14, "num": 22, "is_land": true, "taps": "RG" }, { "name": "Herald of Ilharg", "idx": 12, "num": 25, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Herald of Ilharg", "idx": 13, "num": 23, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Stomping Ground", "idx": 4, "num": 39, "is_land": true, "taps": "RG", "yield": 2 }, { "name": "Stomping Ground", "idx": 8, "num": 38, "is_land": true, "taps": "RG" }, { "name": "Wild Growth", "idx": 5, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Cavern of Souls", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Thragtusk", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Windswept Heath", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 45, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Daybreak Coronet", "Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Kaheera, the Orphanguard, Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Kaheera, the Orphanguard", "Migloz, Maze Crusher"], "cast_order_canonical": ["Kaheera, the Orphanguard", "Migloz, Maze Crusher"], "actions": [{ "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Kaheera, the Orphanguard" }, { "card": "Migloz, Maze Crusher" }] },
+    { "index": 1, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Migloz, Maze Crusher, Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Migloz, Maze Crusher", "Kaheera, the Orphanguard"], "cast_order_canonical": ["Migloz, Maze Crusher", "Kaheera, the Orphanguard"], "actions": [{ "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Migloz, Maze Crusher" }, { "card": "Kaheera, the Orphanguard" }] },
+    { "index": 4, "summary": "land=Cavern of Souls; cast: Kaheera, the Orphanguard, Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Kaheera, the Orphanguard", "Migloz, Maze Crusher"], "cast_order_canonical": ["Kaheera, the Orphanguard", "Migloz, Maze Crusher"], "actions": [{ "card": "Kaheera, the Orphanguard" }, { "card": "Migloz, Maze Crusher" }] },
+    { "index": 5, "summary": "land=Cavern of Souls; cast: Migloz, Maze Crusher, Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Migloz, Maze Crusher", "Kaheera, the Orphanguard"], "cast_order_canonical": ["Migloz, Maze Crusher", "Kaheera, the Orphanguard"], "actions": [{ "card": "Migloz, Maze Crusher" }, { "card": "Kaheera, the Orphanguard" }] },
+    { "index": 6, "summary": "land=Forest; cast: Kaheera, the Orphanguard, Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Kaheera, the Orphanguard", "Migloz, Maze Crusher"], "cast_order_canonical": ["Kaheera, the Orphanguard", "Migloz, Maze Crusher"], "actions": [{ "card": "Kaheera, the Orphanguard" }, { "card": "Migloz, Maze Crusher" }] },
+    { "index": 7, "summary": "land=Forest; cast: Migloz, Maze Crusher, Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Migloz, Maze Crusher", "Kaheera, the Orphanguard"], "cast_order_canonical": ["Migloz, Maze Crusher", "Kaheera, the Orphanguard"], "actions": [{ "card": "Migloz, Maze Crusher" }, { "card": "Kaheera, the Orphanguard" }] },
+    { "index": 8, "summary": "land=Windswept Heath; cast: Kaheera, the Orphanguard, Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Kaheera, the Orphanguard", "Migloz, Maze Crusher"], "cast_order_canonical": ["Kaheera, the Orphanguard", "Migloz, Maze Crusher"], "actions": [{ "card": "Kaheera, the Orphanguard" }, { "card": "Migloz, Maze Crusher" }] },
+    { "index": 9, "summary": "land=Windswept Heath; cast: Migloz, Maze Crusher, Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Migloz, Maze Crusher", "Kaheera, the Orphanguard"], "cast_order_canonical": ["Migloz, Maze Crusher", "Kaheera, the Orphanguard"], "actions": [{ "card": "Migloz, Maze Crusher" }, { "card": "Kaheera, the Orphanguard" }] },
+    { "index": 10, "summary": "land=Windswept Heath; cast: Kaheera, the Orphanguard, Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Kaheera, the Orphanguard", "Migloz, Maze Crusher"], "cast_order_canonical": ["Kaheera, the Orphanguard", "Migloz, Maze Crusher"], "actions": [{ "card": "Kaheera, the Orphanguard" }, { "card": "Migloz, Maze Crusher" }] },
+    { "index": 11, "summary": "land=Windswept Heath; cast: Migloz, Maze Crusher, Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Migloz, Maze Crusher", "Kaheera, the Orphanguard"], "cast_order_canonical": ["Migloz, Maze Crusher", "Kaheera, the Orphanguard"], "actions": [{ "card": "Migloz, Maze Crusher" }, { "card": "Kaheera, the Orphanguard" }] },
+    { "index": 12, "summary": "land=Windswept Heath; cast: Thragtusk, Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Thragtusk", "Windswept Heath"], "actions": [{ "card": "Thragtusk" }, { "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 13, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Thragtusk", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Thragtusk"], "actions": [{ "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Thragtusk" }] },
+    { "index": 15, "summary": "land=Cavern of Souls; cast: Thragtusk", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Thragtusk"], "actions": [{ "card": "Thragtusk" }] },
+    { "index": 16, "summary": "land=Forest; cast: Thragtusk", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Thragtusk"], "actions": [{ "card": "Thragtusk" }] },
+    { "index": 17, "summary": "land=Windswept Heath; cast: Thragtusk", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Thragtusk"], "actions": [{ "card": "Thragtusk" }] },
+    { "index": 18, "summary": "land=Windswept Heath; cast: Thragtusk", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Thragtusk"], "actions": [{ "card": "Thragtusk" }] },
+    { "index": 19, "summary": "land=Windswept Heath; cast: Thragtusk", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Thragtusk"], "actions": [{ "card": "Thragtusk" }] },
+    { "index": 20, "summary": "land=none; cast: Thragtusk", "declared_order_payability": "not_verified", "land": null, "casts": ["Thragtusk"], "actions": [{ "card": "Thragtusk" }] },
+    { "index": 21, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Migloz, Maze Crusher, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Migloz, Maze Crusher"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Migloz, Maze Crusher" }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 23, "summary": "land=Cavern of Souls; cast: Migloz, Maze Crusher, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Migloz, Maze Crusher"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Migloz, Maze Crusher" }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 24, "summary": "land=Forest; cast: Migloz, Maze Crusher, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Migloz, Maze Crusher"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Migloz, Maze Crusher" }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 25, "summary": "land=Windswept Heath; cast: Migloz, Maze Crusher, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Migloz, Maze Crusher"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Migloz, Maze Crusher" }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 26, "summary": "land=Windswept Heath; cast: Migloz, Maze Crusher, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Migloz, Maze Crusher"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Migloz, Maze Crusher" }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 27, "summary": "land=Windswept Heath; cast: Migloz, Maze Crusher, Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Migloz, Maze Crusher", "Windswept Heath"], "actions": [{ "card": "Migloz, Maze Crusher" }, { "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 28, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Migloz, Maze Crusher"], "actions": [{ "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Migloz, Maze Crusher" }] },
+    { "index": 30, "summary": "land=Cavern of Souls; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 31, "summary": "land=Forest; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 32, "summary": "land=Windswept Heath; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 33, "summary": "land=Windswept Heath; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 34, "summary": "land=Windswept Heath; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 35, "summary": "land=none; cast: Migloz, Maze Crusher", "declared_order_payability": "not_verified", "land": null, "casts": ["Migloz, Maze Crusher"], "actions": [{ "card": "Migloz, Maze Crusher" }] },
+    { "index": 36, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Kaheera, the Orphanguard, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Kaheera, the Orphanguard"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Kaheera, the Orphanguard" }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 38, "summary": "land=Cavern of Souls; cast: Kaheera, the Orphanguard, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Kaheera, the Orphanguard"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 39, "summary": "land=Forest; cast: Kaheera, the Orphanguard, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Kaheera, the Orphanguard"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 40, "summary": "land=Windswept Heath; cast: Kaheera, the Orphanguard, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Kaheera, the Orphanguard"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 41, "summary": "land=Windswept Heath; cast: Kaheera, the Orphanguard, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Kaheera, the Orphanguard"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 42, "summary": "land=Windswept Heath; cast: Kaheera, the Orphanguard, Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Kaheera, the Orphanguard", "Windswept Heath"], "actions": [{ "card": "Kaheera, the Orphanguard" }, { "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 43, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Kaheera, the Orphanguard"], "actions": [{ "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Kaheera, the Orphanguard" }] },
+    { "index": 45, "summary": "land=Cavern of Souls; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 46, "summary": "land=Forest; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 47, "summary": "land=Windswept Heath; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 48, "summary": "land=Windswept Heath; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 49, "summary": "land=Windswept Heath; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 50, "summary": "land=none; cast: Kaheera, the Orphanguard", "declared_order_payability": "not_verified", "land": null, "casts": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard" }] },
+    { "index": 51, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 52, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath"], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 54, "summary": "land=Cavern of Souls; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 55, "summary": "land=Forest; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 56, "summary": "land=Windswept Heath; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 57, "summary": "land=Windswept Heath; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 58, "summary": "land=Windswept Heath; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 59, "summary": "land=none; cast: Pay {3}: put companion Kaheera, the Orphanguard into hand", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Kaheera, the Orphanguard"], "actions": [{ "card": "Kaheera, the Orphanguard", "src_num": 300000, "activate": true, "activation_cost": "{3}", "verb": "companion", "companion_cast": false }] },
+    { "index": 60, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath"], "actions": [{ "card": "Windswept Heath", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 61, "summary": "land=Cavern of Souls; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Cavern of Souls", "casts": [], "actions": [] },
+    { "index": 62, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 63, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 64, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 65, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 66, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 104,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "damage", "text": "Herald of Ilharg (Thragtusk, MV 5): 2 +1/+1 counters, then 4 damage to each opponent (7→3)" }, { "turn": 5, "kind": "damage", "text": "Herald of Ilharg (Thragtusk, MV 5): 2 +1/+1 counters, then 2 damage to each opponent (3→1)" }, { "turn": 5, "kind": "lifegain", "text": "❤️ Thragtusk -- gain 5 life" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 19, "battlefield": [{ "name": "Cavern of Souls", "idx": 15, "num": 3, "is_land": true, "taps": "C" }, { "name": "Garruk's Harbinger", "idx": 9, "num": 18, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Gruul Turf", "idx": 14, "num": 22, "tapped": true, "is_land": true }, { "name": "Herald of Ilharg", "idx": 12, "num": 25, "is_land": false, "power": 7, "toughness": 7, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Herald of Ilharg", "idx": 13, "num": 23, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Stomping Ground", "idx": 4, "num": 39, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Stomping Ground", "idx": 8, "num": 38, "tapped": true, "is_land": true }, { "name": "Thragtusk", "idx": 16, "num": 42, "sick": true, "is_land": false, "power": 5, "toughness": 3 }, { "name": "Wild Growth", "idx": 5, "num": 49, "is_aura": true, "attached_to": 39, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Kaheera, the Orphanguard", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Migloz, Maze Crusher", "cost": "{1}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Windswept Heath", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 45, "land_drops_left": 0, "life_gained_this_turn": 5 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Daybreak Coronet", "Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Garruk's Harbinger (4), Herald of Ilharg (7), Herald of Ilharg (5) — 16 to opponent (1→-15)" }
+  ]
+}
