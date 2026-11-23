@@ -44,3 +44,22 @@ Prior root-cause notes: /workspaces/MagicDeckTester/logs/hinata-gi548/handoff.md
 
 ## Measurements so far
 - (prior agent) gi548 s63003 d8 b0: ON -> T5 legal under d5N/d5E0/d4E (~390K units); OFF byte-identical to base (T6).
+
+## A/B RESULT (ab1 DONE rc=0, 2026-11-23 00:51 UTC, 55 min wall, 32/32 busy) -- seed 81000 held out
+Searched (paired, on vs off; loss=9):
+  hinata d3   2000: +0.0000 (4 better / 4 worse)   units 1.0018
+  hinata d5   2000: -0.0015 (5 / 2)                units 1.0015
+  hinata 2hg  2000: -0.0040 (10 / 2, p=0.039)      units 1.0041
+  niv d3      2000: +0.0010 (0 / 2)  FAILS net<=0  units 1.0005
+  niv d5      2000: +0.0005 (0 / 1)  FAILS         units 1.0004
+  niv 2hg d5  2000: +0.0010 (0 / 2)  FAILS         units 0.9998
+  edf d3/d5   2000: identical (digests equal)
+d0 (5000 each): hinata, niv, edf all +0.0000 (niv d0 digest differs, scores identical).
+Slower games: hinata2hg 160,746; hinata d3 518,746,1152,1979; hinata d5 518,746; niv2hg 86,207; niv d3 207,1492; niv d5 207
+(seed = 81000+gi, game_index = gi).
+## Running (2026-11-23)
+- Lane job: d8 b0 (on+off) + 4x/16x/64x (on) for every slower game: manifest build/scratch/claude_prepayc/sg/slow.json,
+  box_lane PID 1203910, out sg/slow.out, wins sg/sloww, DONE marker sg/slow.DONE.
+- Traces (niv d5 gi207, hinata d5 gi518, on/off): sg/trace.json -> sg/traces (lane, foreground-ish).
+Next: check whether OFF's niv gi207 T3 kill used an illegal {C}-as-coloured payment (then the "slower" is the
+illegal win removed, not a regression); classify each slower game via d8b0/escalation; accept or root-cause.
