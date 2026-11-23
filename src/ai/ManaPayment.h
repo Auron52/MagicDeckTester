@@ -416,16 +416,12 @@ bool PayableOrderOn();
 // (docs/design/sac-fodder-menu-2026-11-18.md). The §2b payer eats a legal body through a LIVE outlet (Skirk
 // Prospector, Utopia Mycon); these let the plan menu (EnumeratePlansCore) and the apply's payable-order walk
 // (PayableCastOrderCore) see the outlet the plan itself puts in, and the bodies the plan itself adds.
-bool SacFodderMenuOn();
+bool SacFodderMenuOn();        // MTG_SAC_FODDER_MENU (ADOPTED 2026-11-23, default ON; =0 disables)
 bool SacFodderMenuLeverOn();   // the lever itself, whatever the context (SacFodderMenuOn() also stands it down beyond the horizon)
 bool SacFodderNeededOnlyOn();   // MTG_SAC_FODDER_NEEDED_ONLY (default ON under the lever)
 bool SacFodderInertPruneOn();  // MTG_SAC_FODDER_INERT_PRUNE (default ON under the lever)
 bool SacFodderWaveOn();        // MTG_SAC_FODDER_WAVE (default ON under the lever)
-bool SacFodderStagePlayoutOn();   // MTG_SAC_FODDER_STAGE_PLAYOUT (WIP staging arm, default OFF)
-bool SacFodderWaveEarlyOn();      // MTG_SAC_FODDER_WAVE_EARLY (WIP arm, default OFF)
-bool SacFodderWaveCtxOn();        // MTG_SAC_FODDER_WAVE_CTX (WIP arm, default OFF)
-bool SacFodderWaveInwinOn();      // MTG_SAC_FODDER_WAVE_INWIN (WIP arm, default OFF)
-bool SacFodderWaveBpEnumOn();     // MTG_SAC_FODDER_WAVE_BPENUM (WIP arm, default OFF)
+bool SacFodderStagePlayoutOn();   // MTG_SAC_FODDER_STAGE_PLAYOUT (default ON under the lever)
 // Does this action put a permanent onto the battlefield (cast, Vial, Bronze put, retrace)?
 bool SacFodderPutKind(const Action& a);
 // The legal fodder bodies this action adds for an outlet with params `op`: its own body (a matching

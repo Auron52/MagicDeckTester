@@ -2121,30 +2121,12 @@ static inline void PricedTraceEv(const char* what, long long v)   // same range 
     if (r.first < 0 || gamework::t_used < r.first || gamework::t_used > r.second) { return; }
     std::fprintf(stderr, "[pe] u=%lld p=%lld mute=%d %s %lld\n", gamework::t_used, workctr::t_priced, workctr::t_mute, what, v);
 }
-// MTG_SFM_P2_PRICE (TEMP A/B): inside a dev-seq second pass that only the sac-fodder wave's latents opened, every unit is
-// charged this many times (1 = as before). A RE-PRICING: at an unlimited root no budget exists and nothing is charged,
-// so the pass runs in full there. Slots borrowed (per job): MTG_SAC_FODDER_WAVE_EARLY = x2, _WAVE_CTX = x4,
-// _WAVE_INWIN = skip that pass entirely (DIAGNOSTIC ONLY -- lossy at every budget).
-static thread_local long long g_sfm_p2_price = 1;
-static int SfmP2Mode()   // 0 = as before, 2 / 4 = price, -1 = skip (diagnostic)
-{
-    if (heurarm::Flag(heurarm::SAC_FODDER_WAVE_INWIN, false)) { return -1; }
-    if (heurarm::Flag(heurarm::SAC_FODDER_WAVE_CTX, false))   { return 4; }
-    if (heurarm::Flag(heurarm::SAC_FODDER_WAVE_EARLY, false)) { return 2; }
-    return 0;
-}
-struct SfmP2PriceScope
-{
-    long long prev;
-    explicit SfmP2PriceScope(long long k) : prev(g_sfm_p2_price) { if (k > 1) { g_sfm_p2_price = k; } }
-    ~SfmP2PriceScope() { g_sfm_p2_price = prev; }
-};
 static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
 {
     if (budget == nullptr) { if (pricedbudget::On()) { pricedbudget::Drop(); } return; }
     if (s_rollout_stats && !budget->Unlimited() && budget->Used() >= budget->Limit())
     { g_units_after_spent.fetch_add(1, std::memory_order_relaxed); }
-    const long long u = PricedUnits(budget, 1) * g_sfm_p2_price;
+    const long long u = PricedUnits(budget, 1);
     budget->Consume(u);
     PricedTraceAt(static_cast<int>(site), u);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(u, std::memory_order_relaxed); }
@@ -2200,7 +2182,7 @@ inline Dumper g_dumper;
 static inline void ConsumeAtN(SearchBudget* budget, unitsite::Site site, long long n, bool bill = true)
 {
     if (budget == nullptr || n <= 0) { if (budget == nullptr && pricedbudget::On()) { pricedbudget::Drop(); } return; }
-    const long long u = (bill ? PricedUnits(budget, n) : n) * g_sfm_p2_price;
+    const long long u = bill ? PricedUnits(budget, n) : n;
     budget->Consume(u);
     PricedTraceAt(static_cast<int>(site), u);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(u, std::memory_order_relaxed); }
@@ -36010,36 +35992,18 @@ static thread_local int  g_devseq_latent_min_turn = INT_MAX;   // the earliest t
 static thread_local int  g_devseq_pass_lmt = INT_MAX;
 static inline void DvsNotePassLatent(int turn) { g_devseq_pass_lmt = std::min(g_devseq_pass_lmt, turn); }
 static int SacFodderAdmitMode(const GameState& state);   // MTG_SAC_FODDER_MENU (defined beside BuildBreakpointKey)
-// MTG_SAC_FODDER_WAVE_INWIN: every wave latent record (SfmWaveLatent), ever -- read as deltas against g_devseq_latent_n:
-// a node whose two deltas are equal met wave drops only, so its first-pass answer differs from the full tree's ONLY by the
-// credited plans the wave withheld (see the inwin store in FSLineWin).
-static thread_local unsigned long long g_sfm_wave_n = 0;
-static thread_local unsigned long long sfmdiag_ctx_live = 0;   // TEMP (MTG_SFM_DIAG_TRACE)
-// MTG_SFM_MODE_SHARE: every fodder credit an enumeration body applied (CreditSacFodderMenu), ever -- read as deltas. A body
-// that applied none enumerated the same list in the wave's first pass (mode 2) as in the admitting pass (mode 3): the wave
-// drops only credited plans. So such an entry (Entry::sfm_touched false) serves either mode.
-static thread_local unsigned long long g_sfm_credit_n = 0;
-static thread_local int t_sfm_mode_override = -1;   // >= 0: SacFodderAdmitMode answers this (the other mode's key)
-static bool SfmModeShareOn()
-{
-    // TEMP A/B: per-job key MTG_SAC_FODDER_WAVE_INWIN (that arm is deleted; slot borrowed, no header rebuild)
-    static const bool env_on = EnvOn("MTG_SFM_MODE_SHARE", true);
-    return env_on;
-}
-namespace sfmdiag { thread_local unsigned long long fold[4] = { 0, 0, 0, 0 }; thread_local unsigned long long dead = 0; thread_local unsigned long long live_split[8] = {}; }   // TEMP
 // MTG_SAC_FODDER_WAVE: the first pass met a credited plan (dropped) -- a latent occurrence at `turn`.
 static inline void SfmWaveLatent(int turn)
 {
-    ++g_sfm_wave_n;
     g_devseq_latent_hit = true; ++g_devseq_latent_n;
     g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, turn);
     DvsNotePassLatent(turn);
 }
 static inline bool SfmWaveDropHere()
 {
-    // MTG_SAC_FODDER_WAVE_BPENUM (WIP arm): the first pass also withholds credited plans inside breakpoint enumerations.
-    return g_devseq_suppress > 0 && g_rollout_nest == 0 && (g_bp_enum_depth == 0 || SacFodderWaveBpEnumOn())
-        && SacFodderWaveOn() && BpDevSeqOn();
+    // Not inside breakpoint enumerations (g_bp_enum_depth > 0): withholding credited plans there too measured harmful
+    // (the deleted MTG_SAC_FODDER_WAVE_BPENUM arm, dev seeds 2 faster / 9 slower).
+    return g_devseq_suppress > 0 && g_rollout_nest == 0 && g_bp_enum_depth == 0 && SacFodderWaveOn() && BpDevSeqOn();
 }
 struct DvsPassLmtScope
 {
@@ -88090,28 +88054,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // subset, or bodies the subset adds beside a live one). Inert (live = false) for every deck without an outlet.
     SacFodderMenuCtx sacfod;
     BuildSacFodderMenuCtx(state, cands, sacfod);
-    if (sacfod.live)   // TEMP
-    {
-        ++sfmdiag_ctx_live;
-        ++sfmdiag::live_split[(g_bp_enum_depth > 0 ? 1 : 0) + (g_devseq_suppress > 0 ? 2 : 0) + (g_rollout_nest > 0 ? 4 : 0)];
-        static const bool s_tr = EnvOn("MTG_SFM_DIAG_TRACE");
-        if (s_tr && sfmdiag_ctx_live <= 4)
-        {
-            std::string o = "[sfm-live] T" + std::to_string(state.turn_number) + " outlet_live=" + std::to_string(sacfod.outlet_live)
-                           + " bound=" + std::to_string(sacfod.bound) + " sup=" + std::to_string(g_devseq_suppress) + " nest=" + std::to_string(g_rollout_nest)
-                           + " bp=" + std::to_string(g_bp_enum_depth) + " hand:";
-            for (const Card& c : state.players[static_cast<std::size_t>(state.active_player_index)].hand) { o += " " + c.m_name.str(); }
-            o += " | bf:";
-            for (const Permanent& p : state.battlefield) { if (p.controller_index == state.active_player_index) { o += " " + p.card.m_name.str(); } }
-            o += " | gy:";
-            for (const Card& c : state.players[static_cast<std::size_t>(state.active_player_index)].graveyard) { o += " " + c.m_name.str(); }
-            std::cerr << o << "\n";
-        }
-    }
-    // MTG_SAC_FODDER_WAVE_CTX (WIP arm): the wave's first pass enumerates the lever-off menu exactly (no credit, no
-    // widened odometer bound) and records a latent occurrence wherever a credit COULD apply (the context is live).
-    if (sacfod.live && SacFodderWaveCtxOn() && SfmWaveDropHere())
-    { SfmWaveLatent(state.turn_number); sacfod = SacFodderMenuCtx{}; }
     // Which subset rejection filters can fire at all (see SubsetFilterPre). Lockstep twin of the
     // build in Solve, and built HERE -- after both aura injectors have appended their candidates,
     // because the summary's whole claim is that it saw every member of `cands`.
@@ -90084,17 +90026,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                                  || !SubsetPayable(have_colors, cands, sel);
                 }
                 if (sacfod_needed || !SacFodderNeededOnlyOn())
-                { CreditSacFodderMenu(sacfod, bodies, eff, eff_nc); credited = true; sacfod_credited = true; ++g_sfm_credit_n; }
+                { CreditSacFodderMenu(sacfod, bodies, eff, eff_nc); credited = true; sacfod_credited = true; }
             }
         }
         if (enumstats::Enabled()) { enumstats::g_e_rules.fetch_add(1, std::memory_order_relaxed); }
         bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                                  : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
-        // MTG_SAC_FODDER_WAVE_EARLY (WIP arm): in the wave's first pass a credited subset that passes the flat check is
-        // dropped HERE, before the colour, walk and later gates -- the first pass then spends what the lever-off pass
-        // spends on it (it is refused there at this very check), and the latent occurrence sends pass 2 to look.
-        if (sacfod_credited && mana_ok && SacFodderWaveEarlyOn() && SfmWaveDropHere())
-        { SfmWaveLatent(state.turn_number); _ct.label = "sacfod-wave"; return; }
         if (mana_ok && big_only.live
             && !BigOnlySubsetPayable(big_only, cands, sel, credited ? eff : pool,
                                      credited ? eff_nc : pool_noncreature))
@@ -91070,8 +91007,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         // run and nothing is unfindable. Only where the two passes govern (the dev-seq latent site's own scope).
         if (sacfod_credited && SfmWaveDropHere())
         {
-            static const bool s_nolat = EnvOn("MTG_SFM_DIAG_NOLATENT");   // TEMP diagnostic (UNSOUND: pass 2 may never see the plan)
-            if (!s_nolat) { SfmWaveLatent(state.turn_number); }
+            SfmWaveLatent(state.turn_number);
             _ct.label = "sacfod-wave";
             return;
         }
@@ -91435,26 +91371,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // ...and the FIRST-EQUIP WAIVER (Forge Anew / Kili): the gate's terms bake each equip's printed
     // generic, so the waived equip would be charged in full -- the same bail, to the waiver-aware
     // scalar bound (waiver_bound above). The haste-dork precedent; the gate is default OFF.
-    // MTG_SAC_FODDER_MENU: a live fodder context used to BAIL the selection-exact gate to the scalar bound, so every
-    // enumeration with an outlet in reach walked the odometer on the loose bound -- extra work for the same plan list.
-    static const bool s_sfm_gate_keep = EnvOn("MTG_SFM_GATE_KEEP", true);   // TEMP A/B: per-job key MTG_SAC_FODDER_WAVE_CTX (that arm is deleted; slot borrowed)
-    const bool sfm_gate_keep = s_sfm_gate_keep;
     if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork
         && enter_haste_unlock.empty() && growth_bound == 0 && land_growth_bound == 0
         && !any_hinata_credit && !spec_ctx.live && !any_storied && !manaoracle::t_gate_observe
-        && (!sacfod.live || sfm_gate_keep))   // MTG_SAC_FODDER_MENU: see sfm_gate_keep
+        && !sacfod.live)   // MTG_SAC_FODDER_MENU: its terms cannot see plan-made fodder -- the same bail
     {
         auto idx = std::make_unique<ManaGateIndex>();
         // `&state`: the ETB-untap refund, per SELECTION (tighter than the scalar bound's whole-list
         // sum, and the reason this gate is worth building on a Drake hand at all).
-        if (BuildManaGateIndex(pool, cands, independent, *idx, &state))
-        {
-            // MTG_SAC_FODDER_MENU: the gate's terms cannot see plan-made fodder, but no subset is credited more than
-            // sacfod.bound (SacFodderMenuSubsetBodies <= board + plan bodies), so the pool total widened by it is
-            // still a necessary condition at every reader (each tests need <= pool_total + gains). 0 when inert.
-            idx->pool_total += sacfod.bound;
-            gate_owned = std::move(idx);
-        }
+        if (BuildManaGateIndex(pool, cands, independent, *idx, &state)) { gate_owned = std::move(idx); }
     }
     const ManaGateIndex* gate    = gate_owned.get();      // null -> legacy scalar path
     const bool           gate_on = (gate != nullptr);
@@ -110128,8 +110053,6 @@ namespace enummemo
         uint32_t condemn_drops = 0;            // g_condemn_drops delta over the uncached body
         uint32_t trunc_delta   = 0;            // g_fs_trunc_events delta over the uncached body
         bool     sfm_latent    = false;        // MTG_SAC_FODDER_WAVE: the body dropped a credited plan (a first-pass latent occurrence) -- replayed on a hit
-        bool     sfm_wave_only = false;        // ...and every latent it met was a wave drop (MTG_SAC_FODDER_WAVE_INWIN reads g_sfm_wave_n)
-        bool     sfm_touched   = true;         // MTG_SFM_MODE_SHARE: the body applied a fodder credit (false: the list is mode-agnostic)
         // MTG_PB_LAZY_CANDS: `plans` is the list WITHOUT its lazily held put-back clone block when this
         // is active. A lazy caller gets both back; any other caller gets the materialised full list.
         PbLazyLayout lazy;
@@ -111119,37 +111042,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     if (t_enum_unseen_blind > 0) { Fold(k, 0xB11DE); }
     FoldPhysicalCards(k, state);   // MTG_PLAN_CACHE_EXACT_KEY
     auto it = cache.find(k);
-    // MTG_SFM_MODE_SHARE: a miss in the wave's first pass (mode 2) or the admitting pass (mode 3) may be served by the other
-    // mode's entry when its body applied no fodder credit (Entry::sfm_touched): the two lists are then identical. Its
-    // marker also counts as the first visit (the lever-off arm keys both passes alike, so it would promote here too).
-    const unsigned long long sfm_cred0 = g_sfm_credit_n;
-    bool sfm_alt_marker = false;
-    if (SfmModeShareOn() && !(pledger::On() && !pledger::InShadow())
-        && !(it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans))
-    {
-        const int sm = SacFodderAdmitMode(state);
-        if (sm >= 2)
-        {
-            t_sfm_mode_override = 5 - sm;
-            ++workctr::t_mute;   // a probe key: not billed (Site9ChainRepeats' precedent)
-            TranspositionTable::Key ka = BuildBreakpointKey(state, is_pre_combat);
-            --workctr::t_mute;
-            t_sfm_mode_override = -1;
-            if (s_hosttag_m1)
-            {
-                if (g_fresh_axis_enum)  { Fold(ka, 0x0F5A); }
-                if (g_condemn_suppress) { Fold(ka, 0xC5B9); }
-            }
-            if (t_enum_unseen_blind > 0) { Fold(ka, 0xB11DE); }
-            FoldPhysicalCards(ka, state);
-            const auto ita = cache.find(ka);
-            if (ita != cache.end() && ita->second.epoch == g_decision_epoch)
-            {
-                if (ita->second.has_plans && !ita->second.sfm_touched) { k = ka; it = ita; }
-                else if (!ita->second.has_plans) { sfm_alt_marker = true; }
-            }
-        }
-    }
     // MTG_PLAN_PRICED_LEDGER: the unlimited cache's verdict on this lookup (see pledger).
     const bool led = pledger::On() && !pledger::InShadow();
     const std::uint64_t lk = pledger::K(k);
@@ -111243,8 +111135,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         }
         if (it->second.sfm_latent && g_devseq_suppress > 0)   // MTG_SAC_FODDER_WAVE (see Entry::sfm_latent)
         {
-            if (it->second.sfm_wave_only) { SfmWaveLatent(state.turn_number); }
-            else { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); DvsNotePassLatent(state.turn_number); }
+            SfmWaveLatent(state.turn_number);
         }
         // MTG_PB_LAZY_CANDS: a lazily stored entry goes back lazy to a lazy caller and whole to any other.
         if (it->second.lazy.active)
@@ -111261,13 +111152,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     PricedTraceEv("enum_miss_sh", sh_hit ? 1 : 0);
     if (sh_hit || sh_rep) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit, or a replayed one
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
-    const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch) || sfm_alt_marker;
+    const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
     if (second_visit && enummemo::StatsOn()) { enummemo::g_second.fetch_add(1, std::memory_order_relaxed); }
     const int saved_md = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = 0;
     const unsigned long long drops_before = g_condemn_drops;
     const unsigned long long sfm_lat0 = g_devseq_latent_n;   // MTG_SAC_FODDER_WAVE (Entry::sfm_latent)
-    const unsigned long long sfm_wave0 = g_sfm_wave_n;      // MTG_SAC_FODDER_WAVE_INWIN (Entry::sfm_wave_only)
     const unsigned long long trunc_before = g_fs_trunc_events;
     const long long m1_u0 = gamework::t_used;
     const std::uint64_t m1_ctx = pccv::On() ? PlanCacheCtxBits() : 0;   // MTG_PLAN_CACHE_COST_VERIFY
@@ -111363,12 +111253,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     { PledgerEnumStore(lk, sh_found, m1_cost, plans.size() + (lazy_now ? pb_lazy->P : 0), m1_emitted); }
     if (second_visit)
     {
-        if (sfm_alt_marker)   // MTG_SFM_MODE_SHARE: the first visit was the other mode's marker -- this key may hold nothing yet
-        {
-            it = cache.find(k);
-            if (it == cache.end())
-            { it = cache.emplace(k, enummemo::Entry{ g_decision_epoch, own_md, false, {}, {}, own_drops, own_trunc }).first; }
-        }
         // Second visit this decision: the state provably recurs -- promote to full storage,
         // IF the plan-cache byte budget has room (over budget: stay a marker, recompute).
         const long long psz = lazy_now ? (PlanCacheStoredPriceOn() ? PbLazyStoredBytes(plans, *pb_lazy, nullptr)
@@ -111384,8 +111268,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             it->second.lazy          = lazy_now ? *pb_lazy : PbLazyLayout{};
             it->second.condemn_drops = own_drops;
             it->second.sfm_latent    = g_devseq_suppress > 0 && g_devseq_latent_n != sfm_lat0 && SacFodderAdmitMode(state) == 2;
-            it->second.sfm_wave_only = it->second.sfm_latent && g_sfm_wave_n - sfm_wave0 == g_devseq_latent_n - sfm_lat0;
-            it->second.sfm_touched   = g_sfm_credit_n != sfm_cred0;   // MTG_SFM_MODE_SHARE
             it->second.trunc_delta   = own_trunc;
             if (enummemo::VerifyOn()) { it->second.dbg = enummemo::Fingerprint(state); }
         }
@@ -111443,35 +111325,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     if (t_rollout_narrow) { Fold(k, kRolloutNarrowTag); }   // see MTG_ROLLOUT_FAN_NARROW
     FoldPhysicalCards(k, state);   // MTG_PLAN_CACHE_EXACT_KEY
     auto it = cache.find(k);
-    // MTG_SFM_MODE_SHARE: the m1 host's other-mode probe (see there).
-    const unsigned long long sfm_cred0 = g_sfm_credit_n;
-    bool sfm_alt_marker = false;
-    if (SfmModeShareOn() && !(pledger::On() && !pledger::InShadow())
-        && !(it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans))
-    {
-        const int sm = SacFodderAdmitMode(state);
-        if (sm >= 2)
-        {
-            t_sfm_mode_override = 5 - sm;
-            ++workctr::t_mute;   // a probe key: not billed (Site9ChainRepeats' precedent)
-            TranspositionTable::Key ka = BuildBreakpointKey(state, false);
-            --workctr::t_mute;
-            t_sfm_mode_override = -1;
-            if (s_hosttag)
-            {
-                Fold(ka, 0x371D);
-                if (g_condemn_suppress) { Fold(ka, 0xC5B9); }
-            }
-            if (t_rollout_narrow) { Fold(ka, kRolloutNarrowTag); }
-            FoldPhysicalCards(ka, state);
-            const auto ita = cache.find(ka);
-            if (ita != cache.end() && ita->second.epoch == g_decision_epoch)
-            {
-                if (ita->second.has_plans && !ita->second.sfm_touched) { k = ka; it = ita; }
-                else if (!ita->second.has_plans) { sfm_alt_marker = true; }
-            }
-        }
-    }
     // MTG_PLAN_PRICED_LEDGER: the unlimited cache's verdict on this lookup (see pledger).
     const bool led = pledger::On() && !pledger::InShadow();
     const std::uint64_t lk = pledger::K(k);
@@ -111557,8 +111410,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         }
         if (it->second.sfm_latent && g_devseq_suppress > 0)   // MTG_SAC_FODDER_WAVE (see Entry::sfm_latent)
         {
-            if (it->second.sfm_wave_only) { SfmWaveLatent(state.turn_number); }
-            else { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); DvsNotePassLatent(state.turn_number); }
+            SfmWaveLatent(state.turn_number);
         }
         // M1: a lazily stored entry is handed back whole (every caller of this host walks a vector).
         if (it->second.lazy.active) { return CandSeq(it->second.plans, &it->second.lazy).Materialised(); }
@@ -111568,12 +111420,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     PricedTraceEv("enum_miss_sh", sh_hit ? 1 : 0);
     if (sh_hit || sh_rep) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit, or a replayed one
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
-    const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch) || sfm_alt_marker;
+    const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
     const int saved_md = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = 0;
     const unsigned long long drops_before = g_condemn_drops;
     const unsigned long long sfm_lat0 = g_devseq_latent_n;   // MTG_SAC_FODDER_WAVE (Entry::sfm_latent)
-    const unsigned long long sfm_wave0 = g_sfm_wave_n;      // MTG_SAC_FODDER_WAVE_INWIN (Entry::sfm_wave_only)
     const unsigned long long trunc_before = g_fs_trunc_events;
     // M1: the PROMOTION visit (the only one that stores) enumerates lazily and keeps the lazy form; the
     // caller still gets the whole list. Other visits enumerate whole, as before.
@@ -111601,12 +111452,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     { PledgerEnumStore(lk, sh_found, m2_cost, plans.size() + (m2_lz.active ? m2_lz.P : 0), m2_emitted); }
     if (second_visit)
     {
-        if (sfm_alt_marker)   // MTG_SFM_MODE_SHARE: the first visit was the other mode's marker -- this key may hold nothing yet
-        {
-            it = cache.find(k);
-            if (it == cache.end())
-            { it = cache.emplace(k, enummemo::Entry{ g_decision_epoch, own_md, false, {}, {}, own_drops, own_trunc }).first; }
-        }
         // Same byte-budget gate as the m1 host above (over budget: stay a marker, recompute).
         const long long psz = m2_lz.active ? (PlanCacheStoredPriceOn() ? PbLazyStoredBytes(plans, m2_lz, nullptr)
                                                                        : PbLazyListBytes(plans, m2_lz))
@@ -111622,8 +111467,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
             if (m2_lz.active) { pblazycands::g_m2_lists.fetch_add(1, std::memory_order_relaxed); }
             it->second.condemn_drops = own_drops;
             it->second.sfm_latent    = g_devseq_suppress > 0 && g_devseq_latent_n != sfm_lat0 && SacFodderAdmitMode(state) == 2;
-            it->second.sfm_wave_only = it->second.sfm_latent && g_sfm_wave_n - sfm_wave0 == g_devseq_latent_n - sfm_lat0;
-            it->second.sfm_touched   = g_sfm_credit_n != sfm_cred0;   // MTG_SFM_MODE_SHARE
             it->second.trunc_delta   = own_trunc;
             if (enummemo::VerifyOn()) { it->second.dbg = enummemo::Fingerprint(state); }
         }
@@ -122272,9 +122115,6 @@ namespace inwin
     inline void Clear() { t_map.clear(); t_ctx.clear(); t_bytes = 0; }
     inline TranspositionTable::Key WinKey(TranspositionTable::Key k) { Fold(k, 0x1A7E5C0DE1ULL); return k; }
     inline TranspositionTable::Key NowinKey(TranspositionTable::Key k) { Fold(k, 0x2B0D17A3F7ULL); return k; }
-    // MTG_SAC_FODDER_WAVE_INWIN: a first-pass answer of a node whose only latent occurrences were sac-fodder wave drops --
-    // the tree without the credited plans. Read by a wave first pass alone, and a hit counts as a wave latent.
-    inline TranspositionTable::Key SfmTag(TranspositionTable::Key k) { Fold(k, 0x5AF0D1A7E1ULL); return k; }
     // The key context: gamelc::Tag (leaf, beam, second-main, labeller), and under MTG_LEAFLESS_READS_LEAFED the same
     // context WITHOUT the leaf kind. An in-window proof reads no leaf: a win at w <= T+k-1 lies inside the window, where
     // every leaf estimate (at or after T+k) is later, and a no-win is served only to a query whose cutoff is inside both
@@ -122474,7 +122314,6 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     if (state.TurnSeqCapped(max_turns)) { return { max_turns + 1, {} }; }   // extra-turn chain backstop (inert elsewhere)
     const unsigned long long dvs_latent_at_entry = g_devseq_latent_n;   // MTG_BP_DEV_SEQ: see DvsDirty below
     const unsigned long long dvs_hard_at_entry = g_devseq_hard_n;       // ...and its non-canon-drop part (DevSeqDeferredP2)
-    const unsigned long long sfm_wave_at_entry = g_sfm_wave_n;          // MTG_SAC_FODDER_WAVE_INWIN (see g_sfm_wave_n)
     // MTG_DEV_SEQ_TAIL_SKIP: this node's earliest-latent-turn scope and its completeness watermarks (see DvsDirty).
     const DvsMltFrame dvs_mlt;
     const unsigned long long dvs_trunc0 = g_fs_trunc_events, dvs_binds0 = budgetbind::t_binds;
@@ -122834,23 +122673,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             TranspositionTable::Key kw = key_base;
             const std::uint64_t osig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
             if (s_split_keys && CanonSimKeyOn()) { Fold(kw, osig); }
-            // MTG_SAC_FODDER_WAVE_INWIN: a wave first pass also reads the wave-only first-pass answers (inwin::SfmTag).
-            const bool sfm_read = SacFodderWaveInwinOn() && SfmWaveDropHere() && SacFodderMenuOn();
-            for (int st = 0; st < (sfm_read ? 2 : 1) && !inwin_hit; ++st)
-            {
-            auto itag = [st](TranspositionTable::Key k) { return st == 1 ? inwin::SfmTag(k) : k; };
-            auto iw = inwin::t_map.find(itag(inwin::WinKey(inwin::Ctx(kw, state))));
+            auto iw = inwin::t_map.find(inwin::WinKey(inwin::Ctx(kw, state)));
             if (iw != inwin::t_map.end() && iw->second.win <= we && (iw->second.order_sig == 0 || iw->second.order_sig == osig))
             {
                 inwin::g_win_hits.fetch_add(1, std::memory_order_relaxed);
-                if (st == 1) { SfmWaveLatent(state.turn_number); }
                 if (p17::On()) { ++p17::t_iw_w; }
                 if (!inwin::Verify()) { ++g_fs_memo_win_hits; return iw->second.line; }
                 inwin_hit = true; inwin_hit_win = iw->second.win;
             }
             else
             {
-                auto in = inwin::t_map.find(itag(inwin::NowinKey(inwin::Ctx(key_base, state))));
+                auto in = inwin::t_map.find(inwin::NowinKey(inwin::Ctx(key_base, state)));
                 if (inwin::Verify() && in != inwin::t_map.end()) { inwin_hit_key = in->first; }
                 // The query must judge every turn up to its cutoff by the SEARCH MENU, as the proof did: a cutoff past
                 // this node's window would also count wins its leaf finds there, and the rollout plays lines a
@@ -122866,12 +122699,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                                    state.turn_number, depth, cutoff, in->second.nowin_bound, g_fsline_nest, g_rollout_nest,
                                    g_devseq_suppress, g_devseq_two_pass); }
                     inwin::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
-                    if (st == 1) { SfmWaveLatent(state.turn_number); }
                     if (p17::On()) { ++p17::t_iw_n; }
                     if (!inwin::Verify()) { ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} }; }
                     inwin_hit = true; inwin_hit_win = max_turns + 1;
                 }
-            }
             }
         }
         if (s_split_keys)
@@ -126043,20 +125874,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 }
             }
         }
-        // MTG_SAC_FODDER_WAVE_INWIN: a first-pass node whose every latent occurrence was a sac-fodder wave drop answered for
-        // the tree without the credited plans -- exactly the tree every later wave first pass searches at this state, so
-        // it is kept for those alone (inwin::SfmTag). Any other dirty node (a hard or canon-drop latent, a dirty read)
-        // stays out, as before.
-        const bool sfm_only = dvs_sup && SacFodderWaveInwinOn() && g_devseq_hard_n == dvs_hard_at_entry
-                           && g_sfm_wave_n - sfm_wave_at_entry == g_devseq_latent_n - dvs_latent_at_entry;
-        auto itag = [sfm_only](TranspositionTable::Key k) { return sfm_only ? inwin::SfmTag(k) : k; };
-        if (complete && (!dvs_sup || sfm_only))
+        if (complete && !dvs_sup)
         {
             const int we = state.turn_number + depth - 1;
             const bool win = best.win_turn <= std::min(cutoff, max_turns);
             // MTG_INWIN_EXIT_GUARD: was this node's answer shaped by a first-verified-win exit (see ExitGuardOn)?
             const bool exit_free = !inwin::ExitGuardOn() || g_fs_hexits == dvs_hex0;
-            const auto nowin_it = inwin::t_map.find(itag(inwin::NowinKey(inwin::Ctx(key_base, state))));
+            const auto nowin_it = inwin::t_map.find(inwin::NowinKey(inwin::Ctx(key_base, state)));
             const bool earlier_refuted = nowin_it != inwin::t_map.end() && nowin_it->second.nowin_bound >= best.win_turn - 1;
             auto admit = [](std::size_t nb) -> bool
             {
@@ -126068,7 +125892,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 TranspositionTable::Key kw = key_base;
                 const std::uint64_t osig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
                 if (s_split_keys && CanonSimKeyOn()) { Fold(kw, osig); }
-                const TranspositionTable::Key k = itag(inwin::WinKey(inwin::Ctx(kw, state)));
+                const TranspositionTable::Key k = inwin::WinKey(inwin::Ctx(kw, state));
                 if (inwin::t_map.find(k) == inwin::t_map.end() && admit(ApproxFslBytes(best) + 64))
                 {
                     inwin::t_map.emplace(k, inwin::Entry{ best, best.win_turn, std::numeric_limits<int>::max(), osig });
@@ -126079,7 +125903,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             const int b = std::min(win ? best.win_turn - 1 : std::min(cutoff, max_turns + 1), we);
             if (b >= state.turn_number && exit_free)
             {
-                const TranspositionTable::Key k = itag(inwin::NowinKey(inwin::Ctx(key_base, state)));
+                const TranspositionTable::Key k = inwin::NowinKey(inwin::Ctx(key_base, state));
                 auto it = inwin::t_map.find(k);
                 if (it == inwin::t_map.end())
                 {
@@ -126700,7 +126524,6 @@ struct DevSeqDeferredP2
 {
     bool armed = false;
     int  cut2 = 0, c1 = 0, depth = 0, known_miss = 0, win1 = 0;
-    bool sfm_only = false;   // MTG_SFM_P2_PRICE: the first pass met wave latents only
 };
 static thread_local DevSeqDeferredP2* g_devseq_cd_defer = nullptr;   // set by FullSearchLineHybrid around its probe only
 
@@ -126768,7 +126591,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         const int lmt_prev = g_devseq_latent_min_turn;
         g_devseq_latent_min_turn = INT_MAX;
         const long long dsu0 = gamework::t_used;   // MTG_DEV_SEQ_STATS (diagnostic)
-        const unsigned long long sfm_w0 = g_sfm_wave_n, sfm_l0 = g_devseq_latent_n;   // MTG_SFM_P2_PRICE
         int c1 = 0;
         SearchLine line1;
         {
@@ -126801,14 +126623,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         const int cut2 = std::min(cut_prev > 0 ? cut_prev : max_turns + 1,
                                   (line1.win_turn <= max_turns) ? line1.win_turn - 1 : max_turns + 1);
         devseqstats::Pass1(met_latent);
-        static const bool s_sfm_tr = EnvOn("MTG_SFM_DIAG_TRACE");   // TEMP diagnostic
-        auto sfm_line = [&](const SearchLine& l) { std::string o; for (const PhasePlan& pp : l.phases) { o += (pp.is_pre_combat ? " |pre:" : " |2nd:"); o += PlanDesc(pp.plan); if (o.size() > 300) break; } return o; };
-        if (s_sfm_tr) { std::cerr << "[sfm-2p] T" << state.turn_number << " m" << (second_main ? 2 : 1) << " depth=" << depth << " p1 win=" << line1.win_turn << " c1=" << c1 << " latent=" << met_latent << " lmt=" << lmt1 << " cut2=" << cut2 << " stop=" << AnytimeStop(budget) << " cdhost=" << (cd_host != nullptr) << " hardnew=" << (g_devseq_hard_n != hard_n0) << " ctxlive=" << sfmdiag_ctx_live << " fold1/2/3=" << sfmdiag::fold[1] << "/" << sfmdiag::fold[2] << "/" << sfmdiag::fold[3] << " dead=" << sfmdiag::dead << " u1=" << (dsu1 - dsu0) << " cred=" << g_sfm_credit_n << " wave=" << g_sfm_wave_n << " live[bp|p1<<1|ro<<2]=" << sfmdiag::live_split[0] << "," << sfmdiag::live_split[1] << "," << sfmdiag::live_split[2] << "," << sfmdiag::live_split[3] << "," << sfmdiag::live_split[4] << "," << sfmdiag::live_split[5] << "," << sfmdiag::live_split[6] << "," << sfmdiag::live_split[7] << sfm_line(line1) << "\n"; }
         if (devseqstats::On() && met_latent && g_devseq_hard_n == hard_n0) { devseqstats::g_cd_p1only.fetch_add(1, std::memory_order_relaxed); }
-        const bool sfm_only = met_latent && g_devseq_hard_n == hard_n0 && g_sfm_wave_n != sfm_w0
-                           && g_sfm_wave_n - sfm_w0 == g_devseq_latent_n - sfm_l0;   // MTG_SFM_P2_PRICE
-        const int  sfm_p2 = sfm_only ? SfmP2Mode() : 0;
-        if (!met_latent || cut2 < state.turn_number || AnytimeStop(budget) || sfm_p2 < 0)
+        if (!met_latent || cut2 < state.turn_number || AnytimeStop(budget))
         {
             g_fsl_root_cut = cut_prev;
             // A skipped pass 2 with a latent occurrence met proves nothing about the full tree: no lazy hand-off.
@@ -126825,7 +126641,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         if (cd_host != nullptr && g_devseq_hard_n == hard_n0 && !p1_settled)
         {
             devseqstats::CdDeferred();
-            cd_host->armed = true; cd_host->cut2 = cut2; cd_host->c1 = c1; cd_host->depth = depth; cd_host->sfm_only = sfm_only;
+            cd_host->armed = true; cd_host->cut2 = cut2; cd_host->c1 = c1; cd_host->depth = depth;
             cd_host->known_miss = known_miss; cd_host->win1 = line1.win_turn;
             g_fsl_root_cut = cut_prev;
             g_fsl_leafless_miss_depth = 0;
@@ -126842,8 +126658,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         carry.dvs_mode = DvsTailSkipOn() ? 2 : 0;   // MTG_DEV_SEQ_TAIL_SKIP: read (see DvsTailGate)
         carry.dvs_dirty.clear();
         carry.dvs_dirty_hard.clear();
-        SearchLine line2;
-        { const SfmP2PriceScope _pp(sfm_p2); line2 = FullSearchLine(state, c1 > 0 ? c1 : depth, max_turns, second_main, tt, budget, &c2); }
+        SearchLine line2 = FullSearchLine(state, c1 > 0 ? c1 : depth, max_turns, second_main, tt, budget, &c2);
         carry.dvs_mode = 0;
         if (devseqstats::On())
         {
@@ -126854,7 +126669,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         g_devseq_lc_handoff = lc_prev;
         g_fsl_root_cut = cut_prev;
         const bool take2 = line2.win_turn < line1.win_turn;
-        if (s_sfm_tr) { std::cerr << "[sfm-2p]   p2 win=" << line2.win_turn << " c2=" << c2 << " take=" << take2 << sfm_line(line2) << "\n"; }
         if (devseqstats::On())
         {
             const long long u2 = gamework::t_used - dsu1;
@@ -129194,7 +129008,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         g_lazy_known_miss_depth = cd_defer.known_miss;
         g_fsl_root_cut = cd_defer.cut2;
         int c2 = 0;
-        const SfmP2PriceScope _pp(cd_defer.sfm_only ? SfmP2Mode() : 0);   // MTG_SFM_P2_PRICE (skip never reaches here)
         SearchLine l2 = FullSearchLine(state, cd_defer.c1 > 0 ? cd_defer.c1 : cd_defer.depth, max_turns, second_main,
                                        tt, budget, &c2);
         g_fsl_root_cut = cut_prev;
@@ -129202,8 +129015,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         g_fsl_emul_heuristic_commit = emul_prev;
         const bool held_verified = ln.win_turn <= max_turns && ln.win_turn <= state.turn_number + com - 1;
         const bool take = l2.win_turn < cd_defer.win1 && !(held_verified && ln.win_turn <= l2.win_turn);
-        { static const bool s_sfm_tr = EnvOn("MTG_SFM_DIAG_TRACE");   // TEMP diagnostic
-          if (s_sfm_tr) { std::cerr << "[sfm-cd] T" << state.turn_number << " deferred p2 win=" << l2.win_turn << " win1=" << cd_defer.win1 << " held=" << ln.win_turn << " take=" << take << "\n"; } }
         if (devseqstats::On())
         {
             devseqstats::g_cd_run.fetch_add(1, std::memory_order_relaxed);
@@ -135596,47 +135407,12 @@ static bool SacOutletInReach(const GameState& state)
     };
     return zone(me.hand) || zone(me.graveyard) || zone(state.exile);
 }
-// Can BuildSacFodderMenuCtx / BuildPoSacFodder / PlanSacOutletDef be live at `state` at all? Their shared gates (the payer's
-// own: g_pay_fodder_off, MTG_SAC_OUTLET_PAY, human play) and, per outlet in reach, the death-pays carve-out
-// (SacOutletEatHasValue -- LiveSacPayOutlet and PlanSacOutletDef both stand down on it). A SUPERSET of the live cases
-// (every outlet in reach is asked, whatever the candidates), so a list it calls dead is exactly the lever-off list.
-static bool SacFodderCtxCanLive(const GameState& state)
-{
-    if (g_pay_fodder_off || !SacOutletPayEnabled() || HumanPlayActive()) { return false; }
-    const int active = state.active_player_index;
-    const CardDatabase& db = CardDatabase::Instance();
-    const CardDefinition* asked = nullptr;
-    auto live_for = [&](const CardDefinition* d)
-    {
-        if (d == nullptr || !IsSacManaOutlet(d->params) || d == asked) { return false; }
-        asked = d;
-        return !SacOutletEatHasValue(state, active, d->params);
-    };
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != active) { continue; }
-        if (live_for(db.LookupCached(p.card))) { return true; }
-    }
-    const Player& me = state.players[static_cast<std::size_t>(active)];
-    for (const Card& c : me.hand)      { if (live_for(db.LookupCached(c))) { return true; } }
-    for (const Card& c : me.graveyard) { if (live_for(db.LookupCached(c))) { return true; } }
-    for (const Card& c : state.exile)  { if (live_for(db.LookupCached(c))) { return true; } }
-    return false;
-}
 static int SacFodderAdmitMode(const GameState& state)
 {
-    if (t_sfm_mode_override >= 0) { return t_sfm_mode_override; }   // MTG_SFM_MODE_SHARE's other-mode key
     if (!state.deck_has_sac_mana_outlet || !SacFodderMenuLeverOn()) { return 0; }
     if (!SacOutletInReach(state)) { return 0; }
-    static const bool s_keylive = EnvOn("MTG_SFM_KEY_LIVE", true);   // TEMP A/B: per-job key MTG_SAC_FODDER_WAVE_EARLY (that arm is deleted; slot borrowed, no header rebuild)
-    if (s_keylive)
-    {
-        // A dead context enumerates the lever-off list, beyond the horizon or not: one key for all of them.
-        if (!SacFodderMenuOn() || !SacFodderCtxCanLive(state)) { ++sfmdiag::dead; return 0; }
-    }
     if (!SacFodderMenuOn()) { return 1; }
-    if (SfmWaveDropHere())   // the wave first pass (MTG_SAC_FODDER_WAVE; _BPENUM widens it to breakpoint enumerations)
-    { return 2; }
+    if (SfmWaveDropHere()) { return 2; }   // the wave first pass (MTG_SAC_FODDER_WAVE)
     return 3;
 }
 static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool is_pre_combat, bool cont_list)
@@ -135653,7 +135429,7 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     // the same misindexed-replay class the FSLineEntry.order_sig guard cures. Order-exact key.
     if (CanonSimKeyOn()) { Fold(k, FsOrderSig(state)); }
     Fold(k, 0xB9E4);   // section tag: mid-turn scalars
-    if (const int sfm = SacFodderAdmitMode(state); sfm != 0) { ++sfmdiag::fold[sfm]; Fold(k, 0x5AF0D000ull + static_cast<uint64_t>(sfm)); }   // see SacFodderAdmitMode
+    if (const int sfm = SacFodderAdmitMode(state); sfm != 0) { Fold(k, 0x5AF0D000ull + static_cast<uint64_t>(sfm)); }   // see SacFodderAdmitMode
     // INSIDE A LIFE FROM THE LOAM PROBE (g_loam_probe_offer set; AppendSubdecisionAxes' Loam fan): the enumeration
     // skips the Loam target expansion there (it runs only with no probe open), so the same state enumerates a
     // different list inside and outside one. Nonzero-gated: every key outside a probe is unchanged. (Found while

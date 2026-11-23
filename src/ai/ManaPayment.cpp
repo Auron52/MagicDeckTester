@@ -5799,40 +5799,27 @@ static void PoLandAuraSubtractHeld(ManaPool& pool, const PoLandAuraHold& la)
 // ---- MTG_SAC_FODDER_MENU (ManaPayment.h; docs/design/sac-fodder-menu-2026-11-18.md) ----------------------------
 bool SacFodderMenuOn()
 {
-    // DEFAULT OFF: its held-out A/B (seeds 620000+, x5000) failed the adoption bar -- Goblins net +4 (2 / 6), Fungus
-    // net +5 (0 / 5; gi 630182 and 630865 do not recover at d8 b0, 4 -> 5). It clears most ENUM-GAPs (Goblins
-    // 705 -> 57, Fungus 129 -> 10) at units x1.07 / x1.03. =1 turns it on; docs/design/sac-fodder-menu-2026-11-18.md.
+    // ADOPTED 2026-11-23 (USER: "I think we could just adopt the sac-fodder and put it to rest. I don't like leaving
+    // out completeness items"), DEFAULT ON; =0 disables. A completeness fix: without it a plan that casts the outlet
+    // and pays a later cast by eating a body is unfindable at any budget. Held-out (gi 640000+/650000+ x5000, with
+    // the sub-levers below): Goblins net -3, Fungus -1, at CPU x1.17 / x1.07 (accepted by the USER).
+    // docs/design/sac-fodder-menu-2026-11-18.md.
     if (!SacFodderMenuLeverOn()) { return false; }
-    // MTG_SAC_FODDER_STAGE_PLAYOUT (WIP staging arm): beyond the horizon (a playout, the depth-0 runner) the lever is
-    // off -- no credited plan on a playout's menu and the apply's order decider exactly as with the lever off.
+    // MTG_SAC_FODDER_STAGE_PLAYOUT (DEFAULT ON with the lever; =0 disables): beyond the horizon (a playout, the
+    // depth-0 runner) the lever is off -- no credited plan on a playout's menu and the apply's order decider exactly
+    // as with the lever off. The greedy playout gains nothing from a wider menu it cannot search.
     if (SacFodderStagePlayoutOn() && (TurnSolver::InRolloutPlayout() || TurnSolver::InD0Runner())) { return false; }
     return true;
 }
 bool SacFodderMenuLeverOn()
 {
-    static const bool env_on = EnvOn("MTG_SAC_FODDER_MENU");
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_MENU", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::SAC_FODDER_MENU, env_on);
 }
 bool SacFodderStagePlayoutOn()
 {
-    static const bool env_on = EnvOn("MTG_SAC_FODDER_STAGE_PLAYOUT");
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_STAGE_PLAYOUT", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::SAC_FODDER_STAGE_PLAYOUT, env_on);
-}
-bool SacFodderWaveEarlyOn()
-{
-    return false;   // arm DELETED (measured no better); its heurarm slot is borrowed by a TEMP A/B arm in TurnSolver.cpp
-}
-bool SacFodderWaveCtxOn()
-{
-    return false;   // arm DELETED (measured no better); its heurarm slot is borrowed by a TEMP A/B arm in TurnSolver.cpp
-}
-bool SacFodderWaveInwinOn()
-{
-    return false;   // arm DELETED (measured no better); its heurarm slot is borrowed by a TEMP A/B arm in TurnSolver.cpp
-}
-bool SacFodderWaveBpEnumOn()
-{
-    return false;   // arm DELETED (measured harmful, 2/9 +7)
 }
 bool SacFodderNeededOnlyOn()
 {
@@ -7897,8 +7884,6 @@ static bool BuildPoSacFodder(const GameState& state, const std::vector<Action>& 
 {
     sf = PoSacFodder{};
     if (g_pay_fodder_off || !state.deck_has_sac_mana_outlet || !SacFodderMenuOn()) { return false; }
-    { static const bool s_noapply = EnvOn("MTG_SFM_DIAG_NOAPPLY");   // TEMP diagnostic: the apply's decider as lever-off
-      if (s_noapply && !order_only) { return false; } }
     bool sf_on = false;
     const int active = state.active_player_index;
     const SacPayOutlet live = LiveSacPayOutlet(state, active);
