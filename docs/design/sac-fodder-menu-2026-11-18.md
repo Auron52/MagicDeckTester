@@ -1,7 +1,10 @@
 # Sac-for-mana fodder on the plan menu (`MTG_SAC_FODDER_MENU`), 2026-11-18
 
-Status: **default OFF** (held-out A/B failed the adoption bar). Root-cause of the residual is OWED: a default-off lever
-that gates a missing searched capability is not an end state (CLAUDE.md, "Delete, don't lever").
+Status: **ADOPTED, default ON (USER 2026-11-23)** as a completeness fix: *"I think we could just adopt the sac-fodder
+and put it to rest."* Shipped in f36e81469 (`MTG_SAC_FODDER_MENU` + `MTG_SAC_FODDER_STAGE_PLAYOUT` default ON, `=0`
+disables; inert cuts, TEMP arms/diags and dead wave arms deleted). Before the ruling the held-out A/B had failed the
+adoption bar (net -3/-1 on held-out, CPU x1.17/x1.07; the dev-seed residue is in the sections below); GT is accepted
+with the batch-1123 landing.
 
 ## The defect (engine miss #1 of docs/design/goblins-sac-mana-oracle-2026-11-18.md)
 

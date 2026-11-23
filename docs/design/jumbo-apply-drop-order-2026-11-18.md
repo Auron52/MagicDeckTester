@@ -492,7 +492,7 @@ the walk. Folding the field brought the hits back to the hash-only level.
 |---|---|---|
 | no memo | 348.97G | 303.45G |
 | memo at the tree site only (prototype) | 338.41G | -- |
-| **memo at SubsetPayableSequential (shipped)** | **329.63G** | **293.86G** |
+| **memo at SubsetPayableSequential (shipped)** | **329.63G** (329.74G after the no-trace fix) | **293.86G** |
 | both sites | 330.53G | -- |
 
 With the memo on, VERIFY (`MTG_SPS_XMEMO_VERIFY=1`, which re-walks every hit) found 0 mismatches over 179k Jumbo hits and
@@ -500,7 +500,15 @@ With the memo on, VERIFY (`MTG_SPS_XMEMO_VERIFY=1`, which re-walks every hit) fo
 arms with the memo), and the lever-off engine itself gets 3.2% cheaper. Bruna moves little (837.75G -> about 837.5G):
 its repeats mostly differ in `hand_index`, which the walk reads.
 
-IDENTITY_SLICE_PLACEHOLDER
+**No trace (a09bc5dac).** The first identity slice was not byte-identical (Extra Turns 1 digest + 4 unit lines,
+Hinata 2 unit lines). A bisect pinned it to the memo KEY BUILD alone: BuildSimKeyBase bills `workctr::kSimKey` to the
+priced meter the decision ceiling reads and bumps `combatpin::t_reads`. The key build is now muted; a miss records the
+walk's workctr and combat-pin witness deltas and a hit replays them; nothing is stored under a mute or when the walk
+moved DecisionBudget units, and the memo is bypassed under a live index-carry sink.
+
+**Identity, on the no-trace build:** 60-deck identity on vs off (`MTG_SPS_XMEMO=0`): 276/276 job lines identical,
+units included. Re-walk VERIFY (`MTG_SPS_XMEMO_VERIFY=1`): VERIFY_MISMATCH=0 over 935,194 hits. Smoke + regression:
+ALL PASS (no GT change). Jumbo instructions (lever on, 400 games): 329.74G vs 348.97G without the memo, **-5.5%**.
 
 **Further exact-cut leads (not done).** (a) A general cross-enumeration memo of EnumeratePlans results. The enumeration
 itself re-runs on the same board, and the plan cache's m1-enum barely hits. It is lever-independent and probably the
