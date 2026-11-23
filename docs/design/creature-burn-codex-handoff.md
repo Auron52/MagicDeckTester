@@ -37,6 +37,15 @@ fingerprint made CMake queue another full 390-object build. That redundant all-t
 as it succeeds (`final-integrated-smoke.log`, `FINAL_SMOKE_AFTER_BUILD_DONE`). Final smoke includes the 610-scenario
 sanity stage. We are still queue head, Beasts next; requeue before the 2-hour head window if the smoke is unfinished.
 
+**01:07 UTC final-smoke update:** The supported target-only `./build.sh release -- --target mtg` relinked the
+post-Worldfire source successfully (`FINAL_MTG_BUILD_DONE=0`), and the detached full smoke has started
+(`final-integrated-smoke.log`, `FINAL_SMOKE_AFTER_BUILD_DONE`). The final source is committed; only the two
+pre-existing user edits are dirty. The prior full unit pass remains valid for the Creature Burn + Blood Sun
+merge; Worldfire's sole source change was the human tutor-menu default. The smoke includes scenario sanity.
+After the smoke's complete changed-game audit, classify all searched slowdowns, run scoped regression on moved
+decks, accept GT, check GT logs and strict viewer replay, land, then launch fast mullgen. Beasts is next in queue;
+requeue before ~02:06 UTC if still validating.
+
 The previous full smoke was interrupted when its attached tool session stopped, and the queue lease passed to
 Blood Sun. No user decision is pending. Rejoined the queue as number 1 behind Blood Sun; a detached waiter
 tracks `build/scratch/cb-integrated/QUEUE_PROFILE_READY`. A detached prequeue full smoke is now running under
