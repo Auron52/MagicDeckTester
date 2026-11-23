@@ -2,6 +2,17 @@
 
 ## Codex continuation (2026-11-22 ~21:50 UTC)
 
+**2026-11-23 05:13 UTC integrated gates update:** The full post-Beasts four-job Release build passed
+390/390 steps (`POSTBEASTS_BUILD_DONE=0`). The integrated unit suite passed 4,153/4,153 cases and
+3,667,878/3,667,878 assertions (`POSTBEASTS_UNIT_DONE=0`). Full 247-case Release smoke started at
+04:52 UTC with `MTG_FLAG_NONCONV=1 MTG_FD_ORACLE=1` so its same-manifest run is also the mandatory
+all-game legality sweep (`postbeasts-smoke.log`, `POSTBEASTS_SMOKE_DONE`). A detached classifier waits
+for all cases and the final result (`POSTBEASTS_SMOKE_CLASSIFY_DONE`). The smoke is active under the
+heavy lock. No other queue entry appeared; at 05:13 UTC we requeued ourselves to reset the head
+window, and remain the only queue entry. `postbeasts-smoke-keepalive.log` heartbeats while its watcher
+is alive. Next: final smoke audit and flags, scoped regression on its moved decks, audited GT accept,
+land, then fast mullgen on the frozen commit.
+
 **2026-11-23 03:23 UTC Beasts landing update:** Beasts landed `961306e7a` at ~03:18 and our
 session became queue head. Its change includes general engine files (`TurnSolver.cpp`,
 `Dominance.h`, `SpellEffects.*`, `GameState.h`), so the pre-Beasts scoped regression was stopped
