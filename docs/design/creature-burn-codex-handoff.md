@@ -26,6 +26,17 @@ continues its ~390-step test target; rebase onto `122db56b7`, then run an increm
 those results are prevalidation until the incremental rebuild. A new detached queue hold heartbeats in
 `queue-hold-postworldfire.log`. Requeue behind Beasts before the head window is exhausted if smoke is still running.
 
+**01:03 UTC update:** The 390-step post-Blood Sun Release build passed, then 4,146/4,146 unit tests and
+3,667,573 assertions passed (`POSTBLOOD_BUILD_DONE=0`, `POSTBLOOD_UNIT_DONE=0`). The pre-Worldfire scenario
+run was stopped because final smoke runs scenario sanity. The 21 local commits were rebased cleanly onto
+Worldfire's `122db56b7`, restoring the two user edits afterward; current HEAD was `de800d56c` before this
+handoff edit. Worldfire's source change is only the human tutor-menu default in `SpellEffects.cpp`, but the
+fingerprint made CMake queue another full 390-object build. That redundant all-target rebuild was stopped;
+`run-final-mtg-build.sh` builds the supported `mtg` target only (22 steps, `FINAL_MTG_BUILD_DONE`). A detached
+`run-final-smoke-after-build.sh` starts full `MTG_PGO=0 test/regression.sh --smoke` under the heavy lock as soon
+as it succeeds (`final-integrated-smoke.log`, `FINAL_SMOKE_AFTER_BUILD_DONE`). Final smoke includes the 610-scenario
+sanity stage. We are still queue head, Beasts next; requeue before the 2-hour head window if the smoke is unfinished.
+
 The previous full smoke was interrupted when its attached tool session stopped, and the queue lease passed to
 Blood Sun. No user decision is pending. Rejoined the queue as number 1 behind Blood Sun; a detached waiter
 tracks `build/scratch/cb-integrated/QUEUE_PROFILE_READY`. A detached prequeue full smoke is now running under
