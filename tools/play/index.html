@@ -4760,6 +4760,12 @@ function wireDivideBoard(d){
 
 function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
+  // Multi-pick dialogs repaint after each toggle. Keep the card list at the card the
+  // player was working on instead of jumping back to its first row.
+  const sameDecision=panel.dataset.decisionIndex===String(d.decision_index)
+                  && panel.dataset.decisionType===dec;
+  const panelScroll=sameDecision ? panel.scrollTop : 0;
+  const gridScroll=sameDecision ? [...panel.querySelectorAll('.tutgrid')].map(g=>g.scrollTop) : [];
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder'||dec==='exile_reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='dredge' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor' || dec==='revive' || dec==='rummage'
@@ -4813,6 +4819,10 @@ function renderDecisionPanel(d, dec){
                   : dec==='choose_abilities' ? chooseAbilitiesPanelHtml(d)
                   : dec==='creature_type' ? creatureTypePanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
+  panel.dataset.decisionIndex=String(d.decision_index);
+  panel.dataset.decisionType=dec;
+  panel.scrollTop=panelScroll;
+  panel.querySelectorAll('.tutgrid').forEach((g,i)=>{ g.scrollTop=gridScroll[i]||0; });
   wireDecisionPanel(d, dec);
   // Pre-game keep/bottom decisions consult the deck's MULLIGAN TABLE, but its parse is expensive, so it
   // is fetched ASYNCHRONOUSLY (fetchKeepHint) in parallel with the modal -- the human decides without
@@ -4821,7 +4831,7 @@ function renderDecisionPanel(d, dec){
   if ((dec==='mulligan' || dec==='bottom') && !(d.ai_set&&d.ai_set.length)
       && d._keepHint===undefined && !d._keepHintPending) fetchKeepHint(d);
 }
-function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; const b=$('decback'); b.className=''; b.style.display='none'; }
+function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; delete p.dataset.decisionIndex; delete p.dataset.decisionType; const b=$('decback'); b.className=''; b.style.display='none'; }
 
 // ---- Activation picker (a source with SEVERAL distinct activations) -------------------------
 // Not an engine decision — a QUEUE-time choice, because the LineSpec verb has to name what it
