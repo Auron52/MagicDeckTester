@@ -6183,7 +6183,11 @@ function wireDecisionPanel(d, dec){
   }
   else if (dec==='dragon'){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>toggleDragon(d, +b.dataset.opt));
-    const ai=panel.querySelector('#dragonai'); if (ai) ai.onclick=()=>{ S.dragonSel=new Set(aiDragonSet(d)); renderDecisionPanel(d,'dragon'); };
+    const ai=panel.querySelector('#dragonai'); if (ai) ai.onclick=()=>{
+      S.dragonSel=new Set(aiDragonSet(d));
+      if (/ cards to HAND$/.test(d.source||'')) refreshRevelationSelection(d);
+      else renderDecisionPanel(d,'dragon');
+    };
     const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDragonBatch(d);
   }
   else if (dec==='sac_tutor'){
@@ -6582,11 +6586,22 @@ function commitDiscardBatch(d){
 // Multi-select Dragonstorm put override: toggle a candidate Dragon in/out of the put set (capped at
 // max_puts), then commit all at once. The engine reads ONE int per candidate (1 = put), in candidate
 // order, so we send a 0/1 flag per candidate (like divide/Soulfire). The engine keeps the shown order.
+function refreshRevelationSelection(d){
+  const panel=$('decpanel'), sel=S.dragonSel||new Set(), n=sel.size, cap=d.max_puts||0;
+  panel.querySelectorAll('.tutgrid [data-opt]').forEach(card=>
+    card.classList.toggle('sel', sel.has(+card.dataset.opt)));
+  const count=panel.querySelector('.pcount'); if (count) count.textContent=`${n} / ${cap} selected`;
+  const confirm=panel.querySelector('#decconfirm'); if (confirm){
+    confirm.textContent=`Take ${n} card${n===1?'':'s'}`;
+    confirm.disabled=n>cap;
+  }
+}
 function toggleDragon(d, oi){
   const cap=d.max_puts||0, sel=S.dragonSel||(S.dragonSel=new Set());
   if (sel.has(oi)) { sel.delete(oi); }
   else { if (sel.size>=cap){ flashHint(`Up to ${cap} — deselect one first.`); return; } sel.add(oi); }
-  renderDecisionPanel(d,'dragon');
+  if (/ cards to HAND$/.test(d.source||'')) refreshRevelationSelection(d);
+  else renderDecisionPanel(d,'dragon');
 }
 function commitDragonBatch(d){
   const cap=d.max_puts||0, sel=S.dragonSel||new Set();
