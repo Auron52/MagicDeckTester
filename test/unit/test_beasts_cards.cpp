@@ -99,6 +99,19 @@ struct BeSearchedScope
 };
 }   // namespace
 
+TEST_CASE("Beasts Utopia Sprawl searches only mana colours its list can spend")
+{
+    BeastsProvider provider;
+    GameState s = BeState();
+    const auto all = provider.DeckProvider::EtbChoiceCandidates(s, 0, BeDef("Utopia Sprawl"));
+    const auto kept = provider.EtbChoiceCandidates(s, 0, BeDef("Utopia Sprawl"));
+    CHECK(all.size() == 5);
+    CHECK(kept == std::vector<int>{ static_cast<int>(Color::Green) + 1,
+                                   static_cast<int>(Color::Red) + 1 });
+    CHECK(provider.EtbChoiceCandidates(s, 0, BeDef("Wild Growth"))
+          == provider.DeckProvider::EtbChoiceCandidates(s, 0, BeDef("Wild Growth")));
+}
+
 TEST_CASE("Beasts provider routing survives removal of any one signature card")
 {
     BeDef("Elder Gargaroth");

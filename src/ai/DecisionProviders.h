@@ -667,6 +667,8 @@ class BeastsProvider : public DeckProvider
 public:
     const char* Name() const override { return "Beasts"; }
     int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    std::vector<int> EtbChoiceCandidates(const GameState& s, int controller,
+        const CardDefinition& def) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }
     bool RestrictedSecondMainLive(const GameState& s) const override;
     // Combat damage and toxic/proliferate resolve before this phase. The list has

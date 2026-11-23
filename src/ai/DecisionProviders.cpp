@@ -9676,6 +9676,23 @@ bool DecisionProvider::OffersOilVigilanceMenace(const GameState& s, const CardDe
 bool BeastsProvider::RestrictedSecondMainLive(const GameState& s) const
 { return s.combat_resource_turn == static_cast<std::int16_t>(s.TurnSeq()); }
 
+std::vector<int> BeastsProvider::EtbChoiceCandidates(const GameState& s, int controller,
+                                                     const CardDefinition& def) const
+{
+    std::vector<int> out = DeckProvider::EtbChoiceCandidates(s, controller, def);
+    if (def.card.m_name != "Utopia Sprawl"
+        || DecisionUnpruned(UnprunedGate::EtbColor)) { return out; }
+    // Utopia Sprawl: the shipped list's strict coloured costs are {G} and {R}.
+    // Kaheera's {G/W} pips can use green. W/U/B from Sprawl can therefore pay
+    // only generic costs, which green pays too. Keep both G and R searched.
+    const int red = static_cast<int>(Color::Red) + 1;
+    const int green = static_cast<int>(Color::Green) + 1;
+    std::vector<int> kept;
+    if (std::find(out.begin(), out.end(), green) != out.end()) { kept.push_back(green); }
+    if (std::find(out.begin(), out.end(), red) != out.end()) { kept.push_back(red); }
+    return kept.empty() ? out : kept;
+}
+
 int BeastsProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     // With Packleader already watching, Kaheera first makes a later Warchief

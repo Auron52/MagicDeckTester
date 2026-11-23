@@ -6,12 +6,18 @@ The analyzed list is [`decks/Beasts/Beasts.cod`](../../decks/Beasts/Beasts.cod),
 
 | Sample | Result |
 | --- | ---: |
-| Standard overnight, depth 5 / budget 20, four seeds | 1,192 wins / 1,200 games (99.33%); 4.959 turns among wins |
-| Two headed overnight, depth 5 / budget 20, four seeds | 200 wins / 200 games; 5.285 turns |
-| Standard regression, depth 5 / budget 20, two seeds | 100 wins / 100 games; 4.970 turns |
-| Official cost gate, worst searched two headed shape | 2.62 times same-run Hinata, below the 3 times limit |
+| Standard overnight, depth 5 / budget 20, four seeds | 1,192 wins / 1,200 games (99.33%); 4.951 turns among wins |
+| Two headed overnight, depth 5 / budget 20, four seeds | 200 wins / 200 games; 5.280 turns |
+| Standard regression, depth 5 / budget 20, two seeds | 100 wins / 100 games; 4.960 turns |
+| Official cost gate before the color prune, worst searched two headed shape | 2.62 times same-run Hinata, below the 3 times limit |
 
 The profile was generated from 1,000 card-score games at seed 221122. It keeps one to five lands, has no required card, and uses depth 1 / 1 ms evaluation for mulligan bottoms, refining five finalists. That policy preserved all 215 paired win turns in admission and fresh-seed screens. An exhaustive keep and bottom table is a separate future profile stage.
+
+## Search cost
+
+A three-game Release depth-5/budget-20 branch census recorded 7,260,504 raw plan combinations. Utopia Sprawl was the largest option group in 73.4% of those combinations, Wild Growth in 8.9%, and Kaheera's companion action in 8.8%. These are branch attributions, not isolated CPU shares. The slowest 10% of decisions used 79.5% of search units, and aborted iterative-deepening passes used 47.4% of units. The ledger records the capture and other candidate prunes that lacked a safe dominance proof.
+
+For the shipped list, Utopia Sprawl's white, blue, and black mana can only pay generic costs; green can pay those costs and the deck's green or green/white-hybrid costs. The Beasts provider therefore searches green and red Sprawl choices. The full legal color menu remains available to a human player and to the unpruned audit. On 65 fresh paired standard and two-headed games, this reduced deterministic search units by 36.0% and 36.3%, respectively, without changing a win turn. The full overnight tier had 34 earlier and zero later loss-penalized outcomes in 3,000 searched games. Its 8,000 depth-zero games had 237 earlier and 14 later outcomes, improving the net loss-penalized score. The ledger records the per-tier evidence.
 
 ## Implementation and verification
 
@@ -29,6 +35,7 @@ All three Beasts and two headed regression tiers were accepted without changing 
 | Per-turn second main after combat creates a hand card or usable counter resource | `BeastsProvider` | Search shape. It keeps the full second-main menu on resource turns and avoids a second solve on other turns. The deck-wide comparison is in the ledger. |
 | Skip a postcombat *kill-only* search when no postcombat effect can kill | `BeastsProvider::PostCombatCannotKillOptIn` | Correctness shortcut backed by the stock list's absence of postcombat burn, poison, mill, extra combat, and instant-win effects. |
 | Kaheera before Warchief when Packleader is watching | `BeastsProvider::CastOrderRank` | Cast-order preference that realizes the Packleader draw; a payable Warchief-first rescue remains searchable. |
+| Green and red Utopia Sprawl choices in autonomous Beasts search | `BeastsProvider::EtbChoiceCandidates` | Dominance prune for the shipped list's color demands. White, blue, and black choices pay only generic costs that green can pay. Human play and `MTG_UNPRUNE=etbcolor` retain all five. |
 | Same-name ETB dig targets fold to one rank | `BeastsProvider::EtbDigCandidates` | Identity fold: two copies produce the same hand name and remaining library multiset. The human menu still shows legal targets. |
 | Migloz vigilance/menace grant and artifact/enchantment destroy targets narrow in autonomous play | `BeastsProvider` oil and target hooks | Pruning accepted by the user. Human play and the unpruned gates retain the complete legal menu. |
 | Poison progress in the no-win leaf; extremely narrow no-win certificate | `BeastsProvider` | Search evaluation and proof. The certificate only proves an empty action state winless and refuses poison-bearing states. |
