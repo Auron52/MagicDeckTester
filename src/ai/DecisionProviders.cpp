@@ -73659,6 +73659,11 @@ bool BloodSunRevExplorationBridge(const GameState& s, int controller)
     bool fb_bf = false, fb_hand = false;
     BsHave(s, controller, BsIsFastbond, fb_bf, fb_hand);
     if (fb_bf || fb_hand) { return false; }
+    // A held Grim Tutor can recover Revelation on the extra turn. Spending an
+    // additional X here to fetch another copy can displace the cheaper Warp +
+    // large-land package that already wins this round (2HG seed 2031/index 29).
+    for (const Card& c : pl.hand)
+    { if (c.m_name == "Grim Tutor") { return false; } }
     int warp = 0, rev = 0, exploration = 0, lotus = 0;
     for (const Card& c : pl.library)
     {

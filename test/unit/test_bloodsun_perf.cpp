@@ -273,6 +273,9 @@ TEST_CASE("Blood Sun Revelation priority reaches the saved bridges at high life 
         held.players[0].hand.push_back(CardPf("Blooming Marsh", 303));
         const std::vector<std::string> hold = { "Fastbond", "Lotus Vale", "Time Warp" };
         CHECK(wave0(held).count(hold) == 1);
+        GameState grim = s;
+        grim.players[0].hand.push_back(CardPf("Grim Tutor", 304));
+        CHECK(wave0(grim).count(bridge) == 0);
     }
 }
 

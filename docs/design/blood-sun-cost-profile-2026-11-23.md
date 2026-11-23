@@ -151,14 +151,26 @@ current played turn removed those regressions. Results for the final scoped arm:
 
 | Set | Old mean turn score | New mean turn score | Earlier / later | Wins old / new | Old / new deterministic units |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Tuning, seed 910000 | 5.3700 | 5.3400 | 3 / 0 | 94 / 94 | 46,012,321 / 45,899,240 |
-| Held-out, seed 920000 | 5.3300 | 5.3100 | 2 / 0 | 93 / 93 | 67,911,388 / 67,808,983 |
+| Tuning, seed 910000 | 5.3700 | 5.3400 | 3 / 0 | 94 / 94 | 46,012,321 / 45,899,096 |
+| Held-out, seed 920000 | 5.3300 | 5.3100 | 2 / 0 | 93 / 93 | 67,911,388 / 67,808,091 |
 
-The complete per-game `.wins` and `.units` files are under
-`build/scratch/bloodsun/ref_firstturn/priority_ab/{train100_real,heldout100_real}/glog/`.
+The complete per-game baseline `.wins` and `.units` files are under
+`build/scratch/bloodsun/ref_firstturn/priority_ab/{train100_real,heldout100_real}/glog/`;
+the final-arm rows are under `priority_ab/final_200/glog/`.
 The 0.25% and 0.15% unit reductions are small; the quality result and 12/12
 first-turn coverage motivate the default-on arm. Wall-clock seconds are not used
 for the decision because the machine was contended.
+
+A separate 30-game, 30-life/two-head sample (seed 2002) found one slower win in
+the first version: index 29 was T6 without the arm and T7 with it. The hands and
+boards matched through turn 5. On turn 6, the priority X=5 package fetched a
+second Revelation and Exploration even though Grim Tutor was already held; the
+old X=4 package fetched Time Warp and larger lands and won that round. The
+provider now withholds the five-card bridge priority when Grim Tutor is held.
+The repeated 30-game sample had **0 earlier / 0 later**, 27 wins in both arms,
+and 20,160,610 versus 20,157,446 deterministic units. Index 29 returned to
+the old T6 line with an identical play digest. The sample is a targeted check,
+not a broad estimate of two-head quality.
 
 ## Next optimization checks
 
