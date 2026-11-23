@@ -2,6 +2,19 @@
 
 ## Codex continuation (2026-11-22 ~21:50 UTC)
 
+**2026-11-23 03:23 UTC Beasts landing update:** Beasts landed `961306e7a` at ~03:18 and our
+session became queue head. Its change includes general engine files (`TurnSolver.cpp`,
+`Dominance.h`, `SpellEffects.*`, `GameState.h`), so the pre-Beasts scoped regression was stopped
+after 7/109 cases; its 940 strict viewer replays had passed, but its batch cannot be a final landing
+gate. All 24 local Creature Burn commits rebased cleanly onto Beasts; the user edits in
+`.vscode/settings.json` and `test/ref_bench.json` were stashed and restored. The combined-source
+four-job full Release build and unit suite are running under the heavy lock (`postbeasts-build.log`,
+`postbeasts-unit.log`, `POSTBEASTS_BUILD_DONE`, `POSTBEASTS_UNIT_DONE`). A detached watcher starts
+full smoke immediately after a successful unit run (`postbeasts-smoke.log`,
+`POSTBEASTS_SMOKE_DONE`). Queue heartbeat is held by `postbeasts-queue-hold.log` for 90 minutes;
+if another session joins and smoke exceeds the head window, requeue again. The final regression,
+audit, legality sweep, GT acceptance, landing and fast mullgen must use this Beasts-integrated source.
+
 **2026-11-23 03:15 UTC validation update:** The final post-Worldfire Release smoke completed all 243 cases
 and scenario sanity in 86m28s (`final-integrated-smoke.log`, `FINAL_SMOKE_AFTER_BUILD_DONE=1` because
 206 cases match GT and 37 require review). The per-game audit found 31 searched slower, 13 searched
