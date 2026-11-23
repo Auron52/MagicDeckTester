@@ -2,6 +2,22 @@
 
 ## Codex continuation (2026-11-22 ~21:50 UTC)
 
+**2026-11-23 06:37 UTC final-smoke update:** The Beasts-integrated full smoke completed all 247 cases
+in 100m03s. Scenario sanity passed. No `[nonconv]` or `[fd-diverge]` diagnostic was emitted. All 243
+cases shared with the pre-Beasts full smoke were byte-for-byte identical; the four new Beasts cases
+had three GT matches and a single d3 gi2 T4→T5, for 209 matches and 38 moved cases overall. The
+per-game audit lists 32 searched slower and 13 faster. `postbeasts-smoke-classify.log` classified
+30 of 32 slower as budget churn at 4x/16x, including Beasts d3 gi2. The two persistent games are
+the already investigated Creature Burn d5 gi98 (changed keep) and 1 Drop Burn d5 gi87 (requested
+Vexing Devil opponent policy). Caution: this checkout's saved `smoke-baseline` binary predates Beasts,
+so the inline old-line replay for Beasts gi2 disagrees with its committed `.wins` score; trust the
+committed per-game score and the classifier, not that inline old-line replay. A pooled regression on
+all 26 moved deck variants is running under the heavy lock (`postbeasts-scoped-regression.log`,
+113 cases/27,968 games, `POSTBEASTS_SCOPED_REGRESSION_DONE`); its strict viewer gate is part of the
+run. A detached watcher starts `classify_turn_later.sh regression` after the complete run. Queue
+keepalive is tied to this regression wrapper; no other session is queued. Next: audit regression,
+accept GT, check logs/references, land, launch fast mullgen.
+
 **2026-11-23 05:13 UTC integrated gates update:** The full post-Beasts four-job Release build passed
 390/390 steps (`POSTBEASTS_BUILD_DONE=0`). The integrated unit suite passed 4,153/4,153 cases and
 3,667,878/3,667,878 assertions (`POSTBEASTS_UNIT_DONE=0`). Full 247-case Release smoke started at
