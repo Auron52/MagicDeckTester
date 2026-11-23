@@ -63,3 +63,10 @@ Slower games: hinata2hg 160,746; hinata d3 518,746,1152,1979; hinata d5 518,746;
 - Traces (niv d5 gi207, hinata d5 gi518, on/off): sg/trace.json -> sg/traces (lane, foreground-ish).
 Next: check whether OFF's niv gi207 T3 kill used an illegal {C}-as-coloured payment (then the "slower" is the
 illegal win removed, not a regression); classify each slower game via d8b0/escalation; accept or root-cause.
+## Slower-game findings so far (traces sg/traces)
+- niv d5 gi207 (3->4): OFF's realised T3 is ILLEGAL. T3 board Island, Saprazzan Skerry, Sol Ring, Izzet Signet, Generator
+  Servant ({T},sac: {C}{C}); no land drop. OFF casts Ponder {U} + Niv-Mizzet, the Firemind {2}{U}{U}{R}{R} + Curiosity {U}:
+  needs {R}{R}, but the only red source is the Signet (one {R}). Colourless paid a red pip = exactly the bug. ON plays a
+  legal T4. So that slower game is the illegal win removed (same gi in niv d3/2hg presumably).
+- hinata d5 gi518 (5->6): diverges T3 (ON plays Mountain + one Preordain; OFF plays Preordain, Orchard, Preordain).
+  Classification pending d8b0/escalation (sg/slow.json, lane, started 14:17 UTC 11-23 after 14 h lane queue).
