@@ -95,3 +95,7 @@ illegal win removed, not a regression); classify each slower game via d8b0/escal
   hinata-gi548 worktree -- the last --both run (chain1) was at 628fcc728; 26d1a31e8 only adds the heurarm slot (env-default
   identical), but re-run --both before accepting to be safe. Then check_gt_logs.py, check_references_safe.py, push wip.
   Step 5 (Soulfire follow-up sim/real mismatch) NOT started.
+
+## APPROVED by coordinator 11-23 (accept as rules-correctness fix)
+- chain2 RUNNING: build/scratch/claude_prepayc/chain2.sh PID 1572902 (box lock -> build -> --both; log regr2.log; DONE marker chain2.DONE).
+- Then: --both --accept-with-regressions note, check_gt_logs, check_references_safe, push wip.
