@@ -421,9 +421,9 @@ params from multiple cards, so removing Herald or a single signature card retain
 2. **Second main (USER-owned main-1-vs-main-2).** Contested Cliffs (fight after attacking),
    Elder Gargaroth (draw mode / token -> Packleader draw) and Garruk's Harbinger (combat-damage
    dig) all create combat-time resources, so the deck needs a searched post-combat main.
-   The provisional batch-J shape is a per-turn gate after an actual combat-time hand arrival
+   The adopted batch-J shape is a per-turn gate after an actual combat-time hand arrival
    or a proliferated Garruk/Herald resource. Deck-wide main 2 remains available through
-   `MTG_FORCE_USES_M2`; none/per-turn/deck-wide cost and outcome measurement is in the Checkpoint above. The pinned-Hinata admission gate is pending.
+   `MTG_FORCE_USES_M2`; none/per-turn/deck-wide cost and outcome measurement is in the Checkpoint above. The pinned-Hinata admission gate passed at 2.62×.
 3. **Elder Gargaroth's life mode** is folded away in the provider as a sound dominance (nothing
    reads our life; max self-damage 13 < 20). The viewer still offers all three modes.
 
