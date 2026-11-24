@@ -35,6 +35,9 @@ Burgeoning 183, Archdruid's Charm 171, Manabond 147.
   library.
 - The hand can grow this turn only through Guild Summit's draws: a Summit ours on the battlefield, in hand, or being
   paid for. Otherwise the hand is known and a colour nothing in it can spend is not held.
+- ONLY WHILE A CONTINUATION CAN FOLLOW (commit 090ca0337): the spell being paid for opens a breakpoint (Sylvan
+  Scrying / Archdruid's Charm tutor, Guild Summit, Exploration), an opener in hand fits in the rest of the line, or a
+  Guild Summit of ours is out. Otherwise nothing is reserved (the rest of the line is all the turn casts).
 - Gates Ablaze and lands spend nothing. Only coloured pips are reserved (the amount left does not depend on which
   sources paid; the colours do).
 - Chain: drop the blue first, then one green at a time, then the blue alone: {G}{G}{U} -> {G}{G} -> {G} -> {U}.
@@ -43,6 +46,9 @@ Burgeoning 183, Archdruid's Charm 171, Manabond 147.
   payment keeps ends the loop (the greedy's payment stands). Otherwise, for an entry the board can pay jointly, one
   of the greedy's sources is held out, then (reserve only) two together; the first that keeps the entry is the
   payment made. Never a refusal: the greedy pays when nothing keeps an entry.
+- Held payments (ReserveHoldOut): only the greedy's sources that make a colour an open entry needs are candidates;
+  singles, then pairs, each made ONCE and read against every open entry; the most preferred entry kept wins, ties to
+  the earliest candidate (the same answer as trying candidates per entry).
 
 ## The cheap gate (exact; HoldSupply in ManaPayment.cpp)
 
@@ -96,3 +102,30 @@ The gate removes 35.5% of the list mode's overhead (111.2G -> 71.7G) and 17% of 
 | + one held payment read against every open chain entry (exact restructure) | 419.22 | 57,868 | identical |
 | + candidates = only greedy sources making a colour an open entry needs | 408.76 | 57,868 | identical (0 lines) |
 | reserve-first (hold the sources a solve of the entry takes) | 408.76 | 17,420 | REJECTED: fires 3x less, no cheaper |
+| + reserve only while a continuation can follow (policy) | 379.70 | 39,646 | moves play |
+
+### Final (v7 = 090ca0337), the 120-game slice
+
+| arm | G instr | vs off |
+|---|---|---|
+| off | 1266.22 | - (identical games to 56f23f14c off) |
+| list | 1336.42 | x1.0554 (identical games to 56f23f14c list, which was x1.0878) |
+| reserve | 1369.99 | x1.0820 (v1 reserve was x1.1728) |
+
+| reserve probe (decided, discarded; plays the off games) | 1385.80 | x1.0944 (0 differing lines vs off) |
+
+v7 exactness: off and list identical to v1 / 56f23f14c (0 lines); VERIFY on v7: reserve kept-claims 1,108,686,
+trial-cuts 513,021, infeasible-claims 579,274; list 1,652,718 / 1,531,323 / 383,632; all 0 MISMATCH, verify games
+identical to the plain arms. Fluctuator / Prevent Damage / Gods (other.json, 30 games, VERIFY on): identical to
+56f23f14c, claims 8,057 / 261 / 927, 0 MISMATCH.
+
+Win turns on this slice (too small for a verdict): play 5.45 / 5.45 / 5.45, 2HG 5.125 all arms, d0 6.5 / 6.5 / 6.475.
+
+## What remains
+
+- The three-arm A/B: `logs/maze-reserve/reserve_ab_gen.py <out.json>` (14,400 jobs: 2,500 play d5 b20, 2,000 2HG,
+  300 d0, each x off / list / reserve; seeds 29400000 / 29600000 / 29800000). Not run.
+- Further reserve cost cuts, if the A/B says the reserve is worth keeping: the remaining work is the held payments
+  (2HG: ~33k single + ~18k pair tries per game against ~4k fires) and the trial's pre copy + kept solves. Pairs could
+  be limited to entries of two or more reserve pips; a candidate whose colours the paid board still has could be
+  skipped (both policy, need their own check).
