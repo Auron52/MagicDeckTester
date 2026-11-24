@@ -1,3 +1,12 @@
 {
- "entries": []
+ "entries": [
+  {
+   "branch": "wip/batch-1123",
+   "head_since": "2026-11-24T01:57:20Z",
+   "host": "839667a3a15d",
+   "id": "839667a3a15d:wip/batch-1123",
+   "joined": "2026-11-24T01:57:20Z",
+   "note": ""
+  }
+ ]
 }
