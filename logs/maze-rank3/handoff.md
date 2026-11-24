@@ -47,3 +47,22 @@ MTG_TMP_NO_TIEBREAK (old ranks) and MTG_TMP_NO_TALON_SKIP (disables the 50f807e9
   (the two new tie-break cases included). Game confirmations (step 1-2 above) NOT run yet.
 * NC batch ended rc=143 (SIGTERM, 16:30:45 UTC) with NO job finished -- NC check UN-RUN. Redo with fewer/cheaper jobs
   (e.g. the three base+new arms one at a time) if the coordinator wants it.
+
+## Results (agent 2, 2026-11-24 16:30-17:10 UTC) -- fix BUILT, VERIFIED, TMPDIAG removed, committed
+Binary for the runs: scratch/claude_maze_rank3/bin1/mtg (8342cf810 build); clean rebuild re-checked on g2030/g1770/g993 (same digests).
+All d8 b0, outputs scratch/claude_maze_rank3/{v1,v1_notb,v1_nts,rec14,v2}/out.
+* Default (tie-breaks + Talon skip): g2030 T5, g1770 T6, g1149 T5 -- every digest == base (c384027b / f2804809 / cbcb318c);
+  g993 (2HG) T4, digest == base (c95c094b).
+* MTG_TMP_NO_TIEBREAK=1: g2030 T6, g1770 T7, g1149 T6 -- digests == the frozen 50f807e9c binary's (6841d138 / b8ca9c3e /
+  12c6b7e5); g993 T4. So the tie-breaks alone recover the three.
+* MTG_TMP_NO_TALON_SKIP=1: the three stay recovered (T5/T6/T5); g993 T5 -- the Talon skip is still what holds g993.
+* The 14 earlier recovered games (d8n new arms, minus the 3 above and play g1395, which has no base result): all recover
+  and every digest equals the d8n BASE digest (2HG g178 and g1321 now match base exactly; under 50f807e9c they had won on
+  the same turn with a different digest).
+* NC batch (MTG_NC_SEARCH=1, 50f807e9c binary): killed at 3.5 h with no job finished (nc_g2030_base still running).
+  UN-RUN. It is not needed: the fix recovers every game.
+* Unit: `mtg-test -tc="*Maze*,*payment*,*pay*"` 638/638 cases, 29,597 assertions pass.
+* A/B generator logs/maze-rank3/mk_ab_tb.py -> scratch/claude_maze_rank3/ab_tb.json, 11,000 jobs (base vs new;
+  2,500 play d5 b20 / 2,000 2HG / 1,000 d0; seeds 25700000 / 26700000 / 27700000, grepped unused). NOT RUN (coordinator).
+  The 50f807e9c arm cannot be selected by flags now that the diagnostic is gone. Its comparison with base is ab_new.
+  Snow is not in it, because the change is MazesEndProvider-only.
