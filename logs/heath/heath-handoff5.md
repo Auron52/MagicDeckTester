@@ -63,5 +63,6 @@ Binaries (build volume, `build/scratch/heath/`): `mtg.fad` = a0773a63d; `mtg.bas
    lists the deleted `hand_fixing_produces` key (harmless); WF 103 / 1363 / 1684 / 205 unresolved.
 
 ## Running jobs (mine)
-`build/scratch/heath/r7/build2.sh` (lane): heath-derived full build + units (r7/unit.log, r7/DONE_unit), then the
-base2 build (r7/build_base2.log, r7/DONE_base2 -> mtg.base2). Progress in r7/progress.
+None. base2 built (mtg.base2, reproduces r4 base on all 21 Burn games); heath-derived full build at a0773a63d: units
+4127/4127 (r7/unit.log), mtg unchanged vs mtg.fad. r8 manifests dry-run OK on both binaries (5 one-game jobs, digests
+equal across arms).

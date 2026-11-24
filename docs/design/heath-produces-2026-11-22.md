@@ -278,7 +278,7 @@ tie-break); the search's own land menu is unchanged. Why it is sound: the fetch 
 colours here, a fetch kept in hand stays flexible (it can still become any colour it reaches) and keeps its reshuffle
 for a later Brainstorm / Ponder, so "play the less flexible land first" is the ordinary sequencing rule; and it is
 exactly base's order between the two, so the fix's change narrows to fetch-vs-mono and the other in-hand readers.
-Unit test: `test_boars_cards.cpp` "MTG_FETCH_AFTER_DUAL: ...".
+Unit test: `test_boars_cards.cpp` "MTG_FETCH_AFTER_DUAL: ..."; units 4127/4127 at a0773a63d.
 
 Single games at the r4 setting (rebased binary a0773a63d, `MTG_FETCH_AFTER_DUAL=0` / `=1`; lever off reproduces the r4
 derived turn in every game and is move-for-move identical to the pre-lever rebased binary on the 5 games checked):
@@ -288,6 +288,9 @@ derived turn in every game and is move-for-move identical to the pre-lever rebas
 | Modern RW Burn | 15 of 16 (5555 stays 6: base fetches T1, derived plays Mountain) | 4 of 5 (2703 stays 3) |
 | Morph | 5 of 6 (6404 stays 5: Foothills against a basic Forest) | 3 of 3 |
 | Five Colour | 4 of 4 | (none) |
+
+The rebased base (`mtg.base2`, 249db2aa7) reproduces r4 base's turn on all 21 Burn games, and the rebased derived (lever
+off) r4 derived's, so the r4 picture holds on the current tree.
 
 So on these decks the lever puts back base's play wherever the hint only re-broke a fetch/dual tie (and with it most of
 the r4 faster games, which were the same coin flip). What it keeps of the fix is the fetch over a mono-colour land and
