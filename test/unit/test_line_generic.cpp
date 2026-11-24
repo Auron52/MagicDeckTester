@@ -148,8 +148,12 @@ TEST_CASE("payment: the scarce hold keeps the line's only {U} for Cloud of Faeri
         plan.searched_order = true;
         heurarm::t_arm[heurarm::SCARCE_COLOR_MASK] = static_cast<std::int8_t>(arm);
         heurarm::t_arm[heurarm::PREPAY_AURA_STAGE] = 0;
+        // MTG_LINE_KEEP_CRIT (default ON) also keeps the Coast's {U} for the Cloud (the last {U} source): pinned OFF so
+        // the =0 arm is the historical payer.
+        heurarm::t_arm[heurarm::LINE_KEEP_CRIT] = 0;
         GameState g = s;
         TurnSolver::ApplyPlan(g, plan, /*is_pre_combat=*/true);
+        heurarm::t_arm[heurarm::LINE_KEEP_CRIT] = -1;
         heurarm::t_arm[heurarm::PREPAY_AURA_STAGE] = -1;
         heurarm::t_arm[heurarm::SCARCE_COLOR_MASK] = -1;
         CHECK(g.spells_cast_this_turn == (arm == 1 ? 2 : 1));   // =0 pins the historical drop

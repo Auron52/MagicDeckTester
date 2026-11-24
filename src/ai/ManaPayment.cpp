@@ -9507,7 +9507,7 @@ thread_local std::vector<int> g_plan_reserved_sources;
 thread_local ManaCost g_line_unpaid_cost;
 thread_local int      g_line_reducer_credit = 0;   // see ManaPayment.h (LineReducerCreditScope)
 thread_local int      g_line_noncreature_mv = 0;   // see ManaPayment.h (LineReducerCreditScope)
-thread_local bool     g_line_keep_bound = false;   // see ManaPayment.h (LineReducerCreditScope, MTG_LINE_KEEP_ALL)
+thread_local int      g_line_keep_bound = 0;       // see ManaPayment.h (LineReducerCreditScope, LineKeepBound)
 thread_local bool     g_line_hold_has_acts = false;   // see ManaPayment.h (LineUnpaidCostScope)
 thread_local bool     t_scarce_held_only = false;   // see ScarceHeldOnlyScope (ManaPayment.h)
 thread_local bool     g_line_opens_unseen = false;   // see ManaPayment.h (LineOpensUnseenScope)
@@ -11327,6 +11327,87 @@ struct LineKeepPlan
     std::optional<manaoracle::PayOption>   opt;
     bool Any() const { return !held.empty() || opt.has_value(); }
 };
+// MTG_LINE_KEEP_CRIT: the crit-mode gate's calls, the calls it let through to the trial, and their repairs.
+static std::atomic<unsigned long long> g_lkc_gate{0}, g_lkc_pass{0}, g_lkc_fired{0};
+struct LineKeepCritStats
+{
+    ~LineKeepCritStats()
+    {
+        if (!EnvOn("MTG_LINE_REDUCER_KEEP_STATS")) { return; }
+        std::fprintf(stderr, "[line-keep-crit] gate=%llu passed=%llu fired=%llu\n", g_lkc_gate.load(), g_lkc_pass.load(),
+                     g_lkc_fired.load());
+    }
+};
+static LineKeepCritStats g_lkc_stats;
+
+// THE CRIT-MODE GATE (MTG_LINE_KEEP_CRIT; a line LineKeepBound bound kLineKeepCrit). The defect: the greedy pays a
+// pip of this bill with the LAST source of a colour the rest of the line still owes, where another source could have
+// paid that pip -- Bruna s30051257 T2 {Sol Ring, Arcanum Wings}: Botanical Sanctum, the only {U}, paid Sol Ring's {1}
+// and Avacyn's Pilgrim was left with Wings' {U} unpaid; s30051968 T2 {Sol Ring, Glittering Wish}: the Forest, the
+// only {G}, paid the {1} and Remote Farm's {W}{W} could not pay the Wish's {G}. The static re-ranks built for it (7a /
+// 7b, docs/design/bruna-line-critical-levers.md) moved EVERY payment that met such a source, stranded or not, and so
+// changed payments inside lines the search had valued (Niv gi537, Dragonstorm gi679: real losses at every depth).
+// Here the rung's exact judge decides instead -- the payment changes only when the greedy's own payment strands the
+// rest and a hold-out of its sources keeps it -- and this gate only decides whether that judge is worth a scratch
+// board: true when some untapped source of ours makes a colour c the rest owes, the OTHER sources' units of c (plus
+// the float's c and wild units) fall short of the rest's c pips plus this bill's own, and this bill has a pip that is
+// not c (so the source could be spent elsewhere). One battlefield scan, no copy. It is a REACH filter, not a judge:
+// a strand it does not see (two sources that are only together the last of a colour, an over-counted any-colour
+// source) is paid as the greedy pays it today, never worse. Supply per source as the 7a supply read it: an
+// unrestricted land, ready dork or rock; a source of n colours counts its per-tap amount / n (at least 1) to each.
+static bool LineKeepCritGate(const GameState& s, const ManaCost& cost_in, const ManaCost& rest)
+{
+    const int rest_c[5] = { rest.white, rest.blue, rest.black, rest.red, rest.green };
+    const int cost_c[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+    unsigned owed = 0;
+    for (int ci = 0; ci < 5; ++ci) { if (rest_c[ci] > 0) { owed |= 1u << ci; } }
+    if (owed == 0) { return false; }
+    const int mv = cost_in.ManaValue();
+    const ManaPool& fl = s.floating_mana;
+    int tot[5] = { fl.white + fl.wild, fl.blue + fl.wild, fl.black + fl.wild, fl.red + fl.wild, fl.green + fl.wild };
+    constexpr int kMaxSrc = 48;
+    unsigned src_mask[kMaxSrc];
+    int      src_each[kMaxSrc];
+    int      n_src = 0;
+    const int active = s.active_player_index;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != active || q.tapped || q.def_absent) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd == nullptr || qd->params.creature_mana_only || qd->params.colored_creature_only
+            || BigSpellOnlySource(qd->params))
+        { continue; }
+        const bool dork = qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, s.battlefield);
+        if (!dork && !q.card.IsLand() && !qd->params.mana_rock) { continue; }
+        unsigned m = 0;
+        for (Color c : EffectiveProducesFor(s, active, *qd, &q))
+        {
+            const int ci = static_cast<int>(c);
+            if (ci >= 0 && ci < 5) { m |= 1u << ci; }
+        }
+        if (m == 0) { continue; }
+        const int n = std::popcount(m);
+        const int amt = std::max(1, ManaProducedPerTap(*qd));
+        const int each = n == 1 ? amt : std::max(1, amt / n);
+        for (int ci = 0; ci < 5; ++ci) { if (m & (1u << ci)) { tot[ci] += each; } }
+        if ((m & owed) == 0) { continue; }
+        if (n_src == kMaxSrc) { return true; }   // a board this wide: let the judge decide
+        src_mask[n_src] = m;
+        src_each[n_src] = each;
+        ++n_src;
+    }
+    for (int k = 0; k < n_src; ++k)
+    {
+        const unsigned m = src_mask[k] & owed;
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (!(m & (1u << ci)) || mv <= cost_c[ci]) { continue; }
+            if (tot[ci] - src_each[k] < rest_c[ci] + cost_c[ci]) { return true; }
+        }
+    }
+    return false;
+}
+
 // The rung's own payments (its trials, and the oracle table's verifications) never re-enter it.
 static thread_local int t_lrk_depth = 0;
 // MTG_LINE_REDUCER_KEEP's options-table cap: the rung takes the FIRST option of the oracle's table that keeps the rest
@@ -11353,7 +11434,9 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         }
     } _clock{s_stats && keep_all, s_stats && keep_all ? std::chrono::steady_clock::now()
                                                        : std::chrono::steady_clock::time_point{}};
-    if (keep_all) { g_lka_entry.fetch_add(1, std::memory_order_relaxed); }
+    // (Stats-only: the crit mode reaches this entry on nearly every multi-cast payment, and a shared counter bumped by
+    // every worker thread is contended; the counters are printed only under MTG_LINE_REDUCER_KEEP_STATS.)
+    if (keep_all && s_stats) { g_lka_entry.fetch_add(1, std::memory_order_relaxed); }
     struct PhaseClock
     {
         bool on; int phase = 0; bool rock = false; std::chrono::steady_clock::time_point t0;
@@ -11379,6 +11462,13 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     if (rest.white + rest.blue + rest.black + rest.red + rest.green + rest.colorless == 0) { return none; }
     const int floating = static_cast<int>(state.floating_mana.Total());
     if (cost_in.ManaValue() <= floating) { return none; }   // the float pays it: nothing is tapped
+    // MTG_LINE_KEEP_CRIT: a line only the crit mode binds is tried only past its last-source gate (no scratch board).
+    if (keep_all && g_line_keep_bound == kLineKeepCrit)
+    {
+        if (s_stats) { g_lkc_gate.fetch_add(1, std::memory_order_relaxed); }
+        if (!LineKeepCritGate(state, cost_in, rest)) { return none; }
+        if (s_stats) { g_lkc_pass.fetch_add(1, std::memory_order_relaxed); }
+    }
     const bool rest_creature = g_line_noncreature_mv == 0
                             || (!for_creature && cost_in.ManaValue() >= g_line_noncreature_mv);
     const ManaCost joint = AddManaCosts(cost_in, rest);
@@ -11667,6 +11757,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             if (s_stats) { g_lk_held_paid.fetch_add(1, std::memory_order_relaxed); }
             if (!LineBillPayableOn(b.Board(), rest, rest_creature, rock)) { continue; }
             (keep_all ? g_lka_fired : g_lrk_fired).fetch_add(1, std::memory_order_relaxed);
+            if (keep_all && g_line_keep_bound == kLineKeepCrit) { g_lkc_fired.fetch_add(1, std::memory_order_relaxed); }
             if (rock.def != nullptr) { g_lkr_fired.fetch_add(1, std::memory_order_relaxed); }
             _ph.phase = 4;
             tight_dump("held");
@@ -11722,6 +11813,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             { continue; }
             if (!LineBillPayableOn(b.Board(), rest, rest_creature, rock)) { continue; }
             (keep_all ? g_lka_fired : g_lrk_fired).fetch_add(1, std::memory_order_relaxed);
+            if (keep_all && g_line_keep_bound == kLineKeepCrit) { g_lkc_fired.fetch_add(1, std::memory_order_relaxed); }
             if (rock.def != nullptr) { g_lkr_fired.fetch_add(1, std::memory_order_relaxed); }
             if (s_stats) { g_lk_fire_idx[std::min<std::size_t>(i, 3)].fetch_add(1, std::memory_order_relaxed); }
             _ph.phase = 5;
@@ -12439,7 +12531,7 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
     // Off, outside such a line, or under another rung's decision: a counter test and out.
     LineKeepPlan lrk;
     if (t_pay_nest == 1 && t_lrk_depth == 0 && !_ramp_route && haste_keep == 0 && afr_held == 0 && !phu_pay_first
-        && (g_line_reducer_credit > 0 ? LineReducerKeepOn() : g_line_keep_bound)
+        && (g_line_reducer_credit > 0 ? LineReducerKeepOn() : g_line_keep_bound != 0)
         && !state.dmg_events_armed && !manaoracle::t_float_only)
     { lrk = LineReducerKeepHold(state, cost_in, for_creature, available, honor_legacy_cco); }
     std::optional<PayRefineSnap> refine_pre;

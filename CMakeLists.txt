@@ -552,6 +552,7 @@ add_executable(mtg-test
     test/unit/test_line_reducer_keep.cpp
     test/unit/test_line_keep_all.cpp
     test/unit/test_line_keep_rock.cpp
+    test/unit/test_line_keep_crit.cpp
     test/unit/test_breaching_dragonstorm_discard.cpp
     test/unit/test_angels_discard.cpp
     test/unit/test_angels_cast_order.cpp
