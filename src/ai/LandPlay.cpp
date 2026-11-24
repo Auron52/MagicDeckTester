@@ -622,6 +622,11 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
         for (int sub = 0; sub < 2; ++sub)
         {
         if (sub == 0 && !LandClosingWindowEnabled()) { continue; }   // rule off -> single unfiltered scan
+        // Keep-the-fetch sub-order (FetchAfterDualEnabled, EngineFlags.h): in a MULTI pass, the non-fetch
+        // candidates first (ft 0), then the fetchlands (ft 1). Off, or a non-multi pass -> one unfiltered scan.
+        const bool fetch_split = want_multi && FetchAfterDualEnabled();
+        for (int ft = 0; ft < (fetch_split ? 2 : 1); ++ft)
+        {
         // The library top (Courser) is one more candidate in THIS pass: index -1 in the walk below.
         // Visited first or last within the pass per the provider's tie rule; absent (nullptr) for
         // every deck without a play-from-top permanent, which leaves the walk exactly as it was.
@@ -666,7 +671,9 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
             if (want_untapped && is_tapped)   { continue; }
             if (!want_untapped && !is_tapped) { continue; }
             if (want_multi && !is_multi)      { continue; }
+            if (fetch_split && (ft == 0) == !def->params.fetch_land_types.empty()) { continue; }
             return GreedyLandPick{ i, is_top };
+        }
         }
         }
     }

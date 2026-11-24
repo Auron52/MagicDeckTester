@@ -2591,6 +2591,21 @@ inline bool LandClosingWindowEnabled()
     return v;
 }
 
+// MTG_FETCH_AFTER_DUAL -- DEFAULT OFF (measuring; heath re-measure 2026-11-24). Inside the greedy land ranker's
+// MULTI-colour pass, try every non-fetch multi-colour land before a fetchland. Since the fetchland hand hint became
+// deck-derived (HandFixingProduces) a fetch in hand counts as multi-colour, so it TIES a real dual (Sunbaked Canyon,
+// Sacred Foundry) in that pass and hand order decides; before, it always came after. Modern RW Burn's r4 play-setting
+// slower games all diverge at exactly that tie (the search's last-resort land tie-break names the greedy pick). The
+// rule is the ordinary "keep the more flexible land": a held fetch can still become any colour it reaches (and its
+// reshuffle stays available), a dual cannot. ORDER only, and only of a permitted greedy site (the depth-0 runner, the
+// playout's drop, the enumeration's last-resort tie-break); a fetch still precedes every mono-colour land. Shared by
+// LandPlay.cpp's GreedyLandRank and its rollout mirror (TurnSolver.cpp SimulateLandPlayOne).
+inline bool FetchAfterDualEnabled()
+{
+    static const bool v = EnvOn("MTG_FETCH_AFTER_DUAL");
+    return heurarm::Flag(heurarm::FETCH_AFTER_DUAL, v);
+}
+
 // MTG_LAND_IDLE_TAPPED_FIRST -- DEFAULT OFF (measuring). Invert the ranker's untapped-first
 // preference on the FIRST land drop of the game when the mana provably cannot be spent this turn.
 // The full rationale, the safety conditions and the USER ruling behind it are at the one call site

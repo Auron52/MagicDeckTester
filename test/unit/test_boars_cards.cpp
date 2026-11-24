@@ -5,6 +5,7 @@
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/LandPlay.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -112,6 +113,28 @@ TEST_CASE("A fetchland's hand colour hint is the untapped reach of THIS deck's l
     // The battlefield is unchanged: a held fetchland makes no mana.
     Permanent& held = BPut(s, "Windswept Heath", 20);
     CHECK(EffectiveProducesFor(s, 0, h, &held).empty());
+}
+
+TEST_CASE("MTG_FETCH_AFTER_DUAL: the greedy ranker's multi pass keeps the fetchland behind a real dual, never behind a basic")
+{
+    // A Heath in hand reaches W/U/G here (library Breeding Pool + Plains), so it is multi-colour and TIES the
+    // Breeding Pool in the ranker's multi pass, where hand order decides. The lever orders the dual first.
+    GameState s = BBase();
+    s.turn_number = 1;
+    s.players[0].library = Library{};
+    s.players[0].library.push_back(BCard("Breeding Pool", 900));
+    s.players[0].library.push_back(BCard("Plains", 901));
+    s.players[0].hand.push_back(BCard("Windswept Heath", 910));
+    s.players[0].hand.push_back(BCard("Breeding Pool", 911));
+    s.players[0].hand.push_back(BCard("Forest", 912));
+    heurarm::t_arm[heurarm::FETCH_AFTER_DUAL] = 0;
+    CHECK(GreedyLandChoiceIndex(s) == 0);   // off: hand order, the Heath
+    heurarm::t_arm[heurarm::FETCH_AFTER_DUAL] = 1;
+    CHECK(GreedyLandChoiceIndex(s) == 1);   // on: the Breeding Pool, the Heath kept
+    // With no other multi-colour land the fetch still precedes the basic (the restored hint's point).
+    s.players[0].hand.erase(s.players[0].hand.begin() + 1);
+    CHECK(GreedyLandChoiceIndex(s) == 0);
+    heurarm::t_arm[heurarm::FETCH_AFTER_DUAL] = -1;
 }
 
 TEST_CASE("Windswept Heath is a real battlefield fetchland (the Wooded Foothills shape)")

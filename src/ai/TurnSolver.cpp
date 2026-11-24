@@ -85642,10 +85642,15 @@ static std::string SimulateLandPlayOne(GameState& state)
         if (LakeDropWithoutVictim(state, *def)) { return false; }
         return pass != 0 || HandFixingProduces(state, state.active_player_index, *def).size() > 1;
     };
+    // Keep-the-fetch sub-order (FetchAfterDualEnabled, EngineFlags.h; GreedyLandRank's mirror): the multi pass
+    // scans the non-fetch lands first (ft 0), then the fetchlands (ft 1).
+    const bool fetch_split = FetchAfterDualEnabled();
     for (int pass = 0; pass < 2; ++pass)
     {
         if (top_first && top_fits(pass))
         { const std::string tname = play_top(); landdrop::Record(tname, pass, alternatives); return tname; }
+        for (int ft = 0; ft < ((fetch_split && pass == 0) ? 2 : 1); ++ft)
+        {
         for (const Card& c : ap.hand)
         {
             if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: never played
@@ -85662,11 +85667,13 @@ static std::string SimulateLandPlayOne(GameState& state)
 
             bool is_multi = HandFixingProduces(state, state.active_player_index, *def).size() > 1;   // see LandPlay.cpp's measurement
             if (pass == 0 && !is_multi) { continue; }
+            if (fetch_split && pass == 0 && (ft == 0) == !def->params.fetch_land_types.empty()) { continue; }
 
             std::string name = c.m_name;
             PlayLandByName(state, name);
             landdrop::Record(name, pass, alternatives);
             return name;
+        }
         }
         if (!top_first && top_fits(pass))
         { const std::string tname = play_top(); landdrop::Record(tname, pass, alternatives); return tname; }
