@@ -2624,7 +2624,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             // excluded sources behind that land. Declared ABOVE the label so the rerun keeps it; at most once a pip.
             bool crit_demote = false;
             const bool crit_amend_live = (PayLineCritLandOn() || PayLineCritBehindDorksOn())
-                                      && (PayLineCritUntapperLastOn() || PayLineCritReserveLastOn());
+                                      && (PayLineCritUntapperLastOn() || PayLineCritReserveLastOn()
+                                          || PayLineCritGrowerLastOn());
             // MTG_PAY_DEPLETION_HOLD re-selection point (see the check after the selection below): the
             // held-depletion set is computed only once a depletion land is about to WIN a pip against an
             // alternative, and when that land turns out to be held the selection runs once more with the
@@ -2886,6 +2887,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             {
                 if (qreal == nullptr) { return false; }
                 if (PayLineCritUntapperLastOn() && qreal->params.untap_target_land && q.card.IsCreature()) { return true; }
+                // MTG_PAY_LINE_CRIT_GROWER_LAST: a scaled dork's tap grows with the line's later casts (Selesnya gi837).
+                if (PayLineCritGrowerLastOn() && q.card.IsCreature() && IsScaledManaDork(*qreal)) { return true; }
                 return PayLineCritReserveLastOn() && !q.card.IsCreature() && q_rank >= 60 && q_rank < 499;
             };
             for (int i = 0; i < bn; ++i)

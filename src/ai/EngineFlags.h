@@ -1105,6 +1105,17 @@ inline bool PayLineCritReserveLastOn()
     static const bool env_on = EnvOn("MTG_PAY_LINE_CRIT_RESERVE_LAST");
     return heurarm::Flag(heurarm::PAY_LINE_CRIT_RESERVE_LAST, env_on);
 }
+// MTG_PAY_LINE_CRIT_GROWER_LAST (MEASUREMENT ONLY, default OFF; 7a's third amendment, 2026-11-24): a SCALED mana dork
+// (IsScaledManaDork: "{T}: Add {G} for each Elf") never pays ahead of a line-critical land 7a moved behind the creature
+// band. Its yield grows with every creature the line still casts, so tapping it early for a generic pip spends it at
+// its smallest. Selesnya 2HG gi837 (s1850837, d6 b20 play): T3 Archdruid's {1} came off Priest of Titania (1 Elf)
+// instead of the land, so Priest no longer tapped for GG after Archdruid and Elvish Mystic slipped to T4 (T4 kill -> T5;
+// d8 b0 and MTG_NC_SEARCH=1 both 5). ManaPayment.cpp crit_excluded.
+inline bool PayLineCritGrowerLastOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_LINE_CRIT_GROWER_LAST");
+    return heurarm::Flag(heurarm::PAY_LINE_CRIT_GROWER_LAST, env_on);
+}
 
 inline bool PayNarrowRestrictedFirstOn()
 {

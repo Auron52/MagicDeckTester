@@ -116,3 +116,115 @@ the payer is still OWED (which payment of T2-T5 7a orders differently on this bo
 1. 7a / 7a-amended: neither clears the bar (a searched +3; aa d0 Selesnya +2 / Stompy +1). Default stays OFF unless the
    USER rules otherwise.
 2. 7b: best overall (searched -2, d0 -7) but Cyclone searched +6 and Niv / Mirrorwing / Worldfire d0 +2 / +1 / +2.
+
+## A/B 2 (2026-11-23/24, bin8 = a3feba9d1 tree): 7a amendments (R, T) and 7b ritual credit (T)
+
+Arms: **aUR** = 7a + `MTG_PAY_LINE_CRIT_UNTAPPER_LAST` + `MTG_PAY_LINE_CRIT_RESERVE_LAST`; **aUT** = 7a + untapper +
+`MTG_PAY_LINE_CRIT_RITUAL_CREDIT`; **aURT** = all three; **b** = 7b; **bT** = 7b + ritual credit. 7a arms run on the
+decks that hold a dork / untapper (bruna cyclone dragonstorm elementals jumbo selesnyav2 spirits stompy), 7b arms on the
+decks the first A/B moved (cyclone elementals mirrorwing niv spirits worldfire). MTG_PGO=0 on every arm (same binary).
+
+* **Shapes A/B** (`ab2`, 302,000 games, seed 1830000+gi, 2,000 games per arm per shape): the regression tier's d0 b0,
+  d3 b10 and d5 b20 rows (and 2HG d5 b20), every one PINNED with `ignore_play_profile`. So d5 b20 is the deck's play
+  setting only for Niv, Spirits and Worldfire (no enabled value_play block); for the rest it is one depth below it.
+* **Play-setting A/B** (`ab3`, 78,000 games, seed **1850000**+gi, 2,000 per arm): depth OMITTED so each deck's enabled
+  value_play block picks it (Bruna d7, Cyclone / Elementals / Jumbo / Mirrorwing / Selesnya (+2HG) / Stompy d6,
+  Dragonstorm d5 with its beam), b20 as shipped; checked in the `[play]` lines.
+
+Cell = avg-turn delta per game in MILLI-turns (unwon = 9; lower is better) (faster / slower), then searched CPU ratio
+vs off. "play" = the play-setting row (ab3; for Niv, Spirits, Worldfire it is their d5 b20 row). Rows that never move
+under any arm are omitted (Bruna, Elementals, Spirits: 0 at every shape for every arm; Jumbo / Selesnya / Stompy
+searched except as listed).
+
+| deck | shape | aUR | aUT | aURT | b | bT |
+|---|---|---|---|---|---|---|
+| cyclone | **play d6** | -1.0 (1/0) | 0 | 0 | **+2.5 (2/8)** | **+1.5 (4/8)** |
+| cyclone | d5b20 | +0.5 (0/1) | 0 | 0 | -2.0 (6/2) | -3.5 (7/1) |
+| cyclone | d3b10 | +0.5 (0/1) | 0 | 0 | -1.0 (7/5) | -3.5 (9/3) |
+| cyclone | d0 | 0 | 0 | 0 | +3.0 (4/8) | +1.0 (8/7) |
+| dragonstorm | **play d5** | +0.5 (0/1) | 0 | 0 | | |
+| dragonstorm | d5b20 / d3b10 | +0.5 / +0.5 | 0 / +0.5 | 0 / 0 | | |
+| dragonstorm | d0 | +2.0 (0/2) | +1.0 (0/2) | 0 | | |
+| jumbo | d0 | +2.0 (0/3) | +2.0 (0/3) | +2.0 (0/3) | | |
+| selesnyav2 | **2HG play d6** | +0.5 (0/1) | +0.5 (0/1) | +0.5 (0/1) | | |
+| selesnyav2 | d0 | -0.5 (1/0) | -0.5 (1/0) | -0.5 (1/0) | | |
+| stompy | d5b20 (play d6: 0) | +0.5 (0/1) | +0.5 (0/1) | +0.5 (0/1) | | |
+| stompy | d0 | +1.0 (0/2) | +1.0 (0/2) | +1.0 (0/2) | | |
+| mirrorwing | **play d6** | | | | 0 | 0 |
+| mirrorwing | d5b20 / d3b10 | | | | +0.5 / +0.5 | +0.5 / +0.5 |
+| mirrorwing | d0 | | | | -1.0 (2/0) | -1.0 (2/0) |
+| niv | **play d5** | | | | +0.5 (0/1) | +0.5 (0/1) |
+| niv | **2HG play d5** | | | | +1.0 (0/2) | +1.0 (0/2) |
+| niv | d0 | | | | +3.5 (2/7) | +3.5 (2/7) |
+| worldfire | play d5 / 2HG play / d3 | | | | 0 (1/1) each | 0 (1/1) each |
+| worldfire | d0 | | | | +1.0 (0/1) | 0 |
+
+Totals vs off (games; milli-turns per game):
+
+| arm | play rows | other searched | d0 |
+|---|---|---|---|
+| aUR | 0 (1/2), +0.00 | +5 (0/5), +0.16 | +9 (1/7), +0.56 |
+| aUT | +1 (0/1), +0.06 | +2 (0/2), +0.06 | +7 (1/7), +0.44 |
+| aURT | +1 (0/1), +0.06 | +1 (0/1), +0.03 | +5 (1/5), +0.31 |
+| b | **+8 (4/13), +0.50** | -4 (14/10), -0.22 | +13 (8/16), +1.08 |
+| bT | **+6 (6/13), +0.38** | -12 (17/7), -0.67 | +7 (12/14), +0.58 |
+| bT vs b | -2 (5/3), -0.12 | -8 (8/0), -0.44 | -6 (8/2), -0.50 |
+
+CPU: every searched cell is within 0.988-1.017 of off, in both directions on arms that are byte-identical there (e.g.
+aURT vs aUR on Elementals 0.998-1.000 with no game moving), so the levers cost nothing measurable. The d0 cells read
+0.94-0.99 on every arm, the job-order interleave (off runs first in each chunk), not a lever effect.
+
+### Third 7a amendment: MTG_PAY_LINE_CRIT_GROWER_LAST (G), built from the play-setting A/B
+
+Selesnya 2HG gi837 (s1850837, d6 b20 play) lost a turn under every 7a arm (4 -> 5), and stayed 5 at d8 b0 and with
+MTG_NC_SEARCH=1, while off is 4 at d8 b0 too. The logs split at T3: off pays Elvish Archdruid {1}{G}{G} from the three
+lands, then Priest of Titania taps for GG (two Elves) for Fyndhorn Elves + Elvish Mystic; under 7a the land is held
+for the line's later {W} and Priest pays Archdruid's {1} while it counts ONE Elf, so Mystic slips to T4 and the kill to
+T5. A scaled dork's tap grows with the casts the line still makes, so it is the one creature a critical land must not
+rank behind. G (crit_excluded: `IsScaledManaDork`) restores off's game exactly (same digest). It reaches only decks
+with Priest / Archdruid / Accomplished Alchemist / Three Tree City-shaped sources (of the 7a decks: Selesnya, Stompy).
+
+`ab4` (bin9 = this commit, the ab2 / ab3 seeds, aURT and aURTG on every Selesnya / Stompy shape, 40,000 games):
+aURTG vs aURT = 1 faster (gi837) / 0 slower over 20,000 pairs; every other game byte-identical. bin9 aURT = bin8 aURT on
+all 800 job files (the lever is inert when off).
+
+**7a with all three amendments (aURTG) vs off: play rows 0 (0 / 0) over 18,000 games; other searched +1 (0 / 1, Stompy
+d5 b20 gi1027, recovers at d8 b0); d0 +5 (1 / 5: Jumbo +4, Stompy +2, Selesnya -1; every one recovers at d8 b0).**
+Bruna -- the deck 7a was written for -- does not move in a single game at any shape.
+
+## d8 b0 replays of every slower game (ab2 + ab3), bin8
+
+Treatment arm at `--depth 8 --budget-ms 0 --ignore-play-profile`, seed base+gi (1830000 ab2, 1850000 ab3). Recovered =
+d8 <= the A/B's off turn. 96 replays: 80 recover. Unrecovered ones were replayed with off at d8 b0 (all = the A/B off
+turn) and with the arm under MTG_NC_SEARCH=1:
+
+| arm | deck | gi | shapes (off -> arm) | arm d8 b0 | off d8 b0 | arm NC d8 b0 | verdict |
+|---|---|---|---|---|---|---|---|
+| aUR, aUT, aURT | selesnyav2 2HG | 837 | play 4 -> 5 | 5 | 4 | 5 | real loss; FIXED by G (above) |
+| aUR only | dragonstorm | 787 | d0 6 -> unwon, d3 / d5 6 -> 7 | 7 | 6 | 7 | real loss; R's own (aUT, aURT do not lose it) |
+| aUR only | dragonstorm | 1431 | play 6 -> 7 | 7 | 6 | 7 | real loss; R's own (aURT does not lose it) |
+| b, bT | mirrorwing | 329 | d3, d5 4 -> 5 (play: 0) | 5 | 4 | **4** | clairvoyance (NC recovers) |
+| b, bT | niv (+2HG) | 537 | play d5 3 -> 4 (both formats) | 4 | 3 | 4 | **real loss** (below) |
+
+Niv gi537 under 7b: the game splits at T1's land. Off plays Sandstone Needle (enters tapped), so T2's Needle {R}{R}
+pays Izzet Signet, Island + Signet chain Brainstorm, Sol Ring and a second Signet, and T3 has 8 mana for Niv-Mizzet +
+Curiosity + Brainstorm (T3 kill). Under 7b the search plays Island + Brainstorm T1 and Needle T2 (tapped), is one mana
+short all game and kills T4, at every depth through d8 b0 and non-clairvoyantly. As with Dragonstorm gi679, 7b changes
+a payment inside the search's own Needle-first line (payment is the greedy exemption, not searched), which devalues
+that line; which pip is still OWED (re-add the temp crit trace near `crit_hold`).
+
+Still running when this was written (b / bT, d8 b0): Worldfire gi1373 (d3 / d5 and 2HG) and gi1380 (d0), Cyclone
+gi1477 (d0). None is a play-setting row except Worldfire's d5 / 2HG (Worldfire play = d5 b20), where b / bT are 0 net
+(1 faster / 1 slower) anyway.
+
+## Readings (2026-11-24)
+
+* **The play setting reverses 7b's Cyclone result.** d3 / d5 Cyclone is better under b / bT (-6 / -14 over 4,000
+  pairs), but at Cyclone's shipped d6 b20 it is worse: b +5 (2 / 8), bT +3 (4 / 8). Every one of those play-row losses
+  recovers at d8 b0, so they are budget losses, but they are the shipped play and they are what the average is.
+* **bT dominates b**: vs b it is -2 on play rows (5 / 3), -8 other searched (8 / 0), -6 d0 (8 / 2), never net worse on a
+  deck. If 7b ships, it ships with the ritual credit.
+* **7b still fails the bar**: play rows bT +6 (Cyclone +3, Niv +1, Niv 2HG +2, gi537 a real loss), d0 +7 (Niv +7).
+* **7a, fully amended (aURTG), is inert where it matters**: 0 play-row games move in 18,000; the residue is +1 other
+  searched and +5 d0, all recovering at d8 b0. It fails the every-deck net <= 0 bar only on d0 / one d5 game, but it
+  buys nothing: not one faster game at any play setting.

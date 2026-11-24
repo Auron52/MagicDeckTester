@@ -1090,6 +1090,7 @@ enum Slot : int
     PAY_LINE_CRIT_UNTAPPER_LAST, // MTG_PAY_LINE_CRIT_UNTAPPER_LAST  MEASUREMENT ONLY, amendment to PAY_LINE_CRIT_BEHIND_DORKS (USER 2026-11-22 "7a ... along with the amendment"): a land-untapping creature (untap_target_land: Voyaging Satyr) is not one of the creatures a line-critical land ranks behind -- when it would win a pip only because a critical land was moved back, it pays after that land. Default OFF; read only with a crit lever
     PAY_LINE_CRIT_RESERVE_LAST,  // MTG_PAY_LINE_CRIT_RESERVE_LAST  MEASUREMENT ONLY, second amendment to PAY_LINE_CRIT_BEHIND_DORKS (2026-11-23): a noncreature source of the held tiers (rank 60..499: manland, storage land, burst land) pays after a line-critical land 7a moved back (Dragonstorm gi679, Mercadian Bazaar vs Sandstone Needle)
     PAY_LINE_CRIT_RITUAL_CREDIT, // MTG_PAY_LINE_CRIT_RITUAL_CREDIT  MEASUREMENT ONLY (2026-11-23), amends PAY_LINE_CRIT_LAND / _BEHIND_DORKS: a ritual being paid credits its float against the line's later pips in the critical-land test (Dragonstorm gi679, Cyclone d3/d5)
+    PAY_LINE_CRIT_GROWER_LAST,   // MTG_PAY_LINE_CRIT_GROWER_LAST  MEASUREMENT ONLY, third amendment to PAY_LINE_CRIT_BEHIND_DORKS (2026-11-24): a SCALED mana dork (IsScaledManaDork: Priest of Titania, Elvish Archdruid) is not one of the creatures a line-critical land ranks behind -- its tap grows with the casts the line still makes (Selesnya 2HG gi837 at d6, s1850837)
     COUNT
 };
 
@@ -2124,6 +2125,7 @@ inline const char* Name(int slot)
         "MTG_PAY_LINE_CRIT_UNTAPPER_LAST",
         "MTG_PAY_LINE_CRIT_RESERVE_LAST",
         "MTG_PAY_LINE_CRIT_RITUAL_CREDIT",
+        "MTG_PAY_LINE_CRIT_GROWER_LAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
