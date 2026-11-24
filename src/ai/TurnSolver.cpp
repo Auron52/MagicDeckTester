@@ -129782,7 +129782,20 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // target -- value W3 ld2, byte-identical adoption) and d3 (shallow, static W20 ld1). EVERY other depth
         // (d1/d2/d4 and d6+) is UNTESTED -> beam OFF -> byte-identical. d6+ used to fire via `depth >= 5`; it's
         // gated off now so off-policy deep runs don't hit an unvalidated beam path. Widen only after measuring.
-        if (depth == 5)      { eff_beam = beam_width; eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
+        //
+        // DEPTH-INDEPENDENT A/B ARMS (2026-11-24; USER: "It does sound weird that we act differently at depth 5"):
+        // the d5 value beam made Hinata d5 worse than d4 (docs/design/hinata-d4-vs-d5-2026-11-21.md), so two
+        // single global rules replace the depth == 5 / depth == 3 switch, per job (heurarm) so one batch runs
+        // every arm. Both ignore the deck's beam_width / beam_leafdepth. Default OFF => byte-identical.
+        //   MTG_ESC_BEAM_NONE       : no beam at any depth (the code path deleted).
+        //   MTG_ESC_BEAM_STATIC_ALL : the d3 static W20 ld1 regime at every depth.
+        static const bool s_beam_none_env       = EnvOn("MTG_ESC_BEAM_NONE");
+        static const bool s_beam_static_all_env = EnvOn("MTG_ESC_BEAM_STATIC_ALL");
+        if (heurarm::Flag(heurarm::ESC_BEAM_NONE, s_beam_none_env))
+        { eff_beam = 0;  eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
+        else if (heurarm::Flag(heurarm::ESC_BEAM_STATIC_ALL, s_beam_static_all_env))
+        { eff_beam = 20; eff_beam_leafdepth = 1;              eff_beam_static = true;  }
+        else if (depth == 5) { eff_beam = beam_width; eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
         else if (depth == 3) { eff_beam = 20;         eff_beam_leafdepth = 1;              eff_beam_static = true;  }
         else                 { eff_beam = 0;          eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
     }
