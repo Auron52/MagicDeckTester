@@ -72558,6 +72558,14 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
     return n == 0 ? 5 : n * 10;
 }
 
+// The hold-up's RESERVE mode is armed (MTG_MAZE_HOLD_RESERVE, heurarm MAZE_HOLD_RESERVE; DEFAULT OFF; live only with
+// MTG_MAZE_HOLD_UP): see MazesEndProvider::PaymentReserve.
+static bool MazeHoldReserveOn()
+{
+    static const bool s_res = EnvOn("MTG_MAZE_HOLD_RESERVE");
+    return heurarm::Flag(heurarm::MAZE_HOLD_RESERVE, s_res);
+}
+
 // THE MAZE'S END HOLD-UP (MTG_MAZE_HOLD_UP, heurarm MAZE_HOLD_UP; DEFAULT OFF -- a payment PREFERENCE awaiting its
 // A/B and the USER's call, the Fluctuator rule's shape). Mana-clean gate claude-queue-20261121a: 1,617 of the 1,849
 // APPLY-DROPs lost a cast the plan did not declare (need-later): a breakpoint continuation (Sylvan Scrying's /
@@ -72573,6 +72581,7 @@ std::vector<ManaCost> MazesEndProvider::PaymentHoldUp(const GameState& s, int co
 {
     static const bool s_on = EnvOn("MTG_MAZE_HOLD_UP");
     if (!heurarm::Flag(heurarm::MAZE_HOLD_UP, s_on)) { return {}; }
+    if (MazeHoldReserveOn()) { return {}; }   // the RESERVE mode replaces the list (PaymentReserve)
     if (controller < 0 || controller >= static_cast<int>(s.players.size())) { return {}; }
     std::vector<ManaCost> out;
     for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
@@ -72592,6 +72601,85 @@ std::vector<ManaCost> MazesEndProvider::PaymentHoldUp(const GameState& s, int co
     std::stable_sort(out.begin(), out.end(),
                      [](const ManaCost& a, const ManaCost& b) { return a.ManaValue() < b.ManaValue(); });
     return out;
+}
+
+// THE HOLD-UP'S RESERVE MODE (MTG_MAZE_HOLD_RESERVE, heurarm MAZE_HOLD_RESERVE; DEFAULT OFF, live only with
+// MTG_MAZE_HOLD_UP -- a payment PREFERENCE awaiting its A/B and the USER's call). The USER, 2026-11-24: "It is probably
+// one of those cases where we hold a couple green first and then 1 blue after if we don't know what we will have in
+// hand. Obviously with knowledge of the hand we can adjust that a bit." and "Green seems to be the biggest concern
+// here." (the need-later gate: Guild Summit 586, Sylvan Scrying 381, Exploration 221, Burgeoning 183, Archdruid's
+// Charm 171, Manabond 147 of 1,928 flags). Where the list mode keeps each hand card's cost payable alone, this keeps
+// ONE joint reserve payable BEYOND the rest of the line (`rest`), so the green and the blue are held together:
+//  * GREEN: the green pips of the hand's spells that the rest of the line does not already pay for (a card in the
+//    line is in the hand too), plus TWO ("a couple green") while the hand can still grow this turn and a green spell
+//    remains in the library; at most two, three with a {G}{G}{G} card (Archdruid's Charm) in hand.
+//  * BLUE: one, for a Guild Summit in hand the line does not cast, or while the hand can grow and a Summit remains in
+//    the library.
+//  * The hand can grow this turn only through Guild Summit's draws: one is ours on the battlefield, in hand, or the
+//    spell being paid for. Otherwise the hand is known, and a colour nothing in it can spend is not held.
+//  * Gates Ablaze (does nothing in goldfish) and lands spend nothing.
+// The fallback chain drops the blue first, then one green at a time, then tries the blue alone: {G}{G}{U} -> {G}{G}
+// -> {G} -> {U} (with Charm: {G}{G}{G}{U} -> {G}{G}{G} -> ...). Only coloured pips are reserved: the AMOUNT left after
+// a payment does not depend on which sources paid it, the colours do.
+bool MazesEndProvider::PaymentReserve(const GameState& s, int controller, const Card* paying, const ManaCost& rest,
+                                      std::vector<ManaCost>& chain) const
+{
+    static const bool s_on = EnvOn("MTG_MAZE_HOLD_UP");
+    if (!heurarm::Flag(heurarm::MAZE_HOLD_UP, s_on) || !MazeHoldReserveOn()) { return false; }
+    chain.clear();
+    if (controller < 0 || controller >= static_cast<int>(s.players.size())) { return true; }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    int hand_g = 0, hand_u = 0;
+    bool charm = false, grows = false;
+    const auto is_summit = [](const CardDefinition* d) { return !d->params.draw_on_other_subtype_enter.empty(); };
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand() || !d->params.damage_all_creatures_x_per_subtype.empty()) { continue; }
+        const ManaCost& m = d->card.m_mana_cost;
+        hand_g += m.green;
+        hand_u += m.blue;
+        charm = charm || m.green >= 3;
+        grows = grows || is_summit(d);
+    }
+    if (!grows && paying != nullptr)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(*paying);
+        grows = d != nullptr && is_summit(d);
+    }
+    if (!grows)
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != controller || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && is_summit(d)) { grows = true; break; }
+        }
+    }
+    bool lib_g = false, lib_u = false;
+    if (grows)
+    {
+        for (const Card& c : pl.library)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || d->card.IsLand()) { continue; }
+            lib_g = lib_g || d->card.m_mana_cost.green > 0;
+            lib_u = lib_u || d->card.m_mana_cost.blue > 0;
+            if (lib_g && lib_u) { break; }
+        }
+    }
+    const int cap_g = charm ? 3 : 2;
+    const int g = std::min(cap_g, std::max(0, hand_g - rest.green) + (grows && lib_g ? 2 : 0));
+    const int u = std::min(1, std::max(0, hand_u - rest.blue) + (grows && lib_u ? 1 : 0));
+    ManaCost r;
+    r.green = g;
+    r.blue  = u;
+    if (g + u == 0) { return true; }
+    chain.push_back(r);
+    if (u > 0 && g > 0) { r.blue = 0; chain.push_back(r); }
+    for (int k = g - 1; k >= 1; --k) { r.green = k; chain.push_back(r); }
+    if (u > 0 && g > 0) { ManaCost b; b.blue = u; chain.push_back(b); }
+    return true;
 }
 
 // P5d-6 (USER Q2 2026-11-20, VERBATIM: "I think this case depends more on whether we care about the cards discarded. For

@@ -3719,6 +3719,15 @@ public:
     // given, the first the board can keep winning. Default: nothing held.
     virtual std::vector<ManaCost> PaymentHoldUp(const GameState&, int /*controller*/) const { return {}; }
 
+    // PaymentReserve -- the hold-up's RESERVE mode (Maze's End, MTG_MAZE_HOLD_RESERVE): ONE joint reserve kept payable
+    // BEYOND `rest` (the rest of the applying line after this payment), as a fallback chain, most preferred first; the
+    // payer keeps the first entry it can (ManaPayment.cpp, ProviderHoldUpTargets). `paying` is the spell being paid for,
+    // or nullptr. Returns false when the deck has no reserve mode armed (the PaymentHoldUp list applies); true with an
+    // empty chain means "armed, nothing to reserve" (no hold-up at all for this payment). A preference, never a refusal.
+    virtual bool PaymentReserve(const GameState&, int /*controller*/, const Card* /*paying*/, const ManaCost& /*rest*/,
+                                std::vector<ManaCost>& /*chain*/) const
+    { return false; }
+
     // Enable the plan's held-first scarce-colour payment only for a deck whose
     // paired play and mana-oracle checks support it. The global diagnostic lever
     // remains available; the default provider stays on the old payment path.
