@@ -10137,7 +10137,16 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // the late conversion tier with Cascade Bluffs / Ferrous Lake.
     if (def.params.any_color_filter && !def.params.filter_no_free_colorless) { return 6; }
     if (IsManaConversionSource(def.params)) { return 25; }
-    const std::vector<Color>& prod = EffectiveProduces(s, active, def);
+    // THE RANKED OBJECT (RankObjectScope, DecisionProvider.h): a colour-LOCKED etb_choose_color permanent ranks by
+    // the colours it can really make (EffectiveProducesFor), not its definition's five-colour menu. Every other
+    // source, and every rank asked without a permanent, reads the definition exactly as before.
+    static const bool s_rank_obj = EnvOn("MTG_RANK_OBJECT_COLORS", true);
+    const Permanent* const robj = g_rank_object;
+    const bool obj_colours = robj != nullptr && def.params.etb_choose_color && robj->chosen_color >= 0
+                          && heurarm::Flag(heurarm::RANK_OBJECT_COLORS, s_rank_obj)
+                          && CardDatabase::Instance().LookupCached(robj->card) == &def;
+    const std::vector<Color>& prod = obj_colours ? EffectiveProducesFor(s, active, def, robj)
+                                                 : EffectiveProduces(s, active, def);
     const int amt = ManaProducedPerTap(def);
     // A NARROW restricted source (see NarrowRestrictedMask): -1 for every other source, so the
     // ladder below is the historical one for them.
@@ -71837,6 +71846,7 @@ void MazesEndProvider::EtbTapSubtypeOrder(const GameState& s, int controller, st
         const CardDefinition* d = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(i)].card);
         if (d == nullptr) { return { 0, 0 }; }
         const int tier = MazeGateNonManaTapLive(s, controller, *d) ? 2 : IsScaledManaLand(*d) ? 1 : 0;
+        const RankObjectScope ro(&s.battlefield[static_cast<std::size_t>(i)]);
         return { tier, ManaSourceRank(s, *d) };
     };
     std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) { return key(a) < key(b); });
@@ -72486,6 +72496,42 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
         && ScaledManaNetYield(s, def) > 0
         && LineDemandAfterPayment() >= def.params.mana_per_creature_feeder_generic + 1) { return 61; }
     return DeckProvider::ManaSourceRank(s, def);
+}
+
+// THE MAZE'S END HOLD-UP (MTG_MAZE_HOLD_UP, heurarm MAZE_HOLD_UP; DEFAULT OFF -- a payment PREFERENCE awaiting its
+// A/B and the USER's call, the Fluctuator rule's shape). Mana-clean gate claude-queue-20261121a: 1,617 of the 1,849
+// APPLY-DROPs lost a cast the plan did not declare (need-later): a breakpoint continuation (Sylvan Scrying's /
+// Archdruid's Charm's search, Guild Summit's draws, Exploration's extra drop) cast a card that was ALREADY IN HAND,
+// and the payment made before the breakpoint had spent the colour it needed -- 71% of those flags' paying lines run
+// through Baldur's Gate's fed mode (s30006137 T3: Scrying's {1}{G} off Sea Gate's {G} + Maze's End; Manabond's {G}
+// then had nothing, while Izzet Guildgate + Maze's End feeding Baldur's Gate make {G}{G}{G} for both). The payer
+// cannot see a continuation's cast, so the deck names what to keep payable: each spell still in hand, cheapest cost
+// first (a card that does nothing in goldfish -- Gates Ablaze -- is not held for; the bill's own colours are dropped
+// by the payer, ProviderHoldUpTargets). The payer still pays exactly as its greedy does unless that strands one of
+// these costs while the board pays the bill and the cost together; then one of the trial's sources is held out.
+std::vector<ManaCost> MazesEndProvider::PaymentHoldUp(const GameState& s, int controller) const
+{
+    static const bool s_on = EnvOn("MTG_MAZE_HOLD_UP");
+    if (!heurarm::Flag(heurarm::MAZE_HOLD_UP, s_on)) { return {}; }
+    if (controller < 0 || controller >= static_cast<int>(s.players.size())) { return {}; }
+    std::vector<ManaCost> out;
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand() || !d->params.damage_all_creatures_x_per_subtype.empty()) { continue; }
+        const ManaCost& m = d->card.m_mana_cost;
+        if (m.ManaValue() <= 0 || (m.blue == 0 && m.green == 0 && m.white == 0 && m.black == 0 && m.red == 0)) { continue; }
+        bool dup = false;
+        for (const ManaCost& o : out)
+        {
+            if (o.generic == m.generic && o.white == m.white && o.blue == m.blue && o.black == m.black
+                && o.red == m.red && o.green == m.green) { dup = true; break; }
+        }
+        if (!dup) { out.push_back(m); }
+    }
+    std::stable_sort(out.begin(), out.end(),
+                     [](const ManaCost& a, const ManaCost& b) { return a.ManaValue() < b.ManaValue(); });
+    return out;
 }
 
 // P5d-6 (USER Q2 2026-11-20, VERBATIM: "I think this case depends more on whether we care about the cards discarded. For
