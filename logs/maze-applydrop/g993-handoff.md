@@ -40,7 +40,7 @@ slow (no T1 payment printed after 10+ min). They are MY experiments: kill them i
 (`kill 2006004 2006005`); they run the OLD binary inode, unaffected by the rebuild. No "owning prune" applies here (the
 change is a rank, not a prune).
 
-## Fix (Q4) -- implemented, UNBUILT at handoff time unless noted below
+## Fix (Q4) -- implemented and BUILT (65f77011e); does NOT yet recover g993
 MTG_MAZE_RANK_SPENDABLE (heurarm MAZE_RANK_SPENDABLE, DEFAULT ON, live only with RANK_OBJECT_COLORS on, so
 RANK_OBJECT_COLORS=0 is still the committed tree's play):
 * GameState::deck_spell_pip_colors (uint8, deck constant, in the 3-byte hole after eot_attack_draw_n; sizeof 1736
@@ -57,17 +57,25 @@ RANK_OBJECT_COLORS=0 is still the committed tree's play):
 * A/B generator: logs/maze-applydrop/mk_ab_spend.py (arms base / rank (spend off) / spend; fresh seeds 25400000 /
   26400000 / 27400000; Maze's End only -- nothing else can move). NOT RUN (coordinator runs big batches).
 
+## Results after the build (build/Release = 65f77011e, build_spend.log clean)
+* `mtg-test -tc="*Maze*"`: 121/121 cases, 5061 assertions pass (incl. the 3 new list-colour cases).
+* g993 d8 b0: rank+spend (default) **T5** (still unrecovered); rank, spend off: T5; rank off: T4 (base unchanged).
+* Under the default the chosen line is STILL Exploration-first: {G}=Selesnya, crack {3}=Manor + Maze's End#44 + AZORIUS
+  (the spend rank works: Azorius now pays before Cliffgate), Manabond {G}=Cliffgate, Scrying {1}{G}=Baldur's + Gond,
+  then {1},{1} from Planar Nexus (Gateway Plaza etc.). So Maze's End#44 is spent in the one-activation plan and the
+  search still does not choose base's Planar-Nexus-first two-activation line.
+
 ## Running at handoff
-* Release build of the fix: started ~09:58 UTC by `./build.sh`, log
-  /workspaces/MagicDeckTester/build/scratch/claude_maze_applydrop/build_spend.log (full rebuild, 389 TUs, GameState.h).
+* NC runs PIDs 2006004 / 2006005 (my own experiments, old binary; see Verdict) -- kill if not wanted.
 
 ## Remaining, in order
-1. Confirm build_spend.log finished clean (`exit=0` in the waiter output / `[389/389]`); fix compile errors if any.
-2. Unit tests: `build/Release/mtg-test -tc="*Maze*,*rank object*,*list colours*"` then the mana-payment set
-   (`-tc="*mana*,*Mana*,*pay*"`).
-3. g993 at d8 b0 with the default (rank + spend): expect T4 (repro above with MTG_RANK_OBJECT_COLORS=1). Also check
-   MTG_MAZE_RANK_SPENDABLE=0 still gives T5 and MTG_RANK_OBJECT_COLORS=0 still T4 / digest c95c094b7d35439b.
-4. Commit (WIP commit of the unbuilt fix may already exist -- see git log) and push wip/maze-applydrop (wip/* allowed;
-   NEVER phase-1-2-deck-analyzer, never push_queue.py).
-5. Hand the coordinator: mk_ab_spend.py manifest for the held-out A/B, plus a d8 b0 replay of the 25 previously
+1. Find why the default still misses T4: run the oracle (MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=4
+   MTG_MANA_ORACLE_ONLY_TURN=4, see g993x/or_*.err) under the default and read the engine-ended board of base's plan
+   {land=Planar Nexus + cast:Exploration + act:Maze's End + act:Maze's End}: does it now end with ME#44 untapped,
+   Manabond + Scrying cast (as base's plan 51 did)? If yes, the miss is elsewhere (draw order differs -> different
+   Scrying target / end-step draws; compare with base's hand [Manor Gate, Maze's End, Talon]); if no, read that plan's
+   [paydbg] under the oracle. Maybe also the mana-payment unit set (`-tc="*mana*,*pay*"`) -- not yet run.
+2. Decide whether MTG_MAZE_RANK_SPENDABLE stays (it is sound order-only and fixes the dual-tie stranding in its unit
+   test) or is reverted if it does not buy g993; either way report to the coordinator.
+3. Hand the coordinator: mk_ab_spend.py manifest for the held-out A/B, plus a d8 b0 replay of the 25 previously
    recovered slower games under the new default (the spend lever moves Maze's End play beyond the rank fix).
