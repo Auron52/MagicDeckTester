@@ -90,7 +90,7 @@ bool PayRockThenRest(GameState& s, const std::vector<Action>& line, std::size_t 
 {
     LineUnpaidCostScope luc(LineCastCostTotal(line));
     const int credit = LineReducerCredit(s, line);
-    const bool bound = LineKeepBound(line);
+    const int bound = LineKeepBound(line);
     LineReducerCreditScope lrc(credit, (credit > 0 || bound) ? LineNoncreatureMv(line) : 0, bound);
     {
         SpellSubtypePayScope paying(&rock_card);
@@ -123,6 +123,7 @@ GameState ShamanBoard()
 
 TEST_CASE("Line keep (rock): Mind Stone's {2} floats the Turf's {R} for Dragonspeaker Shaman (Dragons s30094937 T4)")
 {
+    ArmLkr crit_off(heurarm::LINE_KEEP_CRIT, false);   // MTG_LINE_KEEP_CRIT binds these lines too: pinned off (test_line_keep_crit.cpp)
     const GameState s0 = ShamanBoard();
     const std::vector<Action> line = { CastLkr(s0, "Dragonspeaker Shaman"), CastLkr(s0, "Mind Stone") };
     REQUIRE(line[0].cost.red == 2);
@@ -149,6 +150,7 @@ TEST_CASE("Line keep (rock): Mind Stone's {2} floats the Turf's {R} for Dragonsp
 
 TEST_CASE("Line keep (rock): the rock credit is what fires it -- MTG_LINE_KEEP_ALL alone judges the rest without it")
 {
+    ArmLkr crit_off(heurarm::LINE_KEEP_CRIT, false);   // MTG_LINE_KEEP_CRIT binds these lines too: pinned off (test_line_keep_crit.cpp)
     // The same board under MTG_LINE_KEEP_ALL (every multi-cast line bound) but the rock lever off: the rest {1}{R}{R} is
     // judged on the board after Mind Stone's payment WITHOUT the new Mind Stone, where no payment of the {2} leaves it
     // payable (4 mana for a 5-mana line), so the rung cannot fire and the Shaman is stranded (the documented residual
@@ -164,6 +166,7 @@ TEST_CASE("Line keep (rock): the rock credit is what fires it -- MTG_LINE_KEEP_A
 
 TEST_CASE("Line keep (rock): inert when the greedy already keeps the line, and on a line with no rock")
 {
+    ArmLkr crit_off(heurarm::LINE_KEEP_CRIT, false);   // MTG_LINE_KEEP_CRIT binds these lines too: pinned off (test_line_keep_crit.cpp)
     // A second Mountain: whatever pays Mind Stone's {2}, a Mountain + the Turf or two Mountains are left for {R}{R}.
     // The payment must be the greedy's, byte for byte, on both arms.
     GameState s0 = ShamanBoard();

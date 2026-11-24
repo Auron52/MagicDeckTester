@@ -89,7 +89,7 @@ bool PayThenRest(GameState& s, const std::vector<Action>& line, std::size_t pay,
 {
     LineUnpaidCostScope luc(LineCastCostTotal(line));
     const int credit = LineReducerCredit(s, line);
-    const bool bound = LineKeepBound(line);
+    const int bound = LineKeepBound(line);
     LineReducerCreditScope lrc(credit, (credit > 0 || bound) ? LineNoncreatureMv(line) : 0, bound);
     REQUIRE(TapForCostDirect(s, line[pay].cost, /*for_creature=*/false));
     return TapForCostDirect(s, rest, rest_creature);
@@ -98,6 +98,7 @@ bool PayThenRest(GameState& s, const std::vector<Action>& line, std::size_t pay,
 
 TEST_CASE("Line keep (all lines): Mind Stone's {2} leaves the Mountain for Atsushi's {R}{R} (Dragons s30086708 T4)")
 {
+    ArmLka crit_off(heurarm::LINE_KEEP_CRIT, false);   // MTG_LINE_KEEP_CRIT binds these lines too: pinned off (test_line_keep_crit.cpp)
     // Mountain#41, Mind Stone#30, Urza's Incubator#57 (Dragon) and Gruul Turf#13 in play; the line {Atsushi, Mind
     // Stone}. With the Incubator ALREADY in play there is no same-turn reducer credit: Atsushi is priced {R}{R} at
     // enumeration. The greedy pays Mind Stone (cast first) with Mind Stone + the Mountain, and Gruul Turf's {R}{G}
@@ -140,6 +141,7 @@ TEST_CASE("Line keep (all lines): Mind Stone's {2} leaves the Mountain for Atsus
 
 TEST_CASE("Line keep (all lines): Land's Edge's {1} leaves the only {U} for Treasure Hunt (Treasure Hunt s30090713 T4)")
 {
+    ArmLka crit_off(heurarm::LINE_KEEP_CRIT, false);   // MTG_LINE_KEEP_CRIT binds these lines too: pinned off (test_line_keep_crit.cpp)
     // Thundering Falls#53 ({U} or {R}), Cascade Bluffs#4, Sandstone Needle#37 ({R}{R}, two depletion counters) and the
     // land drop Cascade Bluffs#1; the line {Land's Edge {1}{R}{R}, Treasure Hunt {1}{U}}. The greedy pays Land's Edge
     // with the Needle's {R}{R} + Thundering Falls, and two unfed Bluffs make {C}{C}: no {U}. The Needle + one Bluffs'
@@ -168,6 +170,7 @@ TEST_CASE("Line keep (all lines): Land's Edge's {1} leaves the only {U} for Trea
 
 TEST_CASE("Line keep (all lines): inert when the greedy already keeps the line, and on a one-cast line")
 {
+    ArmLka crit_off(heurarm::LINE_KEEP_CRIT, false);   // MTG_LINE_KEEP_CRIT binds these lines too: pinned off (test_line_keep_crit.cpp)
     // Two Mountains + Gruul Turf + Mind Stone, the same {Atsushi, Mind Stone} line: the greedy's Mind Stone + Mountain
     // leaves a Mountain and the Turf, which pay {R}{R}. The payment must be the greedy's, byte for byte, on both arms.
     GameState s0 = BaseLka(4);

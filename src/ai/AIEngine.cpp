@@ -8848,7 +8848,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
     // ...and the line's same-turn reducer credit (MTG_LINE_REDUCER_KEEP), the twin of ApplyPlanDirect's scope.
     const int _lrc_credit = LineReducerCredit(state, plan.actions);
-    const bool _lrc_bound = LineKeepBound(plan.actions);   // MTG_LINE_KEEP_ALL
+    const int _lrc_bound = LineKeepBound(plan.actions);   // MTG_LINE_KEEP_ALL / _ROCK / _CRIT
     LineReducerCreditScope _lrc(_lrc_credit, (_lrc_credit > 0 || _lrc_bound) ? LineNoncreatureMv(plan.actions) : 0,
                                 _lrc_bound);
     // ...and whether the line casts a breakpoint opener (g_line_opens_unseen), seeded at the same point

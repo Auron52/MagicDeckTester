@@ -250,10 +250,12 @@ TEST_CASE("viewer line check: the search's payment drops a cast the board pays f
     heurarm::t_arm[heurarm::PAY_SHRINK]     = 0;
     heurarm::t_arm[heurarm::PREPAY_COLOURS] = 0;
     heurarm::t_arm[heurarm::PAY_REFINE]     = 0;
+    heurarm::t_arm[heurarm::LINE_KEEP_CRIT] = 0;   // MTG_LINE_KEEP_CRIT (default ON) keeps the Displacer too
     const manaoracle::LineAudit a = manaoracle::AuditLine(s, /*pre=*/true, plan);
     heurarm::t_arm[heurarm::PAY_SHRINK]     = saved;
     heurarm::t_arm[heurarm::PREPAY_COLOURS] = saved_pc;
     heurarm::t_arm[heurarm::PAY_REFINE]     = saved_rf;
+    heurarm::t_arm[heurarm::LINE_KEEP_CRIT] = -1;
     REQUIRE(a.audited);
     CHECK_FALSE(a.engine_full);
     CHECK(a.sibling == -1);
