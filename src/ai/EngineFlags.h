@@ -614,7 +614,7 @@ inline bool LineKeepRockOn()
     return heurarm::Flag(heurarm::LINE_KEEP_ROCK, env_on);
 }
 
-// MTG_LINE_KEEP_CRIT (DEFAULT ON; =0 restores the payment byte for byte) -- the line-keep rung (LineReducerKeepHold,
+// MTG_LINE_KEEP_CRIT (ADOPTED default ON (USER 2026-11-25); =0 restores the payment byte for byte) -- the line-keep rung (LineReducerKeepHold,
 // ManaPayment.cpp) on every applying line of two or more held casts that neither MTG_LINE_KEEP_ALL nor
 // MTG_LINE_KEEP_ROCK binds, gated PER PAYMENT on a cheap board scan (LineKeepCritGate): some untapped source of ours is
 // the LAST source of a colour the rest of the line owes (the other sources' units of that colour, plus the float, fall
@@ -625,7 +625,8 @@ inline bool LineKeepRockOn()
 // land paying a generic pip) without their cost: those moved EVERY payment that met a critical land, stranded or not,
 // and so changed payments inside lines the search had valued (Niv gi537, Dragonstorm gi679); this one changes a payment
 // only where the greedy's own payment provably drops a cast of the declared line. Read PER CALL (heurarm slot
-// LINE_KEEP_CRIT), seeded where the reducer credit is. docs/design/line-keep-crit-2026-11-24.md.
+// LINE_KEEP_CRIT), seeded where the reducer credit is. Unlike the rock rung it also runs inside horizon playouts
+// (MTG_LKR_PLAYOUT_OFF exempts kLineKeepCrit lines: the shape the adoption A/B measured). docs/design/line-keep-crit-2026-11-24.md.
 inline bool LineKeepCritOn()
 {
     static const bool env_on = EnvOn("MTG_LINE_KEEP_CRIT", true);

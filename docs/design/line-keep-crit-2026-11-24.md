@@ -1,8 +1,17 @@
 # MTG_LINE_KEEP_CRIT -- the line-critical land defect, fixed by the exact line-keep judge instead of a re-rank
 
-Status 2026-11-24: implemented on `wip/bruna-crit2`, default ON (a payment that strands the declared line when a
-hold-out of its own sources keeps it is a defect). Held-out A/B NOT yet run: manifest generator
-`logs/bruna-crit2/mk_ab.py`. Adoption follows the A/B (USER bar below).
+Status 2026-11-25: **ADOPTED default ON (USER 2026-11-25)**. The USER's ruling: *"If it is slightly better, more
+correct in your understanding and doesn't have much CPU cost let's do it."* The held-out A/B (manifest generator
+`logs/bruna-crit2/mk_ab.py`, binary on e8a2f7d64): play -1, other searched shapes +2, d0 0, every slower game recovers
+at `--depth 8 --budget-ms 0`, CPU ~0 (+0.59% instructions). Landed via `wip/land-crit` on top of
+`origin/phase-1-2-deck-analyzer` 05e2e0030.
+
+**Composition with MTG_LKR_PLAYOUT_OFF (adopted 2026-11-24, after the A/B binary's base).** That cut skips the rung in
+horizon playouts for every line with no reducer credit, which after the merge would have included the crit-mode
+lines -- a shape neither A/B measured. On landing, the playout skip applies only to `kLineKeepFull` lines (the rock
+rung it was measured on); a `kLineKeepCrit` line keeps its rung in playouts, as in this lever's A/B. Extending the cut
+to crit lines is a one-condition change in `LineReducerKeepHold` (drop `g_line_keep_bound != kLineKeepCrit`) and would
+need its own measurement.
 
 ## Why (USER 2026-11-24)
 

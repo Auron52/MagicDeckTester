@@ -11492,10 +11492,13 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     // so the playout pays it with the greedy, as MTG_LINE_KEEP_ROCK=0 does. The search window, the executor's committed
     // apply and the d0 runner keep the full rung. On Niv-Mizzet Combo 88% of the rung's time was in playouts (searched
     // CPU -5.1%, net -8 turns); every slower game recovered at --depth 8 --budget-ms 0. MTG_LINE_REDUCER_KEEP's own
-    // reducer lines are untouched. =0 runs the rung in playouts too.
+    // reducer lines are untouched. =0 runs the rung in playouts too. A line only MTG_LINE_KEEP_CRIT binds (kLineKeepCrit)
+    // keeps its rung in playouts: that is the shape its adoption A/B measured (USER 2026-11-25, the A/B binary predates
+    // this cut), and its gate already makes the common crit payment a single board scan.
     {
         static const bool s_off_env = EnvOn("MTG_LKR_PLAYOUT_OFF", true);
-        if (keep_all && TurnSolver::InRolloutPlayout() && heurarm::Flag(heurarm::LKR_PLAYOUT_OFF, s_off_env))
+        if (keep_all && g_line_keep_bound != kLineKeepCrit && TurnSolver::InRolloutPlayout()
+            && heurarm::Flag(heurarm::LKR_PLAYOUT_OFF, s_off_env))
         {
             if (s_stats) { g_lk_playout_off.fetch_add(1, std::memory_order_relaxed); }
             return none;
