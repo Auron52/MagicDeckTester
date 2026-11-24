@@ -447,6 +447,32 @@ every arm, W-invariant) the clearest result. Against the lever OFF, every price 
 Raw outputs: `logs/jumbo-uo-budget/ab2/compare2.txt`, `recov2.txt` (worktree), and
 `build/scratch/claude_jumbo_uo_budget/{ab2,rec2}/`.
 
+### DELETED 2026-11-24: the price variants are a documented negative (USER ruling)
+
+USER, 2026-11-24: *"Pricing it doesn't seem worthwhile. It is just a bit painful that the quality impact is so tiny on
+the results and the performance impact so significant."* So the unlock-order lever (`MTG_PO_UNLOCK_ORDER`) stays
+DEFAULT ON and UNPRICED, every price variant is dead, and the lever's CPU is to come down by EXACT cuts only
+(byte-identical play; next section and "Exact cuts, 2026-11-24" below).
+
+Deleted from the tree (branch `wip/uo-cpu`), every one default OFF and existing only for the price:
+`MTG_UO_BUDGET_PRICE` (heurarm `UO_BUDGET_PRICE`), `MTG_UO_BUDGET_CUT` (heurarm `UO_BUDGET_CUT`),
+`MTG_UO_BUDGET_PRICE_W` (manifest `uo_price_w`), `MTG_UO_BUDGET_RESID` (manifest `uo_price_resid`, the carried
+residual `g_uo_resid`), `MTG_UO_BUDGET_REPLAY` (manifest `uo_price_replay`, `cachecharge::Rec::uo`,
+`CacheChargeNoteUo`), the calibration diagnostic `MTG_UO_PRICE_STATS`, the `uoprice` namespace (`Meter`), the unit
+site `unlock_order` (census column `u_unlock_order`), and the two test hooks `UnlockPayableOrderUnderRootForTest` /
+`EnumerateMainPlansUnderRootForTest`. Unit tests: the enumeration-site price case is gone (the lever's enumeration
+behaviour on the same Satyr-#54 board stays pinned by "Jumbo Cactuar enumerates Surrak-hasted Satyrs ..."); the
+apply-site price case became "Jumbo Cactuar unlock-order lever: the apply site realises the paying order" (same
+board, lever on moves the order, lever off does not).
+
+Kept: `MTG_UO_DFS` and `MTG_UO_FOLD` (default ON, the shipped exact cuts; `=0` is their legacy hatch) and
+`MTG_UO_DFS_VERIFY` (the diagnostic that proves the tree and the fold against the order-by-order walk, still the
+route for `n > 7` and same-line cost reducers). None of them is a price variant or a dead experiment.
+
+The measurements above stay as the record: every price arm (W 16 / 32 / 64, with or without the cut, the replay and
+the residual) gave back part of the lever's gain (Jumbo +4..+8, Bruna +5..+6 net vs the shipped play on the 400k
+re-measure), each loss being the finite budget re-spent at early decisions.
+
 ## Exact cuts, 2026-11-21/22 (`MTG_SPS_XMEMO`, default ON)
 
 The price arms trade quality for CPU, which is a USER decision. This section covers the other route: cutting the lever's
@@ -513,3 +539,60 @@ ALL PASS (no GT change). Jumbo instructions (lever on, 400 games): 329.74G vs 34
 **Further exact-cut leads (not done).** (a) A general cross-enumeration memo of EnumeratePlans results. The enumeration
 itself re-runs on the same board, and the plan cache's m1-enum barely hits. It is lever-independent and probably the
 larger win. (b) A sound supply bound that credits unlocks.
+
+## Exact cuts, 2026-11-24 (after the price was deleted): `MTG_SPSX_GAME`, default ON
+
+Branch `wip/uo-cpu`. USER ruling (2026-11-24, verbatim): *"Pricing it doesn't seem worthwhile. It is just a bit
+painful that the quality impact is so tiny on the results and the performance impact so significant."* So the lever
+stays ON and unpriced, and its CPU comes down only by exact cuts. CPU is `perf stat -e instructions:u` over Jumbo
+gi 719000-719099 (100 games, seed 30000000+gi, play settings, 2 threads; manifests `build/scratch/claude_uo_cpu/
+jon.json` / `joff.json`, lever per job `MTG_PO_UNLOCK_ORDER` true / false). On this slice lever on and off play the
+same 100 games (same digests; units +0.4% on).
+
+**Where the lever's remaining cost is** (`MTG_UO_CPU_CENSUS`, a temporary rdtsc census, not committed; lever on,
+total ~65.9G ticks = 26.4 s of CPU; on vs off CPU 25.5 s vs 22.1 s, instructions +9.3%):
+
+| site | calls | ticks | share of the on arm |
+|---|---|---|---|
+| SubsetPayableSequential walks on a memo MISS (lever-independent work included) | 64,350 | 5.98G | 9.1% |
+| ...of them, walked EARLIER IN THE SAME GAME (same key + full libraries) | 16,217 | 1.36G | 2.1% (0 verdict differences) |
+| enumeration-site unlock-order tree (the fold; the given leaf included) | 19,154 (2,779 true) | 2.94G | 4.5% |
+| apply site, `UnlockPayableOrder` past its gate | 20,384 (2,720 moved) | 0.83G | 1.3% |
+| ...repeats in the same game (all under a live PlanTraits) | 13,380 | 0.50G | 0.8% (0 result differences) |
+| the domain predicate (`uo_dom`) | 61,665 | 0.02G | 0.03% |
+
+So the lever's DIRECT work (the tree beyond its given leaf, plus the apply site) is at most ~5.8% of the on arm, a bit
+over half of its measured +9.3%; the rest is indirect (the lines it admits are scored and searched like any other).
+The perf flat profile agrees: the on-off delta is spread over payment (`TapForCostShared*`, `UntapLandHostsOf*`,
+`SeqWalkFixedOrder`), GameState copies / memmove and the enumerator, with no single dominant symbol.
+
+**The cut: the SubsetPayableSequential memo lives for the GAME (`MTG_SPSX_GAME`, DEFAULT ON; `=0` -> the decision
+scope).** The decision scope stood in for one input the key did not hold: BuildSimKey's library digest (size + front
+card) implies the library's content only inside one decision. The game-scoped key adds every library's full content
+and order (`spsx::LibSig`); every other input the walk reads was already keyed, which is what made the decision memo
+exact across a decision's many frames, rollouts and budgets. The table is cleared by `ClearPerGameCaches`
+(`spsx::t_game_gen`), an observer's isolated epochs keep the decision scope, and everything else (bypasses, the
+no-trace work replay, the 32 MB bound) is unchanged.
+
+| Jumbo 100 games, instructions | lever on | lever off | on / off |
+|---|---|---|---|
+| origin e8a2f7d64 | 173.175G | 158.357G | +9.36% |
+| price variants deleted (e7e1974aa) | 173.151G | 158.360G | +9.34% |
+| **+ game-scoped memo** | **168.857G (-2.5%)** | **156.441G (-1.2%)** | **+7.94%** |
+
+Memo hits on the slice: 39,890 (decision scope) -> 54,756 (game scope); enumeration trees 19,154 -> 14,311.
+
+**Identity / exactness.** Each arm one pooled `--batch` at 2 threads, `played=` lines compared with ms/cpu stripped
+(digest and units): (1) origin vs the deletion tree, 80 games (Jumbo 20; Bruna, Extra Turns, Hinata, Angels, Five
+Colour, Boars 10; gi 740000+): identical; Jumbo 100 lever on and off: identical. (2) Game vs decision scope: the same
+80 games identical; Jumbo 100 on and off identical; 12 more decks x 8 games (Extra Turns, Hinata, Bruna, Snow,
+Landfall, Beasts, Goblins, Hydras, Accomplished Alchemist, Kitty Equipment, Mirrorwing Dragon, Vampires; gi 750000+)
+identical. VERIFY (`MTG_SPS_XMEMO_VERIFY=1`, every hit re-walked) under the game scope: Jumbo 54,756 hits, the 12 decks
+83,289 hits, **0 mismatches**. A larger pooled identity + VERIFY manifest over every suite deck (2,680 games) is
+`build/scratch/claude_uo_cpu/big_identity.json`, for the coordinator's big slot.
+
+**Leads, not done.** (a) An apply-site memo of `UnlockPayableOrder` (<= 0.8%): every call runs under a live
+PlanTraits, and the walk also reads the sac-fodder scope (`PoSacScope`) and `g_pay_fodder_off`, so the key would need
+all of those by content. (b) `remand_slot` differs on 242,943 of the 12-deck VERIFY's action diffs (lever-independent):
+a further `WalkSame` fold, if the walk provably ignores the field. (c) The tree's own exact headroom is the snapshot
+copies and the transposition of equal prefix states, both measured small above (2026-11-19).

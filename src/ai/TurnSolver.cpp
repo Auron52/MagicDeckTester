@@ -13987,10 +13987,38 @@ static std::uint64_t UoTreeCtxSig()
 // VERIFY 0 mismatches, play byte-identical; instructions lever-on 349.0G -> 329.6G, lever-off 303.5G -> 293.9G.
 // MTG_SPS_XMEMO_VERIFY=1 re-walks every hit, returns the walk's verdict, and prints hit / mismatch / field-diff counts
 // at exit. docs/design/jumbo-apply-drop-order-2026-11-18.md, "Exact cuts, 2026-11-21/22".
+//
+// MTG_SPSX_GAME (DEFAULT ON since 2026-11-24; =0 -> the memo is scoped to one decision, as before). The memo lives for
+// the whole GAME (cleared by ClearPerGameCaches, spsx::t_game_gen) instead of one decision. The decision scope stood
+// in for exactly one input the key did not hold: BuildSimKey's library digest is size + front card, which implies the
+// library's content only inside one decision. The game-scoped key adds every library's full content AND order
+// (spsx::LibSig), so that stand-in is no longer needed; every other input the walk reads is already in the key, which
+// is why the decision-scoped memo was exact across a decision's many search frames, rollouts and budgets. Still
+// bypassed wherever the decision memo was, and an observer's isolated epochs (bit 63) keep the decision scope, so a
+// viewer search never shares entries with play. EXACT (MTG_UO_CPU_CENSUS 2026-11-24, Jumbo 100 games gi 719000+:
+// 16,217 of 64,350 decision-scope misses had been walked earlier in the game, 0 verdict differences). Measured
+// 2026-11-24 (docs/design/jumbo-apply-drop-order-2026-11-18.md, "Exact cuts, 2026-11-24").
 namespace spsx
 {
 inline bool On() { static const bool v = EnvOn("MTG_SPS_XMEMO", true); return v; }
 inline bool Verify() { static const bool v = EnvOn("MTG_SPS_XMEMO_VERIFY"); return v; }
+inline bool GameOn() { static const bool v = EnvOn("MTG_SPSX_GAME", true); return v; }
+inline thread_local std::uint64_t t_game_gen = 0;   // ++ by TurnSolver::ClearPerGameCaches (one memo scope per game)
+// Every library's full content and order: the one input a decision scope implied and a game scope must key.
+inline std::uint64_t LibSig(const GameState& state)
+{
+    std::uint64_t h = 0x51D3ull;
+    for (const Player& pl : state.players)
+    {
+        paycensus::MixA(h, pl.library.size() + 0x9E37ull);
+        for (auto it = pl.library.begin(); it != pl.library.end(); ++it)
+        {
+            paycensus::MixA(h, static_cast<std::uint64_t>(it->m_number) * 0x100000001B3ull
+                                 + static_cast<std::uint64_t>(it->m_name_hash));
+        }
+    }
+    return h;
+}
 inline std::atomic<long long> g_hits{}, g_misses{}, g_mismatch{}, g_bypass_ctx{}, g_act_diff{};
 struct K { std::uint64_t a, b; bool operator==(const K& o) const { return a == o.a && b == o.b; } };
 struct KH { std::size_t operator()(const K& k) const { return static_cast<std::size_t>(k.a ^ (k.b * 0x9E3779B97F4A7C15ull)); } };
@@ -14080,8 +14108,11 @@ static bool SpsCrossEnumMemo(const GameState& state, const std::vector<Action>& 
     // no decision root in between (test_jumbo_cactuar's PO_UNLOCK_ORDER / SEQ_TRAILING_EQUIP
     // cases) used to read a stale verdict.
     static thread_local heurarm::Arm arm_seen = heurarm::Unset();
-    if (epoch != TurnSolver::DecisionEpoch() || bytes > spsx::kMaxBytes || arm_seen != heurarm::t_arm)
-    { table.clear(); bytes = 0; epoch = TurnSolver::DecisionEpoch(); arm_seen = heurarm::t_arm; }
+    // MTG_SPSX_GAME: one scope per game (an observer's isolated epochs, bit 63, keep the decision scope).
+    const bool game = spsx::GameOn() && (TurnSolver::DecisionEpoch() >> 63) == 0;
+    const std::uint64_t scope = game ? (spsx::t_game_gen | (1ull << 62)) : TurnSolver::DecisionEpoch();
+    if (epoch != scope || bytes > spsx::kMaxBytes || arm_seen != heurarm::t_arm)
+    { table.clear(); bytes = 0; epoch = scope; arm_seen = heurarm::t_arm; }
     // THE KEY LEAVES NO TRACE. BuildSimKeyBase bills workctr::kSimKey to the PRICED meter the decision ceiling reads
     // (decisionwork::PricedExceeded) and bumps the combat-pin read witness (combatpin::t_reads) that the put-bounce
     // fold's clean test compares; either moved by this key alone moved play (Extra Turns gi 733038, 2026-11-22). Same
@@ -14103,6 +14134,7 @@ static bool SpsCrossEnumMemo(const GameState& state, const std::vector<Action>& 
     paycensus::MixA(h, UoTreeCtxSig());
     for (int j : sel) { paycensus::MixA(h, paycensus::ActSig(cands[static_cast<std::size_t>(j)])); }
     paycensus::MixA(h, sel.size());
+    if (game) { paycensus::MixA(h, spsx::LibSig(state)); }   // MTG_SPSX_GAME: the libraries, in full
     --workctr::t_mute;
     combatpin::t_reads = cp_reads0;
     const spsx::K key{ bk.h1 ^ (h * 0x2545F4914F6CDD1Dull), bk.h2 + h };
@@ -112196,6 +112228,7 @@ void TurnSolver::ClearBreakpointCachesForDiagnostic()
 
 void TurnSolver::ClearPerGameCaches()
 {
+    ++spsx::t_game_gen;        // MTG_SPSX_GAME: a new game is a new SubsetPayableSequential memo scope
     IdHintGameClear();         // MTG_ID_HINT_GAME: the previous decision's hints are this game's only
     InWinCacheClear();         // MTG_INWIN_CACHE (empty when off)
     RolloutSuffixProbeClear(); // MTG_ROLLOUT_SUFFIX_PROBE (empty when off)
