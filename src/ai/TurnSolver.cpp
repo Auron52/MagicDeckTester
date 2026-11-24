@@ -14310,8 +14310,14 @@ static bool SpsCrossEnumMemo(const GameState& state, const std::vector<Action>& 
     static thread_local std::uint64_t epoch = ~0ull;
     static thread_local std::size_t bytes = 0;
     static thread_local std::unordered_map<spsx::K, spsx::Entry, spsx::KH> table;
-    if (epoch != TurnSolver::DecisionEpoch() || bytes > spsx::kMaxBytes)
-    { table.clear(); bytes = 0; epoch = TurnSolver::DecisionEpoch(); }
+    // The per-job lever arm is not in the key: a verdict walked under one arm is never served under another. In
+    // play the arm changes only at a job switch (a new decision epoch anyway); a scoped override inside a decision
+    // (ManaOracle's PAY_ROLLBACK probe) and the unit tests that flip levers between enumerations of ONE board with
+    // no decision root in between (test_jumbo_cactuar's PO_UNLOCK_ORDER / SEQ_TRAILING_EQUIP / UO_BUDGET_PRICE
+    // cases) used to read a stale verdict.
+    static thread_local heurarm::Arm arm_seen = heurarm::Unset();
+    if (epoch != TurnSolver::DecisionEpoch() || bytes > spsx::kMaxBytes || arm_seen != heurarm::t_arm)
+    { table.clear(); bytes = 0; epoch = TurnSolver::DecisionEpoch(); arm_seen = heurarm::t_arm; }
     // THE KEY LEAVES NO TRACE. BuildSimKeyBase bills workctr::kSimKey to the PRICED meter the decision ceiling reads
     // (decisionwork::PricedExceeded) and bumps the combat-pin read witness (combatpin::t_reads) that the put-bounce
     // fold's clean test compares; either moved by this key alone moved play (Extra Turns gi 733038, 2026-11-22). Same
