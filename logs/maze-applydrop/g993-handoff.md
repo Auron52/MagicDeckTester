@@ -79,3 +79,9 @@ RANK_OBJECT_COLORS=0 is still the committed tree's play):
    test) or is reverted if it does not buy g993; either way report to the coordinator.
 3. Hand the coordinator: mk_ab_spend.py manifest for the held-out A/B, plus a d8 b0 replay of the 25 previously
    recovered slower games under the new default (the spend lever moves Maze's End play beyond the rank fix).
+
+## NC runs: ended WITHOUT a result
+Both `MTG_NC_SEARCH=1` d8 b0 runs (PIDs 2006004/2006005) exited during turn 1 with no `avg` line (stderr ends after the
+first T1 payment; nc_*.DONE written, exit status lost). Most likely killed or crashed when the rebuild replaced
+build/Release/mtg under them (or memory). The NC clairvoyance check is therefore UN-RUN; to redo it, run from the
+frozen copy /workspaces/MagicDeckTester/build/scratch/claude_maze_applydrop/abbin/mtg, not build/Release.
