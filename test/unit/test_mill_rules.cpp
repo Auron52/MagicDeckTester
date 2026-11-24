@@ -528,8 +528,15 @@ TEST_CASE("Mill holds modern Tarn and Delta, while other decks keep immediate fe
         CHECK_FALSE(FetchResolvesOnPlay(state, *fetch));
         CHECK(FetchCrackOnPlayOffered(state, *fetch));
 
-        // `produces` is an in-hand fixing proxy, not an on-board mana ability.
-        CHECK_FALSE(EffectiveProduces(state, 0, *fetch, true).empty());
+        // In hand a fetchland fixes the colours it can fetch from THIS library (HandFixingProduces, USER
+        // 2026-11-22): nothing from an empty library, U from an Island; never an on-board mana ability.
+        CHECK(EffectiveProduces(state, 0, *fetch, true).empty());
+        {
+            Card isl = CardDatabase::Instance().Lookup("Island")->card; isl.m_number = 701;
+            state.players[0].library.push_back(isl);
+            CHECK(EffectiveProduces(state, 0, *fetch, true) == std::vector<Color>{ Color::Blue });
+            state.players[0].library = Library{};
+        }
         Permanent held;
         held.card = fetch->card;
         held.card.m_number = 700;

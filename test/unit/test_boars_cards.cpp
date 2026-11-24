@@ -5,6 +5,7 @@
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/LandPlay.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -91,11 +92,73 @@ TEST_CASE("Boars haste order advances mana creatures only with our Greaves in pl
     CHECK(provider.CastOrderRank(s, druid) < provider.CastOrderRank(s, boar));
 }
 
+TEST_CASE("A fetchland's hand colour hint is the untapped reach of THIS deck's library (USER 2026-11-22)")
+{
+    const CardDefinition& h = BDef("Windswept Heath");   // Forest / Plains
+    GameState s = BBase();
+    s.players[0].library = Library{};
+    // Empty library: nothing to fetch, so the hint is empty (the static `produces` is not consulted).
+    CHECK(HandFixingProduces(s, 0, h).empty());
+    CHECK(EffectiveProduces(s, 0, h, /*in_hand=*/true).empty());
+    s.players[0].library.push_back(BCard("Breeding Pool", 900));   // Forest Island shock: G and U
+    s.players[0].library.push_back(BCard("Plains", 901));          // W
+    s.players[0].library.push_back(BCard("Zagoth Triome", 902));   // Swamp Forest Island, ALWAYS tapped: not counted
+    s.players[0].library.push_back(BCard("Island", 903));          // not a Forest or Plains
+    const std::vector<Color> want{ Color::White, Color::Blue, Color::Green };
+    CHECK(HandFixingProduces(s, 0, h) == want);
+    CHECK(EffectiveProduces(s, 0, h, /*in_hand=*/true) == want);
+    // A non-fetch land keeps its own produces.
+    const CardDefinition& pool = BDef("Breeding Pool");
+    CHECK(&HandFixingProduces(s, 0, pool) == &pool.params.produces);
+    // The battlefield is unchanged: a held fetchland makes no mana.
+    Permanent& held = BPut(s, "Windswept Heath", 20);
+    CHECK(EffectiveProducesFor(s, 0, h, &held).empty());
+}
+
+TEST_CASE("MTG_ROLLOUT_FETCH_STATIC_HINT: the playout's land drop ranks a fetchland by its static produces")
+{
+    // Worldfire's shape: a Flooded Strand reaches U/R through a Steam Vents in the library (deck-derived hint), but its
+    // static `produces` is empty; Scalding Tarn's static proxy is all five colours. A non-fetch land is unchanged.
+    GameState s = BBase();
+    s.turn_number = 1;
+    s.players[0].library = Library{};
+    s.players[0].library.push_back(BCard("Steam Vents", 900));
+    s.players[0].library.push_back(BCard("Island", 901));
+    const CardDefinition& strand = BDef("Flooded Strand");
+    const CardDefinition& tarn = BDef("Scalding Tarn");
+    const CardDefinition& vents = BDef("Steam Vents");
+    heurarm::t_arm[heurarm::ROLLOUT_FETCH_STATIC_HINT] = 0;
+    CHECK(PlayoutLandColours(s, strand).size() == 2);   // off: the deck-derived reach (U, R)
+    CHECK(PlayoutLandColours(s, tarn).size() == 2);
+    CHECK(PlayoutLandColours(s, vents).size() == 2);
+    heurarm::t_arm[heurarm::ROLLOUT_FETCH_STATIC_HINT] = 1;
+    CHECK(PlayoutLandColours(s, strand).empty());       // on: the static proxy, exactly the pre-2026-11-22 read
+    CHECK(PlayoutLandColours(s, tarn).size() == 5);
+    CHECK(PlayoutLandColours(s, vents).size() == 2);
+    // The greedy ranker (the d0 runner, the search's tie-break) keeps the deck-derived reach either way: the Strand is
+    // multi-colour there and takes the drop ahead of a basic.
+    s.players[0].hand.push_back(BCard("Island", 910));
+    s.players[0].hand.push_back(BCard("Flooded Strand", 911));
+    CHECK(GreedyLandChoiceIndex(s) == 1);
+    heurarm::t_arm[heurarm::ROLLOUT_FETCH_STATIC_HINT] = -1;
+}
+
 TEST_CASE("Windswept Heath is a real battlefield fetchland (the Wooded Foothills shape)")
 {
     const CardDefinition& h = BDef("Windswept Heath");
     const CardDefinition& f = BDef("Wooded Foothills");
-    CHECK(h.params.produces.empty());
+    // `produces` is the HAND-only colour hint (the Scalding Tarn / Misty Rainforest shape, restored 2026-11-22):
+    // a Heath in hand is a W/B/R/G fixing source to the land-drop and colour heuristics, as Foothills is.
+    CHECK(h.params.produces == std::vector<Color>{ Color::White, Color::Black, Color::Red, Color::Green });
+    CHECK(f.params.produces == h.params.produces);
+    // On the battlefield a fetchland has no mana ability: the hint never reaches payment.
+    {
+        GameState s = BBase();
+        Permanent& held = BPut(s, "Windswept Heath", 20);
+        CHECK(EffectiveProducesFor(s, 0, h, &held).empty());
+        Permanent& held_f = BPut(s, "Wooded Foothills", 21);
+        CHECK(EffectiveProducesFor(s, 0, f, &held_f).empty());
+    }
     CHECK(h.params.fetch_land_types == std::vector<std::string>{ "Forest", "Plains" });
     CHECK(h.params.land_search_count == f.params.land_search_count);
     CHECK(h.params.land_search_activation_taps == f.params.land_search_activation_taps);

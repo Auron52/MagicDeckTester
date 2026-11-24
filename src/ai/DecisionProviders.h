@@ -2417,6 +2417,8 @@ public:
     // defer the d0 drop when a hand-land tutor is payable from the mana already on board, so
     // the fetched Orchard can be the drop. Gated with MTG_CG_ORDER.
     bool LandDropAfterHandLandTutor(const GameState&, int) const override;
+    // Forbidden Orchard ahead of a fetchland in the greedy land ranker (OrchardBeforeFetchIndex).
+    int GreedyLandFirst(const GameState& s, int controller) const override;
 
     // THE SEARCHED DEFENSE OF THE HEART MENU's folds (MTG_DOTH_AXIS / MTG_DOTH_FOLDS), proven card by card for
     // THIS pool against the passive goldfish opponent (docs/design/searched-doth-put.md, "The folds"). A
@@ -4376,6 +4378,8 @@ public:
                "indestructible reflector (Stuffy Doll, a Loran's Escape target) is an unbounded loop. Design "
                "section 8 gives a one-sided bound; it is a separate, measured step (12)." }; }
     const char* Name() const override { return "StuffyDoll"; }
+    // Forbidden Orchard ahead of a fetchland in the greedy land ranker (OrchardBeforeFetchIndex).
+    int GreedyLandFirst(const GameState& s, int controller) const override;
 };
 
 // BLOOD SUN (docs/design/blood-sun-pipeline.md 10.3; step 3 = the SKELETON). The deck routed to GenericProvider
