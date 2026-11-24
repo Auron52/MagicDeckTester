@@ -16532,6 +16532,7 @@ static void ExecutorPayerOrder(const GameState& state, const std::vector<Attacki
             { p = &q; break; }
         }
         const CardDefinition* d = p ? CardDatabase::Instance().LookupCached(p->card) : nullptr;
+        const RankObjectScope ro(p);
         const int rank = d ? prov.ManaSourceRank(state, *d) : std::numeric_limits<int>::max();
         const int hold = d ? prov.ManaSourceHoldValue(state, *p, *d) : 0;
         keys.push_back({ rank, hold, srcs[static_cast<std::size_t>(i)].power, i });
@@ -71794,7 +71795,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 { continue; }
                 rel[n_rel] = i;
                 key0[n_rel] = (body ? 2 : 0) + ((d != nullptr && d->params.tap_self_damage > 0) ? 1 : 0);
-                key1[n_rel] = d != nullptr ? prov.ManaSourceRank(state, *d) : 1000;
+                { const RankObjectScope ro(&p); key1[n_rel] = d != nullptr ? prov.ManaSourceRank(state, *d) : 1000; }
                 ++n_rel;
             }
             int ord[64];

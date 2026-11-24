@@ -1415,6 +1415,7 @@ std::uint64_t DepletionHoldMask(const GameState& state, std::uint64_t cand_mask,
             || !ManaSubtypeGateLive(state, active, *d)) { continue; }
         if (plain_tier_only)
         {
+            const RankObjectScope ro(&p);
             const int r = ResolveProvider(state).ManaSourceRank(state, *d);
             if (r < 0 || r >= 60) { continue; }
         }
@@ -2976,8 +2977,9 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // §2b fodder is ranked by SacPayFodderRank, whose base 500 sits behind every real
                 // source on the board -- the user's "highest level of deferral", expressed as a
                 // tap-order rank rather than as a rule anyone has to enforce.
-                int rank = (kind == 5) ? SacPayFodderRank(state, p, sac_outlet, &pay_doomed)
-                                       : ResolveProvider(state).ManaSourceRank(state, *def);
+                int rank = 0;
+                if (kind == 5) { rank = SacPayFodderRank(state, p, sac_outlet, &pay_doomed); }
+                else { const RankObjectScope ro(&p); rank = ResolveProvider(state).ManaSourceRank(state, *def); }
                 if (kind == 1 && i == rp_anchor) { rank = std::max(rank, 51); }
                 // An awakened land is still a land in the card database, so its normal land
                 // rank spends it before ordinary Islands. Once it can attack, tapping it for
@@ -3843,7 +3845,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     for (Color pc : EffectiveProducesFor(state, active, *sd, &s))
                     { for (Color ic : bdef->params.produces) { if (pc == ic) { m = true; match = ic; break; } } if (m) { break; } }
                     if (!m) { continue; }
-                    int r = ResolveProvider(state).ManaSourceRank(state, *sd);
+                    int r = 0;
+                    { const RankObjectScope ro(&s); r = ResolveProvider(state).ManaSourceRank(state, *sd); }
                     // MTG_PAY_PAIN_LAST: a feed is a coloured tap, so a pain source feeds last.
                     if (pay_pain_last && (sd->params.tap_self_damage > 0
                                           || (sd->params.energy_per_colored_tap > 0 && PayEnergyLastOn())))
@@ -11011,12 +11014,21 @@ static bool ProviderHoldUpTargets(const GameState& state, const ManaCost& cost_i
         if (cost_in.black > 0) { hold.black = 0; }
         if (cost_in.red > 0)   { hold.red = 0; hold.generic = 0; }
         if (cost_in.white > 0) { hold.white = 0; }
+        // {U} / {G} holds (the Maze's End hold-up): the bill's own colour is not held for, and the hold's generic is
+        // added with a raised U/G pip (Guild Summit's {2}{U}: three mana, one of them blue). No B/R/W hold carries
+        // U or G, so the Fluctuator / Prevent Damage targets are unchanged.
+        if (cost_in.blue > 0)  { hold.blue = 0; }
+        if (cost_in.green > 0) { hold.green = 0; }
         if (hold.ManaValue() <= 0) { continue; }
         // The target: the rest of the line, its pips raised to the hold-up's where the line holds fewer.
         ManaCost target = RampLaterBill(cost_in);
         if (target.black < hold.black) { target.black = hold.black; }
         if (target.red < hold.red) { target.generic += hold.generic; target.red = hold.red; }
         if (target.white < hold.white) { target.white = hold.white; }
+        const bool ug_raise = target.blue < hold.blue || target.green < hold.green;
+        if (target.blue < hold.blue)   { target.blue = hold.blue; }
+        if (target.green < hold.green) { target.green = hold.green; }
+        if (ug_raise && hold.red == 0) { target.generic += hold.generic; }
         if (!PaymentManaCovers(state, /*for_creature=*/false, AddManaCosts(cost_in, target).ManaValue() - floating))
         { continue; }
         targets.push_back(target);

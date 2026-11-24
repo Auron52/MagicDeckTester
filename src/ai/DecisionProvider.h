@@ -208,6 +208,26 @@ struct DigOffer
 // defined in SpellEffects.cpp: this header cannot include SpellEffects.h). Read by LandEntryPinCandidates.
 int LotusSacrificePickCountFor(const GameState& s, int controller, const CardDefinition& def);
 
+// THE RANKED OBJECT (MTG_RANK_OBJECT_COLORS, heurarm RANK_OBJECT_COLORS; default ON). ManaSourceRank is keyed on the
+// DEFINITION, but some sources' colours are a property of the OBJECT: an etb_choose_color permanent locks its colour
+// as it enters (CR 614.12), so a CLB Gate makes its printed colour or the chosen one (a dual), and Thran Portal /
+// Coldsteel Heart the chosen one (mono). Read off the definition, every one of them carried the five-colour menu
+// and ranked "rainbow" (50) -- spent LAST, after the board's genuinely flexible sources. Maze's End, gate
+// claude-queue-20261121a s30006540 T3: Gond Gate ({C} + the Gates' R/G/B, ranked 40) paid Sylvan Scrying's {G}
+// ahead of a Cliffgate locked to G, and the continuation's Guild Summit -- whose {U} only Gond makes, once the
+// fetched Heap Gate is in -- was dropped. A rank site that holds the permanent opens a RankObjectScope; the colour
+// ladder (ManaSourceRankBase) then reads EffectiveProducesFor for that object when it is colour-locked.
+// ORDER ONLY: the payer still taps any source a cost needs, and the complete backtracker is unchanged.
+inline thread_local const Permanent* g_rank_object = nullptr;
+struct RankObjectScope
+{
+    const Permanent* prev;
+    explicit RankObjectScope(const Permanent* p) : prev(g_rank_object) { g_rank_object = p; }
+    ~RankObjectScope() { g_rank_object = prev; }
+    RankObjectScope(const RankObjectScope&) = delete;
+    RankObjectScope& operator=(const RankObjectScope&) = delete;
+};
+
 class DecisionProvider
 {
 public:
@@ -5178,8 +5198,9 @@ public:
         std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) {
             const CardDefinition* da = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(a)].card);
             const CardDefinition* db = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(b)].card);
-            const int ra = da ? ManaSourceRank(s, *da) : 0;
-            const int rb = db ? ManaSourceRank(s, *db) : 0;
+            int ra = 0, rb = 0;
+            { const RankObjectScope ro(&s.battlefield[static_cast<std::size_t>(a)]); ra = da ? ManaSourceRank(s, *da) : 0; }
+            { const RankObjectScope ro(&s.battlefield[static_cast<std::size_t>(b)]); rb = db ? ManaSourceRank(s, *db) : 0; }
             return ra < rb;
         });
     }
