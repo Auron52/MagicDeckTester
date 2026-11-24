@@ -165,3 +165,144 @@ Sea, Spirits, Stuffy, Worldfire, plus their 2HG rows). Searched audit: smoke 5 s
 6 faster. Many more games show same-score play changes (the fetchland now gets played on a different turn). Reference
 protocol: 0 play-drift / board-diverged / enum-gap. All **15 searched slower tier games recover at d8 b0** on the rebased
 binary, each at its old GT turn. NOT YET ACCEPTED.
+
+## Round 5 (2026-11-24): what the play-setting slower games are, the keep-the-fetch lever, the fresh-seed re-measure
+
+### USER bar (verbatim, 2026-11-24)
+
+"I think I would be willing to accept something that helps a lot of decks, but doesn't help a few deck and then look for
+ways to mitigate the cost on the other decks without blocking the adoption. Naturally, if the only reason it is worse on
+those other decks are the specific seeds we can just move on. d0 is not very important at all as I said previously. The
+primary thing that matters is play settings, though we should also check whether any worse case is a result of
+clairvoyant play. We can ignore those." / "Play settings are the most important, so if the change was specific to Maze's
+end we shouldn't adopt." / "(until we can show it is clairvoyance, variance or fix it)" / "If play settings are super
+marginally better, but other settings are much worse it might be worth holding back as well, but usually play settings
+being better is enough."
+
+### Method
+
+Every changed r4 play game of Burn (21), Morph (9) and Five Colour (4), and 20 of Worldfire's 73, replayed as single
+games on the r4 binaries (base 42d819bc0 in heath-base, derived c7a354a63 in heath-produces; --threads 1), with game
+logs, first at the r4 setting (every game reproduces its r4 turn on both arms) and then with `MTG_NC_SEARCH=1`
+(non-clairvoyant search) on both arms. Scratch: `build/scratch/heath/r6/tr/<deck>[nc]_gi<gi>/{base,derived}`;
+`r6/tab.py <tag> <nctag>` prints the table.
+
+### The one mechanism: the dual-vs-fetch tie flips, then the reshuffle deals a different game
+
+Every changed game diverges at its turn-1 or turn-2 LAND DROP, a fetchland against a non-fetch land, and from the
+fetch's reshuffle on the two games draw different cards. The reader of the hint that flips it is the GREEDY LAND RANKER
+(LandPlay.cpp GreedyLandRank), which the search consults as its last-resort tie-break between land lines of equal value
+(TurnSolver `greedy_land_name`) and which its playout mirrors (SimulateLandPlayOne). In base a fetch in hand had no
+colour, so it sat in the mono pass behind every dual. With the deck-derived hint, Arid Mesa / Wooded Foothills reach W+R
+in Burn (Sacred Foundry, Mountain) and R+G in Morph (Stomping Ground), so they TIE Sunbaked Canyon / Sacred Foundry /
+Stomping Ground in the multi pass and hand order decides. In the Burn table below, 16 of the 21 changed games are "derived drops the fetch
+(first in hand order) where base drops a non-fetch land", 14 of them a real dual, and they go both ways (11 slower, 5
+faster). Four more are the reverse (base fetches, derived plays Inspiring Vantage / Mountain: a search choice moved by
+the playout's new land order), and 2738 (a mulligan to 4) skips its T1 drop.
+
+Honest value of that choice is ~0: the fetch and the dual make the same colours here, and the only honest differences are
+one land thinned earlier (in the fetch's favour) and the reshuffle point. Under the LOCKSTEP search the reshuffle is not
+random to the search (ShuffleByKey keyed on the shuffle ordinal: the search sees the very order the real game deals), so
+a fetch held in hand is a clairvoyant option -- "crack it on the turn whose reshuffle deals the better cards". Base holds
+the fetch more often, so base keeps that option more often; that is the 16:5 skew on Burn.
+
+Burn (r4 play, b20; AB = r4 turns, base,derived; NC = both arms with MTG_NC_SEARCH=1):
+
+| gi | AB | NC | base T1-T2 drops | derived T1-T2 drops | class |
+|---|---|---|---|---|---|
+| 629 | 3 / 4 | 4 / 4 | T1 Sunbaked Canyon; T2 Arid Mesa | T1 Arid Mesa; T2 Sunbaked Canyon | C: NC base misses its own T3 |
+| 1641 | 4 / 5 | 6 / 6 | T1 Wooded Foothills; T2 Arid Mesa | T1 Inspiring Vantage; T2 Wooded Foothills | C: NC base misses its own T4 |
+| 2185 | 4 / 5 | 5 / 5 | T1 Sunbaked Canyon; T2 Sacred Foundry | T1 Wooded Foothills; T2 Sunbaked Canyon | C: NC base misses its own T4 |
+| 2234 | 4 / 5 | 5 / 5 | T1 Sunbaked Canyon; T2 Arid Mesa | T1 Arid Mesa; T2 Sunbaked Canyon | C: NC base misses its own T4 |
+| 2738 | 5 / 6 | 7 / 7 | T1 Sunbaked Canyon | T2 Sunbaked Canyon | C: NC base misses its own T5 |
+| 4027 | 3 / 4 | 3 / 3 | T1 Sunbaked Canyon; T2 Wooded Foothills | T1 Wooded Foothills; T2 Sunbaked Canyon | recovers under NC |
+| 4074 | 4 / 5 | 6 / 6 | T1 Arid Mesa; T2 Inspiring Vantage | T1 Inspiring Vantage; T2 Arid Mesa | C: NC base misses its own T4 |
+| 4151 | 3 / 4 | 4 / 4 | T1 Sunbaked Canyon; T2 Sacred Foundry | T1 Arid Mesa; T2 Sunbaked Canyon | C: NC base misses its own T3 |
+| 5250 | 5 / 6 | 6 / 6 | T1 Sunbaked Canyon; T2 Sacred Foundry | T1 Arid Mesa; T2 Sunbaked Canyon | C: NC base misses its own T5 |
+| 5555 | 5 / 6 | 8 / 8 | T1 Arid Mesa; T2 Mountain | T1 Mountain; T2 Arid Mesa | C: NC base misses its own T5 |
+| 6410 | 4 / 5 | 4 / 5 | T1 Sunbaked Canyon; T2 Sacred Foundry | T1 Arid Mesa; T2 Sunbaked Canyon | V: same flip under NC, reshuffle luck |
+| 6888 | 4 / 5 | 6 / 6 | T1 Sunbaked Canyon; T2 Sacred Foundry | T1 Arid Mesa; T2 Wooded Foothills | C: NC base misses its own T4 |
+| 8003 | 6 / 7 | 7 / 8 | T1 Sunbaked Canyon; T2 Sacred Foundry | T1 Sunbaked Canyon; T2 Arid Mesa | C: NC base misses its own T6 (NC derived 8) |
+| 8192 | 3 / 4 | 3 / 4 | T1 Sunbaked Canyon; T2 Mountain | T1 Arid Mesa; T2 Sunbaked Canyon | V: same flip under NC, reshuffle luck |
+| 8645 | 5 / 6 | 7 / lost | T1 Mountain; T2 Mountain | T1 Arid Mesa; T2 Sacred Foundry | C: NC base misses its own T5 (NC derived lost) |
+| 8822 | 3 / 4 | 4 / 4 | T1 Arid Mesa; T2 Inspiring Vantage | T1 Inspiring Vantage; T2 Arid Mesa | C: NC base misses its own T3 |
+| 2703 | 4 / 3 | 3 / 4 | T1 Mountain; T2 Arid Mesa | T1 Arid Mesa; T2 Mountain | (faster) |
+| 2928 | 4 / 3 | 4 / 4 | T1 Sacred Foundry; T2 Wooded Foothills | T1 Wooded Foothills; T2 Sacred Foundry | (faster) |
+| 5144 | 4 / 3 | 4 / 4 | T1 Sacred Foundry; T2 Sunbaked Canyon | T1 Wooded Foothills; T2 Sacred Foundry | (faster) |
+| 5283 | 4 / 3 | 4 / 4 | T1 Sunbaked Canyon; T2 Arid Mesa | T1 Arid Mesa; T2 Sunbaked Canyon | (faster) |
+| 9967 | 4 / 3 | 3 / 3 | T1 Sacred Foundry; T2 Mountain | T1 Wooded Foothills; T2 Arid Mesa | (faster) |
+
+Morph: the same flip, Wooded Foothills against Stomping Ground / Fire-Lit Thicket (9 of 9 changed games). Slower 6:
+1736 (NC 6/6 vs base 5), 2004 (6/6 vs 4), 6404 (5/5 vs 4), 7542 (both lose under NC vs 7) are C; 5381 recovers under NC
+(derived 4 = base 4); 2276 is the flip under NC too (NC base T1 Stomping Ground + Birds, T2 Stomping Ground: 5; NC derived
+T2 Foothills: 8) -- V. Faster 3 (707, 1907, 3911) all become equal under NC.
+
+Five Colour: 4 slower, all C. Each first divergence is a fetch against a shock or another fetch (146 Misty / Foothills;
+1096 Stomping Ground / Heath; 1621 Scalding Tarn / Breeding Pool; 1769 Breeding Pool / Foothills). NC: 146 both lose,
+1096 5/5 (base 4), 1621 7/6 (base 5; derived FASTER under NC), 1769 5/5 (base 4).
+
+Worldfire: a different shape. 73 of 2000 games change, 34 faster / 36 slower (net +6, z ~0.7), and of the 20 traced
+(10 slower, 10 faster) the first divergence is scattered: a fetch against a non-fetch in 7 (141, 227, 361, 403, 448,
+606, 635), a Saprazzan Skerry / Mercadian Bazaar / Sandstone Needle choice in 6, a cantrip choice (Ponder / Brainstorm /
+Preordain / Halberdier) in 3, and a different draw at the same position in 4 (an earlier hidden reshuffle or put-back).
+That is the hint moving the budget-bound search's valuations a little everywhere, both ways -- variance, not a
+mechanism. Round 4 already showed 33 of its 38 slower games recover at d8 b0 or b2000 and 1410 equal at b2000; 103, 1363,
+1684 and 205 stay UNRESOLVED (no capped NC run was needed for this classification and none was run).
+
+### Classification of the play-row slower games
+
+C = clairvoyance: under MTG_NC_SEARCH=1 base itself does not reach the turn it won on in r4, so its faster game came
+from the lockstep search seeing the reshuffle. V = the dual/fetch flip repeats under NC and the reshuffle deals the two
+games different cards (no honest difference in the choice itself; the lever below removes the flip). R = derived's NC
+search reaches base's turn.
+
+| deck | slower | C | R | V | note |
+|---|---|---|---|---|---|
+| Modern RW Burn | 16 | 13 | 1 (4027) | 2 (6410, 8192) | 8003 / 8645 are C but NC derived is also 1 slower / lost: same flip |
+| Morph | 6 | 4 | 1 (5381) | 1 (2276) | |
+| Five Colour | 4 | 4 | 0 | 0 | 1621 is faster under NC |
+| Worldfire | 36 + 2 lost | -- | 33 at d8 b0 / b2000 | rest variance (34 faster) | 103, 1363, 1684, 205 UNRESOLVED |
+
+Under NC the 21 changed Burn games read 5 derived-slower / 0 faster (6410, 8192, 8003, 8645 and the r4-faster 2703); the
+set was selected under the clairvoyant search, so that is no estimate. The re-measure's decoupled rows are the unbiased
+honest-reshuffle check.
+
+### The mitigation: MTG_FETCH_AFTER_DUAL (keep the fetch behind a real dual)
+
+`MTG_FETCH_AFTER_DUAL` (heurarm slot FETCH_AFTER_DUAL, shared reader `FetchAfterDualEnabled` in EngineFlags.h; **default
+OFF** until the re-measure). In the greedy land ranker's MULTI-colour passes (LandPlay.cpp GreedyLandRank) and its
+rollout mirror (TurnSolver.cpp SimulateLandPlayOne, pass 0), every non-fetch candidate is tried before a fetchland. A
+fetch still comes before every mono-colour land, which is what the restored hint was for (the Heath held behind a basic).
+ORDER only, at the permitted greedy sites (the depth-0 runner, the playout's drop, the search's last-resort land
+tie-break); the search's own land menu is unchanged. Why it is sound: the fetch and the dual it ties make the same
+colours here, a fetch kept in hand stays flexible (it can still become any colour it reaches) and keeps its reshuffle
+for a later Brainstorm / Ponder, so "play the less flexible land first" is the ordinary sequencing rule; and it is
+exactly base's order between the two, so the fix's change narrows to fetch-vs-mono and the other in-hand readers.
+Unit test: `test_boars_cards.cpp` "MTG_FETCH_AFTER_DUAL: ...".
+
+Single games at the r4 setting (rebased binary a0773a63d, `MTG_FETCH_AFTER_DUAL=0` / `=1`; lever off reproduces the r4
+derived turn in every game and is move-for-move identical to the pre-lever rebased binary on the 5 games checked):
+
+| deck | r4 slower -> base's turn with the lever | r4 faster -> back to base's turn |
+|---|---|---|
+| Modern RW Burn | 15 of 16 (5555 stays 6: base fetches T1, derived plays Mountain) | 4 of 5 (2703 stays 3) |
+| Morph | 5 of 6 (6404 stays 5: Foothills against a basic Forest) | 3 of 3 |
+| Five Colour | 4 of 4 | (none) |
+
+So on these decks the lever puts back base's play wherever the hint only re-broke a fetch/dual tie (and with it most of
+the r4 faster games, which were the same coin flip). What it keeps of the fix is the fetch over a mono-colour land and
+every other in-hand reader. Whether that keeps the fix's gains on Creature Giving / Boars / Stuffy / d0 is what the
+re-measure's `fad` arm answers. Scratch: `build/scratch/heath/r6/tr/l{burn,morph,fc}_gi*/{off,on}`, `r6/tab2.py`.
+
+### Fresh-seed re-measure (NOT RUN by the agent; the coordinator runs it under the box lock)
+
+Generator `build/scratch/heath/r8/gen_manifest.py` (copy in `logs/heath/r8/`), runner `r8/run.sh`, report `r8/report.py`.
+Seed base 8400000 (fresh: this work used 960000, 2000000, 3000000, 5000000-6047500, 7000000-7100000). Three arms paired
+on (seed, game_index): `base` = 249db2aa7 (the branch's parent; binary `mtg.base2`, cwd `.claude/worktrees/heath-base2`),
+`derived` = a0773a63d with the lever off (= r4's derived), `fad` = lever on. derived and fad are ONE pooled batch
+(per-job `flags`); base needs its own binary and cards.json, so it is a second pooled batch (run.sh runs them back to
+back under the box lock). Rows at each deck's play setting: Burn 10000, Morph 10000, Worldfire 3000, Five Colour 3000
+(b40), Anti-Lifegain 2HG 4000, Sea 4000, Spirits 4000, Creature Giving 6000 (b30), Boars 6000 (b40), Stuffy 2000, plus
+DECOUPLED rows (shuffle_salt_search 1: the honest-reshuffle check) for Burn and Morph, 4000 each, on their own seed block.
+600 base jobs / 60000 games; 1200 fix jobs / 120000 games. CPU from r4's per-game cost: ~48k core-s per arm, ~145k
+core-s total (Worldfire is ~half), so roughly 1.5-2 h of the 32-core box.
