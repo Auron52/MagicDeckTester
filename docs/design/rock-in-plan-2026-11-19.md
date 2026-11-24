@@ -473,3 +473,20 @@ true)` + heurarm slot `LKR_PLAYOUT_OFF` (per-job arm); `=0` runs the rung inside
 CPU -5.1% net -8 (3,000 pairs), Niv 2HG CPU -5.7% net -1 (1,000), Hinata play net 0 at 4,000 fresh pairs, Hinata d3 0,
 Extra Turns / Extra Turns 2HG / the six small-cost decks 0, d0 byte-identical, every slower game recovers at d8 b0.
 
+
+**Adoption tiers** (`wip/lkr-adopt` 0492ee7e5, Release, `MTG_PGO=0 test/regression.sh --both` under the box lock;
+`build/scratch/claude_lkr_adopt/`): units 4,164 / 4,164 pass; scenarios 677 / 677; viewer protocol 0 drift; smoke
+246 / 247, regression 390 / 395, every moved key on a deck whose rung runs in the playout:
+
+| key | old -> new | faster / slower | net |
+|---|---|---|---|
+| sea_smoke_d3_s1001 | 5.8600 -> 5.8600 (digest) | 0 / 0 (gi32 play-changed) | 0 |
+| hinata2hg_regression_d5_s2002 | 5.3333 -> 5.3333 (digest) | 0 / 0 (gi30) | 0 |
+| niv_regression_d3_s2002 | 4.5200 -> 4.4800 | 1 / 0 | -1 |
+| niv_regression_d5_s2002 | 4.4667 -> 4.4800 | 1 / 3 | +2 |
+| niv_regression_d5_s3003 | 4.5067 -> 4.5067 (digest) | 0 / 0 | 0 |
+| niv2hg_regression_d5_s2002 | 4.4533 -> 4.4400 | 1 / 0 | -1 |
+
+Net over the moved keys 0. d0 unmoved. The three slower games (niv d5 s2002 gi70 4->5, gi135 5->6, gi137 4->5) all
+**recover byte-identically at d8 b0** on both arms (T4 / T5 / T4, same digest with `MTG_LKR_PLAYOUT_OFF` =0 and at the
+default). Smoke + regression GT accepted; `test/check_gt_logs.py` consistent (1,435, 0 stale).
