@@ -213,8 +213,8 @@ short all game and kills T4, at every depth through d8 b0 and non-clairvoyantly.
 a payment inside the search's own Needle-first line (payment is the greedy exemption, not searched), which devalues
 that line; which pip is still OWED (re-add the temp crit trace near `crit_hold`).
 
-Still running when this was written (b / bT, d8 b0): Worldfire gi1373 (d3 / d5 and 2HG) and gi1380 (d0), Cyclone
-gi1477 (d0). None is a play-setting row except Worldfire's d5 / 2HG (Worldfire play = d5 b20), where b / bT are 0 net
+b Worldfire gi1380 (d0 7 -> unwon) recovers (d8 b0 = 5). Still running at 03:33 UTC after 2.5 h of d8 b0 (b / bT):
+Worldfire gi1373 (d3 / d5 and 2HG) and Cyclone gi1477 (d0). None is a play-setting row except Worldfire's d5 / 2HG (Worldfire play = d5 b20), where b / bT are 0 net
 (1 faster / 1 slower) anyway.
 
 ## Readings (2026-11-24)
