@@ -41,3 +41,9 @@ MTG_TMP_NO_TIEBREAK (old ranks) and MTG_TMP_NO_TALON_SKIP (disables the 50f807e9
 * NC batch (MTG_NC_SEARCH=1, d8 b0, abandon_units 30M, 2 threads) still running, mtg PID 2137307, started 13:14;
   no job finished after 34 min. Output scratch/claude_maze_rank3/nc/out, DONE marker nc/DONE. My own experiment:
   kill it if the box needs the cores.
+
+## Update after stop
+* build1 finished rc=0 (this WIP source incl. TMPDIAG): `mtg-test -tc="*Maze*"` 124/124 cases, 5173 assertions pass
+  (the two new tie-break cases included). Game confirmations (step 1-2 above) NOT run yet.
+* NC batch ended rc=143 (SIGTERM, 16:30:45 UTC) with NO job finished -- NC check UN-RUN. Redo with fewer/cheaper jobs
+  (e.g. the three base+new arms one at a time) if the coordinator wants it.
