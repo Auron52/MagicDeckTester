@@ -1140,6 +1140,8 @@ enum Slot : int
     SCALED_ROUTE_ACTS,        // MTG_SCALED_ROUTE_ACTS  MTG_SCALED_LAND_ROUTE's "rest of the line" also counts the plan's PENDING trailing activations (PlanTraits::act_mana_total net of those paid and the one being paid), not only its unpaid casts; a payment made while an activation is pending is no longer subtracted from the cast hold. Maze's End 2HG s26701483 gi1483 T4 (USER 2026-11-25 "We should be using Baldur's Gate"): Archdruid's Charm {G}{G}{G} off three Gates stranded the second Maze's End {3}; holding one out pays Charm through Baldur's Gate's fed mode and the surplus pays the {3}. Default ON; =0 -> the casts-only rest
     FETCH_HINT_TAPPED,        // MTG_FETCH_HINT_TAPPED  REPORT-ONLY arm (USER 2026-11-22): a fetchland's deck-derived hand hint (HandFixingProduces) also counts the always-tapped fetchable lands (triomes). Default OFF (the USER: untapped reach only)
     ROLLOUT_FETCH_STATIC_HINT,// MTG_ROLLOUT_FETCH_STATIC_HINT  the playout's legacy land drop (SimulateLandPlayOne) reads a fetchland's static `produces`, not its deck-derived hand reach (Worldfire +11 -> -1 at the heath-wf A/B). Default ON; =0 -> the playout reads the deck-derived reach
+    ESC_BEAM_NONE,            // MTG_ESC_BEAM_NONE  A/B arm (2026-11-24, the depth-5-only beam): NO escalation beam at ANY depth -- the deck's value_play beam_width/beam_leafdepth and the depth-3 static W20 regime are both ignored (the MTG_ESC_BEAM env research override still wins). Default OFF; =1 -> beam off everywhere
+    ESC_BEAM_STATIC_ALL,      // MTG_ESC_BEAM_STATIC_ALL  A/B arm (2026-11-24): the depth-3 STATIC W20 ld1 beam at EVERY search depth for every deck whose value_play block drives, the deck's beam_width ignored (one depth-independent rule). MTG_ESC_BEAM_NONE wins when both are on. Default OFF
     COUNT
 };
 
@@ -2224,6 +2226,8 @@ inline const char* Name(int slot)
         "MTG_SCALED_ROUTE_ACTS",
         "MTG_FETCH_HINT_TAPPED",
         "MTG_ROLLOUT_FETCH_STATIC_HINT",
+        "MTG_ESC_BEAM_NONE",
+        "MTG_ESC_BEAM_STATIC_ALL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
