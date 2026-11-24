@@ -2606,6 +2606,25 @@ inline bool FetchAfterDualEnabled()
     return heurarm::Flag(heurarm::FETCH_AFTER_DUAL, v);
 }
 
+// MTG_ROLLOUT_FETCH_STATIC_HINT -- DEFAULT OFF (measuring; heath-wf A/B 2026-11-24). The PLAYOUT's legacy land drop
+// (TurnSolver.cpp SimulateLandPlayOne: pass 0 = the first multi-colour land in hand order, pass 1 = the first land in
+// hand order; no tapped-ness, no mana amount) reads a fetchland's STATIC `produces` (cards.json) for its multi-colour
+// test instead of its deck-derived hand reach (HandFixingProduces), i.e. exactly what it read before the 2026-11-22
+// restore. Why: that loop has no notion of a land's size or its entry, so promoting a fetch into pass 0 plays it ahead
+// of every mono land in hand -- in Worldfire a Flooded Strand (static [], derived U/R via Steam Vents) then takes the
+// drops its playouts used to give Sandstone Needle / Saprazzan Skerry / Mercadian Bazaar, the two-mana and storage
+// lands its nine-mana turn is built on (rollout drop census, gi1407: Strand 19% of the playout's drops vs 10%). Those
+// playouts are the search's leaf values, so the search misjudges its early lines: with ONLY this reader reverted, 17 of
+// the 20 largest r9 (decoupled-shuffle) Worldfire slower games return to base's turn and one more gains a turn
+// (docs/design/heath-produces-2026-11-22.md, Round 6). ORDER of a permitted greedy site (beyond the horizon and the
+// depth-0 static plans), nothing else: the greedy ranker (the d0 runner's drop, the search's last-resort land
+// tie-break, the playout under MTG_ROLLOUT_LAND_RANKER) and every other in-hand reader keep the deck-derived reach.
+inline bool RolloutFetchStaticHintEnabled()
+{
+    static const bool v = EnvOn("MTG_ROLLOUT_FETCH_STATIC_HINT");
+    return heurarm::Flag(heurarm::ROLLOUT_FETCH_STATIC_HINT, v);
+}
+
 // MTG_LAND_IDLE_TAPPED_FIRST -- DEFAULT OFF (measuring). Invert the ranker's untapped-first
 // preference on the FIRST land drop of the game when the mana provably cannot be spent this turn.
 // The full rationale, the safety conditions and the USER ruling behind it are at the one call site

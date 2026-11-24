@@ -680,6 +680,12 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
     return GreedyLandPick{};
 }
 
+const std::vector<Color>& PlayoutLandColours(const GameState& state, const CardDefinition& def)
+{
+    if (!def.params.fetch_land_types.empty() && RolloutFetchStaticHintEnabled()) { return def.params.produces; }
+    return HandFixingProduces(state, state.active_player_index, def);
+}
+
 int GreedyLandChoiceIndex(const GameState& state)
 {
     return GreedyLandRank(state, nullptr, false).hand_index;

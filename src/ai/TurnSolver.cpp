@@ -85591,7 +85591,7 @@ static std::string SimulateLandPlayOne(GameState& state)
             const std::string name = ap.hand[ci].m_name;
             const CardDefinition* pdef =
                 LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.hand[ci]));
-            const int pass = (pdef && HandFixingProduces(state, state.active_player_index, *pdef).size() > 1) ? 0 : 1;
+            const int pass = (pdef && PlayoutLandColours(state, *pdef).size() > 1) ? 0 : 1;
             PlayLandByName(state, name);
             landdrop::Record(name, pass, alternatives);
             return name;
@@ -85604,7 +85604,7 @@ static std::string SimulateLandPlayOne(GameState& state)
         if (gp.from_top)
         {
             const CardDefinition* tdef = LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.library.front()));
-            const int pass = (tdef && HandFixingProduces(state, state.active_player_index, *tdef).size() > 1) ? 0 : 1;
+            const int pass = (tdef && PlayoutLandColours(state, *tdef).size() > 1) ? 0 : 1;
             const std::string tname = play_top();
             landdrop::Record(tname, pass, alternatives);
             return tname;
@@ -85621,7 +85621,7 @@ static std::string SimulateLandPlayOne(GameState& state)
         const std::string name = ap.hand[idx].m_name;
         const CardDefinition* pdef =
             LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.hand[idx]));
-        const int pass = (pdef && HandFixingProduces(state, state.active_player_index, *pdef).size() > 1) ? 0 : 1;   // see LandPlay.cpp
+        const int pass = (pdef && PlayoutLandColours(state, *pdef).size() > 1) ? 0 : 1;   // see LandPlay.cpp
         PlayLandByName(state, name);
         landdrop::Record(name, pass, alternatives);
         return name;
@@ -85640,7 +85640,7 @@ static std::string SimulateLandPlayOne(GameState& state)
         if (GreedyLandRefused(state, *def)) { return false; }   // the provider's opt-in restriction (step 6d)
         if (EffectiveLandDef(state, *def).params.etb_bounce_land && !has_other_land) { return false; }
         if (LakeDropWithoutVictim(state, *def)) { return false; }
-        return pass != 0 || HandFixingProduces(state, state.active_player_index, *def).size() > 1;
+        return pass != 0 || PlayoutLandColours(state, *def).size() > 1;
     };
     // Keep-the-fetch sub-order (FetchAfterDualEnabled, EngineFlags.h; GreedyLandRank's mirror): the multi pass
     // scans the non-fetch lands first (ft 0), then the fetchlands (ft 1).
@@ -85665,7 +85665,7 @@ static std::string SimulateLandPlayOne(GameState& state)
             if (EffectiveLandDef(state, *def).params.etb_bounce_land && !has_other_land) { continue; }
             if (LakeDropWithoutVictim(state, *def)) { continue; }   // dominated by holding it
 
-            bool is_multi = HandFixingProduces(state, state.active_player_index, *def).size() > 1;   // see LandPlay.cpp's measurement
+            bool is_multi = PlayoutLandColours(state, *def).size() > 1;   // see LandPlay.cpp's measurement; a fetch: MTG_ROLLOUT_FETCH_STATIC_HINT
             if (pass == 0 && !is_multi) { continue; }
             if (fetch_split && pass == 0 && (ft == 0) == !def->params.fetch_land_types.empty()) { continue; }
 

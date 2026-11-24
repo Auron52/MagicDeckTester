@@ -137,6 +137,34 @@ TEST_CASE("MTG_FETCH_AFTER_DUAL: the greedy ranker's multi pass keeps the fetchl
     heurarm::t_arm[heurarm::FETCH_AFTER_DUAL] = -1;
 }
 
+TEST_CASE("MTG_ROLLOUT_FETCH_STATIC_HINT: the playout's land drop ranks a fetchland by its static produces")
+{
+    // Worldfire's shape: a Flooded Strand reaches U/R through a Steam Vents in the library (deck-derived hint), but its
+    // static `produces` is empty; Scalding Tarn's static proxy is all five colours. A non-fetch land is unchanged.
+    GameState s = BBase();
+    s.turn_number = 1;
+    s.players[0].library = Library{};
+    s.players[0].library.push_back(BCard("Steam Vents", 900));
+    s.players[0].library.push_back(BCard("Island", 901));
+    const CardDefinition& strand = BDef("Flooded Strand");
+    const CardDefinition& tarn = BDef("Scalding Tarn");
+    const CardDefinition& vents = BDef("Steam Vents");
+    heurarm::t_arm[heurarm::ROLLOUT_FETCH_STATIC_HINT] = 0;
+    CHECK(PlayoutLandColours(s, strand).size() == 2);   // off: the deck-derived reach (U, R)
+    CHECK(PlayoutLandColours(s, tarn).size() == 2);
+    CHECK(PlayoutLandColours(s, vents).size() == 2);
+    heurarm::t_arm[heurarm::ROLLOUT_FETCH_STATIC_HINT] = 1;
+    CHECK(PlayoutLandColours(s, strand).empty());       // on: the static proxy, exactly the pre-2026-11-22 read
+    CHECK(PlayoutLandColours(s, tarn).size() == 5);
+    CHECK(PlayoutLandColours(s, vents).size() == 2);
+    // The greedy ranker (the d0 runner, the search's tie-break) keeps the deck-derived reach either way: the Strand is
+    // multi-colour there and takes the drop ahead of a basic.
+    s.players[0].hand.push_back(BCard("Island", 910));
+    s.players[0].hand.push_back(BCard("Flooded Strand", 911));
+    CHECK(GreedyLandChoiceIndex(s) == 1);
+    heurarm::t_arm[heurarm::ROLLOUT_FETCH_STATIC_HINT] = -1;
+}
+
 TEST_CASE("Windswept Heath is a real battlefield fetchland (the Wooded Foothills shape)")
 {
     const CardDefinition& h = BDef("Windswept Heath");
