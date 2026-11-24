@@ -309,3 +309,129 @@ back under the box lock). Rows at each deck's play setting: Burn 10000, Morph 10
 DECOUPLED rows (shuffle_salt_search 1: the honest-reshuffle check) for Burn and Morph, 4000 each, on their own seed block.
 600 base jobs / 60000 games; 1200 fix jobs / 120000 games. CPU from r4's per-game cost: ~48k core-s per arm, ~145k
 core-s total (Worldfire is ~half), so roughly 1.5-2 h of the 32-core box.
+
+## Round 6 (2026-11-24): why the fix costs Worldfire, and the playout mitigation (wip/heath-wf)
+
+### What was measured before this round
+
+r8 (fresh seeds 8400000, coupled search) Worldfire play row base > derived: net +14 (38 fast / 49 slow, 1 lost) of 3000.
+r9 (seeds 8600000, `shuffle_salt_search 1`: the search cannot see the real post-shuffle library) net +48 on both-won
+games (75 fast / 104 slow, z ~2.5 on the changed pairs). Burn / Morph decoupled rows were ~0, so Worldfire's cost is
+not the clairvoyant-reshuffle mechanism of Round 5; it is a play mechanism.
+
+### What changed for Worldfire
+
+Worldfire runs 4 Scalding Tarn and 2 Flooded Strand; its fetchable lands are 3 Steam Vents (U/R), 1 Island, 1 Mountain.
+Static `produces`: Tarn W/U/B/R/G (the legacy proxy), Strand [] (empty). Deck-derived (HandFixingProduces): both U/R
+while a Steam Vents is in the library. So the fix makes a Strand in hand MULTI-colour, where base had it colourless;
+Tarn stays multi. The Worldfire provider's own land logic (WfLandOf) reads static params, so it is unaffected.
+
+### Method
+
+The 20 largest r9 slower games and the 6 largest faster ones that did not tie, replayed as single games (--threads 1,
+MTG_SHUFFLE_SALT_SEARCH=1, seed 8600000+gi, b20 at the profile's d5): every one reproduces its r9 turn on both arms. A
+diagnostic build (not committed) then put back the static `produces` at ONE reader of the hint at a time on the fix
+binary: bit 1 = the greedy ranker (LandPlay.cpp GreedyLandRank: the d0 runner, the search's last-resort land
+tie-break), bit 2 = ActivationColorLandIndex, bit 4 = the PLAYOUT's legacy land drop (TurnSolver.cpp
+SimulateLandPlayOne, the default when MTG_ROLLOUT_LAND_RANKER is off), bit 8 = EffectiveProduces(in_hand) (the other
+in-hand readers). All four bits together reproduce base move for move (checked on 973 and 1407). Scratch:
+`build/scratch/heath/wf/` (arms.sh, tr/{s,f,at}_gi*, attab.txt).
+
+### Result: the reader is the playout's land drop
+
+| gi | base | fix | greedy static | actcolour static | PLAYOUT static | in-hand static |
+|---|---|---|---|---|---|---|
+| 114 | 7 | 4 | 4 | 4 | 4 | 4 |
+| 350 | 7 | 4 | 4 | 4 | 7 | 4 |
+| 624 | 5 | 8 | 8 | 8 | 5 | 8 |
+| 794 | 7 | 5 | 7 | 5 | 5 | 5 |
+| 973 | 4 | 8 | 4 | 8 | 8 | 8 |
+| 1097 | 6 | L | L | L | 6 | L |
+| 1348 | 7 | 4 | 4 | 4 | 7 | 4 |
+| 1368 | 4 | 6 | 6 | 6 | 4 | 6 |
+| 1385 | 8 | L | L | L | 8 | L |
+| 1387 | 4 | 8 | 4 | 8 | 4 | 8 |
+| 1407 | 4 | 7 | 7 | 7 | 4 | 7 |
+| 1562 | 8 | L | L | L | 8 | L |
+| 1594 | 5 | 7 | 7 | 7 | 5 | 7 |
+| 1771 | 4 | 7 | 7 | 7 | 4 | 7 |
+| 1905 | 5 | 7 | 6 | 7 | 5 | 7 |
+| 2015 | 5 | 7 | 7 | 7 | 5 | 7 |
+| 2256 | 4 | 6 | 4 | 6 | 4 | 6 |
+| 2286 | 4 | 7 | 7 | 7 | 4 | 7 |
+| 2331 | 5 | 7 | 7 | 7 | 6 | 7 |
+| 2448 | 5 | 7 | 7 | 7 | 5 | 7 |
+| 2567 | 8 | 4 | 8 | 4 | 4 | 4 |
+| 2607 | 8 | 4 | 8 | 4 | 4 | 4 |
+| 2761 | 6 | L | L | L | 6 | L |
+| 2841 | 4 | 7 | 7 | 7 | 4 | 7 |
+| 2889 | 6 | 8 | 6 | 8 | 8 | 8 |
+| 2961 | 5 | 7 | 7 | 7 | 5 | 7 |
+
+(L = not won by the turn limit. Rows 114-2607 with base slower are the faster games.)
+
+Of the 20 slower games, putting back the static `produces` at the PLAYOUT's land drop alone returns 17 to base's turn
+(624, 1097, 1368, 1385, 1387, 1407, 1562, 1594, 1771, 1905, 2015, 2256, 2286, 2448, 2761, 2841, 2961) and one more
+gains a turn (2331: 7 -> 6, base 5). The other two (973, 2889) are the greedy ranker's (bit 1). Of the 6 faster games,
+2 go back to base's turn (350, 1348) and 4 stay faster. The other two readers change nothing on these games.
+
+The first divergence is scattered (the T1 land drop in 14 games, a cantrip choice in 4, T2-T6 in the rest; div_s.txt),
+because the reader is not a choice the game makes: it is the search's LEAF. SimulateLandPlayOne's legacy two-pass
+drop (pass 0 = the first multi-colour land in hand order, pass 1 = the first land in hand order) knows nothing of a
+land's entry or its size. With the derived hint a Flooded Strand joins pass 0, so in every playout it now jumps ahead
+of every mono land, and in Worldfire the mono lands are the deck's engine: Sandstone Needle (RR), Saprazzan Skerry
+(UU), Mercadian Bazaar (storage), the lands its nine-mana Worldfire turn is built on. Playout drop census on gi1407
+(MTG_LANDDROP_STATS): the fix's playouts play Flooded Strand on 19% of their drops (base reader: 10%), Sandstone
+Needle 11.5% (19.4%), Saprazzan Skerry 21% (27.7%). The playouts are the values the budget-bound search compares its
+early lines with, so the search misprices them, in both directions (the 2 faster games that revert are the same
+mechanism), with a net cost. MTG_TRACE=search shows the shape: gi1407's fix search projects a T4 win at T1 and T2 on
+the Skerry line and delivers T7; with the playout reverted it projects T5 for Tarn + Ponder and wins T4.
+
+d0 is unaffected (r4 Worldfire d0 +23 over 100k games: the d0 runner uses the greedy ranker, not this loop), which is
+consistent with a search-only (leaf) mechanism.
+
+### The mitigation: MTG_ROLLOUT_FETCH_STATIC_HINT (wip/heath-wf)
+
+The playout's legacy land drop reads a fetchland's STATIC `produces` again (PlayoutLandColours, LandPlay.cpp; heurarm
+slot ROLLOUT_FETCH_STATIC_HINT; reader RolloutFetchStaticHintEnabled in EngineFlags.h). That is exactly what the loop
+read before 2026-11-22, so it is the diagnostic's bit 4 and nothing else. The greedy ranker (the d0 runner's drop, the
+search's last-resort land tie-break, the playout under MTG_ROLLOUT_LAND_RANKER), ActivationColorLandIndex and every
+other in-hand reader keep the deck-derived reach. ORDER of a permitted greedy site (beyond the horizon and the depth-0
+static plans), so it touches neither the search window nor completeness. **Default OFF** until the A/B below (the
+FETCH_AFTER_DUAL precedent: a heuristic order default is the USER's call once the data is in). Unit test:
+test_boars_cards.cpp "MTG_ROLLOUT_FETCH_STATIC_HINT: ...".
+
+Why not FETCH_AFTER_DUAL: it orders a fetch behind a DUAL, but Worldfire's cost is a fetch ahead of MONO lands (Strand
+vs Needle / Skerry / Bazaar), and r8 measured it +5 worse than derived on Worldfire (and +8 on Five Colour).
+
+**Single games, lever on** (the diagnostic's bit 4 is the lever's code path exactly; derived = lever off):
+* Worldfire r9 (decoupled): the table above, PLAYOUT column -- 17 of 20 slower back to base, 1 partial, 2 stay (the
+  greedy ranker's); 4 of 6 faster stay faster.
+* Modern RW Burn r8 (coupled, b20), all 18 changed games: 3 of 10 slower back to base (5689, 6170, 6742), 1 of 8
+  faster reverts (4150); net -2 vs derived on these games.
+* Creature Giving r8 (b30), its 6 faster games (the fix's gain there): all 6 stay faster. Five Colour r8 (b40), all 5
+  changed games: unchanged. (Both decks' fetches keep a multi-colour static proxy or the Heath's restored W/B/R/G, so
+  the lever barely moves their playouts.)
+Scratch: `build/scratch/heath/wf/tr/{cg,fc,bu}_gi*/m{0,4}`.
+
+### A/B (NOT RUN by the agent; the coordinator runs it under the box lock)
+
+Generator `logs/heath/wf/gen_manifest.py` (copy + run.sh + report.py in `build/scratch/heath/rwf/`, manifests already
+written there). Seeds 9930000 (decoupled rows +5000), fresh. Three arms paired on (seed, game_index): base (mtg.base2 in
+heath-base2), derived (mtg.wf, lever off), wf (mtg.wf, lever on); derived + wf pooled in one batch (per-job flags).
+Rows: Worldfire play 3000 + Worldfire play decoupled 3000, and Burn, Morph, Five Colour (b40), Anti-Lifegain 2HG, Sea,
+Spirits, Creature Giving (b30), Boars (b40), Stuffy at 2000 each. 240 base jobs / 24000 games + 480 fix jobs / 48000
+games; ~31k core-s per arm from r8's per-game cost, ~95k core-s total. `bash build/scratch/heath/rwf/run.sh`; markers
+rwf/DONE_base, DONE_fix, DONE; report rwf/report.txt.
+
+**Checks done at c13167c19** (mtg.wf = `build/scratch/heath/mtg.wf`): units 4128/4128. Lever off reproduces the
+derived binary (mtg.fad, lever off) move for move on 5 Worldfire games (1407, 624, 350, 2015, 794); lever on
+reproduces the diagnostic's bit 4 move for move on the same 5. Dry run of both manifests (one game per row of
+Worldfire, Worldfire decoupled, Anti-Lifegain 2HG, Spirits) parses on both binaries; the flag reaches the job
+(Worldfire decoupled: wf's digest equals base's, derived's differs).
+
+### Decision this A/B feeds (USER-owned, not taken by the agent)
+
+Lever default. Recommendation to bring once the report is in: default ON if wf <= derived on Worldfire's play rows and
+does not give back the fix's gains elsewhere (Creature Giving, Five Colour, Anti-Lifegain), then re-run smoke +
+regression on the new default and accept GT as Round 5 step 4 describes.
