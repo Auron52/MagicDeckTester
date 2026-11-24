@@ -379,3 +379,189 @@ TEST_CASE("Maze's End list colours: the new-name slot skips Talon Gates, so Sylv
     }
     heurarm::Clear();
 }
+
+// ---- THE HOLD-UP'S RESERVE MODE (MTG_MAZE_HOLD_RESERVE, heurarm MAZE_HOLD_RESERVE; DEFAULT OFF, live with MAZE_HOLD_UP) ---
+// USER 2026-11-24: "hold a couple green first and then 1 blue after if we don't know what we will have in hand.
+// Obviously with knowledge of the hand we can adjust that a bit." One joint reserve beyond the rest of the line:
+// {G}{G}{U} shaped by the hand (and the library, while Guild Summit can still draw), falling back {G}{G} -> {G} -> {U}.
+namespace
+{
+void ArmReserve(int hold, int reserve)
+{
+    heurarm::Clear();
+    if (hold >= 0) { heurarm::t_arm[heurarm::MAZE_HOLD_UP] = static_cast<std::int8_t>(hold); }
+    if (reserve >= 0) { heurarm::t_arm[heurarm::MAZE_HOLD_RESERVE] = static_cast<std::int8_t>(reserve); }
+}
+
+GameState ReserveState(const DecisionProvider& prov)
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 3;
+    s.phase               = Phase::PreCombatMain;
+    s.players[0].life     = 20;
+    s.players[1].life     = 20;
+    s.m_provider          = &prov;
+    return s;
+}
+
+// The chain as text: each entry's pips ("GGU"), space-separated.
+std::string ChainText(const MazesEndProvider& prov, const GameState& s, const ManaCost& rest, const Card* paying = nullptr)
+{
+    std::vector<ManaCost> chain;
+    if (!prov.PaymentReserve(s, 0, paying, rest, chain)) { return "<off>"; }
+    std::string out;
+    for (const ManaCost& m : chain)
+    {
+        if (!out.empty()) { out += ' '; }
+        out += std::string(static_cast<std::size_t>(m.green), 'G') + std::string(static_cast<std::size_t>(m.blue), 'U');
+        CHECK(m.generic == 0);
+    }
+    return out;
+}
+}   // namespace
+
+TEST_CASE("Maze's End reserve: the hand's green and blue, nothing drawn yet -> {G}{G}{U}, {G}{G}, {G}, {U}")
+{
+    LoadRoCards();
+    static const MazesEndProvider kProv;
+    GameState s = ReserveState(kProv);
+    Hand(s, "Sylvan Scrying", 60);
+    Hand(s, "Manabond", 61);
+    Hand(s, "Guild Summit", 62);
+    Hand(s, "Gates Ablaze", 63);      // spends nothing in goldfish
+    Hand(s, "Izzet Guildgate", 64);
+    ArmReserve(1, 1);
+    CHECK(ChainText(kProv, s, ManaCost{}) == "GGU GG G U");
+    heurarm::Clear();
+}
+
+TEST_CASE("Maze's End reserve: Archdruid's Charm in hand holds a third green")
+{
+    LoadRoCards();
+    static const MazesEndProvider kProv;
+    GameState s = ReserveState(kProv);
+    Hand(s, "Archdruid's Charm", 60);
+    Hand(s, "Manabond", 61);
+    ArmReserve(1, 1);
+    CHECK(ChainText(kProv, s, ManaCost{}) == "GGG GG G");
+    heurarm::Clear();
+}
+
+TEST_CASE("Maze's End reserve: the rest of the line's own pips are not reserved twice")
+{
+    LoadRoCards();
+    static const MazesEndProvider kProv;
+    GameState s = ReserveState(kProv);
+    Hand(s, "Manabond", 61);
+    Hand(s, "Exploration", 62);
+    ArmReserve(1, 1);
+    ManaCost rest;
+    CHECK(ChainText(kProv, s, rest) == "GG G");
+    rest.green = 1;                                   // the line casts one of them
+    CHECK(ChainText(kProv, s, rest) == "G");
+    rest.green = 2;                                   // ...or both: armed, nothing to reserve
+    CHECK(ChainText(kProv, s, rest).empty());
+    heurarm::Clear();
+}
+
+TEST_CASE("Maze's End reserve: a Guild Summit of ours can draw -> a couple green and one blue from the library")
+{
+    LoadRoCards();
+    static const MazesEndProvider kProv;
+    GameState s = ReserveState(kProv);
+    Put(s, "Guild Summit", 33);
+    Lib(s, { "Heap Gate", "Exploration", "Guild Summit", "Sea Gate" }, 700);
+    ArmReserve(1, 1);
+    CHECK(ChainText(kProv, s, ManaCost{}) == "GGU GG G U");
+    GameState t = ReserveState(kProv);                // only lands left to draw: nothing to hold for
+    Put(t, "Guild Summit", 33);
+    Lib(t, { "Heap Gate", "Sea Gate" }, 700);
+    CHECK(ChainText(kProv, t, ManaCost{}).empty());
+    heurarm::Clear();
+}
+
+TEST_CASE("Maze's End reserve: with no Summit to draw, the hand is known and only its colours are held")
+{
+    LoadRoCards();
+    static const MazesEndProvider kProv;
+    GameState s = ReserveState(kProv);
+    Hand(s, "Exploration", 61);
+    Lib(s, { "Guild Summit", "Sylvan Scrying" }, 700);
+    ArmReserve(1, 1);
+    CHECK(ChainText(kProv, s, ManaCost{}) == "G");
+    // The spell being paid for is a Guild Summit: its draws are coming, so the library counts.
+    const CardDefinition* gs = CardDatabase::Instance().Lookup("Guild Summit");
+    REQUIRE(gs != nullptr);
+    CHECK(ChainText(kProv, s, ManaCost{}, &gs->card) == "GGU GG G U");
+    heurarm::Clear();
+}
+
+TEST_CASE("Maze's End reserve: OFF by default; armed only with the hold-up; it replaces the list")
+{
+    LoadRoCards();
+    static const MazesEndProvider kProv;
+    GameState s = ReserveState(kProv);
+    Hand(s, "Manabond", 61);
+    ArmReserve(-1, -1);
+    CHECK(ChainText(kProv, s, ManaCost{}) == "<off>");
+    ArmReserve(1, 0);
+    CHECK(ChainText(kProv, s, ManaCost{}) == "<off>");
+    CHECK(kProv.PaymentHoldUp(s, 0).size() == 1);    // the list mode
+    ArmReserve(0, 1);
+    CHECK(ChainText(kProv, s, ManaCost{}) == "<off>");
+    ArmReserve(1, 1);
+    CHECK(ChainText(kProv, s, ManaCost{}) == "G");
+    CHECK(kProv.PaymentHoldUp(s, 0).empty());        // the reserve replaces the list
+    heurarm::Clear();
+}
+
+TEST_CASE("Maze's End reserve: s30006137's Scrying keeps Manabond's {G} as the list mode does")
+{
+    LoadRoCards();
+    static const MazesEndProvider kProv;
+    for (const int reserve : { 0, 1 })
+    {
+        ArmReserve(1, reserve);
+        GameState s = HoldBoard(kProv);
+        ManaCost scry; scry.generic = 1; scry.green = 1;
+        const bool paid = TapForCostDirect(s, scry, /*for_creature=*/false);
+        ManaCost bond; bond.green = 1;
+        INFO("reserve=" << reserve);
+        CHECK((paid && TapForCostDirect(s, bond, /*for_creature=*/false)));
+    }
+    heurarm::Clear();
+}
+
+// THE JOINT RESERVE NEEDS TWO SOURCES HELD. Gruul, Selesnya, Simic and Izzet Guildgates up, Manabond and Exploration in
+// hand, Sylvan Scrying's {1}{G} paid. The greedy pays from the first Gates in its order; held out of one, it takes the
+// next green Gate, so one green is all a single hold keeps (the list mode's {G}, kept by the greedy already). Holding
+// two of its sources makes Izzet pay the generic, and {G}{G} stays up for both cards.
+namespace
+{
+bool ScryingKeepsTwoGreen(int hold, int reserve)
+{
+    static const MazesEndProvider kProv;
+    ArmReserve(hold, reserve);
+    GameState s = ReserveState(kProv);
+    Put(s, "Gruul Guildgate", 30);
+    Put(s, "Selesnya Guildgate", 31);
+    Put(s, "Simic Guildgate", 32);
+    Put(s, "Izzet Guildgate", 34);
+    Hand(s, "Manabond", 61);
+    Hand(s, "Exploration", 62);
+    ManaCost scry; scry.generic = 1; scry.green = 1;
+    const bool paid = TapForCostDirect(s, scry, /*for_creature=*/false);
+    heurarm::Clear();
+    ManaCost gg; gg.green = 2;
+    return paid && TapForCostDirect(s, gg, /*for_creature=*/false);
+}
+}   // namespace
+
+TEST_CASE("Maze's End reserve: {G}{G} for two green cards needs two of the greedy's sources held out")
+{
+    LoadRoCards();
+    CHECK(ScryingKeepsTwoGreen(/*hold=*/1, /*reserve=*/1));
+    CHECK_FALSE(ScryingKeepsTwoGreen(/*hold=*/1, /*reserve=*/0));   // the list: one {G} is kept already
+    CHECK_FALSE(ScryingKeepsTwoGreen(/*hold=*/0, /*reserve=*/1));   // off
+}
