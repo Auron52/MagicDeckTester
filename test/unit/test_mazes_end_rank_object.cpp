@@ -294,8 +294,15 @@ TEST_CASE("Maze's End list colours: the rank rewrites only the plain ladder of a
                                                         | (1u << static_cast<int>(Color::Red))
                                                         | (1u << static_cast<int>(Color::Green)));
     CHECK(kProv.ManaSourceRank(s, *az) == 10);                   // W is no flexibility here
-    CHECK(kProv.ManaSourceRank(s, *oz) == 5);                    // W/B: a {C} source in this list
+    CHECK(kProv.ManaSourceRank(s, *oz) == 7);                    // W/B: dead, but above the {C} tier (5 + 2 colours)
     CHECK(kProv.ManaSourceRank(s, *me) == 5);                    // the {C} tier untouched
+    s.deck_spell_major_color = static_cast<std::uint8_t>(Color::Green);
+    const CardDefinition* se = CardDatabase::Instance().Lookup("Selesnya Guildgate");
+    const CardDefinition* iz = CardDatabase::Instance().Lookup("Izzet Guildgate");
+    REQUIRE(se != nullptr); REQUIRE(iz != nullptr);
+    CHECK(kProv.ManaSourceRank(s, *az) == 10);                   // mono-spendable, minor colour (U)
+    CHECK(kProv.ManaSourceRank(s, *se) == 11);                   // mono-spendable, the major colour (G) pays later
+    CHECK(kProv.ManaSourceRank(s, *iz) == 20);                   // U/R: no G
     heurarm::t_arm[heurarm::RANK_OBJECT_COLORS] = 0;             // the base arm: the historical ladder
     CHECK(kProv.ManaSourceRank(s, *az) == 20);
     heurarm::t_arm[heurarm::RANK_OBJECT_COLORS] = 1;
@@ -377,5 +384,79 @@ TEST_CASE("Maze's End list colours: the new-name slot skips Talon Gates, so Sylv
         CHECK(kProv.TutorCandidates(s, 0, scry->params)
               == std::vector<std::string>{ "The Black Gate", "Talon Gates of Madara" });
     }
+    heurarm::Clear();
+}
+
+// THE TWO TIE-BREAKS of the spend rank (d8 b0 slower games, 2026-11-24). s25502030 gi2030 T4: Izzet Guildgate,
+// Citadel Gate (W, chosen G), Boros Guildgate and an untapped Gateway Plaza; Gateway Plaza's {1} first, then Sylvan
+// Scrying {1}{G} and Burgeoning {G}. Citadel and Boros are both mono-spendable in this G/U/R list; without the
+// major-colour tie-break the {1} took Citadel's {G} (battlefield order) and the two G spells could not both be paid.
+namespace
+{
+bool PlazaThenScryingBurgeoning(bool stamp_major, bool* boros_paid)
+{
+    heurarm::Clear();
+    heurarm::t_arm[heurarm::RANK_OBJECT_COLORS] = 1;
+    static const MazesEndProvider kProv;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.phase               = Phase::PreCombatMain;
+    s.m_provider          = &kProv;
+    s.deck_spell_pip_colors = static_cast<std::uint8_t>((1u << static_cast<int>(Color::Blue))
+                                                        | (1u << static_cast<int>(Color::Red))
+                                                        | (1u << static_cast<int>(Color::Green)));
+    if (stamp_major) { s.deck_spell_major_color = static_cast<std::uint8_t>(Color::Green); }
+    Put(s, "Izzet Guildgate", 38);
+    Put(s, "Citadel Gate", 15).chosen_color = static_cast<int>(Color::Green);
+    Put(s, "Amulet of Vigor", 1);
+    Put(s, "Boros Guildgate", 10);
+    Put(s, "Guild Summit", 33);
+    Put(s, "Gateway Plaza", 26);
+    ManaCost one; one.generic = 1;
+    const bool o_ok = TapForCostDirect(s, one, /*for_creature=*/false);
+    *boros_paid = Tapped(s, 10) && !Tapped(s, 15);
+    ManaCost scry; scry.generic = 1; scry.green = 1;
+    const bool s_ok = o_ok && TapForCostDirect(s, scry, /*for_creature=*/false);
+    ManaCost burg; burg.green = 1;
+    const bool b_ok = s_ok && TapForCostDirect(s, burg, /*for_creature=*/false);
+    heurarm::Clear();
+    return b_ok;
+}
+}   // namespace
+
+TEST_CASE("Maze's End list colours: a minor-colour source pays before a same-rung major-colour (G) one")
+{
+    LoadRoCards();
+    bool boros = false;
+    CHECK(PlazaThenScryingBurgeoning(/*stamp_major=*/true, &boros));
+    CHECK(boros);
+    CHECK_FALSE(PlazaThenScryingBurgeoning(/*stamp_major=*/false, &boros));   // no major colour: the tie strands {G}
+    CHECK_FALSE(boros);
+}
+
+// s25501770 gi1770 T4 shape: a generic pip with a dead Gate (Orzhov, W/B in a G/U/R list) and Maze's End ({C})
+// untapped. The {C} pays; the dead Gate stays up (there, for Guild Summit's ETB to tap for a draw).
+TEST_CASE("Maze's End list colours: a dead-colour Gate ranks above the {C} tier, so Maze's End's {C} pays first")
+{
+    LoadRoCards();
+    heurarm::Clear();
+    heurarm::t_arm[heurarm::RANK_OBJECT_COLORS] = 1;
+    static const MazesEndProvider kProv;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.phase               = Phase::PreCombatMain;
+    s.m_provider          = &kProv;
+    s.deck_spell_pip_colors = static_cast<std::uint8_t>((1u << static_cast<int>(Color::Blue))
+                                                        | (1u << static_cast<int>(Color::Red))
+                                                        | (1u << static_cast<int>(Color::Green)));
+    s.deck_spell_major_color = static_cast<std::uint8_t>(Color::Green);
+    Put(s, "Orzhov Guildgate", 47);
+    Put(s, "Maze's End", 43);
+    ManaCost one; one.generic = 1;
+    CHECK(TapForCostDirect(s, one, /*for_creature=*/false));
+    CHECK(Tapped(s, 43));
+    CHECK_FALSE(Tapped(s, 47));
     heurarm::Clear();
 }

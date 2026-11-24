@@ -2394,6 +2394,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // ...and the same over EVERY NONLAND card (GameState::deck_spell_pip_colors; read by Maze's End's rank only).
     {
         std::uint8_t mask = 0, spell_mask = 0;
+        int colour_copies[5] = {};   // nonland mainboard copies per colour (GameState::deck_spell_major_color)
         bool garth = false;
         for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
         {
@@ -2415,10 +2416,20 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 }
                 spell_mask |= cm;
                 if (d->card.IsCreature()) { mask |= cm; }
+                if (zone == &deck.mainboard)
+                { for (int k = 0; k < 5; ++k) { if (cm & (1u << k)) { ++colour_copies[k]; } } }
             }
         }
         state.deck_creature_pip_colors = garth ? std::uint8_t{0x1F} : mask;
         state.deck_spell_pip_colors    = garth ? std::uint8_t{0x1F} : spell_mask;
+        int major = -1, top = 0, second = 0;
+        for (int k = 0; k < 5; ++k)
+        {
+            if (colour_copies[k] > top) { second = top; top = colour_copies[k]; major = k; }
+            else if (colour_copies[k] > second) { second = colour_copies[k]; }
+        }
+        state.deck_spell_major_color = (garth || major < 0 || top == second) ? std::uint8_t{0xFF}
+                                                                             : static_cast<std::uint8_t>(major);
     }
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was
     // actually dealt", and only opponentdeck::Deal may raise it -- see the comment there. Callers
