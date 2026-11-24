@@ -71536,10 +71536,12 @@ bool MazeRestrictLandTargets(const GameState& s, int ctrl, std::vector<std::stri
     // down, every Gate usable on entry -- it was {Gateway Plaza, Talon}, so the base plan's Scrying (pick -1) took
     // Gateway Plaza and the Talon find that feeds the end-step Maze's End {3} (the T4 win) was never emitted. Skipping
     // Talon here keeps the menu {new name, Talon} at both states. A RESTRICTION over the same names, no pick.
+    static const bool s_tmp_nts = EnvOn("MTG_TMP_NO_TALON_SKIP");   // TMPDIAG
     static const bool s_spend_nn = EnvOn("MTG_MAZE_RANK_SPENDABLE", true);
     static const bool s_rank_obj_nn = EnvOn("MTG_RANK_OBJECT_COLORS", true);
     const bool skip_talon = heurarm::Flag(heurarm::MAZE_RANK_SPENDABLE, s_spend_nn)
-                         && heurarm::Flag(heurarm::RANK_OBJECT_COLORS, s_rank_obj_nn);
+                         && heurarm::Flag(heurarm::RANK_OBJECT_COLORS, s_rank_obj_nn)
+                         && !s_tmp_nts;   // TMPDIAG
     if (!h.baldur_in_library && (h.gond || !h.gond_in_library))
     {
         const std::string nn = MazePickNewNameGate(s, ctrl, names, prov, skip_talon ? talon : std::string());
@@ -72465,14 +72467,32 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
     const bool obj = robj != nullptr && def.params.etb_choose_color && robj->chosen_color >= 0
                   && CardDatabase::Instance().LookupCached(robj->card) == &def;
     const std::vector<Color>& prod = obj ? EffectiveProducesFor(s, active, def, robj) : EffectiveProduces(s, active, def);
-    int seen = 0;
+    int seen = 0, own = 0;
     for (Color c : prod)
     {
         const int ci = static_cast<int>(c);
+        if (ci < 5) { own |= 1 << ci; }
         if (ci < 5 && (s.deck_spell_pip_colors & (1 << ci)) != 0) { seen |= 1 << ci; }
     }
     const int n = __builtin_popcount(static_cast<unsigned>(seen));
-    return n == 0 ? 5 : n * 10;
+    // THE TWO TIE-BREAKS (Maze's End d8 b0 slower games of the spend rank, 2026-11-24). Without them the rewrite
+    // made ties the historical ladder never had, and the payer breaks a tie by battlefield order:
+    // * A DEAD source (no colour the list spends) ranks 5 + its colour count, not 5: below every source that makes a
+    //   list colour, but still ABOVE the {C} tier (5) and in the historical mono < dual order among themselves -- the
+    //   committed ladder's order for these lands. At 5 Orzhov Guildgate tied Maze's End / Baldur's Gate / Basilisk
+    //   Gate: s25501770 gi1770 T4, Guild Summit's {2}{U} took Orzhov over Maze's End's {C}, so Summit's ETB had no
+    //   untapped Gate to tap for its draw (T6 -> T7); s25501149 gi1149 T5, the first Maze's End {3} took Orzhov over
+    //   Baldur's Gate's {C} and the second activation's {3} was short (T5 -> T6).
+    // * Within a rung, a source that makes the list's MAJOR colour (GameState::deck_spell_major_color; G here)
+    //   ranks +1, so it pays after a same-rung source of a minor colour. s25502030 gi2030 T4: Citadel Gate (W, chosen
+    //   G) and Boros Guildgate (R/W) were both mono-spendable 10; Gateway Plaza's {1} took Citadel's {G} (battlefield
+    //   order) and Sylvan Scrying {1}{G} + Burgeoning {G} were no longer castable together (T5 -> T6).
+    // ORDER ONLY (the ManaSourceRank contract), like the rewrite itself.
+    static const bool s_tmp_notb = EnvOn("MTG_TMP_NO_TIEBREAK");   // TMPDIAG
+    if (s_tmp_notb) { return n == 0 ? 5 : n * 10; }   // TMPDIAG
+    if (n == 0) { return 5 + std::min(4, __builtin_popcount(static_cast<unsigned>(own))); }
+    const int major = s.deck_spell_major_color;
+    return n * 10 + ((major < 5 && (seen & (1 << major)) != 0) ? 1 : 0);
 }
 
 // THE MAZE'S END HOLD-UP (MTG_MAZE_HOLD_UP, heurarm MAZE_HOLD_UP; DEFAULT OFF -- a payment PREFERENCE awaiting its

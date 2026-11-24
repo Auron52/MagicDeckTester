@@ -693,6 +693,8 @@ static_assert(sizeof(Player) == 216,
 // +0 bytes (2026-11-24, Maze's End rank): `deck_spell_pip_colors` (uint8, the 3-byte hole after eot_attack_draw_n).
 // Classification: a DECK CONSTANT stamped once in StampDeckTraits -- nothing to fold. It decides only which source a
 // payment taps (MazesEndProvider::ManaSourceRank); the tapped sources are already folded.
+// +0 bytes (2026-11-24, Maze's End rank tie-breaks): `deck_spell_major_color` (uint8, the next byte of the same hole).
+// Same classification: a DECK CONSTANT stamped in StampDeckTraits, read only by that rank -- nothing to fold.
 static_assert(sizeof(GameState) == 1736,   // combined upstream free turns and Beasts fields
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "

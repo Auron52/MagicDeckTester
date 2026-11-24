@@ -1415,6 +1415,13 @@ struct GameState
     // (MTG_MAZE_RANK_SPENDABLE): a colour no spell in the list carries is no flexibility, so an Azorius Guildgate
     // in this list ranks as the mono-blue source it is. In the 3-byte hole after eot_attack_draw_n (sizeof unchanged).
     std::uint8_t             deck_spell_pip_colors = 0x1F;
+    // The list's MAJOR spell colour (0..4 = Color W..G; 0xFF = none): the colour carried by STRICTLY more nonland
+    // card copies (mainboard, hybrid halves included) than any other. Maze's End: G (Exploration, Burgeoning, Sylvan
+    // Scrying, Manabond, Archdruid's Charm -- 15 copies) over U (Guild Summit, 4) and R (Gates Ablaze, 1). DECK
+    // CONSTANT, stamped by StampDeckTraits beside deck_spell_pip_colors (0xFF with Garth); 0xFF for a state not
+    // built through it. Read ONLY by MazesEndProvider::ManaSourceRank (MTG_MAZE_RANK_SPENDABLE): within one rung of
+    // the spend ladder a source that makes this colour pays LAST. In the hole after deck_spell_pip_colors.
+    std::uint8_t             deck_spell_major_color = 0xFF;
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later
