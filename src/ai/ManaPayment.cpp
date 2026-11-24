@@ -10651,6 +10651,19 @@ bool RampFilterStranded(const GameState& pre, const GameState& post)
     return false;
 }
 
+// RampLaterPayable's fail-fast AMOUNT bound (the first test of RampLaterPayableConsume, read on the board as given).
+bool RampLaterAmountCovers(const GameState& c, const ManaCost& later)
+{
+    return PaymentManaCovers(c, /*for_creature=*/false, later.ManaValue() - static_cast<int>(c.floating_mana.Total()));
+}
+
+// RampLaterPayableConsume's solve, once the bound has passed.
+bool RampLaterSolveConsume(GameState& c, const ManaCost& later)
+{
+    ManaPool start = c.floating_mana;
+    return TapForCostBacktrack(c, later, /*for_creature=*/false, start);
+}
+
 // Can the rest of the line be paid on `s` -- with the cast being paid now on the board as an untapped rock
 // when it is one (`rock`; it enters untapped and the later casts meet its mana)? One complete backtracker
 // solve over the line's remaining bill, starting from what floats -- behind the payer's own fail-fast
@@ -10671,19 +10684,31 @@ bool RampLaterPayableConsume(GameState& c, const ManaCost& later, const CardDefi
         c.battlefield.push_back(perm);
     }
     if (amount_short != nullptr) { *amount_short = false; }
-    if (!PaymentManaCovers(c, /*for_creature=*/false,
-                           later.ManaValue() - static_cast<int>(c.floating_mana.Total())))
+    if (!RampLaterAmountCovers(c, later))
     {
         if (amount_short != nullptr) { *amount_short = true; }
         return false;
     }
-    ManaPool start = c.floating_mana;
-    return TapForCostBacktrack(c, later, /*for_creature=*/false, start);
+    return RampLaterSolveConsume(c, later);
 }
 
+// CPU (2026-11-24, the Maze's End hold-up's per-payment cost; byte-identical): with no rock to put on the board the
+// copy is the board as given, so the AMOUNT bound is read on `s` itself and the scratch copy is made only for a board
+// that passes it -- a short board (3.4% of the hold-up's post-payment queries) costs no copy at all.
 bool RampLaterPayable(const GameState& s, const ManaCost& later, const CardDefinition* rock,
                       bool* amount_short = nullptr)
 {
+    if (rock == nullptr)
+    {
+        if (amount_short != nullptr) { *amount_short = false; }
+        if (!RampLaterAmountCovers(s, later))
+        {
+            if (amount_short != nullptr) { *amount_short = true; }
+            return false;
+        }
+        RampScratch sc(s);
+        return RampLaterSolveConsume(sc.Board(), later);
+    }
     RampScratch sc(s);
     return RampLaterPayableConsume(sc.Board(), later, rock, amount_short);
 }
@@ -10936,6 +10961,17 @@ struct ProviderHoldStats
 ProviderHoldStats g_phu_stats;
 }   // namespace
 
+// MTG_PROVIDER_HOLD_PROBE=1 (DIAGNOSTIC ONLY, never a play setting): the provider hold-up's whole decision is made on
+// every payment -- the targets, the greedy's payment, every post-payment query, the held trials -- and then DISCARDED,
+// the greedy's payment kept. Play is the hold-up-OFF play byte for byte, so the arm "hold-up ON + probe" minus the arm
+// "hold-up OFF" is the hold-up's pure per-payment CPU cost on identical games (the hold-up's own play changes, which
+// move the games, drop out). The 2026-11-24 Maze's End cost work measured with it.
+static bool ProviderHoldProbeOn()
+{
+    static const bool on = EnvOn("MTG_PROVIDER_HOLD_PROBE");
+    return on;
+}
+
 // The sources (card numbers) of the active player that were untapped on `pre` and that the payment to `post`
 // tapped or spent, in battlefield order; `filter_tapped`: one of them is an any-colour filter.
 static void PaymentTapped(const GameState& pre, const GameState& post, std::vector<int>& tapped, bool* filter_tapped)
@@ -11031,6 +11067,10 @@ static bool ProviderHoldUpTargets(const GameState& state, const ManaCost& cost_i
         if (ug_raise && hold.red == 0) { target.generic += hold.generic; }
         if (!PaymentManaCovers(state, /*for_creature=*/false, AddManaCosts(cost_in, target).ManaValue() - floating))
         { continue; }
+        // CPU (2026-11-24; byte-identical): a target equal to one already listed is dropped. HoldOutTargets takes the
+        // targets in order and its answer for one depends only on the boards and the target, so a repeat's answer is
+        // the first copy's -- which either returned (the repeat is never reached) or moved on (so would the repeat).
+        if (std::find(targets.begin(), targets.end(), target) != targets.end()) { continue; }
         targets.push_back(target);
     }
     return !targets.empty();
@@ -11067,6 +11107,7 @@ static bool PayProviderHoldUp(GameState& state, const ManaCost& cost_in, const s
     const int held = HoldOutTargets(pre.Board(), state, cost_in, targets, tapped, for_creature,
                                     available ? &av_pre : nullptr, honor_legacy_cco, nullptr);
     if (held == 0) { return true; }
+    if (ProviderHoldProbeOn()) { return true; }   // diagnostic: the cost without the play (see ProviderHoldProbeOn)
     g_phu_fired.fetch_add(1, std::memory_order_relaxed);
     state = pre.Board();
     if (available != nullptr) { *available = av_pre; }
@@ -12434,7 +12475,11 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
         bool quiet;
         { const RevealLogPause probe; quiet = probe.noop; }
         if (quiet) { phu_pay_first = true; }
-        else { afr_held = ProviderHoldUpHold(state, cost_in, phu_targets, for_creature, available, honor_legacy_cco); }
+        else
+        {
+            afr_held = ProviderHoldUpHold(state, cost_in, phu_targets, for_creature, available, honor_legacy_cco);
+            if (ProviderHoldProbeOn()) { afr_held = 0; }   // diagnostic: the cost without the play
+        }
     }
     // MTG_PAY_REFINE (above): the board as this payment found it, for the dominance check once it has committed.
     // (The oracle's own copy never gets here -- its payments returned through ScriptedPay above -- and its
