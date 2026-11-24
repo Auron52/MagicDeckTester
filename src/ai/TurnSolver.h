@@ -3676,12 +3676,6 @@ public:
     // damage modelled -- pays it; else the nearest permutation the walk pays replaces it. True iff `order` moved.
     // Called by PayableCastOrderCore (ManaPayment.cpp) at the apply site only, after UnlockPayableOrder.
     static bool DamagePayableOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order);
-    // Test hooks (MTG_UO_BUDGET_PRICE): UnlockPayableOrder / EnumerateMainPlans under a decision root holding `budget`
-    // (nullptr or an unlimited budget: an unlimited root, where the price must be inert).
-    static bool UnlockPayableOrderUnderRootForTest(const GameState& state, const std::vector<Action>& acts,
-                                                   std::vector<int>& order, SearchBudget* budget);
-    static std::vector<Plan> EnumerateMainPlansUnderRootForTest(const GameState& state, bool is_pre_combat,
-                                                                SearchBudget* budget);
     // MTG_MINT_CREDIT_EXACT -- the base pool's share of a HOISTED-MINTER line, paid jointly. The
     // whole-turn prepay above cannot pay a line the mint funds (its bill exceeds the board by
     // construction), so every such line fell to the per-cast greedy, whose "leave out if you can"
