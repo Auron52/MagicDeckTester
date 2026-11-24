@@ -58,4 +58,41 @@ solve and prints `[provider-hold-gate] ... MISMATCH=` at exit.
 
 ## Results
 
-(filled in below as measured)
+### Step 1 (owed from the previous agent, on 56f23f14c)
+
+- `mtg-test -tc="*Maze*,*payment*,*pay*,*prepay*,*Fluctuator*"`: 645 / 645 passed.
+- Fluctuator / Prevent Damage / Gods identity (other.json, 30 games): base 50f807e9c vs cut 56f23f14c, 0 differing
+  played= lines (ms= / cpu= stripped).
+
+### Instructions (perf stat instructions:u, --threads 2, the 120-game slice: 40 play d5 b20, 40 2HG, 40 d0)
+
+| binary / arm | G instr | vs off |
+|---|---|---|
+| 56f23f14c off / list | 1264.80 / 1375.90 | x1.0878 |
+| v1 (0b90cf1e2) off | 1265.93 | - (identical games to 56f off) |
+| v1 list (gate on) | 1337.63 | x1.0566 (identical games to 56f list) |
+| v1 list, MTG_PROVIDER_HOLD_GATE=0 | 1377.13 | x1.0878 |
+| v1 list probe (decided, discarded) | 1339.78 | x1.0583 |
+| v1 reserve | 1484.74 | x1.1728 |
+| v1 reserve, gate off | 1529.47 | x1.2082 |
+| v1 reserve probe | 1483.58 | x1.1719 |
+
+The gate removes 35.5% of the list mode's overhead (111.2G -> 71.7G) and 17% of v1 reserve's.
+
+### Exactness of the gate
+
+- Probe arms (hold-up decided then discarded) vs off: 0 differing played= lines (list and reserve).
+- Gate ON vs OFF (MTG_PROVIDER_HOLD_GATE=0), same arm: 0 differing lines (list and reserve, 120 games each).
+- MTG_PROVIDER_HOLD_VERIFY=1 (every claim re-checked with the real solve; play identical to the gate arm):
+  reserve kept-claims 2,011,056 / trial-cuts 1,029,483, list kept-claims 1,652,718 / trial-cuts 1,531,323: 0 MISMATCH.
+  The infeasibility half (v3+): 108,551 claims on 10 play games, 0 MISMATCH.
+
+### Cutting the reserve's cost (2HG, 10 games, the dearest format; off = 353.25G)
+
+| step | G instr | fired | games vs previous |
+|---|---|---|---|
+| v1 | 424.46 | | |
+| + infeasibility gate (exact) | 424.74 | | identical |
+| + one held payment read against every open chain entry (exact restructure) | 419.22 | 57,868 | identical |
+| + candidates = only greedy sources making a colour an open entry needs | 408.76 | 57,868 | identical (0 lines) |
+| reserve-first (hold the sources a solve of the entry takes) | 408.76 | 17,420 | REJECTED: fires 3x less, no cheaper |
