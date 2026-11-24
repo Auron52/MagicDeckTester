@@ -27,6 +27,10 @@ ap = argparse.ArgumentParser()
 ap.add_argument('out')
 ap.add_argument('--base', type=int, default=2630000)
 ap.add_argument('--estimate', action='store_true')
+# --extra: PLAY-SETTING rows (only) for decks outside the brief's list that the crit mode can reach: AccomplishedAlchemist
+# (the deck MTG_LINE_KEEP_ALL, this rung's unrestricted parent, lost on: +3 / 36,000), Eldrazi Flicker and Angels (their
+# unit fixtures' historical strands are repaired by this lever), Landfall, Boars, Dragons.
+ap.add_argument('--extra', action='store_true')
 opt = ap.parse_args()
 out, base = opt.out, opt.base
 
@@ -49,6 +53,11 @@ for k in DECKS:
     shapes.append((f'{k}play', k, N_PLAY, None, None, False, False))
     if k in TWO_HG:
         shapes.append((f'{k}2hgplay', k, N_PLAY, None, None, False, True))
+EXTRA = ['alchemist', 'edf', 'angels', 'landfall', 'boars', 'dragons']
+if opt.extra:
+    for k in EXTRA:
+        assert k in F and os.path.exists(F[k]) and os.path.exists(P[k]), k
+        shapes.append((f'{k}play', k, N_PLAY, None, None, False, False))
 for k in DECKS:
     shapes.append((f'{k}d5b20', k, N_SEARCH, 5, 20, True, False))
     shapes.append((f'{k}d3b10', k, N_SEARCH, 3, 10, True, False))
