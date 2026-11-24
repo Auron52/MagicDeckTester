@@ -303,3 +303,79 @@ TEST_CASE("Maze's End list colours: the rank rewrites only the plain ladder of a
     CHECK(kProv.ManaSourceRank(s, *az) == 20);
     heurarm::Clear();
 }
+
+// THE NEW-NAME SLOT NEVER TAKES TALON'S NAME (MAZE_RANK_SPENDABLE's scope). 2HG s26200993 gi993 T4, the SECOND cause:
+// under the spend rank The Black Gate's {B} spends on nothing in this G/U/R list (rank 5), so Talon Gates (a filter
+// land) won the new-name slot -- and Talon has its own slot (the P3 amendment), so Sylvan Scrying's menu collapsed to
+// {Talon}. The searched tutor axis is SIZED on that state (one name: no index-1 variant) and READ at resolution, where
+// Gond Gate was down, every Gate usable on entry, and the menu was {new name, Talon}: the base plan's Scrying took the
+// new name, and the Talon find the end-step Maze's End {3} needs was never emitted. Skipping Talon in the new-name
+// pick keeps the menu two names at both states.
+namespace
+{
+void Lib(GameState& s, std::initializer_list<const char*> names, int base)
+{
+    int n = base;
+    for (const char* nm : names)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        REQUIRE(d != nullptr);
+        Card c = d->card;
+        c.m_number = n++;
+        s.players[0].library.push_back(c);
+    }
+}
+GameState G993ScryingState(const MazesEndProvider& prov, bool gond_down)
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.phase               = Phase::PreCombatMain;
+    s.m_provider          = &prov;
+    s.deck_spell_pip_colors = static_cast<std::uint8_t>((1u << static_cast<int>(Color::Blue))
+                                                        | (1u << static_cast<int>(Color::Red))
+                                                        | (1u << static_cast<int>(Color::Green)));
+    Put(s, "Selesnya Guildgate", 52, true);
+    Put(s, "Manor Gate", 41, true).chosen_color = static_cast<int>(Color::Blue);
+    Put(s, "Manabond", 39);
+    Put(s, "Maze's End", 44);
+    Put(s, "Cliffgate", 16).chosen_color = static_cast<int>(Color::Green);
+    Put(s, "Guild Summit", 33);
+    Put(s, "Azorius Guildgate", 6, true);
+    Put(s, "Planar Nexus", 48, true);
+    Put(s, "Exploration", 20);
+    Put(s, "Baldur's Gate", 7);
+    if (gond_down) { Put(s, "Gond Gate", 28); } else { Hand(s, "Gond Gate", 28); }
+    Hand(s, "Manor Gate", 42);
+    Hand(s, "Maze's End", 43);
+    Lib(s, { "Talon Gates of Madara", "The Black Gate", "Citadel Gate", "Heap Gate", "Basilisk Gate", "Gateway Plaza",
+             "Rakdos Guildgate", "Simic Guildgate", "Black Dragon Gate", "Sea Gate", "Sea Gate", "Gond Gate" }, 600);
+    return s;
+}
+}   // namespace
+
+TEST_CASE("Maze's End list colours: the new-name slot skips Talon Gates, so Sylvan Scrying's menu stays two names")
+{
+    LoadRoCards();
+    static const MazesEndProvider kProv;
+    const CardDefinition* scry = CardDatabase::Instance().Lookup("Sylvan Scrying");
+    REQUIRE(scry != nullptr);
+    heurarm::Clear();
+    for (const bool gond_down : { false, true })   // the axis's sizing state, then Scrying's resolution state
+    {
+        const GameState s = G993ScryingState(kProv, gond_down);
+        const std::vector<std::string> m = kProv.TutorCandidates(s, 0, scry->params);
+        INFO("gond_down=" << gond_down);
+        REQUIRE(m.size() == 2);
+        CHECK(m[0] != "Talon Gates of Madara");
+        CHECK(m[1] == "Talon Gates of Madara");
+    }
+    // The base arm (RANK_OBJECT_COLORS off) is the historical menu: The Black Gate is the new name, then Talon.
+    heurarm::t_arm[heurarm::RANK_OBJECT_COLORS] = 0;
+    {
+        const GameState s = G993ScryingState(kProv, /*gond_down=*/false);
+        CHECK(kProv.TutorCandidates(s, 0, scry->params)
+              == std::vector<std::string>{ "The Black Gate", "Talon Gates of Madara" });
+    }
+    heurarm::Clear();
+}
