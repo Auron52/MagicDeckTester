@@ -664,6 +664,7 @@ add_executable(mtg-test
     test/unit/test_mazes_end_f5.cpp
     test/unit/test_summit_twin_fold.cpp
     test/unit/test_mazes_end_f6.cpp
+    test/unit/test_mazes_end_rank_object.cpp
     test/unit/test_greedy_tie_scoring.cpp
     test/unit/test_free_turns.cpp
 )

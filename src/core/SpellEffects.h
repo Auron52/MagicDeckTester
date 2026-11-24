@@ -58020,6 +58020,7 @@ inline int SacLandPayVictim(const GameState& state, const ManaCost& cost)
         }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr || !can_pay(*d)) { continue; }
+        const RankObjectScope ro(&p);
         const int r = prov.ManaSourceRank(state, *d);
         if (r < best_rank) { best_rank = r; best = i; }
     }
