@@ -71536,12 +71536,10 @@ bool MazeRestrictLandTargets(const GameState& s, int ctrl, std::vector<std::stri
     // down, every Gate usable on entry -- it was {Gateway Plaza, Talon}, so the base plan's Scrying (pick -1) took
     // Gateway Plaza and the Talon find that feeds the end-step Maze's End {3} (the T4 win) was never emitted. Skipping
     // Talon here keeps the menu {new name, Talon} at both states. A RESTRICTION over the same names, no pick.
-    static const bool s_tmp_nts = EnvOn("MTG_TMP_NO_TALON_SKIP");   // TMPDIAG
     static const bool s_spend_nn = EnvOn("MTG_MAZE_RANK_SPENDABLE", true);
     static const bool s_rank_obj_nn = EnvOn("MTG_RANK_OBJECT_COLORS", true);
     const bool skip_talon = heurarm::Flag(heurarm::MAZE_RANK_SPENDABLE, s_spend_nn)
-                         && heurarm::Flag(heurarm::RANK_OBJECT_COLORS, s_rank_obj_nn)
-                         && !s_tmp_nts;   // TMPDIAG
+                         && heurarm::Flag(heurarm::RANK_OBJECT_COLORS, s_rank_obj_nn);
     if (!h.baldur_in_library && (h.gond || !h.gond_in_library))
     {
         const std::string nn = MazePickNewNameGate(s, ctrl, names, prov, skip_talon ? talon : std::string());
@@ -72488,8 +72486,6 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
     //   G) and Boros Guildgate (R/W) were both mono-spendable 10; Gateway Plaza's {1} took Citadel's {G} (battlefield
     //   order) and Sylvan Scrying {1}{G} + Burgeoning {G} were no longer castable together (T5 -> T6).
     // ORDER ONLY (the ManaSourceRank contract), like the rewrite itself.
-    static const bool s_tmp_notb = EnvOn("MTG_TMP_NO_TIEBREAK");   // TMPDIAG
-    if (s_tmp_notb) { return n == 0 ? 5 : n * 10; }   // TMPDIAG
     if (n == 0) { return 5 + std::min(4, __builtin_popcount(static_cast<unsigned>(own))); }
     const int major = s.deck_spell_major_color;
     return n * 10 + ((major < 5 && (seen & (1 << major)) != 0) ? 1 : 0);
