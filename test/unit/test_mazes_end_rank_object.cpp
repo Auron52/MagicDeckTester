@@ -405,8 +405,16 @@ GameState ReserveState(const DecisionProvider& prov)
     return s;
 }
 
+// The spell being paid for in most cases below: Sylvan Scrying, a breakpoint opener (its search).
+const Card* Scrying()
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup("Sylvan Scrying");
+    REQUIRE(d != nullptr);
+    return &d->card;
+}
+
 // The chain as text: each entry's pips ("GGU"), space-separated.
-std::string ChainText(const MazesEndProvider& prov, const GameState& s, const ManaCost& rest, const Card* paying = nullptr)
+std::string ChainText(const MazesEndProvider& prov, const GameState& s, const ManaCost& rest, const Card* paying)
 {
     std::vector<ManaCost> chain;
     if (!prov.PaymentReserve(s, 0, paying, rest, chain)) { return "<off>"; }
@@ -432,7 +440,7 @@ TEST_CASE("Maze's End reserve: the hand's green and blue, nothing drawn yet -> {
     Hand(s, "Gates Ablaze", 63);      // spends nothing in goldfish
     Hand(s, "Izzet Guildgate", 64);
     ArmReserve(1, 1);
-    CHECK(ChainText(kProv, s, ManaCost{}) == "GGU GG G U");
+    CHECK(ChainText(kProv, s, ManaCost{}, Scrying()) == "GGU GG G U");
     heurarm::Clear();
 }
 
@@ -444,7 +452,7 @@ TEST_CASE("Maze's End reserve: Archdruid's Charm in hand holds a third green")
     Hand(s, "Archdruid's Charm", 60);
     Hand(s, "Manabond", 61);
     ArmReserve(1, 1);
-    CHECK(ChainText(kProv, s, ManaCost{}) == "GGG GG G");
+    CHECK(ChainText(kProv, s, ManaCost{}, Scrying()) == "GGG GG G");
     heurarm::Clear();
 }
 
@@ -457,11 +465,11 @@ TEST_CASE("Maze's End reserve: the rest of the line's own pips are not reserved 
     Hand(s, "Exploration", 62);
     ArmReserve(1, 1);
     ManaCost rest;
-    CHECK(ChainText(kProv, s, rest) == "GG G");
+    CHECK(ChainText(kProv, s, rest, Scrying()) == "GG G");
     rest.green = 1;                                   // the line casts one of them
-    CHECK(ChainText(kProv, s, rest) == "G");
+    CHECK(ChainText(kProv, s, rest, Scrying()) == "G");
     rest.green = 2;                                   // ...or both: armed, nothing to reserve
-    CHECK(ChainText(kProv, s, rest).empty());
+    CHECK(ChainText(kProv, s, rest, Scrying()).empty());
     heurarm::Clear();
 }
 
@@ -473,11 +481,11 @@ TEST_CASE("Maze's End reserve: a Guild Summit of ours can draw -> a couple green
     Put(s, "Guild Summit", 33);
     Lib(s, { "Heap Gate", "Exploration", "Guild Summit", "Sea Gate" }, 700);
     ArmReserve(1, 1);
-    CHECK(ChainText(kProv, s, ManaCost{}) == "GGU GG G U");
+    CHECK(ChainText(kProv, s, ManaCost{}, nullptr) == "GGU GG G U");   // the Summit out is itself the continuation
     GameState t = ReserveState(kProv);                // only lands left to draw: nothing to hold for
     Put(t, "Guild Summit", 33);
     Lib(t, { "Heap Gate", "Sea Gate" }, 700);
-    CHECK(ChainText(kProv, t, ManaCost{}).empty());
+    CHECK(ChainText(kProv, t, ManaCost{}, nullptr).empty());
     heurarm::Clear();
 }
 
@@ -489,11 +497,28 @@ TEST_CASE("Maze's End reserve: with no Summit to draw, the hand is known and onl
     Hand(s, "Exploration", 61);
     Lib(s, { "Guild Summit", "Sylvan Scrying" }, 700);
     ArmReserve(1, 1);
-    CHECK(ChainText(kProv, s, ManaCost{}) == "G");
+    CHECK(ChainText(kProv, s, ManaCost{}, Scrying()) == "G");
     // The spell being paid for is a Guild Summit: its draws are coming, so the library counts.
     const CardDefinition* gs = CardDatabase::Instance().Lookup("Guild Summit");
     REQUIRE(gs != nullptr);
     CHECK(ChainText(kProv, s, ManaCost{}, &gs->card) == "GGU GG G U");
+    heurarm::Clear();
+}
+
+TEST_CASE("Maze's End reserve: no continuation can follow -> nothing is reserved")
+{
+    LoadRoCards();
+    static const MazesEndProvider kProv;
+    GameState s = ReserveState(kProv);
+    Hand(s, "Exploration", 61);
+    Hand(s, "Sylvan Scrying", 62);
+    ArmReserve(1, 1);
+    const CardDefinition* mb = CardDatabase::Instance().Lookup("Manabond");
+    REQUIRE(mb != nullptr);
+    CHECK(ChainText(kProv, s, ManaCost{}, &mb->card).empty());          // Manabond opens nothing; the line casts nothing more
+    CHECK(ChainText(kProv, s, ManaCost{}, nullptr).empty());
+    ManaCost rest; rest.generic = 1; rest.green = 1;                     // ...unless the rest of the line fits a Scrying
+    CHECK(ChainText(kProv, s, rest, &mb->card) == "G");
     heurarm::Clear();
 }
 
@@ -504,14 +529,14 @@ TEST_CASE("Maze's End reserve: OFF by default; armed only with the hold-up; it r
     GameState s = ReserveState(kProv);
     Hand(s, "Manabond", 61);
     ArmReserve(-1, -1);
-    CHECK(ChainText(kProv, s, ManaCost{}) == "<off>");
+    CHECK(ChainText(kProv, s, ManaCost{}, Scrying()) == "<off>");
     ArmReserve(1, 0);
-    CHECK(ChainText(kProv, s, ManaCost{}) == "<off>");
+    CHECK(ChainText(kProv, s, ManaCost{}, Scrying()) == "<off>");
     CHECK(kProv.PaymentHoldUp(s, 0).size() == 1);    // the list mode
     ArmReserve(0, 1);
-    CHECK(ChainText(kProv, s, ManaCost{}) == "<off>");
+    CHECK(ChainText(kProv, s, ManaCost{}, Scrying()) == "<off>");
     ArmReserve(1, 1);
-    CHECK(ChainText(kProv, s, ManaCost{}) == "G");
+    CHECK(ChainText(kProv, s, ManaCost{}, Scrying()) == "G");
     CHECK(kProv.PaymentHoldUp(s, 0).empty());        // the reserve replaces the list
     heurarm::Clear();
 }
@@ -525,7 +550,8 @@ TEST_CASE("Maze's End reserve: s30006137's Scrying keeps Manabond's {G} as the l
         ArmReserve(1, reserve);
         GameState s = HoldBoard(kProv);
         ManaCost scry; scry.generic = 1; scry.green = 1;
-        const bool paid = TapForCostDirect(s, scry, /*for_creature=*/false);
+        bool paid = false;
+        { const SpellSubtypePayScope paying(Scrying()); paid = TapForCostDirect(s, scry, /*for_creature=*/false); }
         ManaCost bond; bond.green = 1;
         INFO("reserve=" << reserve);
         CHECK((paid && TapForCostDirect(s, bond, /*for_creature=*/false)));
@@ -551,7 +577,8 @@ bool ScryingKeepsTwoGreen(int hold, int reserve)
     Hand(s, "Manabond", 61);
     Hand(s, "Exploration", 62);
     ManaCost scry; scry.generic = 1; scry.green = 1;
-    const bool paid = TapForCostDirect(s, scry, /*for_creature=*/false);
+    bool paid = false;
+    { const SpellSubtypePayScope paying(Scrying()); paid = TapForCostDirect(s, scry, /*for_creature=*/false); }
     heurarm::Clear();
     ManaCost gg; gg.green = 2;
     return paid && TapForCostDirect(s, gg, /*for_creature=*/false);

@@ -72535,6 +72535,8 @@ std::vector<ManaCost> MazesEndProvider::PaymentHoldUp(const GameState& s, int co
 //  * The hand can grow this turn only through Guild Summit's draws: one is ours on the battlefield, in hand, or the
 //    spell being paid for. Otherwise the hand is known, and a colour nothing in it can spend is not held.
 //  * Gates Ablaze (does nothing in goldfish) and lands spend nothing.
+//  * ONLY WHILE A CONTINUATION CAN FOLLOW (see `cont` below): the spell being paid for opens a breakpoint, an opener
+//    in hand fits in the rest of the line, or a Guild Summit of ours is out. Otherwise nothing is reserved.
 // The fallback chain drops the blue first, then one green at a time, then tries the blue alone: {G}{G}{U} -> {G}{G}
 // -> {G} -> {U} (with Charm: {G}{G}{G}{U} -> {G}{G}{G} -> ...). Only coloured pips are reserved: the AMOUNT left after
 // a payment does not depend on which sources paid it, the colours do.
@@ -72549,6 +72551,19 @@ bool MazesEndProvider::PaymentReserve(const GameState& s, int controller, const 
     int hand_g = 0, hand_u = 0;
     bool charm = false, grows = false;
     const auto is_summit = [](const CardDefinition* d) { return !d->params.draw_on_other_subtype_enter.empty(); };
+    // A BREAKPOINT OPENER: a card whose resolution opens a continuation this turn -- a tutor (Sylvan Scrying,
+    // Archdruid's Charm), Guild Summit (its draws), Exploration (the extra land drop's site).
+    const auto opener = [&](const CardDefinition* d) {
+        const CardParams& q = d->params;
+        return is_summit(d) || q.tutor_to_hand || q.tutor_land_to_battlefield || q.tutor_nonland_to_hand
+            || q.static_extra_land_drops > 0;
+    };
+    // THE RESERVE IS FOR A CONTINUATION (USER: "Summit I imagine we often would play up front avoiding the need for
+    // breakpoints to open?"). A card cast after this payment that the line did not name is cast in a breakpoint's
+    // continuation, so the reserve is held only while one can still open this turn: the spell being paid for is an
+    // opener, an opener in hand fits in the rest of the line, or a Guild Summit of ours can draw on a Gate's entry.
+    // Otherwise the rest of the line is all this turn casts, and the payer keeps that already.
+    bool cont = false;
     for (const Card& c : pl.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
@@ -72558,21 +72573,28 @@ bool MazesEndProvider::PaymentReserve(const GameState& s, int controller, const 
         hand_u += m.blue;
         charm = charm || m.green >= 3;
         grows = grows || is_summit(d);
+        if (!cont && opener(d) && m.ManaValue() <= rest.ManaValue() && m.green <= rest.green && m.blue <= rest.blue)
+        { cont = true; }
     }
-    if (!grows && paying != nullptr)
+    if (paying != nullptr)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(*paying);
-        grows = d != nullptr && is_summit(d);
-    }
-    if (!grows)
-    {
-        for (const Permanent& p : s.battlefield)
+        if (d != nullptr)
         {
-            if (p.controller_index != controller || p.def_absent) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d != nullptr && is_summit(d)) { grows = true; break; }
+            grows = grows || is_summit(d);
+            cont = cont || opener(d);
         }
     }
+    bool summit_out = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && is_summit(d)) { summit_out = true; break; }
+    }
+    grows = grows || summit_out;
+    cont = cont || summit_out;
+    if (!cont) { return true; }
     bool lib_g = false, lib_u = false;
     if (grows)
     {
