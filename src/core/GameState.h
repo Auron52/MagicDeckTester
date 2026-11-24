@@ -1408,6 +1408,13 @@ struct GameState
     // byte-identical. Also opens this turn's post-combat main (SeaCreaturesProvider::RestrictedSecondMainLive). In the
     // 2-byte hole after draw_trigger_mark (sizeof(GameState) unchanged).
     std::uint8_t             eot_attack_draw_n = 0;
+    // The COLOURS this deck's SPELLS can spend (bit c = Color c, W..G): every nonland card's coloured pips --
+    // mainboard + sideboard, hybrid halves included; Garth holds every bit (the deck_creature_pip_colors shape, all
+    // nonland cards instead of creatures). DECK CONSTANT, stamped by StampDeckTraits; default all five (= every
+    // colour may matter) for a state not built through it. Read ONLY by MazesEndProvider::ManaSourceRank
+    // (MTG_MAZE_RANK_SPENDABLE): a colour no spell in the list carries is no flexibility, so an Azorius Guildgate
+    // in this list ranks as the mono-blue source it is. In the 3-byte hole after eot_attack_draw_n (sizeof unchanged).
+    std::uint8_t             deck_spell_pip_colors = 0x1F;
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

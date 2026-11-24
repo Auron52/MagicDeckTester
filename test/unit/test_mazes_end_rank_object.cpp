@@ -215,3 +215,91 @@ TEST_CASE("Maze's End hold-up: the costs are the hand's spells, deduplicated, ch
     CHECK(h[1].generic == 2);
     CHECK(kProv.PaymentHoldUp(s, 0).empty());   // default OFF
 }
+
+// ---- THE LIST'S COLOURS (MTG_MAZE_RANK_SPENDABLE, heurarm MAZE_RANK_SPENDABLE; DEFAULT ON with RANK_OBJECT_COLORS) ----
+// 2HG s26200993 gi993 T4, the first Maze's End {3} (the other Maze's End held for its own activation, so it is left
+// out here): Planar Nexus, Manor Gate (G, chosen U), Cliffgate (R, chosen G), Azorius Guildgate untapped. With the
+// object colours alone Manor, Cliffgate and Azorius all rank 20 and the tie goes by battlefield order -- Cliffgate's
+// {G} pays the generic, and once Gond Gate and Baldur's Gate are in, Manabond's {G} and Sylvan Scrying's {1}{G} cannot
+// both be paid. Read as the list's colours (G/U/R) Azorius is mono-blue (10) and pays first.
+namespace
+{
+bool CrackThenManabondScrying(int spend_arm, bool* azorius_paid_crack)
+{
+    heurarm::Clear();
+    heurarm::t_arm[heurarm::RANK_OBJECT_COLORS] = 1;
+    if (spend_arm >= 0) { heurarm::t_arm[heurarm::MAZE_RANK_SPENDABLE] = static_cast<std::int8_t>(spend_arm); }
+    static const MazesEndProvider kProv;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.phase               = Phase::PreCombatMain;
+    s.players[0].life     = 30;
+    s.players[1].life     = 30;
+    s.m_provider          = &kProv;
+    s.deck_spell_pip_colors = static_cast<std::uint8_t>((1u << static_cast<int>(Color::Blue))
+                                                        | (1u << static_cast<int>(Color::Red))
+                                                        | (1u << static_cast<int>(Color::Green)));
+    Put(s, "Selesnya Guildgate", 52, /*tapped=*/true);
+    Put(s, "Manor Gate", 41).chosen_color = static_cast<int>(Color::Blue);
+    Put(s, "Cliffgate", 16).chosen_color = static_cast<int>(Color::Green);
+    Put(s, "Guild Summit", 33);
+    Put(s, "Azorius Guildgate", 6);
+    Put(s, "Planar Nexus", 48);
+    Put(s, "Exploration", 20);
+    ManaCost crack; crack.generic = 3;
+    const bool c_ok = TapForCostDirect(s, crack, /*for_creature=*/false);
+    *azorius_paid_crack = Tapped(s, 6) && !Tapped(s, 16);
+    Put(s, "Baldur's Gate", 7);
+    Put(s, "Gond Gate", 28);
+    ManaCost bond; bond.green = 1;
+    const bool b_ok = c_ok && TapForCostDirect(s, bond, /*for_creature=*/false);
+    ManaCost scry; scry.generic = 1; scry.green = 1;
+    const bool s_ok = b_ok && TapForCostDirect(s, scry, /*for_creature=*/false);
+    heurarm::Clear();
+    return s_ok;
+}
+}   // namespace
+
+TEST_CASE("Maze's End list colours: Azorius Guildgate (W/U in a G/U/R list) pays the {3}, both {G} stay payable")
+{
+    LoadRoCards();
+    bool az = false;
+    CHECK(CrackThenManabondScrying(/*spend_arm=*/-1, &az));   // the default
+    CHECK(az);
+}
+
+TEST_CASE("Maze's End list colours: OFF, the dual tie spends Cliffgate's {G} and Scrying's {G} strands")
+{
+    LoadRoCards();
+    bool az = true;
+    CHECK_FALSE(CrackThenManabondScrying(/*spend_arm=*/0, &az));
+    CHECK_FALSE(az);
+}
+
+TEST_CASE("Maze's End list colours: the rank rewrites only the plain ladder of a plain coloured land")
+{
+    LoadRoCards();
+    static const MazesEndProvider kProv;
+    GameState s;
+    s.active_player_index = 0;
+    s.m_provider = &kProv;
+    heurarm::Clear();
+    const CardDefinition* az = CardDatabase::Instance().Lookup("Azorius Guildgate");
+    const CardDefinition* oz = CardDatabase::Instance().Lookup("Orzhov Guildgate");
+    const CardDefinition* me = CardDatabase::Instance().Lookup("Maze's End");
+    REQUIRE(az != nullptr); REQUIRE(oz != nullptr); REQUIRE(me != nullptr);
+    CHECK(kProv.ManaSourceRank(s, *az) == 20);                   // unstamped state: every colour counts
+    s.deck_spell_pip_colors = static_cast<std::uint8_t>((1u << static_cast<int>(Color::Blue))
+                                                        | (1u << static_cast<int>(Color::Red))
+                                                        | (1u << static_cast<int>(Color::Green)));
+    CHECK(kProv.ManaSourceRank(s, *az) == 10);                   // W is no flexibility here
+    CHECK(kProv.ManaSourceRank(s, *oz) == 5);                    // W/B: a {C} source in this list
+    CHECK(kProv.ManaSourceRank(s, *me) == 5);                    // the {C} tier untouched
+    heurarm::t_arm[heurarm::RANK_OBJECT_COLORS] = 0;             // the base arm: the historical ladder
+    CHECK(kProv.ManaSourceRank(s, *az) == 20);
+    heurarm::t_arm[heurarm::RANK_OBJECT_COLORS] = 1;
+    heurarm::t_arm[heurarm::MAZE_RANK_SPENDABLE] = 0;
+    CHECK(kProv.ManaSourceRank(s, *az) == 20);
+    heurarm::Clear();
+}

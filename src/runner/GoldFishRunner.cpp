@@ -2391,8 +2391,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // FIRST colour, so a hybrid's second half is added from hybrid_pair. Mainboard + sideboard (a
     // wish reaches it). Garth materialises cards from outside every list, so he holds every bit, as
     // he holds every gate above. Erring WIDE only keeps the historical ladder for a source.
+    // ...and the same over EVERY NONLAND card (GameState::deck_spell_pip_colors; read by Maze's End's rank only).
     {
-        std::uint8_t mask = 0;
+        std::uint8_t mask = 0, spell_mask = 0;
         bool garth = false;
         for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
         {
@@ -2401,19 +2402,23 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (d == nullptr) { continue; }
                 if (d->params.garth_copy_ability) { garth = true; }
-                if (!d->card.IsCreature()) { continue; }
+                if (d->card.IsLand()) { continue; }
                 const ManaCost& m = d->card.m_mana_cost;
+                std::uint8_t cm = 0;
                 const int pips[5] = { m.white, m.blue, m.black, m.red, m.green };
-                for (int k = 0; k < 5; ++k) { if (pips[k] > 0) { mask |= static_cast<std::uint8_t>(1u << k); } }
+                for (int k = 0; k < 5; ++k) { if (pips[k] > 0) { cm |= static_cast<std::uint8_t>(1u << k); } }
                 for (int h = 0; h < m.hybrid_count && h < 6; ++h)
                 {
                     const int a = m.hybrid_pair[h] >> 4, b = m.hybrid_pair[h] & 0xF;
-                    if (a < 5) { mask |= static_cast<std::uint8_t>(1u << a); }
-                    if (b < 5) { mask |= static_cast<std::uint8_t>(1u << b); }
+                    if (a < 5) { cm |= static_cast<std::uint8_t>(1u << a); }
+                    if (b < 5) { cm |= static_cast<std::uint8_t>(1u << b); }
                 }
+                spell_mask |= cm;
+                if (d->card.IsCreature()) { mask |= cm; }
             }
         }
         state.deck_creature_pip_colors = garth ? std::uint8_t{0x1F} : mask;
+        state.deck_spell_pip_colors    = garth ? std::uint8_t{0x1F} : spell_mask;
     }
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was
     // actually dealt", and only opponentdeck::Deal may raise it -- see the comment there. Callers
