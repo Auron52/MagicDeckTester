@@ -4709,3 +4709,26 @@ recovered nor failed.
   on `mtg.q`. Re-running those 4 games x 4 salts x 2 arms at d8 b0 (32 jobs, some multi-hour) would settle it. The
   USER decides whether that is needed before deciding on rev.
 - Tier slower games (above): 13 recovered (11 at the old score, 2 equal to origin's own d8), s3003 g112 UNRESOLVED.
+
+## Summit pay-first (2026-11-22/24): Guild Summit's tap set as a mana-payment consequence (`MTG_MAZE_SUMMIT_PAY_FIRST`, DEFAULT ON)
+
+Supersedes B1's {rest-of-line, 0, all} count menu (decisions 2/8/10/30). USER ruling, verbatim (2026-11-22): *"Why do we
+need to search tapping all gates? Isn't that just a special case of fitting it into the turn's plan? Heap Gate is quite
+unimportant compared to any other effect, so I'm not particularly worried about holding that back. In this deck Black
+Gate and Basilisk Gate don't do anything special. Baldur's Gate makes some sense. An order is probably workable here,
+but generally speaking we shouldn't need to make much in terms of decisions of this sort if we are only considering all
+unneeded and none. We can just pay our mana costs and then tap the rst."*
+
+* **What ships:** at resolution a real colour-aware payment of the rest of the applying line (plus Maze's End's `{3}`
+  while an untapped Maze's End is ours and the hold has no activations) is found with every non-Gate source spent
+  first (`LinePayKeepSet`); every Gate it does not use is tapped. The menu is {all unneeded, none}, **plus "all" while
+  an untapped Maze's End of ours exists**: Guild Summit is a breakpoint, so the `{3}` reserve is speculative at
+  resolution. `=0` restores the B1 menu.
+* **Held-out A/B (fresh seeds):** {unneeded, none} alone: d5 b20 +15 (fails). Reserve only for the plan's named
+  activations: d5 +8, 2HG +3 (fails). Shipped menu: **d5 b20 -1 (10/9, n 2500), 2HG -1 (3/2, n 1000), d0 -17 (43/23,
+  n 4000)**, CPU ~1.0. All 9 d5 and 23 d0 slower games recover at d8 b0.
+* **Tiers on 20b9994d5 (accepted, scoped to Maze's End):** searched smoke d5 +2 (gi16, gi41, both recover at d8 b0),
+  regression d5 -3, d3 / 2HG same score; d0 smoke -18 / regression -6 turn-sum, all 10 d0 slower games recover at d8 b0.
+* **UNRESOLVED: 2HG g292** (seed 26100292, gi 292): pay-first T6 vs off T5 at d5 b20/b400/b1280/b5120/b0 and at d8 b0.
+  The pay-first line is the same digest at every budget. The non-clairvoyant (`MTG_NC_SEARCH=1`) check did not finish
+  at d8 b0 (15 h) or at d5 b20-b1280 (7.5 h; killed by the coordinator). It is neither proven clairvoyance nor variance.
