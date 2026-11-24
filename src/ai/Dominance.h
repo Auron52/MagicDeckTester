@@ -690,6 +690,9 @@ static_assert(sizeof(Player) == 216,
 // (nothing to fold). Opponent POISON is folded below (Player::poison_counters, exact) -- now a live win term.
 // +8 bytes (2026-11-22, Beasts J): combat_resource_turn opens a restricted post-combat main
 // only in its stamped turn. It is folded into the mid-turn sim key and dead at the clean boundary.
+// +0 bytes (2026-11-24, Maze's End rank): `deck_spell_pip_colors` (uint8, the 3-byte hole after eot_attack_draw_n).
+// Classification: a DECK CONSTANT stamped once in StampDeckTraits -- nothing to fold. It decides only which source a
+// payment taps (MazesEndProvider::ManaSourceRank); the tapped sources are already folded.
 static_assert(sizeof(GameState) == 1736,   // combined upstream free turns and Beasts fields
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "

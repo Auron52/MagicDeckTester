@@ -72412,7 +72412,38 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
     if (IsScaledManaLand(def) && heurarm::Flag(heurarm::MAZE_TAP_BALDUR_LAST, s_baldur)
         && ScaledManaNetYield(s, def) > 0
         && LineDemandAfterPayment() >= def.params.mana_per_creature_feeder_generic + 1) { return 61; }
-    return DeckProvider::ManaSourceRank(s, def);
+    const int r = DeckProvider::ManaSourceRank(s, def);
+    // THE LIST'S COLOURS (MTG_MAZE_RANK_SPENDABLE, heurarm MAZE_RANK_SPENDABLE; DEFAULT ON, live only with
+    // RANK_OBJECT_COLORS). The colour ladder (mono 10 / dual 20 / ... / rainbow 50) measures how many of the deck's
+    // needs a source can meet; a colour no spell in the list carries meets none (GameState::deck_spell_pip_colors, the
+    // deck_creature_pip_colors argument for every spell). Here the spells are G/U/R, so Azorius Guildgate is a
+    // mono-blue source, Orzhov a {C} one. Once RANK_OBJECT_COLORS read Cliffgate as the R/G dual it is (no longer a
+    // rainbow), it TIED Azorius at 20 and the tie went by battlefield order: 2HG s26200993 gi993 T4, the first Maze's
+    // End {3} took Planar Nexus + Manor Gate + Cliffgate over Azorius, so Manabond's and Sylvan Scrying's two {G} had
+    // only Gond Gate and a Baldur's Gate fed by the other Maze's End -- whose end-step activation was the T4 win
+    // (Manabond's dump + Guild Summit's draws). Read as the list's colours, Azorius (10) pays first and Cliffgate's
+    // {G} stays up. Rewrites only the plain ladder's exact rungs, for a plain coloured land (no filter, reflector or
+    // scaled mode): every other rank -- the holds (59/61/63), the {C} tier, the +1 adjustments -- is untouched.
+    // ORDER ONLY (the ManaSourceRank contract): no payable cost becomes unpayable.
+    static const bool s_spend = EnvOn("MTG_MAZE_RANK_SPENDABLE", true);
+    static const bool s_rank_obj = EnvOn("MTG_RANK_OBJECT_COLORS", true);
+    if (r < 10 || r > 50 || r % 10 != 0 || !def.card.IsLand() || def.params.any_color_filter
+        || !def.params.mana_colors_of_controlled_subtype.empty() || IsScaledManaLand(def) || ManaProducedPerTap(def) != 1
+        || !heurarm::Flag(heurarm::MAZE_RANK_SPENDABLE, s_spend) || !heurarm::Flag(heurarm::RANK_OBJECT_COLORS, s_rank_obj))
+    { return r; }
+    const int active = s.active_player_index;
+    const Permanent* const robj = g_rank_object;
+    const bool obj = robj != nullptr && def.params.etb_choose_color && robj->chosen_color >= 0
+                  && CardDatabase::Instance().LookupCached(robj->card) == &def;
+    const std::vector<Color>& prod = obj ? EffectiveProducesFor(s, active, def, robj) : EffectiveProduces(s, active, def);
+    int seen = 0;
+    for (Color c : prod)
+    {
+        const int ci = static_cast<int>(c);
+        if (ci < 5 && (s.deck_spell_pip_colors & (1 << ci)) != 0) { seen |= 1 << ci; }
+    }
+    const int n = __builtin_popcount(static_cast<unsigned>(seen));
+    return n == 0 ? 5 : n * 10;
 }
 
 // THE MAZE'S END HOLD-UP (MTG_MAZE_HOLD_UP, heurarm MAZE_HOLD_UP; DEFAULT OFF -- a payment PREFERENCE awaiting its
