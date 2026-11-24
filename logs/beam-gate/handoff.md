@@ -58,4 +58,16 @@ Core only (`--no-fleet`, the 4 named decks): 16 rows, 82 jobs, 39,400 games, est
 NOT RUN (coordinator runs it under build/scratch/claude_box.lock).
 
 ## Sanity games
-(see below; filled in after the build)
+Release build of 493dd5f4e (src tree = origin + the two slots), `mtg-test` rc 0. Small batches, --threads 2, seeds
+6900001/6900101 (not A/B seeds), `build/scratch/beam-gate/sanity/`:
+- Anti-Lifegain play (d5 b20, `[play] source=value_play`) 2 games, A/B/C: identical digests AND units (374) -- these
+  games ran NO escalation (MTG_ESC_JOB_STATS taken=0/0), so the beam had nothing to cut. AL d3 1 game A vs C:
+  identical (expected by construction).
+- Hinata play (d5 b30, emulated ladder) 1 game A/B/C: identical, 32,636 units each; no escalation either (the emulated
+  ladder commits the probe's heuristic line). With beam_width 0 Hinata has no recording, so A == B by construction;
+  C differs from A only where Hinata's escalation runs.
+- Dragonstorm play 1 game A/B: identical (157 units).
+- Creature Giving play 2 games (the wiring check): same avg 5.0 and digests in all three arms, but the escalation's
+  units differ -- A (W3 value) 1,320, B (no beam) 23,628, C (static W20) 21,512; game units 43,447 / 65,755 / 63,639,
+  cpu 1,149 / 1,686 / 1,623 ms. So both flags reach the gate, and on CG the W3 beam is a real CPU saving (B +51% on
+  these 2 games). Whether B costs quality is the A/B's question.
