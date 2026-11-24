@@ -341,6 +341,8 @@ TEST_CASE("Payer: MTG_LINE_SPARE_TIGHT keeps Remote Farm's second {W} for the li
         ArmAO arm(1, 0);
         heurarm::t_arm[heurarm::LINE_SPARE_TIGHT] = static_cast<std::int8_t>(tight == 1 ? 1 : 0);
         heurarm::t_arm[heurarm::LINE_KEEP_ROCK] = static_cast<std::int8_t>(tight == 2 ? 1 : 0);
+        // MTG_LINE_KEEP_CRIT (default ON) repairs it too (the Farm is the last {W} source for Lightstall): pinned OFF.
+        heurarm::t_arm[heurarm::LINE_KEEP_CRIT] = 0;
         const std::vector<std::string> hand = {"Lightstall Inquisitor", "Righteous Valkyrie", "Sol Ring"};
         GameState s = BoardAO(0, hand, {"Seraph Sanctuary"});
         PutAO(s, "Remote Farm", 9);
@@ -358,6 +360,7 @@ TEST_CASE("Payer: MTG_LINE_SPARE_TIGHT keeps Remote Farm's second {W} for the li
         }
         heurarm::t_arm[heurarm::LINE_SPARE_TIGHT] = -1;
         heurarm::t_arm[heurarm::LINE_KEEP_ROCK] = -1;
+        heurarm::t_arm[heurarm::LINE_KEEP_CRIT] = -1;
     }
 }
 

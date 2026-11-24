@@ -1011,9 +1011,13 @@ extern thread_local int g_line_reducer_credit;
 // ...and the mana value of the line's NONCREATURE casts, so the rung can tell when the rest of the line is creature
 // casts only (a colored_creature_only land's colour pays them).
 extern thread_local int g_line_noncreature_mv;
-// ...and whether the line-keep rung reaches this line WITHOUT a reducer credit (MTG_LINE_KEEP_ALL): bound true by the
-// same seeds for a line of two or more held casts while that lever is on; false otherwise (inert).
-extern thread_local bool g_line_keep_bound;
+// ...and whether the line-keep rung reaches this line WITHOUT a reducer credit, bound by the same seeds (LineKeepBound):
+// kLineKeepFull (1) for a line MTG_LINE_KEEP_ALL / MTG_LINE_KEEP_ROCK bind (every payment is tried), kLineKeepCrit (2)
+// for a line of two or more held casts only MTG_LINE_KEEP_CRIT binds (a payment is tried only when LineKeepCritGate
+// finds a last-source colour), 0 otherwise (inert). A `true` passed for it is kLineKeepFull, as before the crit mode.
+constexpr int kLineKeepFull = 1;
+constexpr int kLineKeepCrit = 2;
+extern thread_local int g_line_keep_bound;
 
 class LineUnpaidCostScope
 {
@@ -1023,7 +1027,7 @@ public:
           m_prev_credit(g_line_reducer_credit), m_prev_nc(g_line_noncreature_mv), m_prev_bound(g_line_keep_bound)
     {
         g_line_unpaid_cost = c; g_line_hold_has_acts = false; g_line_reducer_credit = 0; g_line_noncreature_mv = 0;
-        g_line_keep_bound = false;
+        g_line_keep_bound = 0;
     }
     ~LineUnpaidCostScope()
     {
@@ -1037,7 +1041,7 @@ private:
     bool     m_prev_acts;
     int      m_prev_credit;
     int      m_prev_nc;
-    bool     m_prev_bound;
+    int      m_prev_bound;
 };
 
 // THE SCARCE HOLD OUTRANKS A LAND AURA'S HOST HOLD (MTG_SCARCE_COLOR_MASK). Both per-cast host holds (the rollout's
@@ -1169,17 +1173,18 @@ private:
 // and AIEngine::TakeTurn) and at every payer walk that binds the hold from an action list. `credit` is the generic
 // the line's same-turn reducers take off its later casts (LineReducerCredit: the enumerator's own per-cast discount,
 // SameTurnReducerDiscountFor, summed); `noncreature_mv` the line's noncreature cast bill. Both 0 with the lever off.
-// `bound` (LineKeepBound, MTG_LINE_KEEP_ALL): the rung reaches the line even with no credit.
+// `bound` (LineKeepBound: MTG_LINE_KEEP_ALL / _ROCK -> kLineKeepFull, MTG_LINE_KEEP_CRIT -> kLineKeepCrit, else 0): the
+// rung reaches the line even with no credit.
 int LineReducerCredit(const GameState& state, const std::vector<Action>& cands, const std::vector<int>& sel);
-bool LineKeepBound(const std::vector<Action>& cands, const std::vector<int>& sel);
-bool LineKeepBound(const std::vector<Action>& acts);
+int LineKeepBound(const std::vector<Action>& cands, const std::vector<int>& sel);
+int LineKeepBound(const std::vector<Action>& acts);
 int LineReducerCredit(const GameState& state, const std::vector<Action>& acts);
 int LineNoncreatureMv(const std::vector<Action>& cands, const std::vector<int>& sel);
 int LineNoncreatureMv(const std::vector<Action>& acts);
 class LineReducerCreditScope
 {
 public:
-    LineReducerCreditScope(int credit, int noncreature_mv, bool bound = false)
+    LineReducerCreditScope(int credit, int noncreature_mv, int bound = 0)
         : m_prev(g_line_reducer_credit), m_prev_nc(g_line_noncreature_mv), m_prev_bound(g_line_keep_bound)
     { g_line_reducer_credit = credit; g_line_noncreature_mv = noncreature_mv; g_line_keep_bound = bound; }
     ~LineReducerCreditScope()
@@ -1189,7 +1194,7 @@ public:
 private:
     int  m_prev;
     int  m_prev_nc;
-    bool m_prev_bound;
+    int  m_prev_bound;
 };
 
 // (The post-spell greedy mana sinks AnimateLandsShared / ActivateTapTokensShared were deleted

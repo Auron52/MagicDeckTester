@@ -614,6 +614,24 @@ inline bool LineKeepRockOn()
     return heurarm::Flag(heurarm::LINE_KEEP_ROCK, env_on);
 }
 
+// MTG_LINE_KEEP_CRIT (DEFAULT ON; =0 restores the payment byte for byte) -- the line-keep rung (LineReducerKeepHold,
+// ManaPayment.cpp) on every applying line of two or more held casts that neither MTG_LINE_KEEP_ALL nor
+// MTG_LINE_KEEP_ROCK binds, gated PER PAYMENT on a cheap board scan (LineKeepCritGate): some untapped source of ours is
+// the LAST source of a colour the rest of the line owes (the other sources' units of that colour, plus the float, fall
+// short of the rest's pips of it plus this bill's own), and this bill has a pip that source could pay with something
+// else. Only then is the greedy payment tried on a scratch board, and it is re-made only when it strands the rest of
+// the line while a hold-out of its own sources keeps it (the rung's exact judge). It is the defect the static
+// line-critical re-ranks 7a / 7b targeted (docs/design/bruna-line-critical-levers.md: Bruna s30051257 T2, the only {U}
+// land paying a generic pip) without their cost: those moved EVERY payment that met a critical land, stranded or not,
+// and so changed payments inside lines the search had valued (Niv gi537, Dragonstorm gi679); this one changes a payment
+// only where the greedy's own payment provably drops a cast of the declared line. Read PER CALL (heurarm slot
+// LINE_KEEP_CRIT), seeded where the reducer credit is. docs/design/line-keep-crit-2026-11-24.md.
+inline bool LineKeepCritOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_KEEP_CRIT", true);
+    return heurarm::Flag(heurarm::LINE_KEEP_CRIT, env_on);
+}
+
 // MTG_LINE_SPARE_FILTER_FEED (DEFAULT ON; =0 restores the plain over-count) -- LineSpareSourceMask's SHORT test
 // also reads the supply LEFT AFTER the generic pip eats a one-unit float that is the only feed of an untapped
 // filter land (the filter's credit goes with it). mana-clean item 6, treasure_hunt {Cascade Bluffs + Land's Edge +

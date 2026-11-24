@@ -11703,7 +11703,8 @@ inline Scope* AuraHoldScopeFor(const GameState& s, const std::vector<Action>& ac
 struct AuraWalkKey
 {
     int      lrc_credit = 0, lrc_mv = 0;
-    bool     lrc_bound = false, unseen = false;
+    int      lrc_bound = 0;   // LineKeepBound's mode (0, kLineKeepFull, kLineKeepCrit)
+    bool     unseen = false;
     ManaCost walk_total{};
 };
 template <class F>
@@ -11726,8 +11727,8 @@ inline bool AuraHoldProbe(Scope* sc, const std::vector<Action>& acts, const std:
         ids[k] = sc->canon[static_cast<std::size_t>(j)];
     }
     const int n = walk_pos;   // ids[0..n-1] = the prefix, ids[n] = the Aura
-    const std::uint8_t flags = static_cast<std::uint8_t>((wk.lrc_bound ? 1u : 0u) | (wk.unseen ? 2u : 0u)
-                                                         | (for_creature ? 4u : 0u));
+    const std::uint8_t flags = static_cast<std::uint8_t>((static_cast<unsigned>(wk.lrc_bound) & 3u) | (wk.unseen ? 4u : 0u)
+                                                         | (for_creature ? 8u : 0u));
     auto same = [&](const AuraEntry& e)
     {
         if (e.n != n || e.aura != ids[n] || e.flags != flags || e.host != host || e.lrc_credit != wk.lrc_credit
@@ -12367,7 +12368,7 @@ static bool SubsetPayableAsExecutedImpl(const GameState& state, const std::vecto
     GameState& cp = _scratch.Board();
     LineUnpaidCostScope _luc(LineCastCostTotal(acts));
     const int _lrc_credit = LineReducerCredit(cp, acts);   // the apply's twin (MTG_LINE_REDUCER_KEEP)
-    const bool _lrc_bound = LineKeepBound(acts);   // MTG_LINE_KEEP_ALL
+    const int _lrc_bound = LineKeepBound(acts);   // MTG_LINE_KEEP_ALL / _ROCK / _CRIT
     LineReducerCreditScope _lrc(_lrc_credit, (_lrc_credit > 0 || _lrc_bound) ? LineNoncreatureMv(acts) : 0, _lrc_bound);
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(cp, acts));
     LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
@@ -13130,7 +13131,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     }
     LineUnpaidCostScope _luc(_walk_total);
     const int _lrc_credit = LineReducerCredit(cp, cands, ord);   // the apply's twin (MTG_LINE_REDUCER_KEEP)
-    const bool _lrc_bound = LineKeepBound(cands, ord);   // MTG_LINE_KEEP_ALL
+    const int _lrc_bound = LineKeepBound(cands, ord);   // MTG_LINE_KEEP_ALL / _ROCK / _CRIT
     const int _lrc_mv = (_lrc_credit > 0 || _lrc_bound) ? LineNoncreatureMv(cands, ord) : 0;
     LineReducerCreditScope _lrc(_lrc_credit, _lrc_mv, _lrc_bound);
     LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
@@ -14844,7 +14845,7 @@ static bool OrderPrepaysWholeTurnImpl(const GameState& state, const std::vector<
     GameState& cp = _scratch.Board();
     LineUnpaidCostScope _luc(LineCastCostTotal(sub));
     const int _lrc_credit = LineReducerCredit(cp, sub);   // the apply's twin (MTG_LINE_REDUCER_KEEP)
-    const bool _lrc_bound = LineKeepBound(sub);   // MTG_LINE_KEEP_ALL
+    const int _lrc_bound = LineKeepBound(sub);   // MTG_LINE_KEEP_ALL / _ROCK / _CRIT
     LineReducerCreditScope _lrc(_lrc_credit, (_lrc_credit > 0 || _lrc_bound) ? LineNoncreatureMv(sub) : 0, _lrc_bound);
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(cp, sub));
     LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
@@ -73443,41 +73444,40 @@ static bool LineCastIsRock(const Action& a)
     return d != nullptr && d->params.mana_rock && !d->card.IsCreature() && !d->params.enters_tapped
         && !(d->params.any_color_filter && d->params.filter_no_free_colorless);
 }
-bool LineKeepBound(const std::vector<Action>& cands, const std::vector<int>& sel)
+// MTG_LINE_KEEP_CRIT: ...and any other line of two or more held casts binds in the CRIT mode (kLineKeepCrit): the rung
+// tries a payment of it only when LineKeepCritGate (ManaPayment.cpp) finds a last-source colour, so the line pays no
+// scratch board for a payment that cannot strand it that way.
+template <class Next>
+static int LineKeepBoundOver(std::size_t n, Next&& next)
 {
-    if (sel.size() < 2) { return false; }
+    if (n < 2) { return 0; }
     const bool all = LineKeepAllOn();
-    if (!all && !LineKeepRockOn()) { return false; }
+    const bool rock_on = LineKeepRockOn();
+    const bool crit = LineKeepCritOn();
+    if (!all && !rock_on && !crit) { return 0; }
     int held = 0;
     bool rock = all;
-    for (int j : sel)
+    for (std::size_t i = 0; i < n; ++i)
     {
-        if (!LineCastHeld(cands[j])) { continue; }
-        ++held;
-        rock = rock || LineCastIsRock(cands[j]);
-        if (held >= 2 && rock) { return true; }
-    }
-    return false;
-}
-bool LineKeepBound(const std::vector<Action>& acts)
-{
-    if (acts.size() < 2) { return false; }
-    const bool all = LineKeepAllOn();
-    if (!all && !LineKeepRockOn()) { return false; }
-    int held = 0;
-    bool rock = all;
-    for (const Action& a : acts)
-    {
+        const Action& a = next(i);
         if (!LineCastHeld(a)) { continue; }
         ++held;
-        rock = rock || LineCastIsRock(a);
-        if (held >= 2 && rock) { return true; }
+        rock = rock || (rock_on && LineCastIsRock(a));
+        if (held >= 2 && rock) { return kLineKeepFull; }
     }
-    return false;
+    return held >= 2 && crit ? kLineKeepCrit : 0;
+}
+int LineKeepBound(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    return LineKeepBoundOver(sel.size(), [&](std::size_t i) -> const Action& { return cands[sel[i]]; });
+}
+int LineKeepBound(const std::vector<Action>& acts)
+{
+    return LineKeepBoundOver(acts.size(), [&](std::size_t i) -> const Action& { return acts[i]; });
 }
 int LineNoncreatureMv(const std::vector<Action>& cands, const std::vector<int>& sel)
 {
-    if (!LineReducerKeepOn() && !LineKeepAllOn() && !LineKeepRockOn()) { return 0; }
+    if (!LineReducerKeepOn() && !LineKeepAllOn() && !LineKeepRockOn() && !LineKeepCritOn()) { return 0; }
     int mv = 0;
     for (int j : sel)
     {
@@ -75830,7 +75830,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // ...and the generic the line's own same-turn reducers take off its later casts (MTG_LINE_REDUCER_KEEP; the
     // executor's twin in AIEngine::TakeTurn). 0 -> the line-keep rung is inert.
     const int _lrc_credit = LineReducerCredit(state, plan.actions);
-    const bool _lrc_bound = LineKeepBound(plan.actions);   // MTG_LINE_KEEP_ALL
+    const int _lrc_bound = LineKeepBound(plan.actions);   // MTG_LINE_KEEP_ALL / _ROCK / _CRIT
     LineReducerCreditScope _lrc(_lrc_credit, (_lrc_credit > 0 || _lrc_bound) ? LineNoncreatureMv(plan.actions) : 0,
                                 _lrc_bound);
     // ...and whether this line casts a breakpoint opener, so the hold above is incomplete (see
