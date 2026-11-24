@@ -71465,7 +71465,7 @@ MazeHoldings MazeHoldingsOf(const GameState& s, int ctrl)
 // entry (enters untapped / an Amulet or Gond untaps it), then the better mana source (higher ManaSourceRank),
 // then the base order. Empty when there is none.
 std::string MazePickNewNameGate(const GameState& s, int ctrl, const std::vector<std::string>& names,
-                                const DecisionProvider& prov)
+                                const DecisionProvider& prov, const std::string& skip = std::string())
 {
     const Player& pl = s.players[static_cast<std::size_t>(ctrl)];
     std::string best;
@@ -71475,6 +71475,7 @@ std::string MazePickNewNameGate(const GameState& s, int ctrl, const std::vector<
         const std::string& nm = names[i];
         const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
         if (!MazeDefIsGate(d) || MazeIsBaldurDef(d) || MazeIsGondDef(d) || MazeControlsGateNamed(s, ctrl, nm)) { continue; }
+        if (!skip.empty() && nm == skip) { continue; }   // a name another menu slot already offers (Talon's)
         int in_hand = 0, lib = 0;
         for (const Card& c : pl.hand)    { if (c.m_name.str() == nm) { in_hand = 1; break; } }
         for (const Card& c : pl.library) { if (c.m_name.str() == nm) { ++lib; } }
@@ -71509,10 +71510,39 @@ bool MazeRestrictLandTargets(const GameState& s, int ctrl, std::vector<std::stri
     // "...and so is Gond Gate if you are missing it" (anywhere: battlefield or hand).
     const std::string gond = find_def(&MazeIsGondDef);
     if (!gond.empty() && !h.gond) { out.push_back(gond); }
+    static const bool s_talon = EnvOn("MTG_MAZE_TALON_TARGET", true);   // DEFAULT ON; =0 -> the USER's P3 menu alone
+    // ...whose own slot is TALON's (the amendment below): `talon` is the name it will append, or empty.
+    std::string talon;
+    if (with_maze && heurarm::Flag(heurarm::MAZE_TALON_TARGET, s_talon) && MazeTalonOffered(s, ctrl))
+    {
+        for (const std::string& nm : names)
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+            if (d == nullptr || !d->params.hand_put_self_cost.has_value() || !MazeDefIsGate(d)
+                || MazeControlsGateNamed(s, ctrl, nm)) { continue; }
+            bool in_hand = false;
+            for (const Card& c : s.players[static_cast<std::size_t>(ctrl)].hand) { if (c.m_name.str() == nm) { in_hand = true; break; } }
+            if (!in_hand) { talon = nm; }
+            break;
+        }
+    }
     // "I would probably skip the 'one gate name' option until Baldur's gate is gone and we have Gond Gate."
+    // THE NEW-NAME SLOT NEVER TAKES TALON'S NAME (MAZE_RANK_SPENDABLE's scope, so live only with RANK_OBJECT_COLORS):
+    // Talon Gates has its own slot below, so a new-name pick that lands on it COLLAPSES the menu to one name -- and
+    // the searched tutor axis is SIZED on the turn-start state (TurnSolver's tutor-index fan) while the index is
+    // read on the resolution state. 2HG s26200993 gi993 T4 (the second cause): under the spend rank The Black Gate's
+    // {B} spends on nothing, so Talon (filter) outranked it as the new name; at the post-Baldur's breakpoint the
+    // Sylvan Scrying menu was {Talon} (size 1: no index-1 variant), while at Scrying's resolution -- Gond Gate now
+    // down, every Gate usable on entry -- it was {Gateway Plaza, Talon}, so the base plan's Scrying (pick -1) took
+    // Gateway Plaza and the Talon find that feeds the end-step Maze's End {3} (the T4 win) was never emitted. Skipping
+    // Talon here keeps the menu {new name, Talon} at both states. A RESTRICTION over the same names, no pick.
+    static const bool s_spend_nn = EnvOn("MTG_MAZE_RANK_SPENDABLE", true);
+    static const bool s_rank_obj_nn = EnvOn("MTG_RANK_OBJECT_COLORS", true);
+    const bool skip_talon = heurarm::Flag(heurarm::MAZE_RANK_SPENDABLE, s_spend_nn)
+                         && heurarm::Flag(heurarm::RANK_OBJECT_COLORS, s_rank_obj_nn);
     if (!h.baldur_in_library && (h.gond || !h.gond_in_library))
     {
-        const std::string nn = MazePickNewNameGate(s, ctrl, names, prov);
+        const std::string nn = MazePickNewNameGate(s, ctrl, names, prov, skip_talon ? talon : std::string());
         if (!nn.empty()) { out.push_back(nn); }
     }
     // P3 AMENDMENT (MTG_MAZE_TALON_TARGET, DEFAULT ON -- adopted by the coordinator's default, USER sign-off
@@ -71521,7 +71551,6 @@ bool MazeRestrictLandTargets(const GameState& s, int ctrl, std::vector<std::stri
     // while it is in the library and no copy is held or controlled. It adds a Gate name WITHOUT using the land drop,
     // which the P3 menu's "one new name only after Baldur's and Gond" deferral cannot see (held-out d3 seed 94035
     // gi34: the unpruned search fetched it on T5 and won T6; P3 alone fetched Gond Gate and won T8).
-    static const bool s_talon = EnvOn("MTG_MAZE_TALON_TARGET", true);   // DEFAULT ON; =0 -> the USER's P3 menu alone
     // P5 VARIANTS (MTG_MAZE_TALON_LACKDROPS / _ATMOST1 / _EFFECTIVE, default OFF -- A/B arms): offer Talon Gates only
     // while we lack extra land drops (USER: "Talon Gates is potentially a worthy candidate if we are lacking in extra
     // land drops"); MazeTalonOffered holds the three readings.
