@@ -11014,11 +11014,11 @@ static bool ProviderHoldUpTargets(const GameState& state, const ManaCost& cost_i
         if (cost_in.black > 0) { hold.black = 0; }
         if (cost_in.red > 0)   { hold.red = 0; hold.generic = 0; }
         if (cost_in.white > 0) { hold.white = 0; }
-        // {U} / {G} holds (the Maze's End hold-up): the bill's own colour is not held for, and the hold's generic is
-        // added with a raised U/G pip (Guild Summit's {2}{U}: three mana, one of them blue). No B/R/W hold carries
-        // U or G, so the Fluctuator / Prevent Damage targets are unchanged.
-        if (cost_in.blue > 0)  { hold.blue = 0; }
-        if (cost_in.green > 0) { hold.green = 0; }
+        // {U} / {G} holds (the Maze's End hold-up): a U/G pip is held even when the bill carries that colour -- the
+        // deck names the costs of OTHER cards still in hand (the card being paid has left the hand), so paying Sylvan
+        // Scrying's {1}{G} still holds Manabond's {G} -- and the hold's generic is added with a raised U/G pip (Guild
+        // Summit's {2}{U}: three mana, one blue). No B/R/W hold carries U or G, so the Fluctuator / Prevent Damage
+        // targets are unchanged.
         if (hold.ManaValue() <= 0) { continue; }
         // The target: the rest of the line, its pips raised to the hold-up's where the line holds fewer.
         ManaCost target = RampLaterBill(cost_in);
