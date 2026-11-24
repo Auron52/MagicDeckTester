@@ -4667,6 +4667,7 @@ void TurnSolver::ChargeAaRouteUnits(SearchBudget* budget, int n)
 // True inside a horizon playout (SimulateToEnd's RolloutNestGuard), i.e. BEYOND the search window,
 // where the doctrine permits a greedy policy and a provider's sub-search is not owed completeness.
 bool TurnSolver::InRolloutPlayout() { return g_rollout_nest > 0; }
+void TurnSolver::RolloutNestAdjustForTest(int delta) { g_rollout_nest += delta; }
 bool RippleCensusBeyondHorizon() { return TurnSolver::InRolloutPlayout() || TurnSolver::InD0Runner(); }   // ripplestats
 
 // Decision epoch: bumped at each committed-decision driver entry (SolveWithLookahead

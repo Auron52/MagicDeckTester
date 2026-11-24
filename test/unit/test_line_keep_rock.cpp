@@ -185,3 +185,38 @@ TEST_CASE("Line keep (rock): inert when the greedy already keeps the line, and o
     const std::vector<Action> norock = { CastLkr(s0, "Dragonspeaker Shaman"), CastLkr(s0, "Glorybringer") };
     CHECK_FALSE(LineKeepBound(norock));
 }
+
+TEST_CASE("Line keep (rock): MTG_LKR_PLAYOUT_OFF (default ON) -- no rung inside a horizon playout, the full rung elsewhere")
+{
+    // The Shaman board of the first case: only the rung's float keeps the line. Inside a horizon playout the adopted
+    // default (USER 2026-11-24) pays it with the greedy, which strands the Shaman; outside a playout, and with the lever
+    // =0 inside one, the rung fires exactly as before.
+    const GameState s0 = ShamanBoard();
+    const std::vector<Action> line = { CastLkr(s0, "Dragonspeaker Shaman"), CastLkr(s0, "Mind Stone") };
+    const Card rock = CardLkr("Mind Stone", 30);
+    ArmLkr arm(heurarm::LINE_KEEP_ROCK, true);
+    struct PlayoutNest
+    {
+        PlayoutNest() { TurnSolver::RolloutNestAdjustForTest(+1); }
+        ~PlayoutNest() { TurnSolver::RolloutNestAdjustForTest(-1); }
+    };
+    REQUIRE(heurarm::t_arm[heurarm::LKR_PLAYOUT_OFF] == -1);   // the env default, not a pinned arm
+    {
+        GameState s = s0;
+        CHECK_FALSE(TurnSolver::InRolloutPlayout());
+        CHECK(PayRockThenRest(s, line, 1, rock, line[0].cost, /*rest_creature=*/true));
+    }
+    {
+        PlayoutNest nest;
+        REQUIRE(TurnSolver::InRolloutPlayout());
+        GameState s = s0;
+        CHECK_FALSE(PayRockThenRest(s, line, 1, rock, line[0].cost, /*rest_creature=*/true));
+    }
+    {
+        PlayoutNest nest;
+        ArmLkr off(heurarm::LKR_PLAYOUT_OFF, false);
+        GameState s = s0;
+        CHECK(PayRockThenRest(s, line, 1, rock, line[0].cost, /*rest_creature=*/true));
+    }
+    CHECK_FALSE(TurnSolver::InRolloutPlayout());
+}

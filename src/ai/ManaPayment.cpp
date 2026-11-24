@@ -11118,6 +11118,8 @@ std::atomic<unsigned long long> g_lk_ph_n[12]{}, g_lk_ph_ns[12]{};
 std::atomic<unsigned long long> g_lk_held_try{0}, g_lk_held_paid{0}, g_lk_opt_try{0}, g_lk_opt_n{0}, g_lk_tables{0};
 // ...the time in MinimalPayments, and the table index of the option that fired (0, 1, 2, 3+).
 std::atomic<unsigned long long> g_lk_mp_ns{0}, g_lk_fire_idx[4]{};
+// ...and the no-credit calls MTG_LKR_PLAYOUT_OFF declined inside a horizon playout.
+std::atomic<unsigned long long> g_lk_playout_off{0};
 struct LineReducerKeepStats
 {
     ~LineReducerKeepStats()
@@ -11146,6 +11148,7 @@ struct LineReducerKeepStats
                      g_lk_held_try.load(), g_lk_held_paid.load(), g_lk_tables.load(), g_lk_opt_n.load(),
                      g_lk_opt_try.load(), static_cast<double>(g_lk_mp_ns.load()) / 1e6, g_lk_fire_idx[0].load(),
                      g_lk_fire_idx[1].load(), g_lk_fire_idx[2].load(), g_lk_fire_idx[3].load());
+        std::fprintf(stderr, "[line-keep-cut] playout_off=%llu\n", g_lk_playout_off.load());
     }
 };
 LineReducerKeepStats g_lrk_stats;
@@ -11366,6 +11369,21 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
                 std::chrono::steady_clock::now() - t0).count()), std::memory_order_relaxed);
         }
     } _ph{s_stats, 0, false, s_stats ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}};
+    // MTG_LKR_PLAYOUT_OFF (DEFAULT ON, adopted by the USER 2026-11-24; docs/design/rock-in-plan-2026-11-19.md, "THE
+    // MENU"): a line with no reducer credit (keep_all: the lines MTG_LINE_KEEP_ROCK binds while MTG_LINE_KEEP_ALL is off)
+    // gets no rung inside a horizon playout -- beyond the search window, where the doctrine permits the greedy policy --
+    // so the playout pays it with the greedy, as MTG_LINE_KEEP_ROCK=0 does. The search window, the executor's committed
+    // apply and the d0 runner keep the full rung. On Niv-Mizzet Combo 88% of the rung's time was in playouts (searched
+    // CPU -5.1%, net -8 turns); every slower game recovered at --depth 8 --budget-ms 0. MTG_LINE_REDUCER_KEEP's own
+    // reducer lines are untouched. =0 runs the rung in playouts too.
+    {
+        static const bool s_off_env = EnvOn("MTG_LKR_PLAYOUT_OFF", true);
+        if (keep_all && TurnSolver::InRolloutPlayout() && heurarm::Flag(heurarm::LKR_PLAYOUT_OFF, s_off_env))
+        {
+            if (s_stats) { g_lk_playout_off.fetch_add(1, std::memory_order_relaxed); }
+            return none;
+        }
+    }
     // The hold must evidently carry this payment (LineRestAfter's test): an activation's payment is not in it.
     const ManaCost& lu = g_line_unpaid_cost;
     if (lu.ManaValue() < cost_in.ManaValue() || lu.white < cost_in.white || lu.blue < cost_in.blue

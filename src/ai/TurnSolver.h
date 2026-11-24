@@ -3238,6 +3238,9 @@ public:
                                     bool second_main);
     // True inside a horizon playout -- beyond the search window, where a greedy policy is permitted.
     static bool              InRolloutPlayout();
+    // Unit-test seam: enter (+1) / leave (-1) a horizon playout's nest, so InRolloutPlayout() reads true for code
+    // unit-tested outside a real playout (test_line_keep_rock.cpp, MTG_LKR_PLAYOUT_OFF). Never called by the engine.
+    static void              RolloutNestAdjustForTest(int delta);
     // True inside the depth-0 executor's greedy pick (a GreedyPermit(D0Runner) is live) -- the
     // doctrine's other permitted greedy site, so likewise not owed completeness.
     static bool              InD0Runner();
