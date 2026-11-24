@@ -62,7 +62,7 @@ branch's Release binary. Caveat: with a fix ON, play before turn t can differ.
 | base (both off) | 674 | - | 17 | 14 | 13 |
 | rank (fix 1) | 575 (-15%) | 14 / 2 | 17 | 14 | 13 |
 | hold v1 (fix 1 + 2, with the U/G-zeroing bug) | 522 (-23%) | 23 / 3 | 16 | 14 | 17 |
-| hold v2 (U/G fix) | see `build/scratch/claude_maze_applydrop/fix2/summary.json` | | | | |
+| hold v2 (fix 1 + 2, U/G fix, commit c1012410a) | 497 (-26%) | 24 / 2 | 16 | 14 | 17 (+4: look at these before adoption) |
 
 **Pay-first** (frozen `build/scratch/claude_maze_summit/b2/mtg`, MTG_MAZE_SUMMIT_PF_ALL3=1, PAY_FIRST off vs on, top-60
 decisions): APPLY-DROP 565 -> 529, 8 games better and 0 worse. It fully removes s6540 (also fixed by fix 1) and s9745
@@ -74,8 +74,8 @@ binary (565 vs 503 on the same decisions).
 ## Unit tests
 
 `test/unit/test_mazes_end_rank_object.cpp`: the rank-object ON / OFF / scope cases pass, and the F6 tests pass. The
-hold-up ON case FAILED on the first build because of the U/G zeroing bug, now fixed. Re-run results:
-`build/scratch/claude_maze_applydrop/units2.log`.
+hold-up ON case FAILED on the first build because of the U/G zeroing bug; after the fix all 23 cases pass (rank
+object, hold-up, F6, Fluctuator): `build/scratch/claude_maze_applydrop/units2.log`.
 
 ## A/B (for the coordinator, under the box lock)
 
@@ -87,8 +87,7 @@ fresh: 25200000 / 26200000 / 27200000 for Maze's End and 25300000 / 27300000 for
 
 ## Remaining, in order
 
-1. Confirm the units2 / fix2 results (chain3: `build/scratch/claude_maze_applydrop/chain3.sh`, markers `chain3.DONE` /
-   `chain3.STOPPED`).
+1. (done) units2 / fix2 confirmed.
 2. The coordinator runs the A/B. Fix 1 is default ON and needs the usual play-change validation: smoke and regression
    GT accept, plus any slower game recovering at d8 b0. Fix 2 needs the USER's call after its A/B.
 3. Family 2's fed-surplus-at-generic<3 case, family 3 (pain vs colour), and the filter payer miss (s30006553 T4 depth0)
