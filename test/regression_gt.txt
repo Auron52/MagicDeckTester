@@ -1,17 +1,19 @@
-# Regression ground truth -- commit 0492ee7e5  date 2026-11-24
+# Regression ground truth -- commit 23685ccec  date 2026-11-24
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk Turns City/Pilgrimage Main 2 split: held-out searched 5 faster and 1 slower (d5 s4004 gi180 T5 to T6 after a different bottom choice), net four turns faster; d0 unchanged. See docs/design/analysis-Merfolk-Turns.md.
 # accepted-with-regressions (overnight, 2026-11-21): Periodic overnight 2026-11-20 (since 1443eeba0, 320 src commits). Every searched PERSISTS game outside MB/Spirits (158) plus 10+10 sampled was replayed on both arms at d8 b0 (178): 76 recover, 9 same turn on both arms (old GT was budget luck), 2 new better (Mill), 59 slower but explained, 31 slower and unattributed at replay time (12 since attributed below), 1 new deck (Red Elemental). Explained: Gods 24 = USER strict dredge MTG_GODS_RETRIEVAL_DREDGE (c39c1da1a/6cb9a7c85; blind -0.13; lever=0 restores 27/27). Hinata = USER d5 floor restore da17c0bbf (new binary + old value.json = old GT; d5 costs ~+0.08/game at b30). Cyclone: all 53 recover at d8 b0 (Ponder-first 7b95d828b + churn). Midrange Burn 24 = USER opponent-lands model c9022b11d (legacy lands restores 25/25). Spirits 10 = keep table a05ac4395. REAL, owed fixes: (1) Windswept Heath card data in 9344fa594 (Boars I1) dropped its produces W/B/R/G hand hint (hand_fixing_produces is read only by Creature Giving's discard), so Heath counts as colourless in hand: Five Colour d0 +0.005/game (T1 holds Heath; reverting the Heath record restores 6/6), Antilife s6006 gi117 x2 and 10 of 20 Creature Giving games restored by the same swap. Fix candidate: restore produces as the hand hint like Scalding Tarn/Misty Rainforest, A/B on the five Heath decks. (2) PD s6006 gi47 T8 -> unwon from MTG_PD_LATER_HAND_HOLD (636910330) skipping T4/T5 land drops; =0 restores. Unattributed, d8 b0-stable, net-faster/neutral decks (owed follow-ups): Creature Giving 10, Galadriel 5, Hinata 2 (s5005 gi384, s6006 gi156), Minotaur 1 (s6006 gi937), Alchemist 1 (s6006 gi318). Mill caveat: s5005 gi3/gi4 old GT wins do not replay from 1443eeba0 (old binary loses both at case settings and d8 b0); new wins them T6/T7. See docs/design/overnight-accept-2026-11-20.md (branch wip/overnight-accept-1120).
 # accepted-with-regressions (regression, 2026-11-24): MTG_LKR_PLAYOUT_OFF default ON (USER 2026-11-24): niv_regression_d5_s2002 gi70 4->5, gi135 5->6, gi137 4->5 all recover byte-identically at d8 b0 on both arms (T4/T5/T4); moved keys net 0 (niv d3 -1, niv d5 s2002 +2, niv2hg -1)
+# accepted-with-regressions (smoke, 2026-11-24): land-1124 combined tree (MTG_LKR_PLAYOUT_OFF default ON + Maze's End Guild Summit pay-first MTG_MAZE_SUMMIT_PAY_FIRST default ON, USER 2026-11-22 'pay our mana costs and then tap the rest'): only mazesend keys moved, each byte-identical (avg+digest) to the maze-summit-alone accept 694777217, LKR keys unmoved vs their 259f1e665 accept; searched smoke d5 +2 (gi16 4->5, gi41 5->6) / regression d5 -3 / d3 same score, both searched slower games recover at d8 b0 (on = off, maze-summit record); d0 smoke 16 faster/3 slower, regression 13 faster/7 slower (gi594 8->unwon), all recover at d8 b0; held-out d5 b20 -1 (n2500), 2HG -1 (n1000), d0 -17 (n4000); 2HG g292 (held-out, not a tier game) UNRESOLVED follow-up
+# accepted-with-regressions (regression, 2026-11-24): land-1124 combined tree (MTG_LKR_PLAYOUT_OFF default ON + Maze's End Guild Summit pay-first MTG_MAZE_SUMMIT_PAY_FIRST default ON, USER 2026-11-22 'pay our mana costs and then tap the rest'): only mazesend keys moved, each byte-identical (avg+digest) to the maze-summit-alone accept 694777217, LKR keys unmoved vs their 259f1e665 accept; searched smoke d5 +2 (gi16 4->5, gi41 5->6) / regression d5 -3 / d3 same score, both searched slower games recover at d8 b0 (on = off, maze-summit record); d0 smoke 16 faster/3 slower, regression 13 faster/7 slower (gi594 8->unwon), all recover at d8 b0; held-out d5 b20 -1 (n2500), 2HG -1 (n1000), d0 -17 (n4000); 2HG g292 (held-out, not a tier game) UNRESOLVED follow-up
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-mazesend_smoke_d0_s1001=6.7300/ca2ed1224aeea4e3
-mazesend_smoke_d3_s1001=5.1000/bfbc30ba9c4ae4d0
-mazesend_smoke_d5_s1001=5.5985/2390b4efc33e6e6f
+mazesend_smoke_d0_s1001=6.7120/fc8e61e2e5c02d74
+mazesend_smoke_d3_s1001=5.1000/52c258fc61b06ece
+mazesend_smoke_d5_s1001=5.6136/c84db86af8414a63
 mazesend2hg_smoke_d5_s1001=5.2333/a03607d41a6c491a
 worldfire_smoke_d0_s1001=7.6090/a9f607ffa835e005
 worldfire_smoke_d3_s1001=4.5000/bb6f26a7e5871bae
@@ -258,10 +260,10 @@ merfolkturns_smoke_d5_s1001=5.5300/ba0fe25beb7fb28b
 merfolkturns2hg_smoke_d3_s1001=5.6000/328239bb41524a66
 
 # --- regression ---
-mazesend_regression_d0_s2002=6.7200/52b36294269003f3
+mazesend_regression_d0_s2002=6.7140/b64605681576e8aa
 mazesend_regression_d3_s2002=5.6667/bc0b31408d208ae6
-mazesend_regression_d5_s2002=5.4891/201b23418ff39d10
-mazesend_regression_d5_s3003=5.5133/5bd6adcf1033486a
+mazesend_regression_d5_s2002=5.4783/3c4ad9cc065d5c6d
+mazesend_regression_d5_s3003=5.5067/8e036de6e58ea6c2
 worldfire_regression_d0_s2002=7.6700/6cf2a02d5cd9718e
 worldfire_regression_d3_s2002=4.5333/a64c560f76c00865
 worldfire_regression_d5_s2002=4.4167/669d647d6f7e14c2
