@@ -118,6 +118,10 @@ GreedyLandPick GreedyLandChoice(const GameState& state);
 // Only for a provider that opts in (DecisionProvider::GreedyLandHonoursOffer); never in human play or under the
 // unpruned gate (the menu filter's own conditions). False for every other deck, so their playout is unchanged.
 bool GreedyLandRefused(const GameState& state, const CardDefinition& def);
+// The colours the PLAYOUT's legacy land drop (TurnSolver.cpp SimulateLandPlayOne) ranks a hand land by: a fetchland's
+// deck-derived hand reach (HandFixingProduces), or its static `produces` under MTG_ROLLOUT_FETCH_STATIC_HINT
+// (EngineFlags.h, default ON). Any other land: its own `produces` either way. Consume before the next HandFixingProduces call.
+const std::vector<Color>& PlayoutLandColours(const GameState& state, const CardDefinition& def);
 
 // THE ACTIVATION-COLOUR NEED (MTG_ROLLOUT_LAND_ACT_COLOR -- the rollout's land drop; see the call
 // site in TurnSolver's SimulateLandPlay). Bit i (i = Color: W U B R G C) is set when a permanent the

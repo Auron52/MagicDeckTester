@@ -88,11 +88,6 @@ struct CardParams
     std::optional<ManaCost> spectacle_cost;  // alternate cost when opponent lost life this turn
     std::vector<Color> produces;   // mana colors this card produces
     std::optional<ManaCost> self_bounce_cost; // Oboro: {1}: return this land to hand
-    // A battlefield fetchland's IN-HAND colour hint (the uncracked-fetchland.md "split the field" step, Boars I1):
-    // the colours a copy in hand stands for in a deck's colour-cover heuristics, kept OFF `produces` so the
-    // permanent can never tap for them. Read only by CreatureGivingProvider's cleanup-discard cover (land_bits),
-    // whose USER-settled rule was written against Windswept Heath's old W/B/R/G hint. Empty = no hint.
-    std::vector<Color> hand_fixing_produces;
     // Modal double-faced LAND (MDFC Pathway lands, e.g. Branchloft // Boulderloft): the FRONT face
     // is this card (name + `produces` above); the BACK face is a distinct single-color land the
     // player may CHOOSE to play instead. When `mdfc_back_name` is set the DB synthesizes a back-face
@@ -5753,6 +5748,18 @@ inline const std::vector<Color>& EtbColorMenu(const CardParams& p)
     return p.produces;
 }
 
+// The fetchland hand hint's basic-land-type bit (CardDefinition::fh_*): Plains 0, Island 1, Swamp 2, Mountain 3,
+// Forest 4; -1 for any other subtype.
+inline int FetchHintBasicTypeBit(const std::string& t)
+{
+    if (t == "Plains")   { return 0; }
+    if (t == "Island")   { return 1; }
+    if (t == "Swamp")    { return 2; }
+    if (t == "Mountain") { return 3; }
+    if (t == "Forest")   { return 4; }
+    return -1;
+}
+
 // A fully resolved card definition: base Card data plus template + parameters.
 struct CardDefinition
 {
@@ -5793,6 +5800,21 @@ struct CardDefinition
     // would make every Bloodghast CAST a landfall-watcher cast (PutsLandfallWatcher) and spawn useless
     // land-position clones. FireLandfallTriggers walks the GRAVEYARD for this byte instead.
     bool gy_landfall_watcher = false;
+    // THE FETCHLAND HAND HINT's per-definition bytes (FetchReachColourMask, SpellEffects.h). Derived at load by
+    // RebuildInternedIndex, the enter_watcher contract. The hint scans the controller's LIBRARY on every in-hand
+    // read of a fetchland, and the string subtype match plus three CardParams probes per library card cost Worldfire
+    // d0 +21% and Stuffy Doll d0 +12% CPU (r4 A/B 2026-11-22). These bytes make the scan one load per card.
+    // Byte-identical by construction: the scan's predicate is unchanged (FetchReachColourMask's comment).
+    //   fh_land_types -- a non-fetch LAND: bit t set when it has basic land type t (FetchHintBasicTypeBit); else 0.
+    //   fh_colours    -- that land's non-colourless `produces`, bit 1 << Color.
+    //   fh_tapped     -- that land's params.enters_tapped.
+    //   fh_seek_types -- a FETCH (fetch_land_types non-empty): the basic types it fetches, same bits.
+    //   fh_seek_exotic -- a fetch type outside the five basics: the scan falls back to the string match.
+    uint8_t fh_land_types  = 0;
+    uint8_t fh_colours     = 0;
+    bool    fh_tapped      = false;
+    uint8_t fh_seek_types  = 0;
+    bool    fh_seek_exotic = false;
     // THE OVERLORD VICTIM FOLD's card-data premises (Shadowborn INT-5; the proof is at SpellEffects.h
     // UpkeepSacFoldReps). Derived at load from the RAW JSON, so a param added tomorrow is NOT audited until
     // someone audits it (fails toward "no fold"):

@@ -26,7 +26,7 @@ namespace landloss {
 enum class LandKeyClass { Mana, Gated, SelfGuard, Unclassified };
 
 inline constexpr std::string_view kManaKeys[] = {
-    "produces", "produces_amount", "produces_one_color", "hand_fixing_produces",
+    "produces", "produces_amount", "produces_one_color",
     "is_filter", "any_color_filter", "ramp_filter", "reflecting",
     // painland / Ancient Tomb / Horizon-land damage is PART of the mana ability (City of Brass's is not:
     // tap_self_damage_is_trigger moves it to the Gated side, see StripsTapSelfDamage).

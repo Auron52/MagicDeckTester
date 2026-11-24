@@ -662,7 +662,7 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
             // better answer here even though it is the looser one. The honest predicate would be
             // board-dependent (has it got a feeder RIGHT NOW), which a static def-only test
             // cannot express -- left to the search, which reads the real board.
-            const bool is_multi  = def->params.produces.size() > 1;
+            const bool is_multi  = HandFixingProduces(state, state.active_player_index, *def).size() > 1;   // a fetchland: its deck-derived reach
             if (want_untapped && is_tapped)   { continue; }
             if (!want_untapped && !is_tapped) { continue; }
             if (want_multi && !is_multi)      { continue; }
@@ -671,6 +671,12 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
         }
     }
     return GreedyLandPick{};
+}
+
+const std::vector<Color>& PlayoutLandColours(const GameState& state, const CardDefinition& def)
+{
+    if (!def.params.fetch_land_types.empty() && RolloutFetchStaticHintEnabled()) { return def.params.produces; }
+    return HandFixingProduces(state, state.active_player_index, def);
 }
 
 int GreedyLandChoiceIndex(const GameState& state)
@@ -789,7 +795,7 @@ int ActivationColorLandIndex(const GameState& state, int preferred)
             if (def == nullptr) { continue; }
             if (EffectiveLandDef(state, *def).params.etb_bounce_land && !has_other_land) { continue; }
             if (LakeDropWithoutVictim(state, *def)) { continue; }
-            if (pass == 0 && def->params.produces.size() <= 1) { continue; }
+            if (pass == 0 && HandFixingProduces(state, active, *def).size() <= 1) { continue; }
             if (supplies(i)) { return i; }
         }
     }

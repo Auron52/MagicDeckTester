@@ -263,7 +263,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         // Anything else -- including every param a later Boars card adds -- is unaudited until someone audits it.
         {
             static const char* const kHandAuditedParams[] = {
-                "produces", "hand_fixing_produces", "produces_amount", "produces_one_color", "creature_mana_only", "enters_tapped",
+                "produces", "produces_amount", "produces_one_color", "creature_mana_only", "enters_tapped",
                 "etb_pay_life_to_untap", "checkland_subtypes", "etb_bounce_land",
                 "fetch_land_types", "land_search_count", "land_search_activation_cost", "land_search_activation_taps",
                 "land_search_activation_sacrifice_self", "land_search_activation_life_cost", "fetch_hold_human_only",
@@ -914,6 +914,25 @@ void CardDatabase::RebuildInternedIndex()
         kv.second.enter_watcher    = DefHasCreatureEnterWatcher(kv.second.params);
         kv.second.landfall_watcher = DefHasLandfallTrigger(kv.second.params);   // same contract
         kv.second.gy_landfall_watcher = kv.second.params.landfall_return_self_from_gy;   // Bloodghast
+        // The fetchland hand hint's bytes (CardDefinition::fh_*; FetchReachColourMask, SpellEffects.h).
+        CardDefinition& d = kv.second;
+        d.fh_land_types = 0; d.fh_colours = 0; d.fh_tapped = false; d.fh_seek_types = 0; d.fh_seek_exotic = false;
+        for (const std::string& t : d.params.fetch_land_types)
+        {
+            const int b = FetchHintBasicTypeBit(t);
+            if (b < 0) { d.fh_seek_exotic = true; } else { d.fh_seek_types |= static_cast<uint8_t>(1u << b); }
+        }
+        if (d.card.IsLand() && d.params.fetch_land_types.empty())
+        {
+            for (const std::string& sub : d.card.m_subtypes)
+            {
+                const int b = FetchHintBasicTypeBit(sub);
+                if (b >= 0) { d.fh_land_types |= static_cast<uint8_t>(1u << b); }
+            }
+            for (Color col : d.params.produces)
+            { if (col != Color::Colorless) { d.fh_colours |= static_cast<uint8_t>(1u << static_cast<unsigned>(col)); } }
+            d.fh_tapped = d.params.enters_tapped;
+        }
     }
 }
 
@@ -1345,10 +1364,6 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     }
     if (params.contains("self_bounce_cost"))
         p.self_bounce_cost = ManaCostFromString(params["self_bounce_cost"].get<std::string>());
-    for (const std::string& c : params.value("hand_fixing_produces", json::array()))
-    {
-        p.hand_fixing_produces.push_back(ColorFromString(c));
-    }
     p.mdfc_back_name = params.value("mdfc_back_name", std::string{});
     for (const std::string& c : params.value("mdfc_back_produces", json::array()))
     {

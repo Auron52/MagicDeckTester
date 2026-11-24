@@ -8,6 +8,7 @@
 
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/LandPlay.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -204,8 +205,9 @@ TEST_CASE("CG discard C5: lone Reflecting Pool, Birds already in play, Crop Rota
 }
 
 // Colours first. Board Forest, Temple Garden, Stomping Ground, Overgrown Tomb (W1 B1 R1 G4); 5 - 4 =
-// ONE source owed. The hand's spells need U2 (Phantasm); Breeding Pool (tier 3) makes U, the fetch
-// (tier 2: W/B/R/G) does not -> Breeding Pool 1 is kept and the better-tier Heath 0 is the surplus.
+// ONE source owed. The hand's spells need U2 (Phantasm); Breeding Pool (tier 3) makes U. The fetch (tier 2) reaches U
+// only while a Breeding Pool is left in the library (deck-derived hint, 2026-11-22): with one there the Heath is kept and
+// Breeding Pool 1 is the surplus; without one, Breeding Pool 1 is kept and the Heath 0 is the surplus (order below).
 // The 5 sources are met (4 + Breeding Pool) before the land-tutor slot, so Crop Rotation 7 is
 // SURPLUS MANA (review fix 2026-10-09), shed after the surplus Heath. Ladder L1, Suture 3, Defense 4,
 // Phantasm 2 (U: 1 kept source, deficit 1 -> near). Shed Warden 6, Heath 0, Crop Rotation 7,
@@ -213,7 +215,18 @@ TEST_CASE("CG discard C5: lone Reflecting Pool, Birds already in play, Crop Rota
 TEST_CASE("CG discard C6: a land covering a missing colour beats a better-tier land")
 {
     const GameState s = MakeCg({ kHeath, kBP, kHP, kSP, kDotH, kWR, kEW, kCrop }, { kFor, kTG, kSG, kOT });
-    CHECK(Cg(s) == std::vector<int>{ 6, 0, 7, 5, 2, 4, 3, 1 });
+    // The Heath's hand hint is its deck-derived reach (HandFixingProduces, USER 2026-11-22: "They can get any shock in
+    // the deck"). The default library holds a Breeding Pool (Forest Island), so here the Heath DOES reach U: it covers
+    // the missing colour AND is the better tier, so the hand Breeding Pool 1 is the surplus and the Heath 0 is kept.
+    CHECK(Cg(s) == std::vector<int>{ 6, 1, 7, 5, 2, 4, 3, 0 });
+    {
+        // The case's original premise -- a fetch that cannot reach U -- holds with no Breeding Pool left in the library:
+        // then Breeding Pool 1 is kept and the better-tier Heath 0 is the surplus.
+        std::vector<std::string> lib = LibWithDoth();
+        lib.erase(std::find(lib.begin(), lib.end(), std::string(kBP)));
+        const GameState t = MakeCg({ kHeath, kBP, kHP, kSP, kDotH, kWR, kEW, kCrop }, { kFor, kTG, kSG, kOT }, {}, lib);
+        CHECK(Cg(t) == std::vector<int>{ 6, 0, 7, 5, 2, 4, 3, 1 });
+    }
     CHECK(Gen(s).front() == 4);       // generic sheds Defense of the Heart (MV 4)
     CHECK(DothLast(s).front() == 2);  // the patch moves it back and sheds Phantasm
 }
@@ -420,5 +433,40 @@ TEST_CASE("CG Crop Rotation: the resolution tutor pin picks the land; the Orchar
         PerformLandTutorToBattlefield(s, 0, pp, std::string());
         CHECK(put_land(s) == std::string(kOrch));
         CHECK(g_scripted_tutor_choice == -1);
+    }
+}
+
+// Forbidden Orchard ahead of a fetchland in the greedy land ranker (OrchardBeforeFetchIndex, 2026-11-22,
+// docs/design/heath-produces-2026-11-22.md): with the fetchland's hand colour hint restored, the Heath and the
+// Orchard tie in the multi-colour pass and hand order decided; the Orchard is the token engine, so it goes first.
+TEST_CASE("CG + Stuffy greedy land: Forbidden Orchard ahead of a fetchland, nothing else moved")
+{
+    {
+        GameState s = MakeCg({ kHeath, kOrch, kTG }, { kFor });
+        s.players[0].lands_played_this_turn = 0;
+        CHECK(Prov().GreedyLandFirst(s, 0) == 1);
+        CHECK(GreedyLandChoiceIndex(s) == 1);
+    }
+    {
+        // No fetchland in hand: the hook stays out and the four passes decide (Temple Garden, first in hand order).
+        GameState s = MakeCg({ kTG, kOrch }, { kFor });
+        s.players[0].lands_played_this_turn = 0;
+        CHECK(Prov().GreedyLandFirst(s, 0) == -1);
+        CHECK(GreedyLandChoiceIndex(s) == 0);
+    }
+    {
+        // No Orchard: the hook stays out.
+        GameState s = MakeCg({ kHeath, kTG }, { kFor });
+        s.players[0].lands_played_this_turn = 0;
+        CHECK(Prov().GreedyLandFirst(s, 0) == -1);
+    }
+    {
+        // Stuffy Doll: the same rule over Arid Mesa.
+        static const StuffyDollProvider stuffy;
+        GameState s = MakeCg({ "Arid Mesa", kOrch }, { "Mountain" });
+        s.m_provider = &stuffy;
+        s.players[0].lands_played_this_turn = 0;
+        CHECK(stuffy.GreedyLandFirst(s, 0) == 1);
+        CHECK(GreedyLandChoiceIndex(s) == 1);
     }
 }
