@@ -1,5 +1,18 @@
 # Beasts analyze-deck: handoff to Codex (2026-11-22)
 
+## Current status (2026-11-24)
+
+The analyze-deck run is complete and pushed to `phase-1-2-deck-analyzer`. The primary
+checkout also pushed ten Beasts viewer references and their benchmark (`882d4019b`):
+all ten replay exactly, the shipped search matches nine win turns and beats one, with
+no opening-hand mismatch. The shared branch has since advanced through unrelated
+engine changes; a mulligan-generation checkout should pull the current shared HEAD,
+pin that exact commit for its entire run, and let `scripts/mullgen.sh run` perform its
+setting screen and PGO build. `python3 scripts/suite_gate.py --require decks/Beasts`
+passes. No exhaustive Beasts keep profile or generation journal exists yet. **Do not
+start generation until the USER asks.** The historical batch instructions below are
+preserved as the implementation record, not as remaining work.
+
 The USER asked to move the in-flight Beasts `analyze-deck` run from Claude to Codex (Claude budget).
 This file is the entry point; the authoritative state is the ledger `docs/design/analysis-Beasts.md`
 (Checkpoint section, its **Running** line, the Stage 2 card table, the two "USER rulings" sections and
@@ -8,10 +21,9 @@ This file is the entry point; the authoritative state is the ledger `docs/design
 ## Where
 
 * Worktree `.claude/worktrees/beasts` (under the primary checkout `/workspaces/MagicDeckTester`),
-  branch `beasts-analysis`, based on origin/phase-1-2-deck-analyzer c9a2e1ff6.
-* **Nothing is on the shared branch yet.** The LOCAL branch is authoritative. An older backup exists at
-  `origin/backup/2026-11-21/beasts-analysis` (last pushed at the "integrator H running" commit; the
-  handoff commits are local only, per the USER).
+  branch `beasts-analysis`. It began at c9a2e1ff6 and has since been rebased onto the shared branch.
+* The shared branch is authoritative. The older backup at
+  `origin/backup/2026-11-21/beasts-analysis` records an early integration checkpoint only.
 * Per-card research drafts: `logs/beasts/drafts/*.md`; per-batch integrator handoffs:
   `logs/beasts/integrator-{A,C,D,E,F,H}-handoff.md` (gitignored, on the host drive in that worktree).
 * Builds land on the build volume via `./build.sh` (the worktree's `build/` is a symlink there).
