@@ -72506,8 +72506,8 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
 // through Baldur's Gate's fed mode (s30006137 T3: Scrying's {1}{G} off Sea Gate's {G} + Maze's End; Manabond's {G}
 // then had nothing, while Izzet Guildgate + Maze's End feeding Baldur's Gate make {G}{G}{G} for both). The payer
 // cannot see a continuation's cast, so the deck names what to keep payable: each spell still in hand, cheapest cost
-// first (a card that does nothing in goldfish -- Gates Ablaze -- is not held for; the bill's own colours are dropped
-// by the payer, ProviderHoldUpTargets). The payer still pays exactly as its greedy does unless that strands one of
+// first (a card that does nothing in goldfish -- Gates Ablaze -- is not held for; ProviderHoldUpTargets holds a U/G
+// pip even when the bill carries that colour: paying Scrying's {1}{G} still keeps Manabond's {G}). The payer still pays exactly as its greedy does unless that strands one of
 // these costs while the board pays the bill and the cost together; then one of the trial's sources is held out.
 std::vector<ManaCost> MazesEndProvider::PaymentHoldUp(const GameState& s, int controller) const
 {
