@@ -3,20 +3,35 @@
 Worktree `.claude/worktrees/enchanted-evening`, branch `ee-analysis` (from 05e2e0030). Nothing pushed yet.
 Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantress / lock).
 
-## CHECKPOINT (orchestrator, 2026-11-26 ~01:20 UTC) -- read this first after a compaction
+## CHECKPOINT (orchestrator, updated 2026-11-26, pre-compaction #2) -- read this first after a compaction
 
-* Done: Stage 1 coverage; lock-cluster DESIGN 84a576461 (`docs/design/enchanted-evening-lock-design.md`, with the
-  orchestrator's Grove correction below); four simple cards WIP f986f6e19 (Release build OK; handoff
-  `logs/ee/simple-cards-handoff.md`).
-* RUNNING: a fresh "finish simple cards" agent (Opus) working the handoff's items: searched O-Ring target, same-turn
-  lead-position Grove activation + budget-0 test, units, `audit_card_fields.py --update` re-run (the first ended rc=1,
-  232 rate-limited; snapshot uncommitted), offline diff, smoke (expect play-changed=0), coverage. It reports with
-  commit hashes + smoke numbers. Its own handoff (if any) = `logs/ee/simple-cards-handoff2.md`.
-* NEXT (after it reports, same files so strictly after): launch the LOCK-CLUSTER implementer (Opus) from the design
-  doc's §8 order, with USER rulings 1-13 below and the Grove correction in its brief; split into narrow agents
-  (type refresh + Opalescence SBA + pre-float first) under the 250K handoff rule. Then: Stage 3 coverage loop, Stage 4
-  profile, provider audit, suite addition (all three tiers, 3x Hinata gate), Stage 5 verification incl. 5d sweep.
-* No USER question is open (rulings 8-13 answered the design's two questions).
+* Done: Stage 1 coverage; lock-cluster DESIGN 84a576461 (with the orchestrator's Grove correction below); four simple
+  cards DONE (f986f6e19, 61e5bc848, b5b8dd3cb, d7885c7fe: units, smoke 247/0 play-changed=0, coverage full); lock
+  steps 1, 2, 3+5 DONE (entries below).
+* RUNNING (orchestrator-launched Opus agent): "Finish EE lock step 4 Wave" -- continues from
+  `logs/ee/lock4-handoff.md` (WIP f855925a7: Parallax Wave + ruling-7 end-step sweep, builds, NOT yet tested). Its
+  brief carries the orchestrator default for G >= 2 Groves (sweep still spends the Wave's counters on opponent
+  creatures, ruling 7 literally). Its own handoff (if any) = `logs/ee/lock4-handoff2.md`. Smoke may move a Saproling
+  Burst deck (fading now placed on every entry route): root-cause, do NOT accept GT without the orchestrator.
+* NEXT, strictly serial (same files), one narrow Opus agent each, 250K handoff rule in every brief:
+  1. USER ruling 15 (Grove policy): provider prune "no second Sterling Grove while one is out, except after
+     sacrificing the first in the same window" + tutor-target ORDER combo pieces first (EE, Opalescence, Wave; mana
+     enchantments + Presence after; orchestrator also applies it to Idyllic Tutor, surfaced to the USER). Measure the
+     24-game sanity + b0 checks; REPORT games with mana-efficiency loss pre-combo and lost Presence draws (ruling 15
+     follow-ups) for the USER's pre-combo-exception decision.
+  2. Step 6: free-turn integration (trait in `DeckMayLockOpponent`, `DeckLockNeedsLandStrip` false, reach
+     certificate OFF for this deck, fairness check per rulings 5, 6, 8-13: virtual board, Verse wipe point, hexproof
+     trample >= 5 test incl. castable Auras, FoV vs virtual Auras as a searched cast).
+  3. Step 7: FoV end-step pitch. 4. Step 8: folds (land play under the lock, fetch variants) + root-cause gi=12/gi=13
+     (steps 3+5 notes). 5. Step 9: viewer wiring incl. ruling 14 (auto float + manual tap) and DECISIONS.md.
+  Then: Stage 3 coverage loop, Stage 4 profile + provider audit (provider must NOT opt into `ClassifiesMainPhases`),
+  suite addition (all three tiers, 3x Hinata gate: watch step-1 gi=14 328 s), Stage 5 verification incl. 5d sweep,
+  fetch-hold review (Heath, Foothills), Stage 6 report (disclose ruling 12's attack-everything optimism). Push later
+  via the push queue as one batch.
+* Open USER question: whether ruling 15's tutor ordering should also apply to Idyllic Tutor (default: yes). The
+  G >= 2 sweep default is moot-ish after ruling 15 (kept as fallback).
+* Housekeeping: `build/wt/ee-base35` (scratch baseline build output) can be deleted.
+
 * **LOCK STEP 1 (type statics: Enchanted Evening + Opalescence) DONE (2026-11-26):** code a9d866afe, Scryfall snapshot
   aea0e800e (update rc=0, offline diff rc=0). Units 4191/4191 (13 new, `test/unit/test_enchanted_evening_lock1.cpp`).
   Smoke (Release, `MTG_PGO=0`): 247 passed / 0 failed / 0 new, play-changed=0 (searched and d0), scenarios
@@ -38,6 +53,18 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
   vs the step-2 baseline's 6.625 (4 games moved a turn: gi=3 faster, gi=5/12/13 slower), units +8.7%; the slower
   games do not recover at d3 b0 (gi=12, gi=13: T6 -> T7) -- NOT root-caused, handed to step 8. Held-out playout A/B
   neutral. Notes: "Lock-cluster steps 3+5" section. NEXT: step 4 (Parallax Wave, §4.4).
+* **LOCK STEP 4 (Parallax Wave §4.4 + the USER ruling-7 end-step sweep) DONE (2026-11-26):** code f855925a7 (WIP) +
+  eb746055a (finite tail, retype-before-targeting, test fixes, Scryfall snapshot: update rc=0, offline diff rc=0).
+  Units 4216/4216 (10 new, `test/unit/test_enchanted_evening_lock4.cpp`; one expectation fix: the idle pass is appended
+  by every search host, not by `EnumerateMainPlans`). Smoke (Release, `MTG_PGO=0`): 247 passed / 0 failed / 0 new,
+  play-changed=0 (searched and d0), scenarios 677/677 -- the enter-cascade fading change moved nothing. Coverage:
+  missing = none, every card `full`. Sanity (24 games, seed 7000, d3 b10): 22/24, avg 6.7083 (= step 3+5's 6.7083,
+  which was 23/24); units 18.13M vs 14.22M (+27.4%). Moved a turn: gi=5 8->7, gi=9 8->6 faster; gi=2 6->7, gi=11 5->6,
+  gi=16 8->unwon slower. d3 b0 repros: gi=11 T5 (recovers), gi=16 T8 (recovers to the base), gi=2 still running at commit (d3 b0 over 45 min, a single game; `build/scratch/ee/l4/b0-2.out`, marker `b0.DONE`). Root cause
+  of the three: the Wave is now a real card (it was a blank before), so the d3 b10 search spends on its cast and its
+  one-action-per-target activation menu (no own-target folds, step 8) and picks worse roots (gi=11: Wave T3 instead of
+  Opalescence T3; gi=16: no T1 land drop; gi=2: Tutor -> Grove T5 instead of Opalescence T5). Notes + the open USER
+  question (the sweep's finite tail): "Lock-cluster step 4" section. NEXT: step 6 (fairness check, §3.4).
 
 ## USER rulings (verbatim, 2026-11-25)
 
@@ -111,6 +138,29 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
    already tapped, so the automatic float skips them, and the mana they made stays in the pool for the phase.
    Owed in step 9 (viewer wiring): verify both routes in the viewer and in a reference replay.
 
+15. On two Sterling Groves out at once (which makes the Wave self-exile loop impossible): *"My recommendation would be
+   to not put out 2 sterling groves simultaneously or to only play the second one when sacrificing the first.
+   Typically you want to use them to get combo pieces anyway. We should also prune that if possible. Rarely you want a
+   mana enchantments like Wild Growth or Utopia Sprawl or Enchantresses' presence for cards, but generally you want to
+   advance the lock by gathering pieces."* (2026-11-26) -- so (a) a USER-requested PROVIDER prune
+   (`EnchantedEveningProvider`): never offer casting/putting a second Sterling Grove onto the battlefield while one is
+   there, except in the same window where the first one is sacrificed (its tutor activation) before the second
+   arrives; (b) Grove / Idyllic Tutor targets are ORDERED combo pieces first (Enchanted Evening, Opalescence, Parallax
+   Wave), mana enchantments (Wild Growth, Utopia Sprawl) and Enchantress's Presence after -- an ordering, not a
+   restriction ("Rarely you want ..."). The orchestrator's step-4 default for the end-step sweep with G >= 2 (spend
+   the Wave's counters on opponent creatures, ruling 7 literally) stays as the fallback for the rare board that still
+   reaches two Groves.
+   USER follow-up: *"We'll have to think about whether this causes any mana efficiency issues and maybe we'll need an
+   exception prior to the full combo being assembled, but let's play with it."* -- build it, then measure for
+   mana-efficiency losses (games where a second Grove before the combo is assembled would have used mana better,
+   e.g. a spare 2 mana with nothing else to cast); report those games so the USER can decide on a pre-combo exception.
+   USER follow-up 2: *"Another reason to play a second early could be the card from Enchantresses' Presence, but
+   usually we can afford to sacrifice one of them in that case."* -- a second Grove cast is an enchantment spell, so it
+   draws a card off Enchantress's Presence; the prune's "sacrifice the first in the same window" exception already
+   covers the usual line (sacrifice one Grove to tutor, cast the second for the Presence draw). Count, in the
+   measurement, games where the Presence draw from a second Grove was lost because the first could not be sacrificed
+   (e.g. no {1} for the activation).
+
 Reading: the lock is credited through the EXISTING free-turn rule (`MTG_FREE_TURNS`, default ON,
 `src/core/FreeTurns.h`, `docs/design/opponent-lockdown-free-turns.md`): a locked opponent turn does not advance the
 round. The deck's lock cards must join `GoldFishRunner::DeckMayLockOpponent`. Under EE + Opalescence the attackers are
@@ -153,11 +203,12 @@ lock has removed unless floated). The implementer must model the targeting legal
 | Calming Verse | 3 (lock step 3) | `destroy_opp_enchantments_then_own_if_untapped_land` (its OWN param, never `destroy_all_enchantments`) | shared `ResolveCalmingVerse` (SpellEffects.h) at both worlds' sorcery resolution (`EffectHandler` beside Worldfire / `apply_one`); destroys through `DestroyRemoveTogether` + `DestroyFireTogether` (one simultaneous event, triggers after both clauses, every leave reaches the chokepoints); KEEP floats via `g_lock_prefloat_hook`; searched axis KEEP "VK" / SWEEP-SELF "VS" in the CollectActions post-pass, `#DV` in both plan signatures | A: `main_phase` plan variants ("tap all lands first" / "leave lands") | -- (EE provider withdraws a no-op KEEP, notes below) |
 | Force of Vigor | 2 (lock step 5: HARD CAST only; clause 1 pitch PARTIAL -> step 7) | `destroy_up_to_artifacts_enchantments` 2 | shared `ResolveDestroyUpToArtEnch` (re-checks each target, CR 608.2b), same destroy halves; target SET searched: `DestroyUpToArtEnchOptions` (identity classes, every 0..2 multiset), pinned "FV<n>[,<m>]", `#DV` | A: `main_phase` plan variants (step 9 may move it to the `target` multi-target row) | pitch (step 7); coverage says `full` (pattern checker) but the pitch clause is NOT modelled |
 | Opalescence | 3 (lock step 1) | `static_animate_other_nonaura_enchantments_mv` | same refresh (layer 4 + 7b: other non-Aura enchantments = MV/MV creatures; two animate each other); 0/0s die at the checkpoint through `OnCreatureDies` (LTB fires: O-Ring returns its card); orphaned Auras (Sprawl / Wild Growth) swept; fetch on play suppressed both sides (`LandDiesToTypeStatics` in `PlayLandCore` and `PlayLeftmostLandFrom`), opponent Karoo finds no land | A: existing `attackers` | -- |
+| Parallax Wave | 3 (lock step 4) | `fading_counters` 5, `fade_exile_target_creature`; deck stamp `deck_has_wave_opal_sweep` (EE provider `WaveOpalSweepRule` + Wave + Opalescence in the list) | fading: put by the cast sites pre-push AND by the shared enter cascade on every other route (a self-exiled Wave returns with five), `PerformUpkeepFading` at our upkeep; activation `PermAbilityMode::FadeExileCreature` (cost = one fade counter; one searched Action per admitted target, `FadeExileAdmittedTargets` beside CounterDestroy's, identity-class fold; `ApplyPermAbility` -> `ResolveFadeExileCreature`; `PermAbilitySourceLive` re-checks counter + target); exile via `FadeExilePermanent` (linked = `kExileUntilLeavesBase` marker + digest in `linked_exile_number`; token ceases to exist; leave chokepoints); return via `ReturnExiledUntilLeaves` from `FireLeavesBattlefieldTriggers`; ruling-7 sweep `PerformWaveOpalSweep` in BOTH opponent_turn lambdas (loop on targeting legality, finite linked tail when no loop, top-up) | A: `main_phase` plan variants (exile target; step 9 may move it to `target`); the sweep has no viewer decline yet (step 9) | sweep finite-tail default = USER question (step-4 notes) |
 
 Provider: `EnchantedEveningProvider` (empty `DeckProvider` derivation, `Certificate()` = NotAssessed), routed FIRST on
 `grants_other_enchantments_shroud || draw_on_cast_types || static_all_permanents_enchantments ||
 static_animate_other_nonaura_enchantments_mv || destroy_opp_enchantments_then_own_if_untapped_land ||
-destroy_up_to_artifacts_enchantments` (Parallax Wave's param to be OR-ed in by its implementer). Since lock steps 3+5 the
+destroy_up_to_artifacts_enchantments || fade_exile_target_creature` (Parallax Wave's param OR-ed in at lock step 4, also in `revpkg::CardCanEndOwnEnchantment`). Since lock steps 3+5 the
 provider is no longer empty: it carries the two no-op cast folds (`CalmingVerseVariants`,
 `DestroyUpToArtEnchTargetOptions`; "Lock-cluster steps 3+5" below).
 
@@ -307,6 +358,68 @@ Grove is a creature: `SacrificeSourceAsCost` already routes it through the creat
 * **For step 8 (folds):** FoV own-target dominance (e.g. our tapped land vs untapped) and Verse KEEP / SWEEP
   coincidence when every land pays the Verse; and root-cause gi=13 (seed 7013, game-index 13, d3 b0): why "no Grove
   tutor + no-op Verse" outscores "tutor Presence + Presence" at the T2->T3 boundary.
+
+## Lock-cluster step 4 (Parallax Wave, §4.4 + the USER ruling-7 end-step sweep) -- notes for the later steps
+
+What was built (code f855925a7 WIP + the final commit): Parallax Wave in `cards.json` (`fading_counters` 5,
+`fade_exile_target_creature`); FADING is now put by the shared enter cascade on every NON-cast enter route (the cast
+sites already put it pre-push), so a Wave returned by its own leave trigger re-enters with five; the activation is
+`PermAbilityMode::FadeExileCreature` (no {T}, cost = one fade counter, CR 602.2b), one searched Action per admitted
+target (identity-class fold via `CastTriggerTargetFoldKey`; the source never folded; human play = full legal set), the
+exile LINKED to the Wave (`kExileUntilLeavesBase` marker; an order-free digest of the linked set in
+`Permanent::linked_exile_number`, so every existing key and fold separates linked sets) and returned by the shared
+`ReturnExiledUntilLeaves` on ANY leave route; a token exiled ceases to exist; target legality = creature (printed or
+animated), no shroud (`PermanentHasShroud`, so Sterling Grove's grant counts), no opponent hexproof. The USER ruling-7
+deck default (`EnchantedEveningProvider::WaveOpalSweepRule` -> `GameState::deck_has_wave_opal_sweep`, needs Wave +
+Opalescence in the list) runs `PerformWaveOpalSweep` in BOTH opponent_turn lambdas right after the off-main alt-win,
+before the rest of the end-step window and before `freeturn::NoteOpponentTurnEnd`.
+
+The sweep, on the targeting legality (never a counter formula):
+* **Loop possible** (0 Groves, or 1 Grove which is exiled first): cycles of (enablers, linked) -> up to
+  `counters - enablers - 1` opponent creatures exiled FOR GOOD (their activations resolve after the old Wave left,
+  CR 607.2a / 400.7) -> the Wave exiles itself and returns with five; repeats while a target remains. Unlimited.
+* **Loop impossible, targets left (2+ Groves; or too few counters for enablers + self)** -- ORCHESTRATOR DEFAULT
+  2026-11-26, a USER question below: ruling 7 LITERALLY. The Waves spend the counters they have, one LINKED exile per
+  targetable opponent creature, until targets or counters run out; the rest stay. A Wave spent to zero is sacrificed
+  at our next upkeep (CR 702.32a) and its linked cards return then -- the rules' consequence of the default.
+  (The previous step-4 agent had made this case do nothing.)
+* **No target: TOP-UP** (information, beyond design §4.4.1's "at least one opponent creature" gate): a Wave below five,
+  nothing linked, nothing attached, with clean enablers, is looped once (enablers + self) and returns with five. It
+  returns exactly what it exiled at the opponent's end step, so it only adds counters (weak dominance); this is how
+  "fading never kills a Wave beside an Opalescence" (design §4.4) actually holds.
+* The sweep retypes (RefreshTypeStatics + TypeStaticsSbaCheckpoint) BEFORE choosing targets, so a permanent the
+  opponent's turn added (a card a fading sacrifice returned, a spawn) is current and a 0/0 dies rather than costing a
+  counter; it ends with the same pair.
+
+**OPEN USER QUESTION (step 4; default taken, work continues):** with 2+ Sterling Groves out the self-exile loop is
+illegal (each Grove shrouds the others and the Wave). Should the end-step sweep still spend the Wave's counters on the
+opponent's creatures (finite, LINKED exiles that return when the Wave leaves; a Wave spent to zero is sacrificed at our
+next upkeep and they come back then), or leave the counters for our own turn's searched activations? ORCHESTRATOR
+DEFAULT (built, unit-tested): spend them -- ruling 7 literally, because the free-turn lock check right after the
+opponent's end step needs it to have no creatures, and an our-turn activation cannot reach a creature that appeared on
+the opponent's turn. The same tail covers a single-Grove Wave with too few counters for Grove + self.
+
+Not built, recorded (each has a counterexample, so a fold would be LOSSY -> USER / step 8):
+* **F1** (an own-turn self-reset is dominated by the end-step sweep): counterexample -- reset now, then cast a second
+  Grove this turn, which makes the end-step loop illegal.
+* **F2** (an own-target exile without payoff is dominated): counterexample -- exile our enchantment-creatures, then a
+  Calming Verse SWEEP-SELF destroys the Wave and they return (a protection line; KEEP is not strictly better since it
+  spends main-2 land mana).
+* **No our-turn "loop batch" action** (permanent exile on our turn): the end-step sweep reaches the same state before
+  the only reader (the lock check), and explicit single activations compose the self-reset correctly.
+
+Notes for the later steps:
+* **Step 6 (fairness check):** clear the VIRTUAL opponent creatures inside `PerformWaveOpalSweep` (comment hook
+  there); treat the sweep as able to clear them only when `WaveSelfTargetEnablers` succeeds (the loop) -- not a
+  `1 + G` counter formula -- and, under the finite tail, only as far as the counters go. A hexproof virtual creature
+  is never exiled (ruling 9).
+* **Step 7 (FoV pitch):** shares the opponent's end-step window; the sweep runs BEFORE it.
+* **Step 8 (folds):** F1 / F2 above, identity folds of OWN targets, and the branching cost the activation adds (one
+  action per admitted target at every main).
+* **Step 9 (viewer):** a decline entry for the sweep (`eot_cast`), and human-play wiring of the activation (today
+  `main_phase` plan variants; `exile_target` in the JSON).
+* A fading sacrifice of an animated Wave goes through `PerformUpkeepFading`'s plain erase (no `OnCreatureDies`): no
+  dies-reader in this list, noted.
 
 ## Done items (formerly provisional Q1 / Q2 -- settled by standing CLAUDE.md rules, not USER questions)
 
