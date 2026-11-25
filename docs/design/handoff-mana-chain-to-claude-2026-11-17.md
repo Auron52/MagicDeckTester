@@ -296,6 +296,8 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**22:38 UTC 11-25:** status check. All three agents are still working. The k-fleet A/B is at 32/32 workers: arm O has finished 698 of 864 jobs, and arm S runs after it (about 1.5 h left). maze2hg-perf and worldfire-ad each have a 2-slot lane job running. Push queue is empty and nothing of mine is gated yet. NEXT is unchanged from the 21:xx entry.
+
 **21:48 UTC 11-25:** Interim before compaction. Origin = e430cc585 (my landing). Push queue: not joined, nothing ready.
 - Agent k-fleet (wip/k-fleet + wip/beam-staged2): one pooled A/B on the box, 32/32 busy. K fleet-wide on 31 armed decks, plus SG50 and SG50+K vs today on CG/AL/DS, fresh seeds 52M+. Report goes to logs/k-fleet/report.md; then put K and SG50(+K) to the USER.
 - Agent maze2hg-perf (wip/maze2hg-perf): root-causing the two slow 2HG Maze games (seeds 31301647 gi1647, 31301380 gi1380), with an identity batch before/after.
