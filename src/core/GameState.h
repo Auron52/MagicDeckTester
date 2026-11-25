@@ -2223,6 +2223,12 @@ struct GameState
     // and leaves a dual to die untapped, as before step 2. A DECK CONSTANT, never folded. In the same pad as the bit
     // above (sizeof(GameState) unchanged).
     bool                     deck_float_wild_exact        = false;
+    // THE PARALLAX WAVE + OPALESCENCE SWEEP (lock cluster step 4, USER ruling 7; PerformWaveOpalSweep in SpellEffects.h).
+    // True when the deck's PROVIDER adopts the sweep as its rule (DecisionProvider::WaveOpalSweepRule) AND the list
+    // holds both a fade_exile_target_creature card and an Opalescence-param card. Stamped after the provider is
+    // attached (GameSetup). DEFAULT FALSE: an unstamped state (a unit test, a scenario) never sweeps. A DECK CONSTANT,
+    // never folded. In the same pad as the two bits above (sizeof(GameState) unchanged; Dominance.h's assert).
+    bool                     deck_has_wave_opal_sweep     = false;
     // THE SEARCHED ELDER GARGAROTH MODE (Plan::attack_choose_mode_choice): PACKED 2 bits per attack-trigger
     // ordinal (ordinal 0 lowest; a field of 0 = that ordinal unpinned, m + 1 = mode m: 0 token / 1 life /
     // 2 draw); -1 = nothing pinned (every trigger takes DecisionProvider::AttackChooseOneModes' front).

@@ -5220,6 +5220,10 @@ public:
                                      [](const std::vector<int>& o) { return o.empty(); }),
                       options.end());
     }
+    // USER ruling 7 (2026-11-25): *"The default for Parallax Wave and Opalescence in this deck should be to exile all
+    // opponent creatures."* -- the deck default, so this provider adopts PerformWaveOpalSweep (SpellEffects.h) at the
+    // opponent's end step (lock cluster step 4).
+    bool WaveOpalSweepRule() const override { return true; }
 };
 
 class WorldfireProvider : public DeckProvider

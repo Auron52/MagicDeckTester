@@ -1418,6 +1418,27 @@ std::string GoldFishRunner::LandAbilityLossSelfGuard(const Decklist& deck)
     return std::string{};
 }
 
+// THE PARALLAX WAVE + OPALESCENCE SWEEP stamp (lock cluster step 4, USER ruling 7; GameState::deck_has_wave_opal_sweep):
+// the list holds a fade_exile_target_creature card (Parallax Wave) AND an Opalescence-param card, and the attached
+// provider adopts the sweep (DecisionProvider::WaveOpalSweepRule -- a DECK rule, so it lives in the provider). Read at
+// both stamp points: StampDeckTraits (the scenario harness attaches the provider first) and SetupGame after it attaches
+// the provider. False whenever no provider is attached.
+static void StampWaveOpalSweep(GameState& state, const Decklist& deck)
+{
+    bool wave = false, opal = false;
+    for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+    {
+        for (const Card& c : *zone)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr) { continue; }
+            if (d->params.fade_exile_target_creature) { wave = true; }
+            if (d->params.static_animate_other_nonaura_enchantments_mv) { opal = true; }
+        }
+    }
+    state.deck_has_wave_opal_sweep = wave && opal && state.m_provider != nullptr && state.m_provider->WaveOpalSweepRule();
+}
+
 void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
 {
     // Shuffle-variance instrument (see GameState::shuffle_salt): an independent salt lets the SAME
@@ -2238,6 +2259,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // scenario harness attaches the provider before this stamp; SetupGame attaches it after and re-stamps.
         state.deck_m2_tracks_noncombat     = state.deck_reads_damage_dealt && state.m_provider != nullptr
                                           && state.m_provider->Main2RuleReadsNoncombatDamage();
+        StampWaveOpalSweep(state, deck);   // Parallax Wave + Opalescence (USER ruling 7); re-stamped in SetupGame
         state.deck_has_count_anthem        = garth || count_anthem;
         state.deck_has_demon_triggers      = garth || demon_triggers;
         state.deck_has_sac_named           = garth || sac_named;
@@ -2597,6 +2619,7 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     WarnRequiredHeuristics(deck, *state.m_provider, "");
     // The one deck trait that needs the provider (StampDeckTraits ran above, before it was attached).
     state.deck_m2_tracks_noncombat = state.deck_reads_damage_dealt && state.m_provider->Main2RuleReadsNoncombatDamage();
+    StampWaveOpalSweep(state, deck);   // the Parallax Wave + Opalescence sweep's provider rule (lock step 4)
 
     // LEGACY BOARD (--legacy-passive-opponent-lands only): the passive opponent starts with three
     // inert lands. Across ten game indices, two have

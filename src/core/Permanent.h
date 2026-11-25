@@ -410,6 +410,12 @@ enum class PermAbilityMode
     // is SEARCHED: one Action per tutor candidate (Action::tutor_target, the SacNamedPin target in both
     // trailing passes); the resolver is ResolveSacTutorTop, which the upkeep window shares. Appended LAST.
     SacTutorTop,
+    // Remove a fade counter from this enchantment: Exile target creature  (Parallax Wave; CardParams::
+    // fade_exile_target_creature). NO {T}, no mana (legal the turn it lands; repeatable; in PermAbilityTaps'
+    // exclusion list); the counter is the COST. The TARGET is SEARCHED: one Action per admitted target (the
+    // Steelbane shape: Action::sac_victim_id, read through TapTargetPumpPinScope), the Wave itself included under
+    // Opalescence. The shared resolver is ResolveFadeExileCreature. Appended LAST.
+    FadeExileCreature,
 };
 // Is `m` one of the two morph turn-face-up modes?
 inline bool IsTurnFaceUpMode(PermAbilityMode m)
@@ -424,6 +430,7 @@ inline bool PermAbilityTaps(PermAbilityMode m)
 {
     return m != PermAbilityMode::SacDraw
         && m != PermAbilityMode::SacTutorTop          // Sterling Grove: "{1}, Sacrifice" -- no {T}
+        && m != PermAbilityMode::FadeExileCreature    // Parallax Wave: "remove a fade counter" -- no {T}
         && m != PermAbilityMode::SelfBounce
         && m != PermAbilityMode::Drain
         && m != PermAbilityMode::ExileTop

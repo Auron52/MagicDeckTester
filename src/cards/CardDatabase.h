@@ -5457,6 +5457,15 @@ struct CardParams
     // opponent's hexproof honoured) is a searched cast axis pinned on tutor_target "FV<n>[,<m>]". The off-turn pitch
     // (clause 1) is a separate later param.
     int                      destroy_up_to_artifacts_enchantments = 0;
+    // Parallax Wave (lock cluster step 4; PermAbilityMode::FadeExileCreature, ResolveFadeExileCreature in SpellEffects.h):
+    // "Remove a fade counter from this enchantment: Exile target creature. When this enchantment leaves the battlefield,
+    // each player returns to the battlefield all cards they own exiled with it." The fade counters are fading_counters'
+    // (Fading 5); the counter is the COST, no {T} and no mana. Target = any creature either side (the Wave itself
+    // under Opalescence), shroud and an opponent's hexproof honoured; SEARCHED (one activation per target class). A
+    // card exiled is LINKED to this object through the exile-until-leaves marker (kExileUntilLeavesBase), so the shared
+    // leave hook returns every linked card (FireLeavesBattlefieldTriggers -> ReturnExiledUntilLeaves) on any route.
+    // The deck default (USER ruling 7, PerformWaveOpalSweep) loops it at the opponent's end step under Opalescence.
+    bool                     fade_exile_target_creature = false;
     // Sterling Grove: "{1}, Sacrifice this enchantment: Search your library for an enchantment card,
     // reveal it, then shuffle and put that card on top." The mana half of an activated tutor-to-top
     // whose other cost is SACRIFICING THE SOURCE (no {T}: legal the turn it enters). The search spec is

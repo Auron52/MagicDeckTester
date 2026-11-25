@@ -370,6 +370,7 @@ add_executable(mtg-test
     test/unit/test_enchanted_evening_lock1.cpp
     test/unit/test_enchanted_evening_lock2.cpp
     test/unit/test_enchanted_evening_lock35.cpp
+    test/unit/test_enchanted_evening_lock4.cpp
     test/unit/test_spirits_usher.cpp
     test/unit/test_spirits_fetch_rule.cpp
     test/unit/test_spirits_discard.cpp

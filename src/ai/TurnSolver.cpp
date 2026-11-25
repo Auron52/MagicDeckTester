@@ -6929,6 +6929,25 @@ static std::vector<int> CounterDestroyAdmittedTargets(const GameState& state, in
     return out;
 }
 
+// PARALLAX WAVE's admitted exile targets (battlefield indices; lock cluster step 4): in human play every legal target,
+// else one representative per identity class (FadeExileLegalTargets' sound fold) restricted by the provider
+// (DecisionProvider::FadeExileCreatureTargets -- an index outside the legal set is dropped: a provider may only restrict
+// or order). ONE function for the CollectActions emission, the breakpoint availability bits and the site-9 key.
+static std::vector<int> FadeExileAdmittedTargets(const GameState& state, int ctrl, const Permanent& src)
+{
+    const bool human = HumanPlayActive();
+    std::vector<int> legal = FadeExileLegalTargets(state, ctrl, src.card.m_number, /*fold=*/!human);
+    if (legal.empty() || human) { return legal; }
+    std::vector<int> out;
+    for (int ti : ResolveProvider(state).FadeExileCreatureTargets(state, ctrl, src, legal))
+    {
+        if (std::find(legal.begin(), legal.end(), ti) != legal.end()
+            && std::find(out.begin(), out.end(), ti) == out.end()) { out.push_back(ti); }
+    }
+    return out;
+}
+static_assert(static_cast<int>(PermAbilityMode::FadeExileCreature) < 64, "PermAbilityMode availability bits are a uint64");
+
 static bool SelfBounceOffered(const GameState& state, const CardDefinition& def)
 {
     return HumanPlayActive() || ResolveProvider(state).OffersSelfBounce(state, def);
@@ -7078,6 +7097,10 @@ static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const P
         && pool.CanPay(EffectiveActivationCost(state, ctrl, src.card, *sd.params.remove_counter_destroy_art_ench_cost))
         && !CounterDestroyAdmittedTargets(state, ctrl, src).empty())
     { bits |= 1ull << static_cast<int>(PermAbilityMode::CounterDestroyArtEnch); }
+    // Parallax Wave: the out-of-band block's condition, mirrored (a fade counter and an ADMITTED target). No mana.
+    if (sd.params.fade_exile_target_creature && src.fade_counters >= 1
+        && !FadeExileAdmittedTargets(state, ctrl, src).empty())
+    { bits |= 1ull << static_cast<int>(PermAbilityMode::FadeExileCreature); }
     // Walking Ballista's counter ping and the Heliod loop: the out-of-band blocks' conditions, mirrored
     // (the shared CollectCounterPingOffers / PingLoopLiveNow). See CollectActions, "WALKING BALLISTA".
     if (sd.params.remove_counter_ping_damage > 0)
@@ -35364,7 +35387,10 @@ enum : uint64_t {
     // is newly activatable (no {T}, legal while sick), which opens site 9 so the same main can pump it (Garruk,
     // Primal Hunter's -3 reads the greatest power).
     kActOilPump = 223,
-    kActCompanionHand = 224
+    kActCompanionHand = 224,
+    // Parallax Wave (EE lock step 4): a fade counter and an admitted exile target -- a Wave cast this main is newly
+    // activatable, which opens site 9 so the same main can exile with it.
+    kActFadeExile = 225
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -35611,6 +35637,9 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     if (heurarm::Flag(heurarm::BP_FADE_POST_ENTRY, s_fade_post_entry)
         && pp.fade_saproling_cost > 0 && p.fade_counters >= pp.fade_saproling_cost)
     { out.push_back(ActKey(num, kActFadeSaproling)); }
+    // Parallax Wave: presence-only, like the fade pop above (a counter and an admitted target).
+    if (pp.fade_exile_target_creature && p.fade_counters >= 1 && !FadeExileAdmittedTargets(state, ctrl, p).empty())
+    { out.push_back(ActKey(num, kActFadeExile)); }
 
     // Lavamancer may gain fuel when the plan's earlier spells resolve. The graveyard signature
     // makes newly available fuel pairs visible even when an older pair was already available.
@@ -53048,6 +53077,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.is_noncreature = true;
                         actions.push_back(std::move(a));
                     }
+                }
+            }
+
+            // ---- PARALLAX WAVE (lock cluster step 4): "Remove a fade counter from this enchantment: Exile target
+            // creature." No {T}, no mana (legal the turn it lands, repeatable); the counter is the cost. One action per
+            // ADMITTED target (FadeExileAdmittedTargets: one per identity class, the provider's restriction; human play
+            // every legal target), the target pinned on sac_victim_id -- the Steelbane shape, so each activation is its
+            // own decision and the phase re-prompts (a loop is a sequence of them). Under Opalescence the Wave itself is a
+            // target (the self-exile returns it with five counters). NO-GREEDY: every target branches; "do nothing more"
+            // stays offered by the phase as always.
+            if (sd->params.fade_exile_target_creature && src.fade_counters >= 1)
+            {
+                for (int ti : FadeExileAdmittedTargets(state, state.active_player_index, src))
+                {
+                    Action a;
+                    a.kind = Action::Kind::ActivatePermAbility;
+                    a.card_name = src.card.m_name;
+                    a.def = sd;
+                    a.hand_index = -1;
+                    a.sac_source_id = src.card.m_number;
+                    a.sac_victim_id = state.battlefield[static_cast<std::size_t>(ti)].card.m_number;
+                    a.ability_mode = Action::AbilityMode::FadeExileCreature;
+                    a.cost = ManaCost{};   // the cost is a fade counter, not mana
+                    a.eval = 0;
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
                 }
             }
 
@@ -82987,7 +83042,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // payment (TapTargetPumpPay) and the resolver. {0, 0} for every other mode (never read).
             const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
             const bool target_pump = a.ability_mode == Action::AbilityMode::TargetPump
-                                  || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch;   // Steelbane's target
+                                  || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch   // Steelbane's target
+                                  || a.ability_mode == Action::AbilityMode::FadeExileCreature;      // Parallax Wave's
             const bool untap_land = a.ability_mode == Action::AbilityMode::UntapLand;
             const TapTargetPumpPinScope _tpump_pin((tpump || target_pump || untap_land) ? a.sac_victim_id : 0,
                                                    tpump ? a.chosen_x : 0);
@@ -85882,6 +85938,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
         if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
         TryOffMainAltWinActivation(state);   // ...after a Burgeoning put (F1 defect 4; executor twin)
+        PerformWaveOpalSweep(state);   // Parallax Wave + Opalescence, USER ruling 7 (executor twin: RunTurnFrom)
         freeturn::NoteSireBeforeDiscard(state);   // MTG_FREE_TURN_SIRE_FAIR (executor twin: RunTurnFrom)
         PerformEndStepDiscardHands(state, state.active_player_index);   // Sire at the opponent's end step (twin)
         PerformEndStepSelfSacrifices(state);   // morph at the opponent's end step (twin of RunTurnFrom's)
@@ -88033,7 +88090,8 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (act.ability_mode == Action::AbilityMode::TapTargetPump
                     || act.ability_mode == Action::AbilityMode::TargetPump
                     || act.ability_mode == Action::AbilityMode::UntapLand
-                    || act.ability_mode == Action::AbilityMode::CounterDestroyArtEnch)
+                    || act.ability_mode == Action::AbilityMode::CounterDestroyArtEnch
+                    || act.ability_mode == Action::AbilityMode::FadeExileCreature)
                 { w.Put("#P"); w.Int(act.sac_victim_id); }
                 // Contested Cliffs' fight: WHICH of ours and WHICH of theirs are distinct plans. Lockstep with
                 // the legacy builder. Every other ability: no tag.
@@ -93911,7 +93969,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                                   + ((act.ability_mode != Action::AbilityMode::TapTargetPump
                                       && act.ability_mode != Action::AbilityMode::TargetPump
                                       && act.ability_mode != Action::AbilityMode::UntapLand
-                                      && act.ability_mode != Action::AbilityMode::CounterDestroyArtEnch)
+                                      && act.ability_mode != Action::AbilityMode::CounterDestroyArtEnch
+                                      && act.ability_mode != Action::AbilityMode::FadeExileCreature)
                                      ? std::string() : "#P" + std::to_string(act.sac_victim_id))
                                   // Contested Cliffs' fight pair (TapFight). Every other ability: no tag.
                                   + (act.ability_mode != Action::AbilityMode::TapFight ? std::string()
@@ -107916,7 +107975,8 @@ static std::string PlanDomKey(const Action& a)
         && (a.ability_mode == Action::AbilityMode::TapTargetPump
             || a.ability_mode == Action::AbilityMode::TargetPump
             || a.ability_mode == Action::AbilityMode::UntapLand
-            || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch))
+            || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch
+            || a.ability_mode == Action::AbilityMode::FadeExileCreature))
     { k += "|T"; k += std::to_string(a.sac_victim_id); }   // Kessig Wolf Run: the pump's target
     if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapFight)
     { k += "|F"; k += std::to_string(a.sac_victim_id); k += '/'; k += std::to_string(a.enchant_target); }   // Contested Cliffs

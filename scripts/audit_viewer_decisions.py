@@ -627,6 +627,10 @@ MANIFEST = {
     # lock step 7, will add its own end-step decision.)
     "destroy_opp_enchantments_then_own_if_untapped_land": ("main_phase", truthy),
     "destroy_up_to_artifacts_enchantments": ("main_phase", truthy),
+    # Parallax Wave (lock step 4): "Remove a fade counter: exile target creature" -- one main_phase plan variant per
+    # legal target under human play (`exile_target` on the action; the Steelbane shape). The opponent-end-step sweep
+    # (USER ruling 7, the deck default) gets its decline entry in lock step 9's end-step decision.
+    "fade_exile_target_creature": ("main_phase", truthy),
     # ---- Maze's End (I2, 2026-11-17) ----
     # Gateway Plaza "When this land enters, sacrifice it unless you pay {1}": pay or sacrifice is asked at
     # the entry (ResolveEtbSacUnlessPay, every land-entry route) on the `dig` chooser -- one examined card

@@ -7866,7 +7866,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Kessig Wolf Run's searched target + X (TapTargetPump) -- lockstep twin of the rollout's.
             const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
             const bool target_pump = a.ability_mode == Action::AbilityMode::TargetPump
-                                  || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch;   // Steelbane's target
+                                  || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch   // Steelbane's target
+                                  || a.ability_mode == Action::AbilityMode::FadeExileCreature;      // Parallax Wave's
             const bool untap_land = a.ability_mode == Action::AbilityMode::UntapLand;
             const TapTargetPumpPinScope _tpump_pin((tpump || target_pump || untap_land) ? a.sac_victim_id : 0,
                                                    tpump ? a.chosen_x : 0);

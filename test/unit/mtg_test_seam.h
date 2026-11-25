@@ -139,4 +139,6 @@ struct MtgTestSeam
     // ...and the untap + upkeep (Boars LK3: the next-upkeep legend keep opens at the untap, closes at the upkeep's end).
     static void GeUntapStep(GameEngine& g, GameState& s) { g.UntapStep(s); }
     static void GeUpkeepStep(GameEngine& g, GameState& s) { g.UpkeepStep(s); }
+    // EE lock step 4: our end step, cleanup and the opponent's turn (its end-step window), stopping before our untap.
+    static void GeRunTurnFromEnd(GameEngine& g, GameState& s) { g.RunTurnFrom(s, GameEngine::ResumeAt::End); }
 };

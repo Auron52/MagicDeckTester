@@ -19648,6 +19648,21 @@
    "parameters": {
     "destroy_up_to_artifacts_enchantments": 2
    }
+  },
+  {
+   "name": "Parallax Wave",
+   "mana_cost": "{2}{W}{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Fading 5 (This enchantment enters with five fade counters on it. At the beginning of your upkeep, remove a fade counter from it. If you can't, sacrifice it.)\nRemove a fade counter from this enchantment: Exile target creature.\nWhen this enchantment leaves the battlefield, each player returns to the battlefield all cards they own exiled with it. [FADING 5: fading_counters 5 (put as it enters on EVERY route -- a cast and the universal enter cascade, so a Wave returned by its own leave trigger re-enters with five; Doubling Season doubles it), the shared upkeep PerformUpkeepFading (remove one, or sacrifice it when it has none; its leave trigger fires). ACTIVATION fade_exile_target_creature (PermAbilityMode::FadeExileCreature; ResolveFadeExileCreature, SpellEffects.h): no {T}, no mana, the counter is the COST; legal the turn it lands and repeatable. TARGET = any creature on either side (under Opalescence the Wave itself and our other non-Aura enchantments), never one with shroud (Sterling Grove's grant on our other enchantments, PermanentHasShroud) or an opponent's hexproof one; a SEARCHED axis (one activation per identity class of legal target; human play: every legal target). A token exiled ceases to exist; a card is LINKED to this object (CR 607.2a) with the exile-until-leaves marker, and on ANY leave route (fading's sacrifice, a destroy, its own exile) every linked card returns under its owner as a new object through the enter cascade (FireLeavesBattlefieldTriggers -> ReturnExiledUntilLeaves). SELF-EXILE under Opalescence: the Wave is exiled with itself, so its leave trigger returns it with five fade counters; activations that resolve after the old object left exile for good (CR 607.2a / 400.7). With one Sterling Grove the Grove must be exiled first (it shrouds the Wave; it returns too); with two or more Groves each shrouds the others and the Wave, so the loop is impossible. DECK DEFAULT (USER ruling 7; PerformWaveOpalSweep, EnchantedEveningProvider, deck_has_wave_opal_sweep): at the OPPONENT'S end step, with a Wave and an Opalescence on our side and the loop legal, every targetable opponent creature (under Enchanted Evening every opponent permanent) is exiled for good through the loop and the Wave returns with five; with no opponent creature and nothing linked, a Wave below five is topped up the same way. Hexproof opponent creatures are skipped. The fairness check's virtual board (lock step 6) and the viewer's decline entry (step 9) are not built yet.]",
+   "template": "custom",
+   "parameters": {
+    "fading_counters": 5,
+    "fade_exile_target_creature": true
+   }
   }
 ]
 }

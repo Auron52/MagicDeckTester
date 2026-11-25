@@ -1274,7 +1274,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 }
                 if (a.ability_mode == Action::AbilityMode::TargetPump
                     || a.ability_mode == Action::AbilityMode::UntapLand
-                    || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch)   // Steelbane: destroy target
+                    || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch   // Steelbane: destroy target
+                    || a.ability_mode == Action::AbilityMode::FadeExileCreature)      // Parallax Wave: exile target
                 {
                     tag += " \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id);
                     if (a.ability_mode == Action::AbilityMode::TargetPump && a.chosen_x > 1)
@@ -3751,6 +3752,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             {
                 os << ", \"destroy_target\": " << ac.sac_victim_id
                    << ", \"destroy_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
+            }
+            if (ac.kind == Action::Kind::ActivatePermAbility
+                && ac.ability_mode == Action::AbilityMode::FadeExileCreature)   // Parallax Wave
+            {
+                os << ", \"exile_target\": " << ac.sac_victim_id
+                   << ", \"exile_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
             }
             if (ac.kind == Action::Kind::ActivatePermAbility
                 && ac.ability_mode == Action::AbilityMode::UntapLand)

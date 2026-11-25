@@ -4924,6 +4924,21 @@ public:
         return best;
     }
 
+    // FadeExileCreatureTargets -- the exile targets the SEARCH is offered for Parallax Wave's "Remove a fade counter
+    // from this enchantment: Exile target creature" (lock cluster step 4; one activation action per returned target).
+    // `legal` = battlefield indices of one representative per identity class of legal target, both sides, the Wave
+    // itself included under Opalescence (FadeExileAdmissibleTargets). RESTRICT / ORDER only. Base: every legal target.
+    // (Design §4.4's own-target folds are NOT applied: each has a counterexample in this list -- see the ledger's
+    // "Lock-cluster step 4" notes -- so they are step-8 work, not a sound default.)
+    virtual std::vector<int> FadeExileCreatureTargets(const GameState& s, int controller, const Permanent& src,
+                                                      const std::vector<int>& legal) const
+    { (void)s; (void)controller; (void)src; return legal; }
+    // WaveOpalSweepRule -- does this deck adopt the USER's ruling-7 default (lock cluster step 4; PerformWaveOpalSweep):
+    // at the OPPONENT's end step, with a Parallax Wave and an Opalescence on our side, exile every targetable opponent
+    // creature through the Wave's self-exile loop. A DECK rule, read once into GameState::deck_has_wave_opal_sweep at
+    // the stamp. Base: no.
+    virtual bool WaveOpalSweepRule() const { return false; }
+
     // EtbDestroyTargetPick -- a MANDATORY "When this enters, destroy target <X>" trigger whose legal
     // set (BOTH sides, CR 603.3d: a trigger with a legal target must take one) can be only OUR OWN
     // permanents against the goldfish: Shriekmaw (nonartifact, nonblack creature) and Acidic Slime

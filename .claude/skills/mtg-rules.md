@@ -178,7 +178,7 @@ For review, build, and card modes, use the rules sections below as the authorita
 | **Outlast {cost}** | {cost}, {T}: put a +1/+1 counter on this; sorcery speed only |
 | **Training** | Whenever this attacks alongside a creature with greater power, put a +1/+1 counter on this |
 | **Vanishing N** | Enters with N time counters; remove one at the start of each upkeep; sacrifice when the last is removed |
-| **Fading N** | Enters with N fade counters; remove one at the start of each upkeep; sacrifice when the last is removed |
+| **Fading N** | Enters with N fade counters; at the beginning of your upkeep remove one -- if you CAN'T (none left), sacrifice it (CR 702.32a; so Fading 5 survives five upkeeps and is sacrificed at the sixth, and a counter spent as a cost brings that forward). Contrast Vanishing: sacrifice when the LAST is removed |
 | **Sunburst** | Enters with a +1/+1 counter (or charge counter if not a creature) for each color of mana used to cast it |
 | **Unleash** | May enter with a +1/+1 counter; if it has a +1/+1 counter on it, it can't block |
 

@@ -30937,7 +30937,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // enchantment shroud grant, Enchantress's Presence's cast-TYPE draw (draw_on_cast_types; Sram's
     // subtype form is a different param), and the lock cluster's params as they land (Enchanted Evening's
     // static_all_permanents_enchantments, Opalescence's static_animate_other_nonaura_enchantments_mv, Calming Verse's
-    // destroy_opp_enchantments_then_own_if_untapped_land, Force of Vigor's destroy_up_to_artifacts_enchantments; carried
+    // destroy_opp_enchantments_then_own_if_untapped_land, Force of Vigor's destroy_up_to_artifacts_enchantments, Parallax Wave's
+    // fade_exile_target_creature; carried
     // by no other card), so a list that cuts one card still routes. EXCLUDED, with reasons: Oblivion Ring (a white staple),
     // Utopia Sprawl / Wild Growth (AccomplishedAlchemist / Auras), the fetchlands, Idyllic Tutor
     // (Anti-Lifegain), Exploration (Maze's End). Returns FIRST: the fetchlands set `anti` alone.
@@ -30991,7 +30992,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || (def->card.IsCreature() && p.suspend_time_counters > 0)) { worldfire = true; }
         if (p.grants_other_enchantments_shroud || !p.draw_on_cast_types.empty()
             || p.static_all_permanents_enchantments || p.static_animate_other_nonaura_enchantments_mv
-            || p.destroy_opp_enchantments_then_own_if_untapped_land || p.destroy_up_to_artifacts_enchantments > 0)
+            || p.destroy_opp_enchantments_then_own_if_untapped_land || p.destroy_up_to_artifacts_enchantments > 0
+            || p.fade_exile_target_creature)
         { enchanted_evening = true; }
         if (p.spell_exile_opponent_until_mv > 0 || p.landfall_mill_opponent > 0
             || p.landfall_mill_target_player || p.cycling_mill_opponent > 0

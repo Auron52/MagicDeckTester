@@ -366,6 +366,10 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
         // ...and Maze's End's off-main WIN after a Burgeoning put on their turn (F1 defect 4; rollout twin).
         TryOffMainAltWinActivation(state);
+        // Parallax Wave + Opalescence at the OPPONENT's end step (USER ruling 7, the deck default; lock cluster step 4):
+        // every targetable opponent creature exiled for good through the self-exile loop, before the rest of the
+        // end-step window and so before the lock check below. Deck-gated (deck_has_wave_opal_sweep). Rollout twin.
+        PerformWaveOpalSweep(state);
         // Sire of Insanity at the OPPONENT's notional end step ("each end step"): after their draw.
         // Our hand is empty by then in this pool (our own end step discarded it), so it is faithful and
         // inert; the opponent discards a dealt hand. Lockstep twin in the rollout; deck-gated.

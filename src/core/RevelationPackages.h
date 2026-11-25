@@ -66,7 +66,8 @@ inline bool CardCanEndOwnEnchantment(const CardParams& p)
         || p.etb_destroy_artifact_enchantment_land || p.etb_destroy_artifact_enchantment_optional
         || p.sac_outlet_destroy_artifact_enchantment_optional || p.sac_outlet_allows_enchantment
         || p.etb_destroy_own_noncreature_max > 0 || p.cast_trigger_bounce_nonland || p.etb_bounce_nonland
-        || p.destroy_opp_enchantments_then_own_if_untapped_land || p.destroy_up_to_artifacts_enchantments > 0;
+        || p.destroy_opp_enchantments_then_own_if_untapped_land || p.destroy_up_to_artifacts_enchantments > 0
+        || p.fade_exile_target_creature;   // Parallax Wave exiles our own creature (an Opalescence enchantment)
     // (Worldfire, exile_all_permanents_hands_graveyards, exiles every hand with the board: excluded by construction.)
 }
 
