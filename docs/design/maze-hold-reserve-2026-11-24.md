@@ -1,6 +1,10 @@
-# Maze's End hold-up: the RESERVE mode and the cheap gate (2026-11-24, wip/maze-reserve)
+# Maze's End hold-up: the RESERVE mode and the cheap gate (2026-11-24, wip/maze-reserve; 2026-11-25, wip/maze-holdup)
 
-Status: built, DEFAULT OFF, awaiting the three-arm A/B (off / list / reserve) and the USER's call.
+Status (2026-11-25): the hold-up LIST is DEFAULT ON (`MTG_MAZE_HOLD_UP`, `=0` off) and the RESERVE mode is DELETED
+(USER 2026-11-25, verbatim: "Okay, those ideas are all fine and it would be nice to cut the CPU if possible, but we'll
+see whether that is practical."). Sections below "2026-11-25" are the history of the reserve work; the reserve rule,
+`MTG_MAZE_HOLD_RESERVE`, `PaymentReserve`, `ReserveHoldOut` and their tests no longer exist. See "2026-11-25: list
+default ON, reserve deleted, exact CPU cuts" at the end for the current state.
 
 ## USER guidance (verbatim, 2026-11-24)
 
@@ -129,3 +133,98 @@ Win turns on this slice (too small for a verdict): play 5.45 / 5.45 / 5.45, 2HG 
   (2HG: ~33k single + ~18k pair tries per game against ~4k fires) and the trial's pre copy + kept solves. Pairs could
   be limited to entries of two or more reserve pips; a candidate whose colours the paid board still has could be
   skipped (both policy, need their own check).
+
+## 2026-11-25: list default ON, reserve deleted, exact CPU cuts (wip/maze-holdup)
+
+USER ruling (verbatim, answering "Maze hold-up list default ON + delete the reserve mode?"): "Okay, those ideas are all
+fine and it would be nice to cut the CPU if possible, but we'll see whether that is practical." Standing rule: a fix's
+CPU cost is never justified by suite headroom.
+
+- `5412ef79c`: `MTG_MAZE_HOLD_UP` DEFAULT ON (`=0` off, the A/B lever). Deleted: `MTG_MAZE_HOLD_RESERVE` and its heurarm
+  slot, `DecisionProvider::PaymentReserve`, `MazesEndProvider::PaymentReserve`, `ReserveHoldOut`, `HoldPick`, the
+  reserve branch of `ProviderHoldUpTargets`, and every reserve unit test. Kept: the exact gate (HoldSupply COVERS), its
+  exact infeasibility half (HoldSupplyMax), and the VERIFY / PROBE / STATS diagnostics.
+- `a68b2f2c3` (exact): the gate runs before the amount bound; a per-payment amount memo (PaymentManaCovers is monotone
+  in need); PaymentTapped made lazily; COVERS(target, 0) on each held board before its solve; a payability-dominance
+  skip (a target within a kept one is kept, one containing a dead one is dead); an insertion sort in
+  `MazesEndProvider::PaymentHoldUp`.
+- `5f2383600` (exact):
+  - THE BOARD COPY. PayProviderHoldUp copied the whole GameState before every pay-first payment (2.0M on the slice)
+    and read it on about 1 in 5. It now takes a `PayRefineSnap` (the field snapshot MTG_PAY_REFINE already undoes a
+    successful payment with) when no payment can change a zone (`HoldUndoSafe`: no sac-for-mana, Deathrite or
+    sac-outlet source of ours, no granted mana, every permanent defined; else the full copy as before). The board
+    before the payment is made lazily (`HoldPre`), as a copy of the paid board with the snapshot restored, only when
+    a target reaches the joint test or a held trial; a held payment restores the real board in place. Zone sizes are
+    checked after the payment and the run aborts on a miss (a field restore could not undo it).
+  - In-place solves (`HoldSolveInPlace`): the kept test on the paid board and the joint test on the made board solve
+    on the board itself and are undone, instead of RampLaterPayable's copy each.
+  - The held trial's solve consumes its own scratch board (no one reads it again).
+  - The joint test's amount bound is skipped: ProviderHoldUpTargets' amount_covers already proved the same
+    PaymentManaCovers query on the same board for every listed target.
+  - `MTG_PROVIDER_HOLD_UNDO_VERIFY=1` (diagnostic, default off): a full copy beside every undo, compared with
+    BoardsEqual (complete memberwise GameState equality) after it; prints `[provider-hold-undo] ... MISMATCH=`.
+- `a2226f751` (exact): the undo snapshot's buffers are reused per thread (two allocations a payment).
+
+### Measurements (the 120-game slice, perf stat instructions:u, --threads 2; off = 1261.15G)
+
+| binary | on, G instr | vs off | overhead |
+|---|---|---|---|
+| 5412ef79c (list ON, reserve deleted) | 1331.62 | x1.0559 | 70.5G |
+| a68b2f2c3 (cut2) | 1326.78 | x1.0520 | 65.6G |
+| + undo instead of the pre copy (cut3) | 1326.49 | x1.0518 | 65.3G |
+| + in-place solves, held consume (cut4) | 1325.48 | x1.0510 | 64.3G |
+| + joint amount known (cut5 = 5f2383600) | 1324.71 | x1.0504 | 63.6G |
+| + thread-local undo buffers (cut6) | 1324.18 | x1.0500 | 63.0G |
+
+The off arm on cut5 is 1260.96G with identical games to the base off (0 digest / units diffs).
+
+Exactness: every cut binary's on arm against a68b2f2c3's: 0 digest and 0 units diffs on 120/120 jobs; the
+UNDO_VERIFY arms too. cut5 UNDO_VERIFY: 1,872,740 undo checks, 70,681 fired restores, 1,020,770 in-place solves, all 0
+MISMATCH. Fluctuator / Prevent Damage / Gods (other.json, 30 games): identical to a68b2f2c3 with and without VERIFY;
+12,048 undo checks, 429 fired restores, 6,395 in-place solves, 0 MISMATCH. Units 4184/4184.
+
+THE BOARD COPY WAS NOT 24% OF THE OVERHEAD. The earlier flat profile put about 24% of the hold-up's samples in GameState
+copies, but replacing the pre copy on 1.92M of 2.07M pay-first payments (148k stayed on the copy path) saved only 0.3G:
+a copy-assign into the warm RampScratch pool slot costs little more than the field snapshot that replaces it. The
+in-place solves saved another 1.0G for the same reason. The copies were spread over many small sites, and none was
+large.
+
+Where the remaining ~63G goes (cut5, perf record probe minus off, flat samples, ~11.2k overhead samples):
+- the gate scans (ScanHoldSupply, HoldSupplyCovers, EffectiveProducesFor with Gond Gate's ControlledSubtypeColors
+  walk, subtype checks): ~16%. Most of it is the pre-payment scan, which runs on every outermost payment with a target
+  (7.9M entries; 5.9M end with no target);
+- the backtracker solves (worker, ManaCacheKey, TapFlowInfeasible, colour feasibility): ~17%;
+- the amount bound (UntappedManaUpperBound, SourceMaxNetLive, grants, scaled feeders): ~9%;
+- ProviderHoldUpTargets / PaymentHoldUp themselves and their vectors: ~10%;
+- the undo snapshot (SnapPayFields, Take / Restore): ~4%; the held payments (the payer): ~5%.
+
+Ideas not done (each worth a few % of the overhead at most): derive the paid board's HoldSupply from the pre-payment
+scan (a source stays counted unless the payment tapped it, cut its life below the tap's cost or drained its storage),
+with a VERIFY against the real scan; a per-thread buffer for the target list and the provider's hold vector.
+
+### Final A/B (2026-11-25; `logs/maze-holdup/ab_gen.py`, one pooled batch, 14,000 jobs, binary 5f2383600)
+
+Hold-up ON vs OFF (`MTG_MAZE_HOLD_UP=0`), paired per seed. Play: 31100000+gi, d5 b20, 5,000 games. 2HG:
+31300000+gi, life 30, two heads, 2,000 games. Net = slower - faster (negative = ON better).
+
+| format | differ | slower | faster | net | mean win turn off -> on | units on/off |
+|---|---|---|---|---|---|---|
+| play | 220 | 13 | 17 | -4 | 5.5150 -> 5.5142 | 1.0023 |
+| 2HG | 88 | 4 | 7 | -3 | 5.3445 -> 5.3425 | 1.0016 |
+
+The cpu-ms ratios (play 1.066, 2HG 1.060 without its two tail games) were measured on a contended box. The slice's
+instruction ratio (x1.050) is the clean CPU figure.
+
+Slower games, each re-run at d8 b0 (both arms) and at play settings with `MTG_LINE_KEEP_CRIT=0` (both arms):
+- 16 of 17 recover at d8 b0: play gi 525, 662, 1105, 1317, 1392, 1813, 2615, 3251, 3965, 4370, 4590, 4931; 2HG gi 660,
+  1126, 1598, 1942.
+- play gi 4785 (seed 31104785) does not: d8 b0 off 5 / on 6. The arms diverge at T2, with one green source (Black
+  Dragon Gate): OFF casts Exploration, then two Manabonds on T3; ON casts Manabond. The divergence is the same at play
+  and at d8 b0. MTG_NC_SEARCH=1 d8 b0: running at this commit (see the next commit).
+- The line-keep interaction: hold-up ON skips the line-keep rung for any payment with a hold-up target
+  (`!phu_pay_first`), so the A/B measures both effects together. None of the 17 traces to it. With the rung's
+  `MTG_LINE_KEEP_CRIT=0` in both arms, every one keeps the same off/on gap.
+
+Not hold-up specific: 2HG gi 1380 and 1647 take 20-33 min of wall in BOTH arms for only ~172k / ~60k units, while
+ordinary games take ~10-30 s at 0.6-1.4M units. Something in them is expensive and not charged in units. Repro:
+`--seed 31301647 --game-index 1647 --games 1`, life 30, two heads.
