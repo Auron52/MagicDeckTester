@@ -1,3 +1,12 @@
 {
- "entries": []
+ "entries": [
+  {
+   "branch": "phase-1-2-deck-analyzer",
+   "head_since": "2026-11-25T00:45:58Z",
+   "host": "a7c2d36c718e",
+   "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
+   "joined": "2026-11-25T00:45:58Z",
+   "note": "Creature Burn fast mulligan profile adoption and GT"
+  }
+ ]
 }
