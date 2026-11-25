@@ -61,4 +61,6 @@ branch is NEVER pushed from here. Scratch: `/workspaces/MagicDeckTester/build/sc
   mode 3, ...), and the sparse ladder is the shape for the decks whose best alternative today is heur. The sparse
   ladder must therefore beat heur CLEARLY (a few percent at least) on those decks, and must never do MORE work than
   heur -- an arm that costs more units than heur on any deck is a defect to root-cause, not an outcome.
+  *"So what I want to see is all decks moving off the heuristic ladder after the value-leaf with at least a small
+  benefit."* *"Ideally a bit bigger than that."*
 ## Measurements: see docs/design/sparse-heuristic-ladder.md (AB1 tables).
