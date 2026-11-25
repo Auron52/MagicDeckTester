@@ -10062,8 +10062,11 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     const int dl_feeder = def.params.mana_per_creature_feeder_generic;
     const bool dl_in_pay = g_pay_need_live;
     const bool dl_later = !dl_in_pay || g_line_unpaid_cost.ManaValue() - g_pay_full_mv > 0;
-    const int dl_others = ScaledManaFeederMana(s) - (dl_in_pay ? g_pay_remaining_mv : 0);
-    if (DevotionLandHoldOn() && IsDevotionManaLand(def) && dl_later && dl_others >= dl_feeder)
+    // ScaledManaFeederMana walks the battlefield (a PermanentManaYield per untapped source), so it is read only once
+    // the cheap tests have admitted a devotion land: it is pure, so evaluating it lazily is byte-identical. Computed
+    // eagerly it was ~40% of a Maze's End 2HG crossing (every Gate ranked by Heap Gate's tap order reached here).
+    if (DevotionLandHoldOn() && IsDevotionManaLand(def) && dl_later
+        && ScaledManaFeederMana(s) - (dl_in_pay ? g_pay_remaining_mv : 0) >= dl_feeder)
     {
         int dev[5];
         DevotionAllColors(s, active, dev);
@@ -71786,11 +71789,18 @@ std::vector<int> MazesEndProvider::LandEntryPinCandidates(const GameState& s, in
         if (mc.green > 0) { spend[4] = true; }
     };
     const Player& me = s.players[static_cast<std::size_t>(controller)];
-    for (const Card& c : me.library)   { scan(c); }
-    for (const Card& c : me.hand)      { scan(c); }
-    for (const Card& c : me.graveyard) { scan(c); }
-    for (const Card& c : s.exile)      { scan(c); }
-    for (const Permanent& p : s.battlefield) { if (p.owner_index == controller) { scan(p.card); } }
+    // Only `base`'s colours are read below, so the scan stops once each of them is known to be spent: the result is
+    // the same, and a Maze's End 2HG crossing (one call per colour-choosing land on every Burgeoning / Manabond menu)
+    // no longer walks the whole library each time.
+    bool need[5] = { false, false, false, false, false };
+    for (int c : base) { if (c >= 0 && c < 5) { need[c] = true; } }
+    auto covered = [&]() { for (int c = 0; c < 5; ++c) { if (need[c] && !spend[c]) { return false; } } return true; };
+    bool done = covered();
+    for (const Card& c : me.library)   { if (done) { break; } scan(c); done = covered(); }
+    for (const Card& c : me.hand)      { if (done) { break; } scan(c); done = covered(); }
+    for (const Card& c : me.graveyard) { if (done) { break; } scan(c); done = covered(); }
+    for (const Card& c : s.exile)      { if (done) { break; } scan(c); done = covered(); }
+    for (const Permanent& p : s.battlefield) { if (done) { break; } if (p.owner_index == controller) { scan(p.card); done = covered(); } }
     std::vector<int> out;
     for (int c : base) { if (c >= 0 && c < 5 && spend[c]) { out.push_back(c); } }
     if (out.empty()) { out = base; }
@@ -71911,7 +71921,15 @@ void MazesEndProvider::EtbTapSubtypeOrder(const GameState& s, int controller, st
         const RankObjectScope ro(&s.battlefield[static_cast<std::size_t>(i)]);
         return { tier, ManaSourceRank(s, *d) };
     };
-    std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) { return key(a) < key(b); });
+    // Each key is computed ONCE (decorate-sort-undecorate). The comparator used to recompute both keys on every
+    // comparison -- two ManaSourceRank calls each, O(n log n) of them -- which was ~47% of a Maze's End 2HG crossing
+    // (Heap Gate's "tap an untapped Gate" cost orders every Gate here). The key is a pure function of the index for
+    // the sort's duration, and a stable sort on (key, original position) keeps the same order: byte-identical.
+    std::vector<std::pair<std::pair<int, int>, int>> keyed;
+    keyed.reserve(idx.size());
+    for (int i : idx) { keyed.push_back({ key(i), i }); }
+    std::stable_sort(keyed.begin(), keyed.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (std::size_t j = 0; j < keyed.size(); ++j) { idx[j] = keyed[j].second; }
 }
 
 // Maze's End I4 (ledger decision 31): Talon Gates of Madara's from-hand put runs FIRST in its plan's trailing

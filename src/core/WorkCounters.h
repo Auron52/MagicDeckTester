@@ -19,11 +19,12 @@ enum Kind : int
     kPay,               // TapForCostShared call (a mana-payment search; EDF: 38% of a slow game's time)
     kSimKey,            // BuildSimKeyBase call (state key for the TT / line caches / memos)
     kPlanEmit,          // plan built by EnumeratePlans, before sorting/deduplication
+    kDeadCross,         // a boundary-fan crossing no child search bills (its FSLineWin refused at entry, or it failed)
     kKinds
 };
 inline const char* KindName(int k)
 {
-    static const char* n[kKinds] = { "step_c", "step_f", "greedy", "enum", "plans", "odo", "apply", "pay", "simkey", "plan_emit" };
+    static const char* n[kKinds] = { "step_c", "step_f", "greedy", "enum", "plans", "odo", "apply", "pay", "simkey", "plan_emit", "dead_x" };
     return (k >= 0 && k < kKinds) ? n[k] : "?";
 }
 // PRICES, in nanoseconds of reference work per event: a non-negative per-game fit of wall clock on these
@@ -49,7 +50,21 @@ inline constexpr long long kPriceNs[kKinds] = {
      2561,   // pay
      3749,   // simkey
     10000,   // plan_emit; Melira's 46M emitted plans took 548 s (~11.9 us each, including other work)
+    21426,   // dead_x: a DEAD boundary-fan crossing, priced as a turn-step (see below)
 };
+// DEAD_X (MTG_DEAD_CROSS_PRICE, DEFAULT ON; =0 counts nothing). A boundary fan (TurnSolver's BoundaryFan) crosses the
+// turn once per pin combination -- a full simulated end step, opponent turn and upkeep -- and hands each crossing to
+// FSLineWin. A crossing whose child search runs is billed by that child (the fit above absorbed it into the child's
+// kinds), but one whose child is REFUSED at entry (turn > cutoff: the caller already holds a line winning by then, so
+// only a win AT the boundary could be adopted) or whose crossing fails was billed nothing beyond its payments. Maze's
+// End 2HG s31301380 gi1380 (USER-flagged, 2026-11-25): T6 d0 tails at their cutoff turn walked crossing-land fans of
+// 65k-284k crossings, every child refused, ~9M crossings per decision at 20-60 us each against ~5.6 us of priced
+// payments, so the priced decision ceiling (MTG_DECISION_PRICED_X) saw a seventh of the real cost and four decisions
+// ran 150-350 s each (989 s for the game). Priced at the fitted turn-step price, the boundary half of a step being
+// the nearest fitted analogue. A PRICE, never a cut: it moves only t_priced, so play moves only where the priced
+// ceiling (or MTG_PRICED_BUDGET) binds; the priced ceiling is armed only at a budgeted root, so an unlimited search
+// is untouched.
+bool DeadCrossPriceOn();
 // The fitted price of one CHARGED budget unit beyond the work kinds above (the fit's `interior` regressor).
 inline constexpr long long kInteriorNs = 586;
 inline thread_local long long t_n[kKinds] = {};

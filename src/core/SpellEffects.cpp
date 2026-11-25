@@ -38,6 +38,12 @@ bool workctr::MuteNoStoreOn()
     static const bool env = EnvOn("MTG_MUTE_NO_STORE", true);
     return heurarm::Flag(heurarm::MUTE_NO_STORE, env);   // per-job lever (the A/B control is =0)
 }
+// core/WorkCounters.h: MTG_DEAD_CROSS_PRICE (default ON; see kDeadCross there).
+bool workctr::DeadCrossPriceOn()
+{
+    static const bool env = EnvOn("MTG_DEAD_CROSS_PRICE", true);   // DEFAULT ON (a price, inert unbudgeted); =0 counts nothing
+    return env;
+}
 namespace { std::atomic<long long> g_refused_stores[workctr::kRefSites]; }
 void workctr::NoteRefused(int site) { g_refused_stores[site].fetch_add(1, std::memory_order_relaxed); }
 long long WorkctrRefusedStores(int site) { return g_refused_stores[site].load(std::memory_order_relaxed); }

@@ -16,9 +16,10 @@ import argparse
 import collections
 import sys
 
-KINDS = ["step_c", "step_f", "greedy", "enum", "plans", "odo", "apply", "pay", "simkey", "plan_emit"]
+KINDS = ["step_c", "step_f", "greedy", "enum", "plans", "odo", "apply", "pay", "simkey", "plan_emit", "dead_x"]
 DEFAULT_PRICE_NS = {"step_c": 21426, "step_f": 21426, "greedy": 569, "enum": 18455, "plans": 2866,
-                    "odo": 511, "apply": 8097, "pay": 2561, "simkey": 3749, "plan_emit": 10000}
+                    "odo": 511, "apply": 8097, "pay": 2561, "simkey": 3749, "plan_emit": 10000,
+                    "dead_x": 21426}
 
 
 def pct(v, q):
@@ -50,7 +51,7 @@ def main():
             parts = line.rstrip("\n").split("\t")
             if hdr is None:
                 hdr = {n: i for i, n in enumerate(parts)}
-                missing = [k for k in KINDS if k != "plan_emit" and "w_" + k not in hdr]
+                missing = [k for k in KINDS if k not in ("plan_emit", "dead_x") and "w_" + k not in hdr]
                 if missing:
                     sys.exit(f"census lacks work columns {missing} (built before the w_* columns?)")
                 if "w_plan_emit" not in hdr:
