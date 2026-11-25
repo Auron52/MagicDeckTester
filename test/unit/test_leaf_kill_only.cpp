@@ -118,6 +118,52 @@ GameState NoKillBoard()
     return s;
 }
 
+// MAZE'S END'S END-STEP WIN (KillOnlyBoundaryEndsGame, TurnSolver.cpp). MTG_LEAF_KILL_ONLY_VERIFY found 6 mismatches
+// in 1,581 Maze's End rollouts under MTG_LEAF_KILL_ONLY_NOM2=1 (2026-11-25, seed 48418000 gi0-11 d1 b0), and this is
+// their shape: Maze's End in HAND beside Manabond and Amulet of Vigor. Turn 5, land drop spent; nine Gates with
+// different names in play; a tenth name in the library. No main phase can win (Maze's End cannot be played). At the
+// end step Manabond puts Maze's End onto the battlefield, Amulet untaps it, and its off-main activation fetches the
+// tenth Gate -- a win THIS turn (SimulateEndAndStartNextTurn returns before the counter advances). Only three Gates are
+// untapped, so a line that casts Sylvan Scrying cannot pay the {3}: the kill-only skip used to drop every candidate as
+// "did not kill this turn" and fall back to the solve's first candidate, whose replay did not win.
+GameState MazeEndStepWinBoard()
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 5;
+    s.phase               = Phase::PreCombatMain;
+    s.players[0].life     = gamesetup::StartingLife();
+    s.players[1].life     = gamesetup::StartingLife();
+    s.players[0].lands_played_this_turn = 1;
+    s.uses_second_main    = false;
+    s.deck_has_crossing_land_put = true;
+    s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
+        ResolveHeuristicDefaultsPath("decks/Maze's End/Maze's End.cod")));
+    int n = 1;
+    for (const char* g : { "Azorius Guildgate", "Rakdos Guildgate", "Golgari Guildgate", "Dimir Guildgate",
+                           "Orzhov Guildgate", "Boros Guildgate", "Selesnya Guildgate", "Simic Guildgate",
+                           "Gruul Guildgate" })
+    {
+        Put(s, g, n);
+        s.battlefield.back().tapped = n <= 6;   // three untapped: exactly Maze's End's {3}
+        ++n;
+    }
+    Put(s, "Manabond", 21);
+    Put(s, "Amulet of Vigor", 22);
+    Hand(s, "Maze's End", 30);
+    Hand(s, "Sylvan Scrying", 31);   // castable, cannot win: spending its {1}{G} leaves the activation short
+    Card izzet = Def("Izzet Guildgate").card;
+    izzet.m_number = 40;
+    s.players[0].library.push_back(izzet);
+    for (int k = 0; k < 12; ++k)
+    {
+        Card c = Def("Forest").card;
+        c.m_number = 900 + k;
+        s.players[0].library.push_back(c);
+    }
+    return s;
+}
+
 }   // namespace
 
 TEST_CASE("Leaf kill-only: at a slack-0 leaf with no kill this turn, both arms return no-win and the scope skips rollouts")
@@ -355,4 +401,15 @@ TEST_CASE("Edge m2 no-reach: the full-line search skips an edge node's second ma
     CHECK(off.edges == 0);
     CHECK(on.edges > 0);
     CHECK(on.units < off.units);
+}
+
+TEST_CASE("Leaf kill-only NOM2: Maze's End's end-step win (Manabond's dump, then the off-main fetch) is found at the cutoff")
+{
+    EnsureCardsLoaded();
+    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // Maze's End does not opt in; force the shortcut on
+    const GameState s = MazeEndStepWinBoard();
+    const Both b = Run(s, /*cutoff=*/5, /*second_main=*/false);
+    CHECK(b.off == 5);          // the full solve: the end step wins this turn
+    CHECK(b.on == b.off);       // the kill-only turn finds the same win (it answered kMaxTurns + 1 before the fix)
+    CHECK(b.t_on.armed >= 1);   // armed at the cutoff turn (a nested re-solve of the same turn may arm it again)
 }
