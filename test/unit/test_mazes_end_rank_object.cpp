@@ -141,7 +141,7 @@ TEST_CASE("Maze's End rank object: the rank reads the object's colours only insi
     }
 }
 
-// ---- THE MAZE'S END HOLD-UP (MTG_MAZE_HOLD_UP, heurarm MAZE_HOLD_UP; DEFAULT OFF) ------------------------------------
+// ---- THE MAZE'S END HOLD-UP (MTG_MAZE_HOLD_UP, heurarm MAZE_HOLD_UP; DEFAULT ON) -------------------------------------
 // s30006137 gi6137 T3 (gate claude-queue-20261121a, need-later APPLY-DROP): Sea Gate (U, chosen G), Izzet Guildgate,
 // Exploration, Maze's End, Manor Gate (entered tapped), Baldur's Gate; Manabond in hand. The continuation's Sylvan
 // Scrying {1}{G} was paid with Sea Gate's {G} + Maze's End, and Manabond's {G} then had nothing. Fed by Izzet
@@ -184,17 +184,28 @@ bool ScryingThenManabond(int arm)
 }
 }   // namespace
 
-TEST_CASE("Maze's End hold-up: ON, Scrying's payment keeps Manabond's {G} (Baldur's Gate fed by Izzet + Maze's End)")
+TEST_CASE("Maze's End hold-up: ON (the default), Scrying's payment keeps Manabond's {G} (Baldur's Gate fed by Izzet + Maze's End)")
 {
     LoadRoCards();
     CHECK(ScryingThenManabond(/*arm=*/1));
+    CHECK(ScryingThenManabond(/*arm=*/-1));
+    // ...and with the spell being paid for in scope (the cast site's SpellSubtypePayScope).
+    const CardDefinition* scry_def = CardDatabase::Instance().Lookup("Sylvan Scrying");
+    REQUIRE(scry_def != nullptr);
+    heurarm::Clear();
+    static const MazesEndProvider kProv;
+    GameState s = HoldBoard(kProv);
+    ManaCost scry; scry.generic = 1; scry.green = 1;
+    bool paid = false;
+    { const SpellSubtypePayScope paying(&scry_def->card); paid = TapForCostDirect(s, scry, /*for_creature=*/false); }
+    ManaCost bond; bond.green = 1;
+    CHECK((paid && TapForCostDirect(s, bond, /*for_creature=*/false)));
 }
 
-TEST_CASE("Maze's End hold-up: OFF (the default), the greedy spends Sea Gate's {G} and Manabond strands")
+TEST_CASE("Maze's End hold-up: OFF (=0), the greedy spends Sea Gate's {G} and Manabond strands")
 {
     LoadRoCards();
     CHECK_FALSE(ScryingThenManabond(/*arm=*/0));
-    CHECK_FALSE(ScryingThenManabond(/*arm=*/-1));
 }
 
 TEST_CASE("Maze's End hold-up: the costs are the hand's spells, deduplicated, cheapest first, Gates Ablaze left out")
@@ -213,7 +224,10 @@ TEST_CASE("Maze's End hold-up: the costs are the hand's spells, deduplicated, ch
     CHECK(h[0].ManaValue() == 1);
     CHECK(h[1].blue == 1);
     CHECK(h[1].generic == 2);
-    CHECK(kProv.PaymentHoldUp(s, 0).empty());   // default OFF
+    CHECK(kProv.PaymentHoldUp(s, 0).size() == 2);   // default ON
+    heurarm::t_arm[heurarm::MAZE_HOLD_UP] = 0;
+    CHECK(kProv.PaymentHoldUp(s, 0).empty());
+    heurarm::Clear();
 }
 
 // ---- THE LIST'S COLOURS (MTG_MAZE_RANK_SPENDABLE, heurarm MAZE_RANK_SPENDABLE; DEFAULT ON with RANK_OBJECT_COLORS) ----

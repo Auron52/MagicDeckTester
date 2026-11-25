@@ -5313,7 +5313,7 @@ public:
     int TapTutorPutEval(const GameState& s, const CardDefinition& source, const std::string& target) const override;
     // F6: mana-source tap order -- Baldur's Gate (live fed mode) and an untapped Maze's End pay LAST (see the definition).
     int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
-    // Maze's End hold-up (MTG_MAZE_HOLD_UP, heurarm MAZE_HOLD_UP; DEFAULT OFF, a payment PREFERENCE awaiting its A/B):
+    // Maze's End hold-up (MTG_MAZE_HOLD_UP, heurarm MAZE_HOLD_UP; DEFAULT ON since 2026-11-25, a payment PREFERENCE):
     // the costs of the hand's spells, cheapest first. See DecisionProvider::PaymentHoldUp.
     std::vector<ManaCost> PaymentHoldUp(const GameState& s, int controller) const override;
     // I4: the Gate tap ORDER (Guild Summit, Heap Gate's cost): pure-mana Gates first, Baldur's Gate next, a Gate

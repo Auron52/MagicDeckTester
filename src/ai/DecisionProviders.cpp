@@ -72607,8 +72607,8 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
     return n * 10 + ((major < 5 && (seen & (1 << major)) != 0) ? 1 : 0);
 }
 
-// THE MAZE'S END HOLD-UP (MTG_MAZE_HOLD_UP, heurarm MAZE_HOLD_UP; DEFAULT OFF -- a payment PREFERENCE awaiting its
-// A/B and the USER's call, the Fluctuator rule's shape). Mana-clean gate claude-queue-20261121a: 1,617 of the 1,849
+// THE MAZE'S END HOLD-UP (MTG_MAZE_HOLD_UP, heurarm MAZE_HOLD_UP; DEFAULT ON -- adopted by the USER 2026-11-25, a
+// payment PREFERENCE in the Fluctuator rule's shape; =0 is the A/B lever). Mana-clean gate claude-queue-20261121a: 1,617 of the 1,849
 // APPLY-DROPs lost a cast the plan did not declare (need-later): a breakpoint continuation (Sylvan Scrying's /
 // Archdruid's Charm's search, Guild Summit's draws, Exploration's extra drop) cast a card that was ALREADY IN HAND,
 // and the payment made before the breakpoint had spent the colour it needed -- 71% of those flags' paying lines run
@@ -72620,7 +72620,7 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
 // these costs while the board pays the bill and the cost together; then one of the trial's sources is held out.
 std::vector<ManaCost> MazesEndProvider::PaymentHoldUp(const GameState& s, int controller) const
 {
-    static const bool s_on = EnvOn("MTG_MAZE_HOLD_UP");
+    static const bool s_on = EnvOn("MTG_MAZE_HOLD_UP", true);
     if (!heurarm::Flag(heurarm::MAZE_HOLD_UP, s_on)) { return {}; }
     if (controller < 0 || controller >= static_cast<int>(s.players.size())) { return {}; }
     std::vector<ManaCost> out;
@@ -72636,10 +72636,15 @@ std::vector<ManaCost> MazesEndProvider::PaymentHoldUp(const GameState& s, int co
             if (o.generic == m.generic && o.white == m.white && o.blue == m.blue && o.black == m.black
                 && o.red == m.red && o.green == m.green) { dup = true; break; }
         }
-        if (!dup) { out.push_back(m); }
+        if (!dup)
+        {
+            // Cheapest first, ties in hand order: an insertion into the sorted list (std::stable_sort's order, without
+            // its scratch buffer -- CPU 2026-11-25, this runs on every outermost payment).
+            out.push_back(m);
+            for (std::size_t k = out.size() - 1; k > 0 && out[k - 1].ManaValue() > out[k].ManaValue(); --k)
+            { std::swap(out[k - 1], out[k]); }
+        }
     }
-    std::stable_sort(out.begin(), out.end(),
-                     [](const ManaCost& a, const ManaCost& b) { return a.ManaValue() < b.ManaValue(); });
     return out;
 }
 
