@@ -118279,19 +118279,40 @@ inline thread_local bool g_esc_beam_static = false;
 // one (USER 2026-10-06: "everything should be findable at unlimited or large budgets"). The value ranking still
 // decides which plans are spent on first. Lossy under a finite budget: an A/B decides adoption.
 inline thread_local bool g_esc_beam_staged = false;
+// CHEAPER STAGING (2026-11-25, logs/beam-staged/report.md): the full-budget staging above spends the escalation's
+// whole fresh share where the capped beam stopped early (x1.24 cpu on Creature Giving). Two per-job knobs re-price
+// the plans beyond W so they reach only a SHARE of the budget; both stay complete at an unlimited budget (no limit
+// => no share is ever reached), so a larger budget admits proportionally more:
+//   g_esc_beam_stage_frac  f in (0,1]: a plan beyond W is admitted while Used() < f x Limit() (1 = the S arm).
+//   g_esc_beam_stage_geo   ORDERED re-pricing: the k-th plan beyond W (k = 1, 2, ...) is admitted while
+//                          Used() < f^k x Limit(), so each later-ranked plan needs a larger unspent share.
+inline thread_local double g_esc_beam_stage_frac = 1.0;
+inline thread_local bool   g_esc_beam_stage_geo  = false;
 struct EscBeamStagedGuard
 {
-    bool prev;
-    explicit EscBeamStagedGuard(bool on) : prev(g_esc_beam_staged) { g_esc_beam_staged = on; }
-    ~EscBeamStagedGuard() { g_esc_beam_staged = prev; }
+    bool prev; double prev_f; bool prev_g;
+    EscBeamStagedGuard(bool on, double f, bool geo)
+        : prev(g_esc_beam_staged), prev_f(g_esc_beam_stage_frac), prev_g(g_esc_beam_stage_geo)
+    { g_esc_beam_staged = on; g_esc_beam_stage_frac = f; g_esc_beam_stage_geo = geo; }
+    ~EscBeamStagedGuard() { g_esc_beam_staged = prev; g_esc_beam_stage_frac = prev_f; g_esc_beam_stage_geo = prev_g; }
 };
-// The beam's cut at a node that has already handed out its W slots. Staged: cut only once the budget is spent.
-// Exhausted() (not the quiet read) on purpose: it bumps budgetbind::t_binds, which is how a node that left plans
-// unexplored for budget reasons is kept out of the complete-node memos (DvsDirty's `complete`).
-static inline bool EscBeamCutsHere(const SearchBudget* budget)
+// The beam's cut at a node that has already handed out its W slots; k = 1 for the first plan beyond W. Staged: cut
+// only once the plan's share of the budget is spent. Exhausted() (not the quiet read) on purpose: it bumps
+// budgetbind::t_binds, which is how a node that left plans unexplored for budget reasons is kept out of the
+// complete-node memos (DvsDirty's `complete`); the share test bumps the same counters.
+static inline bool EscBeamCutsHere(const SearchBudget* budget, int k)
 {
     if (!g_esc_beam_staged) { return true; }
-    return budget != nullptr && budget->Exhausted();
+    if (budget == nullptr) { return false; }
+    const double f = g_esc_beam_stage_frac;
+    if (!g_esc_beam_stage_geo && f >= 1.0) { return budget->Exhausted(); }   // the full-budget S arm, unchanged
+    if (budget->Unlimited()) { return false; }                                // complete at unlimited budget
+    double share = f;
+    if (g_esc_beam_stage_geo) { for (int i = 1; i < k && share > 0.0; ++i) { share *= f; } }
+    ++budgetbind::t_reads;
+    const bool b = budget->Used() >= SearchBudget::SatMulD(share, budget->Limit());
+    if (b) { ++budgetbind::t_binds; }
+    return b;
 }
 struct EscBeamGuard
 {
@@ -121789,7 +121810,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
-            if (beam_here && _beam_i++ >= g_esc_beam_width && EscBeamCutsHere(budget)) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only; staged: only once the budget is spent)
+            if (beam_here && _beam_i++ >= g_esc_beam_width && EscBeamCutsHere(budget, _beam_i - g_esc_beam_width)) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only; staged: only once the budget is spent)
             // THE DIG FOLD -- before the unit charge and the apply; leaves the beam refund, which is
             // all the post-apply dedup's skip leaves here.
             if (m2_dig_fold.Declines(q) >= 0)
@@ -122795,6 +122816,11 @@ namespace gamelc
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_esc_beam_leafdepth)));
         Fold(k, g_esc_beam_static ? 1u : 0u);
         if (g_esc_beam_staged) { Fold(k, 0x57A6EDB3ULL); }   // staged answers differ from capped ones (off => keys unchanged)
+        if (g_esc_beam_staged && (g_esc_beam_stage_geo || g_esc_beam_stage_frac < 1.0))   // the cheaper shares (S keys unchanged)
+        {
+            Fold(k, static_cast<uint64_t>(std::llround(g_esc_beam_stage_frac * 1e6)));
+            Fold(k, g_esc_beam_stage_geo ? 0x6E0ULL : 0x0F1ULL);
+        }
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_simkey_m2coarse)));
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_unbounded_label_search)));
         return k;
@@ -124675,7 +124701,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // base already measured empty, a node prefix or post-apply state a sibling reached) refunds
         // it. Otherwise adding exact-duplicate options (the EMPTY arm, axis variants) narrows the beam
         // and drops real lines -- auras s20505 gi505 lost its T4 kill that way at d3 b0.
-        if (beam_here && _beam_i++ >= g_esc_beam_width && EscBeamCutsHere(budget)) { ++g_fs_trunc_events; break; }   // staged: only once the budget is spent
+        if (beam_here && _beam_i++ >= g_esc_beam_width && EscBeamCutsHere(budget, _beam_i - g_esc_beam_width)) { ++g_fs_trunc_events; break; }   // staged: only once the budget is spent
         // A constant-leaf pass stops at exhaustion (see g_constant_leaf_pass); the truncation is recorded.
         if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; break; }
         // A VOID game (gamework::Abandoned: the per-game unit ceiling or wall cap fired) stops scanning
@@ -129817,7 +129843,16 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         { eff_beam = 0;  eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
         else if (heurarm::Flag(heurarm::ESC_BEAM_STATIC_ALL, s_beam_static_all_env))
         { eff_beam = 20; eff_beam_leafdepth = 1;              eff_beam_static = true;  }
-        else if (depth == 5) { eff_beam = beam_width; eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
+        else if (depth == 5)
+        {
+            // MTG_ESC_BEAM_D5_ALL (A/B arm, default OFF): the W3 ld2 value beam for every driving deck at d5, the
+            // deck's beam_width ignored. Off => the deck's own width (byte-identical).
+            static const bool s_beam_d5_all_env = EnvOn("MTG_ESC_BEAM_D5_ALL");
+            const bool d5_all = heurarm::Flag(heurarm::ESC_BEAM_D5_ALL, s_beam_d5_all_env);
+            eff_beam           = d5_all ? 3 : beam_width;
+            eff_beam_leafdepth = d5_all ? 2 : beam_leafdepth;
+            eff_beam_static    = false;
+        }
         else if (depth == 3) { eff_beam = 20;         eff_beam_leafdepth = 1;              eff_beam_static = true;  }
         else                 { eff_beam = 0;          eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
     }
@@ -129828,6 +129863,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     static const bool s_beam_staged_env = EnvOn("MTG_ESC_BEAM_STAGED");
     const bool eff_beam_staged = !s_esc_beam_env_set && eff_beam > 0
                               && heurarm::Flag(heurarm::ESC_BEAM_STAGED, s_beam_staged_env);
+    // The staging share and its ordered (geometric) form: per-job arm > env > 1.0 / off (= the full-budget S arm).
+    // Read only while staging is on, so off stays byte-identical.
+    static const double s_beam_stage_frac_env = []{ const char* e = std::getenv("MTG_ESC_BEAM_STAGE_FRAC");
+                                                    return (e && *e) ? std::atof(e) : 1.0; }();
+    static const bool   s_beam_stage_geo_env  = EnvOn("MTG_ESC_BEAM_STAGE_GEO");
+    const double eff_stage_frac = (valuearm::t_arm.esc_beam_stage_frac > 0.0) ? valuearm::t_arm.esc_beam_stage_frac
+                                                                              : s_beam_stage_frac_env;
+    const bool   eff_stage_geo  = (valuearm::t_arm.esc_beam_stage_geo >= 0) ? (valuearm::t_arm.esc_beam_stage_geo != 0)
+                                                                            : s_beam_stage_geo_env;
     ProbePlanVals beam_vals_map;
     // Value recording is consumed only by the VALUE-ranked reorder; the static beam ignores it, so arm it only
     // for the value regime (deep). Off/static => null map => no recording overhead => byte-identical.
@@ -130534,7 +130578,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // read + recording armed at the top of the hybrid (before the probe). 0 = unlimited = byte-identical.
         // eff_beam_leafdepth restricts the beam to near-leaf nodes (protects the top plies / committed play).
         EscBeamGuard _beam(line_constant ? 0 : eff_beam, eff_beam_leafdepth, eff_beam_static);   // no ranks under a leafless line
-        EscBeamStagedGuard _beam_staged(eff_beam_staged);
+        EscBeamStagedGuard _beam_staged(eff_beam_staged, std::clamp(eff_stage_frac, 0.0, 1.0), eff_stage_geo);
         int hcommitted = depth;
         SearchBudget  esc_alloc_budget;
         SearchBudget* esc_budget = budget;   // legacy shared REMAINING budget (only when fresh_frac < 0)
