@@ -1162,6 +1162,15 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Calming Verse": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "Destroy all enchantments you don't control. Then if you control an untapped land, destroy all enchantments you control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Canyon Slough": {
     "cmc": 0.0,
     "keywords": [
@@ -2756,6 +2765,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Force of Vigor": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}{G}",
+    "oracle_text": "If it's not your turn, you may exile a green card from your hand rather than pay this spell's mana cost.\nDestroy up to two target artifacts and/or enchantments.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Forerunner of the Coalition": {
     "cmc": 3.0,
