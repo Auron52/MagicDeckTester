@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 3279ee66e  date 2026-11-25
+# Regression ground truth -- commit f9e182ad4  date 2026-11-25
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
@@ -69,7 +69,7 @@ modernrwburn2hg_smoke_d5_s1001=4.9600/7aedd19773c1e959
 creatureburn_smoke_d0_s1001=5.8750/cb6f96ff43e45775
 creatureburn_smoke_d3_s1001=4.5800/338e5203c4e9f06b
 creatureburn_smoke_d5_s1001=4.7400/fccd1c19b4cebe90
-creatureburn2hg_smoke_d5_s1001=5.7600/c8b931eab68cab87
+creatureburn2hg_smoke_d5_s1001=5.7200/edad33099d097e0b
 fungusv3_smoke_d0_s1001=5.2340/afdfa7fdff8118eb
 fungusv3_smoke_d3_s1001=4.4600/7a5f2f005d3240cd
 fungusv3_smoke_d5_s1001=4.5086/2e64f1b6bf8fe686
