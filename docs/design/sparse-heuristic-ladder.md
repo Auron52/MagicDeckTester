@@ -660,3 +660,12 @@ pass 1 152 units vs heur's 147, heur's pass 2 found T6 instead of T7). Fixed in 
 ONE setting below heur on all 8 decks, no per-deck switch: m4_ptc_pab1_pabc (pooled 0.976, 2 earlier / 1 later). The
 later game (Maze 395, T5 -> T6) is being checked at d8 b0 (`R395/`). Confirmation on FRESH seeds: HO3 (20M x 600; heur,
 m4_ptc, m4_ptc_pab1_pabc in ONE batch for a same-run CPU ratio; mtg_k18; `run_ho3.sh`) running.
+
+- On `_pab1` as a general change: *"Let's see how things go. If the results are good then perhaps it could be worth
+  adopting. But yes, you are right that the new mode is intended to do less work for the same depth compared to the
+  heuristic ladder. The reason is that the decks in which the heuristic ladder is winning out are exactly those that
+  punish us for searching further. I would like to avoid that doing so, so that the setting is actually good on those
+  decks."* So in the sparse mode a saving must NOT be spent on extra depth (the gate drift `_pabc` removes); the general
+  (all-modes) `_pab1` question stays open pending results.
+- Maze 395 (the one D18 later game): reproduced at d5 b20 (arm T6, heur T5); at d8 b0 the arm wins T5 with heur's exact
+  digest -- recovers.
