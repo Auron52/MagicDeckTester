@@ -631,3 +631,10 @@ heur on k16 = heur on k11 byte for byte (digests and units). CPU per unit (same-
 **D17 (running): `_pabc`** -- price only the no-win hits the BOUND made usable: taken before pass 1 has an incumbent (the
 leaf's cutoff is still the bound) with a stored bound below the root cut, which an unbounded pass 1 cannot read.
 
+
+#### USER rulings 2026-11-25 (verbatim)
+- On `_ptc` in the default mode 4: *"If it is better overall then sure."* Held-out HO1: m4_ptc 0.9951 vs m4 0.9957 pooled,
+  quality 0/0 both -- so `_ptc` goes into the default mode 4 when the sparse ladder lands.
+- On a per-deck turn-1 lookahead setting: *"I mentioned before that I prefer no deck-specific settings, but I think it is
+  okay if we are running into tough problems here."* So a per-deck on/off is allowed as the fallback, chosen by
+  measurement (value-leaf run), not as the first resort.
