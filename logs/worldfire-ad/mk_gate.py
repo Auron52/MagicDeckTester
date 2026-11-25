@@ -16,6 +16,8 @@ if o.loo:
     for k in L:
         a = {x: True for x in L}; a[k] = False
         arms['no' + k.split('_')[-1].lower()] = a
+    # loose: all on, MTG_LINE_KEEP_RITUAL_TIGHT off (the ritual rung before its exact cheaper form)
+    arms['loose'] = dict({x: True for x in L}, MTG_LINE_KEEP_RITUAL_TIGHT=False)
 src = [j for j in json.load(open(o.gate))['jobs'] if j['name'].startswith('worldfire__')]
 jobs = []
 for j in src:

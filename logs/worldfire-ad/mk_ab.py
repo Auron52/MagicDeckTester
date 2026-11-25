@@ -16,6 +16,10 @@ ap.add_argument('--chunk', type=int, default=25)
 o = ap.parse_args()
 L = ['MTG_LINE_KEEP_CRIT_MULTI', 'MTG_LINE_KEEP_SUSPEND', 'MTG_LINE_KEEP_RITUAL']
 ARMS = {'off': {k: False for k in L}, 'on': {k: True for k in L}}
+# 'loose' (ritual decks only): all three on with MTG_LINE_KEEP_RITUAL_TIGHT off -- the ritual rung before its exact
+# cheaper form (gate counts the float, tight joint), to measure what the gate's float costs in quality.
+LOOSE = dict({k: True for k in L}, MTG_LINE_KEEP_RITUAL_TIGHT=False)
+RITUAL_DECKS = {'cyclone', 'dragonstorm', 'hinata', 'shadowborn', 'worldfire'}
 HG = {"starting_life": 30, "opponent_heads": 2}
 src = open('test/regression_cases.sh').read()
 def amap(name):
@@ -40,7 +44,10 @@ for k in decks:
 jobs = []
 for (tag, k, n, hg) in shapes:
     for off in range(0, n, o.chunk):
-        for arm, fl in ARMS.items():
+        arms = dict(ARMS)
+        if k in RITUAL_DECKS:
+            arms['loose'] = LOOSE
+        for arm, fl in arms.items():
             j = {"name": f"{arm}__{tag}__o{off}", "deck": F[k], "profile": P[k], "games": min(o.chunk, n - off),
                  "seed": o.base + off, "game_index": off, "flags": dict(fl)}
             if hg:

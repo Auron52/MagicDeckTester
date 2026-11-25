@@ -12139,7 +12139,7 @@ static LineKeepCritStats g_lkc_stats;
 // a strand it does not see (two sources that are only together the last of a colour, an over-counted any-colour
 // source) is paid as the greedy pays it today, never worse. Supply per source as the 7a supply read it: an
 // unrestricted land, ready dork or rock; a source of n colours counts its per-tap amount / n (at least 1) to each.
-static bool LineKeepCritGate(const GameState& s, const ManaCost& cost_in, const ManaCost& rest)
+static bool LineKeepCritGate(const GameState& s, const ManaCost& cost_in, const ManaCost& rest, const ManaPool* ritual)
 {
     const int rest_c[5] = { rest.white, rest.blue, rest.black, rest.red, rest.green };
     const int cost_c[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
@@ -12149,6 +12149,15 @@ static bool LineKeepCritGate(const GameState& s, const ManaCost& cost_in, const 
     const int mv = cost_in.ManaValue();
     const ManaPool& fl = s.floating_mana;
     int tot[5] = { fl.white + fl.wild, fl.blue + fl.wild, fl.black + fl.wild, fl.red + fl.wild, fl.green + fl.wild };
+    // MTG_LINE_KEEP_RITUAL_TIGHT: the float of the ritual this payment is for is supply of the REST (it resolves before
+    // the casts after it; it cannot pay its own bill). A strand of c needs the rest's c short after this bill, so the
+    // float only adds to the left side of every test below -- stricter, never a strand of c the judge could keep.
+    if (ritual != nullptr)
+    {
+        const int rw = ritual->wild;
+        tot[0] += ritual->white + rw; tot[1] += ritual->blue + rw; tot[2] += ritual->black + rw;
+        tot[3] += ritual->red + rw;   tot[4] += ritual->green + rw;
+    }
     constexpr int kMaxSrc = 48;
     unsigned src_mask[kMaxSrc];
     int      src_each[kMaxSrc];
@@ -12286,11 +12295,17 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     if (rest.white + rest.blue + rest.black + rest.red + rest.green + rest.colorless == 0) { return none; }
     const int floating = static_cast<int>(state.floating_mana.Total());
     if (cost_in.ManaValue() <= floating) { return none; }   // the float pays it: nothing is tapped
+    // MTG_LINE_KEEP_ROCK / MTG_LINE_KEEP_RITUAL: the rock or ritual this payment is for (read once, before the gate,
+    // which counts a ritual's float as the rest's supply under MTG_LINE_KEEP_RITUAL_TIGHT).
+    const LineKeepRock rock = LineKeepRockFor(state);
+    static const bool s_rtight_env = EnvOn("MTG_LINE_KEEP_RITUAL_TIGHT", true);
+    const bool s_rtight = heurarm::Flag(heurarm::LINE_KEEP_RITUAL_TIGHT, s_rtight_env);
+    const bool ritual_on_board = rock.ritual.Total() > 0;
     // MTG_LINE_KEEP_CRIT: a line only the crit mode binds is tried only past its last-source gate (no scratch board).
     if (keep_all && g_line_keep_bound == kLineKeepCrit)
     {
         if (s_stats) { g_lkc_gate.fetch_add(1, std::memory_order_relaxed); }
-        if (!LineKeepCritGate(state, cost_in, rest)) { return none; }
+        if (!LineKeepCritGate(state, cost_in, rest, s_rtight && ritual_on_board ? &rock.ritual : nullptr)) { return none; }
         if (s_stats) { g_lkc_pass.fetch_add(1, std::memory_order_relaxed); }
     }
     const bool rest_creature = g_line_noncreature_mv == 0
@@ -12301,7 +12316,6 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     // casts after it). The joint bound then also counts its mana -- still a necessary condition (a payment of this bill
     // off the board plus the rest off what is left and the rock pays the two together off board + rock) -- so the
     // amount pre-test is left to LineBillPayable's own, on the board with the rock.
-    const LineKeepRock rock = LineKeepRockFor(state);
     _ph.rock = rock.def != nullptr;
     // The rock cannot pay ITSELF: a repair pays this bill off the board and only the rest off what is left plus the
     // rock. For a rock whose mana is colourless only (Mind Stone {C}, Sol Ring {C}{C}; not a Signet, whose filter makes
@@ -12458,7 +12472,30 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     static const bool s_tcheck = EnvOn("MTG_LKR_TIGHT_CHECK");
     bool tight_refused = false;
     // (A ritual's float, MTG_LINE_KEEP_RITUAL, is mana the rest meets: it counts toward the amount as the float does.)
-    const int ritual_units = static_cast<int>(rock.ritual.Total());
+    int ritual_units = static_cast<int>(rock.ritual.Total());
+    // MTG_LINE_KEEP_RITUAL_TIGHT (DEFAULT ON; =0 restores the loose joint, for the identity check): the joint of a ritual
+    // payment judged on board + float lets the float pay the ritual's OWN bill, so it passed strands no repair keeps
+    // (Worldfire / Dragonstorm probe: strand-nofire 377 -> 13,238). Every repair pays this bill off the board and the rest
+    // off what is left plus the float, whose Y units of colour X meet the rest's {X} pips or its generic. So the board
+    // alone must pay this bill plus the rest net of Y of those -- {X} pips first, then generic (a board unit that met an
+    // extra {X} pip meets the generic it leaves: the rock's tight test, above). A NECESSARY condition of every repair,
+    // tighter than the loose joint: the repairs found, and so play, are unchanged. Only a single-colour (or {C}) float,
+    // and a rest with no hybrid, phyrexian, twobrid or X pip (the float could meet those too).
+    bool ritual_tight = false;
+    if (s_rtight && ritual_on_board && rock.def == nullptr && rock.ritual.wild == 0 && !rest.has_x
+        && rest.hybrid_count == 0 && rest.phyrexian_count == 0 && rest.twobrid_count == 0)
+    {
+        const ManaPool& r = rock.ritual;
+        ManaCost rest_t = rest;
+        int left = 0;
+        auto take = [&](int units, int& pip) { const int c = std::min(units, pip); pip -= c; left += units - c; };
+        take(r.white, rest_t.white); take(r.blue, rest_t.blue); take(r.black, rest_t.black);
+        take(r.red, rest_t.red);     take(r.green, rest_t.green); take(r.colorless, rest_t.colorless);
+        rest_t.generic -= std::min(left, rest_t.generic);
+        joint_t = AddManaCosts(cost_in, rest_t);
+        ritual_tight = true;
+        ritual_units = 0;   // the float is already netted out of joint_t
+    }
     if ((rock.def == nullptr || tight)
         && !PaymentManaCovers(state, joint_creature, joint_t.ManaValue() - floating - ritual_units))
     {
@@ -12529,7 +12566,8 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         if (LineBillPayable(a.Board(), rest, rest_creature, rock)) { return none; }
     }
     _ph.phase = 2;
-    bool joint_ok = tight ? LineBillPayable(state, joint_t, joint_creature) : LineBillPayable(state, joint, joint_creature, rock);
+    bool joint_ok = (tight || ritual_tight) ? LineBillPayable(state, joint_t, joint_creature)
+                                            : LineBillPayable(state, joint, joint_creature, rock);
     if (!joint_ok && tight && s_tcheck)
     {
         tight_refused = true;

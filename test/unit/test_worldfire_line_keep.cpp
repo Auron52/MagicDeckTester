@@ -232,10 +232,15 @@ TEST_CASE("Worldfire line keep: s30000125 T4 -- a ritual's float is on the board
     ArmWfl all(heurarm::LINE_KEEP_ALL, false);
     ArmWfl mu(heurarm::LINE_KEEP_CRIT_MULTI, true);
     REQUIRE(LineKeepBound(line) == kLineKeepCrit);
+    // MTG_LINE_KEEP_RITUAL_TIGHT (the exact cheaper form: the gate counts the float as the rest's supply, the joint asks
+    // the board for the bill plus the rest net of the float) keeps the same repair: the strand is Personal Tutor's {U}.
+    for (const bool tight : { true, false })
     for (const bool on : { true, false })
     {
         CAPTURE(on);
+        CAPTURE(tight);
         ArmWfl ri(heurarm::LINE_KEEP_RITUAL, on);
+        ArmWfl rt(heurarm::LINE_KEEP_RITUAL_TIGHT, tight);
         GameState s = s0;
         LineUnpaidCostScope luc(LineCastCostTotal(line));
         LineReducerCreditScope lrc(0, LineNoncreatureMv(line), LineKeepBound(line));

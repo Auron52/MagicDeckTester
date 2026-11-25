@@ -49,6 +49,20 @@ declared line, and a hold-out keeps it.
   ritual's float (at no splice, the least it adds) is on every board the rest is judged on, as `MTG_LINE_KEEP_ROCK`
   puts a rock there. The amount pre-test counts it.
 
+- `MTG_LINE_KEEP_RITUAL_TIGHT` (DEFAULT ON; `=0` is the loose ritual rung, kept as an A/B arm): the cheaper form of
+  RITUAL, added after a rung-counter probe (6 decks, 112 games, `MTG_LINE_REDUCER_KEEP_STATS=1`) showed RITUAL alone
+  taking the rung's trials 76k -> 300k and its strand-nofire repairs (a strand no hold-out keeps) 377 -> 13,238. Two
+  cuts. (a) The joint test judged board + float, which lets the float pay the ritual's OWN bill. Every repair pays the
+  bill off the board and the rest off what is left plus the float, so the board alone must pay the bill plus the rest
+  net of the float's Y units (its colour's pips first, then generic; only a single-colour float and a rest with no
+  hybrid, phyrexian, twobrid or X pip). That is a necessary condition, so it is exact. (b) The crit gate counts the
+  float as the rest's supply: a strand of colour c needs the rest's c short after the bill, and the float meets the
+  rest. That is right in the gate's own model, but it is not byte-identical to the loose form, because the loose gate
+  passed red payments only because it ignored the float, and the judge sometimes found a strand of another colour
+  there. On the probe the 112 games are digest-identical to the loose form, trials 355k -> 126k, strand-nofire
+  20,365 -> 403, crit repairs 21,622 -> 18,421 (off: 11,766). The A/B carries a `loose` arm on the ritual decks to
+  measure (b).
+
 All three widen only the rung's REACH. The rung still changes a payment only when the greedy's own payment strands
 the rest of the declared line and a hold-out of the greedy's sources keeps it. It is the shared payer, so the
 executor, the rollout and the walks move together, at every budget. It is a payment choice (the standing mana-payment
