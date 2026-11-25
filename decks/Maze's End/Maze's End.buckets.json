@@ -21,8 +21,8 @@
       "why": "USER ruling 2026-11-25 (G/U grouping). Tapped, makes EITHER G or U: a fixed non-G/U colour plus one colour chosen as it enters, so G or U but not both."
     },
     {
-      "cards": ["Heap Gate", "Planar Nexus", "Talon Gates of Madara"],
-      "why": "USER ruling 2026-11-25 ('Then there are untapped lands and some special ones'). Untapped, {T}: {C}, and {1},{T}: any colour. Talon Gates' {4} put-from-hand and phase-out, and Heap Gate's Treasure mode, are minor next to the shared mana shape. Left alone as special cases: Maze's End, Gond Gate, Baldur's Gate (scaled mana), Basilisk Gate (plain {C}), Thran Portal (fastland + chosen basic type), Gateway Plaza (pay {1} or sacrifice), The Black Gate (B, optional 3 life to untap)."
+      "cards": ["Basilisk Gate", "The Black Gate"],
+      "why": "USER ruling 2026-11-25: 'merged Basilisk Gate and The Black Gate as lands that do nothing in this deck except come in untapped and produce colourless' (The Black Gate's {B} is a colour the list never spends, and both abilities need a creature). Kept SEPARATE by the same ruling: Heap Gate, Planar Nexus and Talon Gates of Madara ('those have actual differences ... the ability to be dropped from hand and ability to produce treasures'), and Maze's End, Gond Gate, Baldur's Gate, Thran Portal and Gateway Plaza. 14 land buckets in all."
     }
   ]
 }
