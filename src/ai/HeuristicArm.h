@@ -1133,6 +1133,7 @@ enum Slot : int
     PREPAY_FLOAT_C_PHYS,      // MTG_PREPAY_FLOAT_C_PHYS  the whole-turn prepay (BatchPrepayMainCasts) counts a {C} ALREADY FLOATING at entry as physical {C}, never relaunched as wild (CR 106.1b: colourless cannot pay a coloured pip). Hinata s63003 gi548 d8 b0: a failed tap-ahead left Sol Ring floating {C}{C}, the next prepay booked it wild2 and paid Reality Spasm {U}{U} -> a verified T5 the executor could not cast. A rules-correctness fix. Default ON; =0 -> the old illegal booking (A/B lever only)
     LKR_PLAYOUT_OFF,          // MTG_LKR_PLAYOUT_OFF  CPU CUT of the rock rung (docs/design/rock-in-plan-2026-11-19.md, "THE MENU"): in a horizon playout (TurnSolver::InRolloutPlayout, beyond the search window, the doctrine's permitted greedy policy) the line-keep rung of a line with no reducer credit (the rock rung, MTG_LINE_KEEP_ROCK) does not run, so the playout pays that line with the greedy (as MTG_LINE_KEEP_ROCK=0 does). The search window, the executor and the d0 runner keep the full rung. ADOPTED DEFAULT ON (USER 2026-11-24, "Okay, let's adopt it."; Niv searched CPU -5.1% net -8, Hinata play net 0 at 4,000 pairs, d0 byte-identical); =0 runs the rung in playouts too
     MAZE_SUMMIT_PAY_FIRST,    // MTG_MAZE_SUMMIT_PAY_FIRST  Maze's End (USER 2026-11-22: "We can just pay our mana costs and then tap the rest."): Guild Summit's tap set is a mana-payment consequence of the line -- at resolution a real colour-aware payment of the rest of the applying line (g_line_unpaid_cost, plus Maze's End's {3} reserve) is found with every non-Gate source spent first (LinePayKeepSet), and EVERY Gate it does not use is tapped (MazesEndProvider::EtbTapSubtypePayFirst); the searched menu is {all unneeded, none}, plus "all" while an untapped Maze's End of ours exists (the reserve is speculative: the Summit is a breakpoint). The fixed Gate order is only the tie-break. DEFAULT ON (held-out 2026-11-22: d5 b20 -1, 2HG -1, d0 -17); =0 -> the {rest-of-line, 0, all} mana-value menu
+    EE_USER_PRUNE,            // MTG_EE_USER_PRUNE  Enchanted Evening (USER rulings 15 / 16, 2026-11-25/26; EnchantedEveningProvider): no second Sterling Grove onto the battlefield while one stays (except a plan that sacrifices one for its tutor), and the Grove / Idyllic Tutor targets limited to missing lock pieces (EE, Opalescence, Parallax Wave), one mana Aura while mana is short, then Enchantress's Presence. Default ON (USER-requested prune); =0 -> the unrestricted search (the A/B arm; adoption is the USER's)
     COUNT
 };
 
@@ -2210,6 +2211,7 @@ inline const char* Name(int slot)
         "MTG_PREPAY_FLOAT_C_PHYS",
         "MTG_LKR_PLAYOUT_OFF",
         "MTG_MAZE_SUMMIT_PAY_FIRST",
+        "MTG_EE_USER_PRUNE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

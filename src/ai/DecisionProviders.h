@@ -5224,7 +5224,44 @@ public:
     // opponent creatures."* -- the deck default, so this provider adopts PerformWaveOpalSweep (SpellEffects.h) at the
     // opponent's end step (lock cluster step 4).
     bool WaveOpalSweepRule() const override { return true; }
+
+    // ---- USER rulings 15 / 16 (2026-11-25/26): the GROVE / TUTOR PRUNE, one lever MTG_EE_USER_PRUNE (heurarm
+    // EE_USER_PRUNE, DEFAULT ON, USER-requested; =0 -> the unrestricted search, the A/B arm; adoption is the USER's).
+    // Restrict / order only; the search branches over every option kept. Never consulted in human play or under the
+    // unpruned gate (the human sees every legal name; the tutor menu puts this ranking first). Definitions in
+    // DecisionProviders.cpp ("EnchantedEveningProvider: the USER's Grove / tutor prune").
+    //   (A) PlanListAdmit: no plan puts a SECOND Sterling Grove onto the battlefield while one stays -- a plan that
+    //       casts a Grove is kept only when (our Groves + Groves it casts - Grove sacrifice activations it holds) <= 1.
+    //   (B) TutorCandidates (Grove's sacrifice tutor AND Idyllic Tutor): missing lock pieces (Enchanted Evening,
+    //       Opalescence, Parallax Wave), then ONE mana Aura (Wild Growth / Utopia Sprawl) while mana is short, then
+    //       Enchantress's Presence (only while no lock piece is fetchable or mana is short); nothing else, no copy of
+    //       a piece already in hand or on our battlefield. Empty -> the tutor is not cast / the Grove not activated
+    //       (TutorNeedsCandidate).
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
+    bool TutorNeedsCandidate(const GameState& s, int controller, const CardParams& pp) const override;
+    bool PlanListFilterLive(const GameState& s) const override;
+    void PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans, std::vector<char>& admit) const override;
 };
+
+// The Enchanted Evening tutor prune's census and pick (USER rulings 15 / 16), exposed for the unit tests.
+namespace eeprune
+{
+bool On();   // MTG_EE_USER_PRUNE (heurarm EE_USER_PRUNE), DEFAULT ON; false in human play / under the unpruned gate
+struct Census
+{
+    int total = 0;      // our mana sources' units: each land 1 (an uncracked fetch 1), + each land Aura's extra
+    int white = 0;      // ...of which can be white
+    int forests = 0;    // our lands with the Forest subtype (Utopia Sprawl's host)
+    bool fetch_forest = false;   // an uncracked fetch that can find a Forest (a Sprawl host next)
+    bool have_ee = false, have_opal = false, have_wave = false, have_presence = false;   // hand or our battlefield
+    bool lib_ee = false, lib_opal = false, lib_wave = false, lib_presence = false;
+    bool lib_wild_growth = false, lib_sprawl = false;
+};
+Census CensusOf(const GameState& s, int controller);
+bool LockPieceFetchable(const Census& c);
+bool ManaNeeded(const Census& c);           // B4: < 4 or < 2 white; at exactly 4 only with no lock piece fetchable
+bool PreferSprawl(const Census& c);         // B3: short of white (with a Forest host) or 2+ Forests
+}
 
 class WorldfireProvider : public DeckProvider
 {

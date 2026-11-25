@@ -39117,6 +39117,248 @@ WorldfireProvider::TutorCandidates(const GameState& s, int controller, const Car
 bool WorldfireProvider::TutorNeedsCandidate(const GameState&, int, const CardParams&) const
 { return WorldfireTutorPiecesOn(); }
 
+// ---- EnchantedEveningProvider: the USER's Grove / tutor prune (rulings 15 / 16) ----------------
+// USER ruling 15 (2026-11-26): "My recommendation would be to not put out 2 sterling groves simultaneously or to only
+// play the second one when sacrificing the first. Typically you want to use them to get combo pieces anyway. We should
+// also prune that if possible. Rarely you want a mana enchantments like Wild Growth or Utopia Sprawl or Enchantresses'
+// presence for cards, but generally you want to advance the lock by gathering pieces."
+// USER ruling 16 (2026-11-25): "At most there should only be 5 choices for search (Parallax Wave, Enchanted Evening,
+// Opalescence, Enchantresses' Presence and one of Wild Growth or Utopia Sprawl (depending on our mana needs) and usually
+// much less than that, since we don't need duplicates of any of the pieces (including Enchantresses' Presence I would
+// say) and we don't need the mana option if we are doing fine on that front." -- follow-ups (ledger, verbatim): Sprawl
+// over Wild Growth only "if we need the extra white or perhaps if we have 2 forests"; mana is fine at "2 white and 4 or
+// 5 mana", 4 enough unless "mana is the only thing missing"; Presence is not a lock piece -- "If we have the chance to
+// get a lock piece and are missing nothing else, that is an obvious choice over more draw."
+//
+// A PROVIDER PRUNE (restrict + order, never a pick): the search branches over every name kept, and over every plan
+// kept. ONE lever, MTG_EE_USER_PRUNE (heurarm EE_USER_PRUNE), DEFAULT ON; =0 -> the unrestricted search.
+//
+// (A) THE GROVE-COPY RULE, in this engine's action model. A main-phase plan is a set of casts plus permanent
+// activations; Sterling Grove's sacrifice tutor (PermAbilityMode::SacTutorTop) is in the plan as a LEAD activation
+// (chosen_x 1: before every cast -- "tutor to top, then cast an enchantment so Presence draws it") or a TRAIL one (after
+// the casts). "Only play the second one when sacrificing the first" is therefore: a plan that CASTS a Grove must also
+// hold a sacrifice of one of our Groves, so that at most one Grove is ours once the plan has run --
+//     ours on the battlefield + Groves the plan casts - Grove sacrifices the plan holds <= 1.
+// Both timings are admitted: lead (sacrifice, then cast the second: the Presence draw takes the tutored card) and trail
+// (cast the second, Presence draws blind, then sacrifice the first). The activation itself is only emitted while its
+// {1} is payable and the tutor rule below keeps a target, so a Grove we cannot sacrifice blocks the second copy (the
+// lost Presence draw the USER's follow-up 2 asks us to count). Applied to every plan enumeration (root and breakpoint
+// continuation, main 1 and main 2: ApplyProviderPlanListFilter); the beyond-horizon playout is the permitted greedy and
+// is not restricted. A continuation entered after the second Grove's cast drew a card may still hold two Groves (its
+// own plans only cast what it holds); that board is the step-4 fallback (the sweep with G >= 2).
+//
+// (B) THE TUTOR-TARGET RULE (an enchantment tutor: Sterling Grove's activation and Idyllic Tutor). Lock pieces = EE,
+// Opalescence, Parallax Wave (identified by their params). Kept, in this order:
+//   1. each lock piece not in hand and not on our battlefield, if one is in the library -- Enchanted Evening, then
+//      Opalescence, then Parallax Wave. EE first: it is in BOTH lock routes (EE + Opalescence; Calming Verse + EE) and
+//      the scarcest (3 copies vs 4 Opalescence); Opalescence next (the EE + Opalescence land lock, and the Wave loop's
+//      animator); the Wave last (one copy, a full lock only beside Opalescence). Order only (budget priority).
+//   2. ONE mana Aura, only while mana is needed (ManaNeeded): total < 4 or white < 2 -> needed; exactly 4 with >= 2
+//      white -> needed only when no lock piece is fetchable ("mana is the only thing missing"); >= 5 with >= 2 white ->
+//      not needed. Wild Growth by default; Utopia Sprawl when short of white (it names white as it enters) with a
+//      Forest host (or a fetch that can find one), or with 2+ Forests; whichever is left when only one is.
+//   3. Enchantress's Presence, if none is in hand or ours, and only while no lock piece is fetchable or mana is needed.
+// Never offered: Sterling Grove, Exploration, Oblivion Ring, anything else. Mana is counted as the engine credits it:
+// each of our lands one unit (its produced colours; an uncracked fetch one unit of the basic types it finds), each land
+// Aura on our land its extra unit (Utopia Sprawl its locked colour), tapped or not (the turn's capacity).
+// Empty -> the tutor is not cast (TutorNeedsCandidate) and the Grove activation is not emitted (no target).
+namespace eeprune
+{
+namespace
+{
+bool IsEE(const CardDefinition* d)    { return d != nullptr && d->params.static_all_permanents_enchantments; }
+bool IsOpal(const CardDefinition* d)  { return d != nullptr && d->params.static_animate_other_nonaura_enchantments_mv; }
+bool IsWave(const CardDefinition* d)  { return d != nullptr && d->params.fade_exile_target_creature; }
+bool IsPresence(const CardDefinition* d)
+{
+    if (d == nullptr) { return false; }
+    for (const std::string& t : d->params.draw_on_cast_types) { if (t == "Enchantment") { return true; } }
+    return false;
+}
+bool IsManaAura(const CardDefinition* d)
+{ return d != nullptr && d->params.is_land_aura && d->params.land_aura_extra_mana > 0; }
+bool IsSprawl(const CardDefinition* d) { return IsManaAura(d) && d->params.land_aura_host_subtype == "Forest"; }
+bool IsWildGrowth(const CardDefinition* d) { return IsManaAura(d) && d->params.land_aura_host_subtype.empty(); }
+bool IsGrove(const CardDefinition* d)  { return d != nullptr && d->params.grants_other_enchantments_shroud; }
+bool IsEnchantmentTutor(const CardParams& pp)
+{ return pp.tutor_types.size() == 1 && pp.tutor_types.front() == "Enchantment" && !pp.wish_from_sideboard
+      && !pp.tutor_from_graveyard; }
+bool FetchFinds(const CardDefinition* d, const char* type)
+{
+    if (d == nullptr) { return false; }
+    for (const std::string& t : d->params.fetch_land_types) { if (t == type) { return true; } }
+    return false;
+}
+}   // namespace
+
+bool On()
+{
+    static const bool env = EnvOn("MTG_EE_USER_PRUNE", true);   // DEFAULT ON (USER-requested); =0 the unrestricted search
+    return heurarm::Flag(heurarm::EE_USER_PRUNE, env) && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::Tutor);
+}
+
+Census CensusOf(const GameState& s, int controller)
+{
+    Census c;
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    auto mark_have = [&c](const CardDefinition* d) {
+        c.have_ee       = c.have_ee || IsEE(d);
+        c.have_opal     = c.have_opal || IsOpal(d);
+        c.have_wave     = c.have_wave || IsWave(d);
+        c.have_presence = c.have_presence || IsPresence(d);
+    };
+    for (const Card& h : pl.hand) { mark_have(CardDatabase::Instance().LookupCached(h)); }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        mark_have(d);
+        if (p.card.IsLand())
+        {
+            unsigned bits = 0;
+            for (Color col : d->params.produces)
+            { if (col != Color::Colorless) { bits |= 1u << static_cast<int>(col); } }
+            if (d->params.produces.empty() && !d->params.fetch_land_types.empty())
+            {
+                if (FetchFinds(d, "Plains"))   { bits |= 1u << static_cast<int>(Color::White); }
+                if (FetchFinds(d, "Forest"))   { bits |= 1u << static_cast<int>(Color::Green); c.fetch_forest = true; }
+                if (FetchFinds(d, "Island"))   { bits |= 1u << static_cast<int>(Color::Blue); }
+                if (FetchFinds(d, "Swamp"))    { bits |= 1u << static_cast<int>(Color::Black); }
+                if (FetchFinds(d, "Mountain")) { bits |= 1u << static_cast<int>(Color::Red); }
+            }
+            if (bits != 0 || !d->params.produces.empty())
+            {
+                ++c.total;
+                if (bits & (1u << static_cast<int>(Color::White))) { ++c.white; }
+            }
+            if (LandHasSubtypeNow(s, p, "Forest")) { ++c.forests; }
+            continue;
+        }
+        if (IsManaAura(d) && p.aura_attached_to != 0)
+        {
+            bool on_our_land = false;
+            for (const Permanent& h : s.battlefield)
+            {
+                if (h.card.m_number == p.aura_attached_to)
+                { on_our_land = h.controller_index == controller && h.card.IsLand(); break; }
+            }
+            if (!on_our_land) { continue; }
+            const std::vector<Color>& prod = LandAuraProducesFor(*d, p);
+            bool w = prod.empty();
+            for (Color col : prod) { w = w || col == Color::White; }
+            c.total += d->params.land_aura_extra_mana;
+            if (w) { c.white += d->params.land_aura_extra_mana; }
+        }
+    }
+    for (const Card& lc : pl.library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+        c.lib_ee          = c.lib_ee || IsEE(d);
+        c.lib_opal        = c.lib_opal || IsOpal(d);
+        c.lib_wave        = c.lib_wave || IsWave(d);
+        c.lib_presence    = c.lib_presence || IsPresence(d);
+        c.lib_wild_growth = c.lib_wild_growth || IsWildGrowth(d);
+        c.lib_sprawl      = c.lib_sprawl || IsSprawl(d);
+    }
+    return c;
+}
+
+bool LockPieceFetchable(const Census& c)
+{ return (!c.have_ee && c.lib_ee) || (!c.have_opal && c.lib_opal) || (!c.have_wave && c.lib_wave); }
+
+bool ManaNeeded(const Census& c)
+{
+    if (c.total < 4 || c.white < 2) { return true; }
+    if (c.total == 4) { return !LockPieceFetchable(c); }   // follow-up 3: "if mana is the only thing missing"
+    return false;
+}
+
+bool PreferSprawl(const Census& c)
+{ return (c.white < 2 && (c.forests >= 1 || c.fetch_forest)) || c.forests >= 2; }
+
+}   // namespace eeprune
+
+std::vector<std::string>
+EnchantedEveningProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> all = DeckProvider::TutorCandidates(s, controller, pp);
+    // The ranked pass of human play runs with the unpruned gate suppressed, so the viewer's menu puts this list first.
+    static const bool env = EnvOn("MTG_EE_USER_PRUNE", true);
+    if (all.empty() || !heurarm::Flag(heurarm::EE_USER_PRUNE, env) || DecisionUnpruned(UnprunedGate::Tutor)
+        || !eeprune::IsEnchantmentTutor(pp))
+    { return all; }
+    const eeprune::Census c = eeprune::CensusOf(s, controller);
+    const bool mana = eeprune::ManaNeeded(c);
+    const bool piece = eeprune::LockPieceFetchable(c);
+    const std::string* ee = nullptr; const std::string* opal = nullptr; const std::string* wave = nullptr;
+    const std::string* wg = nullptr; const std::string* sprawl = nullptr; const std::string* pres = nullptr;
+    for (const std::string& nm : all)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if      (eeprune::IsEE(d))         { if (ee == nullptr) { ee = &nm; } }
+        else if (eeprune::IsOpal(d))       { if (opal == nullptr) { opal = &nm; } }
+        else if (eeprune::IsWave(d))       { if (wave == nullptr) { wave = &nm; } }
+        else if (eeprune::IsWildGrowth(d)) { if (wg == nullptr) { wg = &nm; } }
+        else if (eeprune::IsSprawl(d))     { if (sprawl == nullptr) { sprawl = &nm; } }
+        else if (eeprune::IsPresence(d))   { if (pres == nullptr) { pres = &nm; } }
+    }
+    std::vector<std::string> kept;
+    if (ee != nullptr && !c.have_ee)     { kept.push_back(*ee); }
+    if (opal != nullptr && !c.have_opal) { kept.push_back(*opal); }
+    if (wave != nullptr && !c.have_wave) { kept.push_back(*wave); }
+    if (mana)
+    {
+        const std::string* m = eeprune::PreferSprawl(c) ? (sprawl != nullptr ? sprawl : wg)
+                                                        : (wg != nullptr ? wg : sprawl);
+        if (m != nullptr) { kept.push_back(*m); }
+    }
+    if (pres != nullptr && !c.have_presence && (!piece || mana)) { kept.push_back(*pres); }
+    return kept;
+}
+
+bool EnchantedEveningProvider::TutorNeedsCandidate(const GameState&, int, const CardParams& pp) const
+{ return eeprune::On() && eeprune::IsEnchantmentTutor(pp); }
+
+bool EnchantedEveningProvider::PlanListFilterLive(const GameState& s) const
+{
+    if (!eeprune::On()) { return false; }
+    const int me = s.active_player_index;
+    int in_hand = 0;
+    for (const Card& h : s.players[static_cast<std::size_t>(me)].hand)
+    { if (eeprune::IsGrove(CardDatabase::Instance().LookupCached(h))) { ++in_hand; } }
+    if (in_hand == 0) { return false; }
+    if (in_hand >= 2) { return true; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == me && eeprune::IsGrove(CardDatabase::Instance().LookupCached(p.card))) { return true; }
+    }
+    return false;
+}
+
+void EnchantedEveningProvider::PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans,
+                                             std::vector<char>& admit) const
+{
+    const int me = s.active_player_index;
+    int ours = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == me && eeprune::IsGrove(CardDatabase::Instance().LookupCached(p.card))) { ++ours; }
+    }
+    for (std::size_t i = 0; i < plans.size(); ++i)
+    {
+        if (!admit[i] || plans[i].actions == nullptr) { continue; }
+        int cast = 0, sac = 0;
+        for (const Action& a : *plans[i].actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && eeprune::IsGrove(a.def)) { ++cast; }
+            else if (a.kind == Action::Kind::ActivatePermAbility
+                     && a.ability_mode == Action::AbilityMode::SacTutorTop && eeprune::IsGrove(a.def)) { ++sac; }
+        }
+        if (cast > 0 && ours + cast - sac >= 2) { admit[i] = 0; }
+    }
+}
+
 // ---- WorldfireProvider: Rift Bolt is held for the combo -----------------------
 // USER 2026-11-21: "We should prune casting Rift Bolt and suspending it on a non-Worldfire turn most
 // likely." -- "Typically Halberdiers are just suspended early and then we try to go off before they land."
