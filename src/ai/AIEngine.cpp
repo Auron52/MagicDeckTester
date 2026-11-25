@@ -4824,14 +4824,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // must NOT fire (they'd over-prune a shallow search / change an off-production sanity result).
                     const bool vp_here = m_profile.value_play.drives()
                                       && m_lookahead_depth == m_profile.value_play.target_depth;
-                    // The escalation BEAM is DEPTH-ADAPTIVE (FullSearchLineHybrid picks the deep vs shallow
-                    // regime by search depth), so it fires whenever the block drives -- not only on-policy. At the
-                    // deck's own (deep) depth this is the ADOPTED config (byte-identical); at a shallow off-policy
-                    // depth it switches to the wide static leaf beam (measured neutral+faster). (The escalation's
-                    // budget is no longer a block lever: a fresh 0.5 x budget_ms at every depth, USER 2026-10-21.)
-                    // -1 beam_width => no block => beam off => byte-identical; d0/d1/d2 are too shallow for any
-                    // regime so the beam stays off there too.
-                    const bool vp_beam = m_profile.value_play.drives();
+                    // The escalation BEAM: the deck's beam_width AT ITS PLAY DEPTH only (vp_here), so a deck at any
+                    // play depth can carry one (play_setting_stage.py admits it) and no other depth runs it. Off-policy
+                    // a driving block passes 0 (FullSearchLineHybrid's depth-3 static regime reads that); no block
+                    // passes -1 => no beam. (The escalation's budget is no longer a block lever: a fresh 0.5 x
+                    // budget_ms at every depth, USER 2026-10-21.)
+                    const int vp_beam_width = vp_here ? m_profile.value_play.beam_width
+                                            : m_profile.value_play.drives() ? 0 : -1;
                     // Per-decision reset for the fd-oracle's leaf-estimate diagnostic (no-op unless
                     // MTG_FD_ORACLE, which is the only thing that writes it).
                     if (s_fd_oracle) { TurnSolver::ResetLeafEstimate(); }
@@ -4850,10 +4849,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         m_lookahead_depth, m_max_turns, m_search_post_combat,
                         fd_tt, &budget, &searched_depth, escalate_below, m_budget_ms,
                         m_profile.value_no_fallback, m_profile.value_fallback_take_at,
-                        // Per-deck escalation beam; fires whenever the block drives (depth-adaptive inside the
-                        // hybrid). beam_leafdepth protects the top plies (the committed play). -1 => use env.
-                        vp_beam ? m_profile.value_play.beam_width : -1,
-                        vp_beam ? m_profile.value_play.beam_leafdepth : 2,
+                        // Per-deck escalation beam at the deck's play depth only (vp_beam_width). beam_leafdepth
+                        // protects the top plies (the committed play).
+                        vp_beam_width,
+                        vp_here ? m_profile.value_play.beam_leafdepth : 2,
                         // Per-deck single-depth escalation cap; on-policy only (vp_here) -- the predicted-
                         // affordable single pass was tuned/measured at the deck's own depth. 0 => use env / off.
                         vp_here ? m_profile.value_play.escalation_cap : 0,

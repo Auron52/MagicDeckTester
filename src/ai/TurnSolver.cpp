@@ -118040,63 +118040,45 @@ inline thread_local bool g_emul_warm_pass = false;
 // FILL-IN re-search: set while a committed line that ended at an order-free reuse is re-searched
 // with the shortcut off, so the replayed line is complete.
 inline thread_local bool g_orderfree_off = false;
-// ESCALATION BEAM (value-guided frontier pruning): when > 0, FSLineWin / FSLineTail expand only the top
-// `g_esc_beam_width` MoveOrderPlans-ranked plans per node. The escalation re-search then visits only the
-// probe's top value-ranked lines (a W^depth frontier) and pays for exactly that many heuristic rollouts --
-// the escalation's dominant (94%) cost -- instead of the full B&B frontier. The value ordering IS the probe's
-// "first pass" ranking, so this reuses that work; only the incremental rollouts are new. 0 = unlimited =
-// byte-identical (the probe always runs with 0). Set only around the heuristic escalation pass. See the
-// escalation-fallback / verify-the-line work.
+// ESCALATION BEAM (value-guided frontier ordering): when > 0, FSLineWin / FSLineTail expand the top
+// `g_esc_beam_width` value-ranked plans per node first and re-price the rest (EscBeamCutsHere below). The
+// escalation re-search then spends first on the probe's top value-ranked lines and pays for those heuristic
+// rollouts -- the escalation's dominant (94%) cost -- before the rest of the B&B frontier. The value ordering IS the
+// probe's "first pass" ranking, so this reuses that work. 0 = no beam (the probe always runs with 0). Set only
+// around the heuristic escalation pass. See the escalation-fallback / verify-the-line work.
 inline thread_local int g_esc_beam_width = 0;
 // The beam applies ONLY to nodes at remaining depth <= g_esc_beam_leafdepth (near the leaf, where the frontier
 // is widest = most of the rollout cost). Nodes ABOVE it (the top plies -- crucially the ROOT, which is the play
 // we actually commit) keep the full static MoveOrder exploration, so a narrow beam can never drop the
-// heuristic-best PLAY -- it only prunes the deep win-turn-ESTIMATE frontier. INT_MAX (default when
-// MTG_ESC_BEAM_LEAFDEPTH is unset) => beam every node (uniform beam, the original behavior). See the
-// depth-aware-beam work.
+// heuristic-best PLAY -- it only prunes the deep win-turn-ESTIMATE frontier. Set from the deck's value_play
+// beam_leafdepth (default 2). See the depth-aware-beam work.
 inline thread_local int g_esc_beam_leafdepth = 2147483647;
-// STATIC beam (MTG_ESC_BEAM_STATIC): keep the beam's WIDTH cap but DON'T reorder `pre` by the probe's value
-// ranking -- prune by the static MoveOrderPlans order instead. Diagnostic for shallow searches, where the
-// value leaf is a weak ranking proxy so the value reorder can perturb which line commits (measured d3 quality
-// drift even at no-prune width). 0 = value-ranked (default, the adopted behavior).
+// STATIC beam: keep the beam's width but DON'T reorder `pre` by the probe's value ranking -- order by the static
+// MoveOrderPlans order instead. The depth-3 regime (FullSearchLineHybrid: W20 ld1 for every deck whose value_play block
+// drives), where the value leaf is a weak ranking proxy so the value reorder can perturb which line commits (measured
+// d3 quality drift even at no-prune width). false = value-ranked.
 inline thread_local bool g_esc_beam_static = false;
-// STAGED beam (MTG_ESC_BEAM_STAGED heurarm arm, CANDIDATE, default OFF; logs/beam-cpu/report.md). The width cap
-// above becomes a BUDGET-STAGED ADMISSION: at a beamed node the first g_esc_beam_width ranked plans are always
-// expanded, and every later plan only while the node's budget is not Exhausted(). An unlimited budget (or none)
-// never reports Exhausted, so there every plan is admitted -- complete at unlimited budget, a price under a finite
-// one (USER 2026-10-06: "everything should be findable at unlimited or large budgets"). The value ranking still
-// decides which plans are spent on first. Lossy under a finite budget: an A/B decides adoption.
-inline thread_local bool g_esc_beam_staged = false;
-// CHEAPER STAGING (2026-11-25, logs/beam-staged/report.md): the full-budget staging above spends the escalation's
-// whole fresh share where the capped beam stopped early (x1.24 cpu on Creature Giving). Two per-job knobs re-price
-// the plans beyond W so they reach only a SHARE of the budget; both stay complete at an unlimited budget (no limit
-// => no share is ever reached), so a larger budget admits proportionally more:
-//   g_esc_beam_stage_frac  f in (0,1]: a plan beyond W is admitted while Used() < f x Limit() (1 = the S arm).
-//   g_esc_beam_stage_geo   ORDERED re-pricing: the k-th plan beyond W (k = 1, 2, ...) is admitted while
-//                          Used() < f^k x Limit(), so each later-ranked plan needs a larger unspent share.
-inline thread_local double g_esc_beam_stage_frac = 1.0;
-inline thread_local bool   g_esc_beam_stage_geo  = false;
-struct EscBeamStagedGuard
-{
-    bool prev; double prev_f; bool prev_g;
-    EscBeamStagedGuard(bool on, double f, bool geo)
-        : prev(g_esc_beam_staged), prev_f(g_esc_beam_stage_frac), prev_g(g_esc_beam_stage_geo)
-    { g_esc_beam_staged = on; g_esc_beam_stage_frac = f; g_esc_beam_stage_geo = geo; }
-    ~EscBeamStagedGuard() { g_esc_beam_staged = prev; g_esc_beam_stage_frac = prev_f; g_esc_beam_stage_geo = prev_g; }
-};
-// The beam's cut at a node that has already handed out its W slots; k = 1 for the first plan beyond W. Staged: cut
-// only once the plan's share of the budget is spent. Exhausted() (not the quiet read) on purpose: it bumps
-// budgetbind::t_binds, which is how a node that left plans unexplored for budget reasons is kept out of the
-// complete-node memos (DvsDirty's `complete`); the share test bumps the same counters.
+// THE ORDERED RE-PRICE -- the beam's ONLY form (2026-11-25, logs/beam-staged/report.md "SG50", adopted in
+// logs/beam-adopt/). At a beamed node the first g_esc_beam_width value-ranked plans are always expanded; the k-th plan
+// beyond them (k = 1, 2, ...) only while the escalation budget has Used() < 0.5^k x Limit(), so each later-ranked plan
+// needs a larger unspent share. An unlimited budget (or none) never cuts: every plan is admitted -- complete at
+// unlimited budget, a price under a finite one, and a larger budget admits proportionally more (USER 2026-10-06:
+// "everything should be findable at unlimited or large budgets"). It replaced the fixed-width cut (which refused
+// every plan beyond W at any budget) and the flat-share stagings: on Creature Giving / Anti-Lifegain / Dragonstorm it
+// played net -34 (5000 games each) and -16 in 2HG against the fixed cut at x1.00 / x0.98 units, and every slower game
+// recovered at d8 b0. The width and leaf depth are the deck's value_play beam_width / beam_leafdepth; there is no
+// flag that selects another shape.
+// g_esc_beam_live: a beam is configured for the escalation in progress (set with the width, even where a leafless
+// line runs it at width 0) -- what the answer-context fold below keys on.
+inline thread_local bool g_esc_beam_live = false;
+// The beam's cut at a node that has already handed out its W slots; k = 1 for the first plan beyond W. The share
+// test bumps budgetbind::t_reads / t_binds (as Exhausted() does) on purpose: t_binds is how a node that left plans
+// unexplored for budget reasons is kept out of the complete-node memos (DvsDirty's `complete`).
 static inline bool EscBeamCutsHere(const SearchBudget* budget, int k)
 {
-    if (!g_esc_beam_staged) { return true; }
-    if (budget == nullptr) { return false; }
-    const double f = g_esc_beam_stage_frac;
-    if (!g_esc_beam_stage_geo && f >= 1.0) { return budget->Exhausted(); }   // the full-budget S arm, unchanged
-    if (budget->Unlimited()) { return false; }                                // complete at unlimited budget
-    double share = f;
-    if (g_esc_beam_stage_geo) { for (int i = 1; i < k && share > 0.0; ++i) { share *= f; } }
+    if (budget == nullptr || budget->Unlimited()) { return false; }   // complete at unlimited budget
+    double share = 0.5;
+    for (int i = 1; i < k && share > 0.0; ++i) { share *= 0.5; }
     ++budgetbind::t_reads;
     const bool b = budget->Used() >= SearchBudget::SatMulD(share, budget->Limit());
     if (b) { ++budgetbind::t_binds; }
@@ -118104,11 +118086,12 @@ static inline bool EscBeamCutsHere(const SearchBudget* budget, int k)
 }
 struct EscBeamGuard
 {
-    int prev_w, prev_ld; bool prev_st;
-    EscBeamGuard(int w, int ld, bool st)
-        : prev_w(g_esc_beam_width), prev_ld(g_esc_beam_leafdepth), prev_st(g_esc_beam_static)
-    { g_esc_beam_width = w; g_esc_beam_leafdepth = ld; g_esc_beam_static = st; }
-    ~EscBeamGuard() { g_esc_beam_width = prev_w; g_esc_beam_leafdepth = prev_ld; g_esc_beam_static = prev_st; }
+    int prev_w, prev_ld; bool prev_st, prev_live;
+    EscBeamGuard(int w, int ld, bool st, bool live)
+        : prev_w(g_esc_beam_width), prev_ld(g_esc_beam_leafdepth), prev_st(g_esc_beam_static), prev_live(g_esc_beam_live)
+    { g_esc_beam_width = w; g_esc_beam_leafdepth = ld; g_esc_beam_static = st; g_esc_beam_live = live; }
+    ~EscBeamGuard()
+    { g_esc_beam_width = prev_w; g_esc_beam_leafdepth = prev_ld; g_esc_beam_static = prev_st; g_esc_beam_live = prev_live; }
 };
 // VALUE-RANKED BEAM reuse: when the beam is enabled, the probe (value-leaf) pass RECORDS, per interior node,
 // the value-win-turn each MoveOrderPlans-ordered plan produced (indexed by its position in the ordered `pre`).
@@ -121614,7 +121597,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
-            if (beam_here && _beam_i++ >= g_esc_beam_width && EscBeamCutsHere(budget, _beam_i - g_esc_beam_width)) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only; staged: only once the budget is spent)
+            if (beam_here && _beam_i++ >= g_esc_beam_width && EscBeamCutsHere(budget, _beam_i - g_esc_beam_width)) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only; the ordered re-price)
             // THE DIG FOLD -- before the unit charge and the apply; leaves the beam refund, which is
             // all the post-apply dedup's skip leaves here.
             if (m2_dig_fold.Declines(q) >= 0)
@@ -122623,12 +122606,8 @@ namespace gamelc
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_esc_beam_width)));
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_esc_beam_leafdepth)));
         Fold(k, g_esc_beam_static ? 1u : 0u);
-        if (g_esc_beam_staged) { Fold(k, 0x57A6EDB3ULL); }   // staged answers differ from capped ones (off => keys unchanged)
-        if (g_esc_beam_staged && (g_esc_beam_stage_geo || g_esc_beam_stage_frac < 1.0))   // the cheaper shares (S keys unchanged)
-        {
-            Fold(k, static_cast<uint64_t>(std::llround(g_esc_beam_stage_frac * 1e6)));
-            Fold(k, g_esc_beam_stage_geo ? 0x6E0ULL : 0x0F1ULL);
-        }
+        if (g_esc_beam_live)   // the ordered re-price's answers (the same words the SG50 arm folded, so keys are unchanged)
+        { Fold(k, 0x57A6EDB3ULL); Fold(k, 500000ULL); Fold(k, 0x6E0ULL); }
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_simkey_m2coarse)));
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_unbounded_label_search)));
         return k;
@@ -124509,7 +124488,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // base already measured empty, a node prefix or post-apply state a sibling reached) refunds
         // it. Otherwise adding exact-duplicate options (the EMPTY arm, axis variants) narrows the beam
         // and drops real lines -- auras s20505 gi505 lost its T4 kill that way at d3 b0.
-        if (beam_here && _beam_i++ >= g_esc_beam_width && EscBeamCutsHere(budget, _beam_i - g_esc_beam_width)) { ++g_fs_trunc_events; break; }   // staged: only once the budget is spent
+        if (beam_here && _beam_i++ >= g_esc_beam_width && EscBeamCutsHere(budget, _beam_i - g_esc_beam_width)) { ++g_fs_trunc_events; break; }   // the ordered re-price
         // A constant-leaf pass stops at exhaustion (see g_constant_leaf_pass); the truncation is recorded.
         if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; break; }
         // A VOID game (gamework::Abandoned: the per-game unit ceiling or wall cap fired) stops scanning
@@ -129594,95 +129573,25 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     {
         g_probe_recording = true;
     }
-    // VALUE-RANKED BEAM (MTG_ESC_BEAM=W): capture the probe's per-node value ranking so the escalation reorders
-    // its beam by the lines the value pass rated best (see g_probe_plan_vals). Off (W=0) => map stays null =>
-    // recording is a no-op => byte-identical. The map lives for this whole decision (probe + escalation).
-    static const bool s_esc_beam_env_set = EnvSet("MTG_ESC_BEAM");
-    static const int s_esc_beam = []{ const char* e = std::getenv("MTG_ESC_BEAM");
-                                      return (e && *e) ? std::atoi(e) : 0; }();
-    // MTG_ESC_BEAM_LEAFDEPTH=D: apply the beam only to nodes within D plies of the leaf (the top plies keep full
-    // exploration so the committed PLAY is never beamed out). Unset => INT_MAX => uniform beam (original).
-    static const int s_esc_beam_leafdepth = []{ const char* e = std::getenv("MTG_ESC_BEAM_LEAFDEPTH");
-                                                return (e && *e) ? std::atoi(e) : 2147483647; }();
-    static const bool s_esc_beam_static = EnvOn("MTG_ESC_BEAM_STATIC");  // prune by static order
-    // DEPTH-ADAPTIVE BEAM (per-deck path). Precedence: an EXPLICITLY-SET
-    // MTG_ESC_BEAM env wins (keeps env A/B working + its literal uniform-beam semantics -- a research tool, no
-    // depth adaptation). Else the per-deck value_play beam (beam_width >= 0 whenever an enabled block drives,
-    // passed at ANY depth; beam_width < 0 => no block => off => byte-identical).
-    //
-    // The value_play block configures the DEEP (production) beam; at a shallower search depth the value leaf is a
-    // weaker ranking proxy, so a NARROW value-ranked beam mis-prunes the winning line (measured d3 quality loss).
-    // Measured answer (escalation-beam-verify.md, width ladder): a WIDE STATIC leaf beam is quality-neutral at d3
-    // on all 6 decks and faster. So auto-select the regime by SEARCH DEPTH:
-    //   deep    (depth >= 5): value-ranked, the deck's own width/leafdepth == the ADOPTED d5 config -> BYTE-
-    //                         IDENTICAL (antilife/hinata W3 ld2; light decks beam_width 0 = off; burn at d5 off).
-    //   shallow (depth == 3): STATIC, width 20, leafdepth 1 (MEASURED neutral+faster; overrides the deck config).
-    //   d1/d2/d4 + all else : beam OFF -> BYTE-IDENTICAL to pre-adoption. d3 is the ONLY shallow depth turned on
-    //                         (the sole validated + suite-covered off-policy depth). d4 is a deliberate hole:
-    //                         plausibly neutral (same W20/ld1 mechanism) but UNMEASURED, so it stays off until a
-    //                         d4 sweep confirms it -- see escalation-beam-verify.md "d4 widening (deferred)".
-    // (The escalation-budget renewal / fresh_frac stays on-policy-only in AIEngine, so a shallow beam runs on the
-    // legacy budget as measured.)
-    int  eff_beam;
-    int  eff_beam_leafdepth;
-    bool eff_beam_static;
-    if (s_esc_beam_env_set)
-    {
-        eff_beam           = s_esc_beam;
-        eff_beam_leafdepth = s_esc_beam_leafdepth;
-        eff_beam_static    = s_esc_beam_static;
-    }
-    else if (beam_width >= 0)   // an enabled value_play block drives; enable ONLY at VALIDATED depths (d3, d5)
-    {
-        // The beam fires only where it has been measured + validated: d5 (deep, the heavy decks' production
-        // target -- value W3 ld2, byte-identical adoption) and d3 (shallow, static W20 ld1). EVERY other depth
-        // (d1/d2/d4 and d6+) is UNTESTED -> beam OFF -> byte-identical. d6+ used to fire via `depth >= 5`; it's
-        // gated off now so off-policy deep runs don't hit an unvalidated beam path. Widen only after measuring.
-        //
-        // DEPTH-INDEPENDENT A/B ARMS (2026-11-24; USER: "It does sound weird that we act differently at depth 5"):
-        // the d5 value beam made Hinata d5 worse than d4 (docs/design/hinata-d4-vs-d5-2026-11-21.md), so two
-        // single global rules replace the depth == 5 / depth == 3 switch, per job (heurarm) so one batch runs
-        // every arm. Both ignore the deck's beam_width / beam_leafdepth. Default OFF => byte-identical.
-        //   MTG_ESC_BEAM_NONE       : no beam at any depth (the code path deleted).
-        //   MTG_ESC_BEAM_STATIC_ALL : the d3 static W20 ld1 regime at every depth.
-        static const bool s_beam_none_env       = EnvOn("MTG_ESC_BEAM_NONE");
-        static const bool s_beam_static_all_env = EnvOn("MTG_ESC_BEAM_STATIC_ALL");
-        if (heurarm::Flag(heurarm::ESC_BEAM_NONE, s_beam_none_env))
-        { eff_beam = 0;  eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
-        else if (heurarm::Flag(heurarm::ESC_BEAM_STATIC_ALL, s_beam_static_all_env))
-        { eff_beam = 20; eff_beam_leafdepth = 1;              eff_beam_static = true;  }
-        else if (depth == 5)
-        {
-            // MTG_ESC_BEAM_D5_ALL (A/B arm, default OFF): the W3 ld2 value beam for every driving deck at d5, the
-            // deck's beam_width ignored. Off => the deck's own width (byte-identical).
-            static const bool s_beam_d5_all_env = EnvOn("MTG_ESC_BEAM_D5_ALL");
-            const bool d5_all = heurarm::Flag(heurarm::ESC_BEAM_D5_ALL, s_beam_d5_all_env);
-            eff_beam           = d5_all ? 3 : beam_width;
-            eff_beam_leafdepth = d5_all ? 2 : beam_leafdepth;
-            eff_beam_static    = false;
-        }
-        else if (depth == 3) { eff_beam = 20;         eff_beam_leafdepth = 1;              eff_beam_static = true;  }
-        else                 { eff_beam = 0;          eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
-    }
-    else { eff_beam = 0; eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
-    // MTG_ESC_BEAM_STAGED (heurarm CANDIDATE, default OFF): whichever beam regime is live above becomes a budget-staged
-    // admission (see g_esc_beam_staged). Not under the MTG_ESC_BEAM research override, and moot when no beam is live
-    // (MTG_ESC_BEAM_NONE included). Off => byte-identical.
-    static const bool s_beam_staged_env = EnvOn("MTG_ESC_BEAM_STAGED");
-    const bool eff_beam_staged = !s_esc_beam_env_set && eff_beam > 0
-                              && heurarm::Flag(heurarm::ESC_BEAM_STAGED, s_beam_staged_env);
-    // The staging share and its ordered (geometric) form: per-job arm > env > 1.0 / off (= the full-budget S arm).
-    // Read only while staging is on, so off stays byte-identical.
-    static const double s_beam_stage_frac_env = []{ const char* e = std::getenv("MTG_ESC_BEAM_STAGE_FRAC");
-                                                    return (e && *e) ? std::atof(e) : 1.0; }();
-    static const bool   s_beam_stage_geo_env  = EnvOn("MTG_ESC_BEAM_STAGE_GEO");
-    const double eff_stage_frac = (valuearm::t_arm.esc_beam_stage_frac > 0.0) ? valuearm::t_arm.esc_beam_stage_frac
-                                                                              : s_beam_stage_frac_env;
-    const bool   eff_stage_geo  = (valuearm::t_arm.esc_beam_stage_geo >= 0) ? (valuearm::t_arm.esc_beam_stage_geo != 0)
-                                                                            : s_beam_stage_geo_env;
+    // THE ESCALATION BEAM (the ordered re-price, EscBeamCutsHere), two regimes:
+    //   * the deck's value_play beam_width / beam_leafdepth, value-ranked. AIEngine passes a width > 0 only when this
+    //     search IS the block's own -- depth == target_depth, the deck's PLAY depth -- so a deck at any play depth can
+    //     carry a beam and no other depth runs it (USER 2026-11-25: "we need a way to admit decks in the value-leaf
+    //     pipeline"; scripts/play_setting_stage.py admits or removes the width). This replaced a depth == 5 switch.
+    //   * depth 3, for every deck whose value_play block drives (beam_width >= 0) and no width applies: STATIC,
+    //     width 20, leafdepth 1 (measured neutral and faster, escalation-beam-verify.md). It plays every pinned d3 row
+    //     at the same win turns as no beam, but not byte-identically (logs/beam-adopt/report.md: 21 of 1,200 d3 b10
+    //     games take a different line to the same turn), so it stays pending that call.
+    // beam_width < 0 => no block => no beam. The value regime has the probe RECORD its per-node value ranking so the
+    // escalation reorders its beam by the lines the value pass rated best (see g_probe_plan_vals); the static regime
+    // ignores it, so no beam / static => the map stays null => recording is a no-op. The map lives for this whole
+    // decision (probe + escalation).
+    int  eff_beam           = 0;
+    int  eff_beam_leafdepth = beam_leafdepth;
+    bool eff_beam_static    = false;
+    if (beam_width > 0)                        { eff_beam = beam_width; }
+    else if (beam_width == 0 && depth == 3)    { eff_beam = 20; eff_beam_leafdepth = 1; eff_beam_static = true; }
     ProbePlanVals beam_vals_map;
-    // Value recording is consumed only by the VALUE-ranked reorder; the static beam ignores it, so arm it only
-    // for the value regime (deep). Off/static => null map => no recording overhead => byte-identical.
     ProbeValsGuard _pvg((eff_beam > 0 && !eff_beam_static) ? &beam_vals_map : nullptr);
     if (eff_beam > 0 && !eff_beam_static) { g_probe_val_recording = true; }
     int committed = depth;
@@ -130379,14 +130288,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         static const int    s_esc_single_off = []{ const char* e = std::getenv("MTG_ESC_SINGLE_OFFSET");
                                                    return (e && *e) ? std::atoi(e) : 0; }();
         ForceHeuristicLeafGuard _fh(true);
-        // VALUE-GUIDED BEAM (MTG_ESC_BEAM=W): restrict the heuristic escalation to the probe's top-W
-        // value-ranked lines per node, so it rolls out only ~W^depth frontier states instead of the full
-        // B&B frontier. `pre` is reordered by the probe's recorded value ranks (g_probe_plan_vals) before the
-        // cap, so the kept W lines are the value pass's best -- only their rollouts are new work. s_esc_beam was
-        // read + recording armed at the top of the hybrid (before the probe). 0 = unlimited = byte-identical.
-        // eff_beam_leafdepth restricts the beam to near-leaf nodes (protects the top plies / committed play).
-        EscBeamGuard _beam(line_constant ? 0 : eff_beam, eff_beam_leafdepth, eff_beam_static);   // no ranks under a leafless line
-        EscBeamStagedGuard _beam_staged(eff_beam_staged, std::clamp(eff_stage_frac, 0.0, 1.0), eff_stage_geo);
+        // VALUE-GUIDED BEAM: the heuristic escalation expands the probe's top-W value-ranked lines per node first
+        // and re-prices the rest (EscBeamCutsHere), so a finite budget spends on the value pass's best lines first.
+        // `pre` is reordered by the probe's recorded value ranks (g_probe_plan_vals) before the cut; recording was
+        // armed at the top of the hybrid (before the probe). 0 = no beam. eff_beam_leafdepth restricts the beam to
+        // near-leaf nodes (protects the top plies / committed play).
+        EscBeamGuard _beam(line_constant ? 0 : eff_beam, eff_beam_leafdepth, eff_beam_static, eff_beam > 0);   // no ranks under a leafless line
         int hcommitted = depth;
         SearchBudget  esc_alloc_budget;
         SearchBudget* esc_budget = budget;   // legacy shared REMAINING budget (only when fresh_frac < 0)
