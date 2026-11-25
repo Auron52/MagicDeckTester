@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# ab_report.py <outdir> [--list-slower]: the paired play A/B of mk_ab.py (arms off / on). Reads <outdir>/wins.err
+# ab_report.py <outdir> [--arms off,on] [--list-slower]: the paired play A/B of mk_ab.py (arms off / on). Reads <outdir>/wins.err
 # ([win] job=<arm>__<shape>__o<off> gi=<i> wt=<t>) and <outdir>/batch.out (per-job ms / units / cpu). Unwon scores 9
 # (paired_wins.py's convention). Per shape: n paired games, net = sum(on - off) in turns (+ = slower), slower / faster
 # game counts, paired t, and the on/off ratios of units and cpu.
@@ -7,6 +7,10 @@ import re, sys, math
 from collections import defaultdict
 out = sys.argv[1]
 listing = '--list-slower' in sys.argv
+A, B = 'off', 'on'          # --arms a,b: compare arm b against arm a (e.g. --arms loose,on)
+for i, x in enumerate(sys.argv):
+    if x == '--arms':
+        A, B = sys.argv[i + 1].split(',')
 W = defaultdict(dict)
 for line in open(out + '/wins.err', errors='ignore'):
     m = re.match(r'^\[win\] job=(\w+?)__(\w+?)__o\d+ gi=(\d+) wt=(-?\d+)', line)
@@ -24,7 +28,7 @@ cu = [0, 0, 0, 0]
 print('%-22s %6s %6s %5s %5s %7s %8s %8s' % ('shape', 'n', 'net', 'slow', 'fast', 't', 'units', 'cpu'))
 slower = []
 for s in shapes:
-    a, b = W[('off', s)], W[('on', s)]
+    a, b = W[(A, s)], W[(B, s)]
     ks = sorted(set(a) & set(b))
     d = [b[k] - a[k] for k in ks]
     n = len(d)
@@ -36,7 +40,7 @@ for s in shapes:
     t = mu / math.sqrt(var / n) if var > 0 else 0.0
     sl = sum(1 for x in d if x > 0)
     fa = sum(1 for x in d if x < 0)
-    co, cn = C[('off', s)], C[('on', s)]
+    co, cn = C[(A, s)], C[(B, s)]
     ur = cn[1] / co[1] - 1 if co[1] else 0
     cr = cn[2] / co[2] - 1 if co[2] else 0
     tot[0] += n; tot[1] += net; tot[2] += sl; tot[3] += fa
