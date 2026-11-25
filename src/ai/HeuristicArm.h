@@ -1135,6 +1135,7 @@ enum Slot : int
     UO_BUDGET_CUT,            // MTG_UO_BUDGET_CUT  with UO_BUDGET_PRICE on, the ENUMERATION site's search also STOPS (no other order admitted) once the decision budget is Exhausted() or Overrun() -- the equip route's per-link cut test, read at each charge. The apply site is charged, never cut. DEFAULT ON (inert while the price is off); =0 -> charge only (the reflection fans' shape)
     ESC_BEAM_NONE,            // MTG_ESC_BEAM_NONE  A/B arm (2026-11-24, the depth-5-only beam): NO escalation beam at ANY depth -- the deck's value_play beam_width/beam_leafdepth and the depth-3 static W20 regime are both ignored (the MTG_ESC_BEAM env research override still wins). Default OFF; =1 -> beam off everywhere
     ESC_BEAM_STATIC_ALL,      // MTG_ESC_BEAM_STATIC_ALL  A/B arm (2026-11-24): the depth-3 STATIC W20 ld1 beam at EVERY search depth for every deck whose value_play block drives, the deck's beam_width ignored (one depth-independent rule). MTG_ESC_BEAM_NONE wins when both are on. Default OFF
+    ESC_BEAM_STAGED,          // MTG_ESC_BEAM_STAGED  CANDIDATE (2026-11-25, logs/beam-cpu/report.md): the escalation beam as a BUDGET-STAGED ADMISSION instead of a fixed width -- at a beamed node the first W ranked plans are always expanded and every later plan only while the escalation budget is not Exhausted(), so an unlimited budget admits every plan (complete). Applies to whichever beam regime is live (value d5 / static d3 / STATIC_ALL); MTG_ESC_BEAM_NONE wins. Lossy under a finite budget (A/B before adoption). Default OFF
     COUNT
 };
 
@@ -2214,6 +2215,7 @@ inline const char* Name(int slot)
         "MTG_UO_BUDGET_CUT",
         "MTG_ESC_BEAM_NONE",
         "MTG_ESC_BEAM_STATIC_ALL",
+        "MTG_ESC_BEAM_STAGED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

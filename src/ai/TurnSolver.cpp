@@ -118272,6 +118272,27 @@ inline thread_local int g_esc_beam_leafdepth = 2147483647;
 // value leaf is a weak ranking proxy so the value reorder can perturb which line commits (measured d3 quality
 // drift even at no-prune width). 0 = value-ranked (default, the adopted behavior).
 inline thread_local bool g_esc_beam_static = false;
+// STAGED beam (MTG_ESC_BEAM_STAGED heurarm arm, CANDIDATE, default OFF; logs/beam-cpu/report.md). The width cap
+// above becomes a BUDGET-STAGED ADMISSION: at a beamed node the first g_esc_beam_width ranked plans are always
+// expanded, and every later plan only while the node's budget is not Exhausted(). An unlimited budget (or none)
+// never reports Exhausted, so there every plan is admitted -- complete at unlimited budget, a price under a finite
+// one (USER 2026-10-06: "everything should be findable at unlimited or large budgets"). The value ranking still
+// decides which plans are spent on first. Lossy under a finite budget: an A/B decides adoption.
+inline thread_local bool g_esc_beam_staged = false;
+struct EscBeamStagedGuard
+{
+    bool prev;
+    explicit EscBeamStagedGuard(bool on) : prev(g_esc_beam_staged) { g_esc_beam_staged = on; }
+    ~EscBeamStagedGuard() { g_esc_beam_staged = prev; }
+};
+// The beam's cut at a node that has already handed out its W slots. Staged: cut only once the budget is spent.
+// Exhausted() (not the quiet read) on purpose: it bumps budgetbind::t_binds, which is how a node that left plans
+// unexplored for budget reasons is kept out of the complete-node memos (DvsDirty's `complete`).
+static inline bool EscBeamCutsHere(const SearchBudget* budget)
+{
+    if (!g_esc_beam_staged) { return true; }
+    return budget != nullptr && budget->Exhausted();
+}
 struct EscBeamGuard
 {
     int prev_w, prev_ld; bool prev_st;
@@ -121768,7 +121789,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
-            if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only)
+            if (beam_here && _beam_i++ >= g_esc_beam_width && EscBeamCutsHere(budget)) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only; staged: only once the budget is spent)
             // THE DIG FOLD -- before the unit charge and the apply; leaves the beam refund, which is
             // all the post-apply dedup's skip leaves here.
             if (m2_dig_fold.Declines(q) >= 0)
@@ -122773,6 +122794,7 @@ namespace gamelc
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_esc_beam_width)));
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_esc_beam_leafdepth)));
         Fold(k, g_esc_beam_static ? 1u : 0u);
+        if (g_esc_beam_staged) { Fold(k, 0x57A6EDB3ULL); }   // staged answers differ from capped ones (off => keys unchanged)
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_simkey_m2coarse)));
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_unbounded_label_search)));
         return k;
@@ -124653,7 +124675,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // base already measured empty, a node prefix or post-apply state a sibling reached) refunds
         // it. Otherwise adding exact-duplicate options (the EMPTY arm, axis variants) narrows the beam
         // and drops real lines -- auras s20505 gi505 lost its T4 kill that way at d3 b0.
-        if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; break; }
+        if (beam_here && _beam_i++ >= g_esc_beam_width && EscBeamCutsHere(budget)) { ++g_fs_trunc_events; break; }   // staged: only once the budget is spent
         // A constant-leaf pass stops at exhaustion (see g_constant_leaf_pass); the truncation is recorded.
         if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; break; }
         // A VOID game (gamework::Abandoned: the per-game unit ceiling or wall cap fired) stops scanning
@@ -129800,6 +129822,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         else                 { eff_beam = 0;          eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
     }
     else { eff_beam = 0; eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
+    // MTG_ESC_BEAM_STAGED (heurarm CANDIDATE, default OFF): whichever beam regime is live above becomes a budget-staged
+    // admission (see g_esc_beam_staged). Not under the MTG_ESC_BEAM research override, and moot when no beam is live
+    // (MTG_ESC_BEAM_NONE included). Off => byte-identical.
+    static const bool s_beam_staged_env = EnvOn("MTG_ESC_BEAM_STAGED");
+    const bool eff_beam_staged = !s_esc_beam_env_set && eff_beam > 0
+                              && heurarm::Flag(heurarm::ESC_BEAM_STAGED, s_beam_staged_env);
     ProbePlanVals beam_vals_map;
     // Value recording is consumed only by the VALUE-ranked reorder; the static beam ignores it, so arm it only
     // for the value regime (deep). Off/static => null map => no recording overhead => byte-identical.
@@ -130506,6 +130534,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // read + recording armed at the top of the hybrid (before the probe). 0 = unlimited = byte-identical.
         // eff_beam_leafdepth restricts the beam to near-leaf nodes (protects the top plies / committed play).
         EscBeamGuard _beam(line_constant ? 0 : eff_beam, eff_beam_leafdepth, eff_beam_static);   // no ranks under a leafless line
+        EscBeamStagedGuard _beam_staged(eff_beam_staged);
         int hcommitted = depth;
         SearchBudget  esc_alloc_budget;
         SearchBudget* esc_budget = budget;   // legacy shared REMAINING budget (only when fresh_frac < 0)
