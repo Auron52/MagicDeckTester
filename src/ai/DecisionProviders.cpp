@@ -28071,6 +28071,7 @@ namespace
     const PreventDamageProvider  g_prevent_damage;
     const MazesEndProvider       g_mazes_end;
     const WorldfireProvider      g_worldfire;
+    const EnchantedEveningProvider g_enchanted_evening;
 }
 
 // Our own damage is useful whenever a gain engine is on the board (see the class comment). Rules
@@ -30932,6 +30933,13 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // fetchlands, Seething Song / Irencrag Feat (red storm), the tutors and cantrips (blue staples).
     // Returns FIRST: the fetchlands and tutors set `anti` alone.
     bool worldfire = false;
+    // ENCHANTED EVENING (onboarding 2026-11-25): OR of params no other card carries -- Sterling Grove's
+    // enchantment shroud grant, Enchantress's Presence's cast-TYPE draw (draw_on_cast_types; Sram's
+    // subtype form is a different param). The lock cluster's params join this OR when they land, so a
+    // list that cuts one card still routes. EXCLUDED, with reasons: Oblivion Ring (a white staple),
+    // Utopia Sprawl / Wild Growth (AccomplishedAlchemist / Auras), the fetchlands, Idyllic Tutor
+    // (Anti-Lifegain), Exploration (Maze's End). Returns FIRST: the fetchlands set `anti` alone.
+    bool enchanted_evening = false;
     // SPIRITS (W/U(/b) Spirit tribal on Aether Vial; onboarding 2026-11-13). MUST return ABOVE `anti`
     // (Flooded Strand's fetch_land_types), `goblin` (a Spirit dies-watcher such as Millicent's) and
     // `vial && slivers` (Millicent's affinity_for_subtype) -- the archetype-neutral misroute class
@@ -30979,6 +30987,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || !p.damage_all_creatures_x_per_subtype.empty()) { mazes_end = true; }
         if (p.exile_all_permanents_hands_graveyards || p.each_player_life_becomes >= 0
             || (def->card.IsCreature() && p.suspend_time_counters > 0)) { worldfire = true; }
+        if (p.grants_other_enchantments_shroud || !p.draw_on_cast_types.empty()) { enchanted_evening = true; }
         if (p.spell_exile_opponent_until_mv > 0 || p.landfall_mill_opponent > 0
             || p.landfall_mill_target_player || p.cycling_mill_opponent > 0
             || p.spell_mill_opponent > 0)
@@ -31604,6 +31613,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // set alone (see the flag). Its signature is carried by no other deck, so the position is free.
     // Maze's End: FIRST -- its signature is carried by no other deck, so the position is free.
     // Worldfire: FIRST -- its signature is carried by no other deck, so the position is free.
+    // Enchanted Evening: FIRST -- its signature is carried by no other deck, so the position is free.
+    if (enchanted_evening) { return g_enchanted_evening; }
     if (worldfire)   { return g_worldfire; }
     if (mazes_end)   { return g_mazes_end; }
     // Stuffy Doll: above everything (see the flag); its signature is carried by no other deck.

@@ -1926,6 +1926,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool land_etb_target = false;
         // Abiding Grace's end-step mode/return (GameState::deck_has_endstep_reanimate).
         bool endstep_reanimate = false;
+        // Sterling Grove's shroud grant (GameState::deck_has_enchantment_shroud): the param the walk tests.
+        bool ench_shroud = false;
         // Tectonic Giant's modal attack trigger: the Tectonic axis's cast route (GameState::deck_has_attack_modal).
         bool attack_modal = false;
         // Goblin Lackey's combat-damage put: the Lackey axis's cast route (GameState::deck_has_combat_put).
@@ -2038,6 +2040,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.etb_target_creature_pump_power > 0 || d->params.etb_target_creature_pump_toughness > 0)
                 { land_etb_target = true; }
                 if (d->params.endstep_modal_reanimate_mv >= 0) { endstep_reanimate = true; }
+                if (d->params.grants_other_enchantments_shroud) { ench_shroud = true; }
                 if (d->params.attack_trigger_modal)            { attack_modal = true; }
                 if (!d->params.combat_damage_puts_subtype_from_hand.empty()) { combat_put = true; }
                 if (d->params.upkeep_gy_reanimate)             { upkeep_reanimate = true; }
@@ -2156,6 +2159,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no end-step reanimator can exist, so the end-step
         // Grace walk (both worlds) and the plan axis's consumer scan are dead code for that deck.
         state.deck_has_endstep_reanimate   = garth || endstep_reanimate;
+        // Same reasoning, no lever: a clear bit proves no Sterling Grove can exist, so the shroud grant's
+        // board walk (EnchantmentShroudFromGrant) finds nothing for that deck.
+        state.deck_has_enchantment_shroud  = garth || ench_shroud;
         // Same reasoning, no lever: a clear bit proves no modal attack trigger can exist, so the Tectonic
         // axis's cast-route scan is dead code for that deck.
         state.deck_has_attack_modal        = garth || attack_modal;

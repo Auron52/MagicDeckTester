@@ -858,6 +858,17 @@ void CardDatabase::RebuildInternedIndex()
         const CardDefinition* d = LookupInterned(kv.second.card.m_name);
         kv.second.card.m_def = d ? d : NotInDb();
     }
+    // Sterling Grove's derived activated-tutor spec (CardDefinition::activated_tutor).
+    for (auto& kv : m_cards)
+    {
+        CardDefinition& def = kv.second;
+        def.activated_tutor.reset();
+        if (!def.params.sac_tutor_top_cost.has_value()) { continue; }
+        auto tp = std::make_shared<CardParams>();
+        tp->tutor_to_top = true;
+        tp->tutor_types  = def.params.sac_tutor_top_types;
+        def.activated_tutor = std::move(tp);
+    }
 
     // Largest hand_size_anthem_max over every loaded definition; -1 when no card has one.
     // ComputeLordBonus's conditional-anthem scan can only ever fire for a controller whose hand
@@ -2188,6 +2199,15 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.draw_on_aura_cast         = params.value("draw_on_aura_cast", false);
     p.draw_on_cast_subtypes     = params.value("draw_on_cast_subtypes",
                                                std::vector<std::string>{});
+    p.draw_on_cast_types        = params.value("draw_on_cast_types",
+                                               std::vector<std::string>{});
+    p.etb_exile_nonland_until_leaves   = params.value("etb_exile_nonland_until_leaves", false);
+    p.grants_other_enchantments_shroud = params.value("grants_other_enchantments_shroud", false);
+    if (params.contains("sac_tutor_top_cost"))
+        p.sac_tutor_top_cost = ManaCostFromString(params["sac_tutor_top_cost"].get<std::string>());
+    p.sac_tutor_top_types       = params.value("sac_tutor_top_types", std::vector<std::string>{});
+    if (p.sac_tutor_top_cost.has_value() && p.sac_tutor_top_types.empty())
+        throw std::runtime_error("sac_tutor_top_cost needs sac_tutor_top_types (the search spec)");
     p.aura_cast_tutor_attach    = params.value("aura_cast_tutor_attach", false);
 
     // --- Niv-Mizzet draw/damage loop (see CardParams) ---

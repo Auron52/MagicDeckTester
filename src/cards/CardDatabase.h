@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <limits>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -3212,6 +3213,16 @@ struct CardParams
     //   * it is gated on "whenever YOU cast" (watcher controller == active player).
     // Empty => inert => every other deck byte-identical.
     std::vector<std::string> draw_on_cast_subtypes;
+    // Enchantress's Presence: "Whenever you cast an enchantment spell, draw a card." The Sram shape
+    // (same FireOnCastTriggers site, same "whenever YOU cast", MANDATORY draw, no viewer decision) but
+    // matched on the cast card's printed CARD TYPE rather than a subtype -- so an Aura (Utopia Sprawl,
+    // Wild Growth) counts because its type line has Enchantment, and an instant/sorcery never does. It
+    // reads the SPELL's own printed types (the stack object), so a static that changes PERMANENTS'
+    // types (Enchanted Evening, Opalescence) never makes a non-enchantment spell count. Drawn through
+    // TrickDraw (a real CR-121 draw: counted, logged, deck-out flagged). Site 10 (the put-in-hand
+    // breakpoint) fans the cast exactly as for Sram (CastDrawWatcherMatches is the one predicate both
+    // the effect and the site-10 clause read). Empty => inert => every other deck byte-identical.
+    std::vector<std::string> draw_on_cast_types;
 
     // --- Light-Paws, Emperor's Voice ---
     // "Whenever an Aura you control enters, if you cast it, search your library for an Aura card with mana
@@ -5400,6 +5411,41 @@ struct CardParams
     // WHICH target = DecisionProvider::EtbOptionalExileTargetPick (a stated identity fold); the human
     // picks via the `dig` "(may exile)" modal (-1 = none).
     int                      etb_exile_opp_nonland_nontoken_max_mv = -1;
+    // Oblivion Ring: "When this enchantment enters, exile another target nonland permanent. When this
+    // enchantment leaves the battlefield, return the exiled card to the battlefield under its owner's
+    // control." TWO linked triggers (CR 607.2a). The ETB is MANDATORY and its legal set is BOTH sides
+    // (CR 603.3d): any nonland permanent except the source itself that we can target (shroud -- Sterling
+    // Grove's grant, Lightning Greaves -- binds our own targeting, CR 702.18a; an opponent's hexproof).
+    // Resolver: ResolveEtbExileNonlandUntilLeaves (SpellEffects.h). The card is parked in exile with
+    // m_staged_expiry = kExileUntilLeavesBase - (2 * source_number + owner) (a range disjoint from every
+    // other linked-exile marker) and the source records it in Permanent::linked_exile_number (already
+    // folded into both state keys and dominance). The LEAVES half returns it through
+    // FireLeavesBattlefieldTriggers (ReturnExiledUntilLeaves) at the moment the source leaves, as a new
+    // object (CR 400.7) under its OWNER. An exiled TOKEN ceases to exist (CR 111.8) and never returns.
+    // WHICH target = DecisionProvider::EtbExileNonlandTargetPick; human play board-clicks it (`target`).
+    bool                     etb_exile_nonland_until_leaves = false;
+    // Sterling Grove: "Other enchantments you control have shroud." A static ability of the source,
+    // read by every shroud predicate (CreatureHasShroud / LandHasShroud / PermanentHasShroud) through
+    // EnchantmentShroudFromGrant, behind the per-game deck stamp GameState::deck_has_enchantment_shroud
+    // (so no other deck pays a board walk). Shroud binds OUR OWN targeting too (CR 702.18a): with a
+    // Grove out, Oblivion Ring cannot exile one of our other enchantments and an Aura SPELL cannot
+    // target one of our enchantment permanents (relevant once Enchanted Evening makes every permanent
+    // an enchantment -- e.g. a land can no longer take Utopia Sprawl / Wild Growth).
+    bool                     grants_other_enchantments_shroud = false;
+    // Sterling Grove: "{1}, Sacrifice this enchantment: Search your library for an enchantment card,
+    // reveal it, then shuffle and put that card on top." The mana half of an activated tutor-to-top
+    // whose other cost is SACRIFICING THE SOURCE (no {T}: legal the turn it enters). The search spec is
+    // sac_tutor_top_types (CardParams::tutor_types' vocabulary). The source deliberately does NOT carry
+    // tutor_to_top / tutor_types itself: those keys mean "this card's resolution / ETB tutors", and a
+    // Grove entering must not search. Resolution runs PerformTutor on CardDefinition::activated_tutor
+    // (a derived CardParams built at load: tutor_to_top + these types). Two timings, both searched:
+    //   * PermAbilityMode::SacTutorTop -- a main-phase activation, one Action per tutor candidate
+    //     (Action::tutor_target, installed as the SacNamedPin target in both trailing passes);
+    //   * the UPKEEP priority window before the draw (GameEngine::UpkeepTutorOptions, the Enlightened
+    //     Tutor window both worlds already search): activating there puts the card on top for THIS
+    //     turn's draw.
+    std::optional<ManaCost>  sac_tutor_top_cost;
+    std::vector<std::string> sac_tutor_top_types;
     // "When this creature leaves the battlefield, the exiled card's owner creates an X/X blue Illusion
     // creature token, where X is the mana value of the exiled card." FireLeavesBattlefieldTriggers;
     // nothing exiled -> no token. false = inert.
@@ -5884,6 +5930,12 @@ struct CardDefinition
     const CardDefinition* land_ability_loss_twin = nullptr;
     std::uint64_t mana_only_identity = 0;
     std::string land_ungated_ability;
+    // Sterling Grove (CardParams::sac_tutor_top_cost): the DERIVED search spec its activation resolves
+    // through PerformTutor -- a copy of nothing but tutor_to_top = true + tutor_types =
+    // sac_tutor_top_types. Built by RebuildInternedIndex (single-threaded load), immutable during play,
+    // null for every card without the ability. Kept off `params` because tutor_to_top on the SOURCE
+    // would make the Grove's own entry search (FireOwnEtbTriggers' tutor ETB).
+    std::shared_ptr<const CardParams> activated_tutor;
     CardParams params;
 };
 

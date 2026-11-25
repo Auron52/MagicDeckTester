@@ -7853,8 +7853,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // every other mode (never read). Lockstep twin in the other world.
             const bool sac_named = a.ability_mode == Action::AbilityMode::SacNamedTutorPut;
             const bool tap_tutor = a.ability_mode == Action::AbilityMode::TapTutorPut;
+            // Sterling Grove's searched tutor candidate (SacTutorTop) rides the same target slot. Twin in the other world.
+            const bool sac_tutor_top = a.ability_mode == Action::AbilityMode::SacTutorTop;
             const SacNamedPinScope _sac_named_pin(sac_named ? a.sac_victim_id : 0,
-                                                  (sac_named || tap_tutor) ? &a.tutor_target.str() : nullptr);
+                                                  (sac_named || tap_tutor || sac_tutor_top) ? &a.tutor_target.str() : nullptr);
             // Maze's End I2: the fetched land's searched as-enters choice (chosen_x = pin + 1). Twin in the other world.
             const LandEntryPinScope _le_pin(tap_tutor && a.chosen_x > 0 ? a.chosen_x - 1 : -1);
             // Den Protector's searched regrowth (a turn-face-up action's tutor_target); null for every other
@@ -10648,7 +10650,29 @@ bool AIEngine::CastUpkeepTutor(GameState& state, int hand_number, const std::str
     Player& ap = state.ActivePlayer();
     auto it = std::find_if(ap.hand.begin(), ap.hand.end(), [&](const Card& c)
     { return c.m_number == hand_number; });
-    if (it == ap.hand.end()) { return false; }
+    if (it == ap.hand.end())
+    {
+        // Sterling Grove: the option names a battlefield SOURCE (GameEngine::UpkeepTutorOptions). Pay the
+        // {1}, then the shared resolver sacrifices it and tutors to top. Both worlds reach this one body.
+        const int me = state.active_player_index;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.card.m_number != hand_number || p.controller_index != me) { continue; }
+            const CardDefinition* gd = CardDatabase::Instance().LookupCached(p.card);
+            if (!gd || gd->activated_tutor == nullptr || !gd->params.sac_tutor_top_cost.has_value()) { return false; }
+            const ManaCost cost = EffectiveActivationCost(state, me, p.card, *gd->params.sac_tutor_top_cost);
+            ManaPool avail = AvailableManaPool(state);
+            if (!TapForCost(state, cost, avail, /*for_creature=*/false)) { return false; }
+            for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+            {
+                if (state.battlefield[static_cast<std::size_t>(j)].card.m_number == hand_number)
+                { return ResolveSacTutorTop(state, me, j, target); }
+            }
+            return false;
+        }
+        return false;
+    }
     const CardDefinition* def = CardDatabase::Instance().LookupCached(*it);
     if (!def || !def->card.IsInstant() || !def->params.tutor_to_top) { return false; }
     ManaPool available = AvailableManaPool(state);

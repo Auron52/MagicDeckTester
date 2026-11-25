@@ -35539,6 +35539,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::TapTreasure, &pp.tap_treasure_cost },   // Heap Gate (Maze's End I4) -- appended LAST
         { PermAbilityMode::SelfPing,    &pp.self_ping_cost     },   // Stuffy Doll -- appended LAST (slots = table INDEX)
         { PermAbilityMode::TapFight,    &pp.tap_fight_cost     },   // Contested Cliffs (Beasts B) -- appended LAST
+        { PermAbilityMode::SacTutorTop, &pp.sac_tutor_top_cost },   // Sterling Grove (no {T}) -- appended LAST
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -52880,6 +52881,44 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     }
                     if (!narrowed || targets.empty())
                     { emit(kTutorDeclineTarget); }  // hidden-zone search may fail even with a match
+                }
+            }
+
+            // Sterling Grove: "{1}, Sacrifice this enchantment: search your library for an enchantment card ...
+            // put that card on top." NO {T} (legal the turn it enters). WHICH card is SEARCHED: one Action per
+            // candidate of the provider's tutor rule (RankedTutorCandidates -- every legal name in human play,
+            // ranked first), carried on tutor_target (the SacNamedPin target in both trailing passes). A
+            // fail-to-find (it only shuffles) is offered to the human alone: against the autonomous search it
+            // is dominated by holding the Grove. No candidate -> nothing to search for -> no emission.
+            if (sd->activated_tutor != nullptr && sd->params.sac_tutor_top_cost.has_value())
+            {
+                ManaPool others = turn_pool();
+                others.AddPool(state.floating_mana);
+                const ManaCost cost = EffectiveActivationCost(
+                    state, state.active_player_index, src.card, *sd->params.sac_tutor_top_cost);
+                if (others.CanPay(cost))
+                {
+                    std::vector<std::string> targets = RankedTutorCandidates(
+                        ResolveProvider(state), state, state.active_player_index, *sd->activated_tutor);
+                    std::vector<std::string> uniq;
+                    for (const std::string& t : targets)
+                    { if (std::find(uniq.begin(), uniq.end(), t) == uniq.end()) { uniq.push_back(t); } }
+                    if (HumanPlayActive()) { uniq.push_back(kTutorDeclineTarget); }
+                    if (uniq.size() == 1 && uniq.front() == kTutorDeclineTarget) { uniq.clear(); }
+                    for (const std::string& name : uniq)
+                    {
+                        Action a;
+                        a.kind           = Action::Kind::ActivatePermAbility;
+                        a.card_name      = src.card.m_name;
+                        a.def            = sd;
+                        a.hand_index     = -1;
+                        a.sac_source_id  = src.card.m_number;
+                        a.ability_mode   = Action::AbilityMode::SacTutorTop;
+                        a.tutor_target   = name;
+                        a.cost           = cost;
+                        a.is_noncreature = true;
+                        actions.push_back(std::move(a));
+                    }
                 }
             }
 
@@ -82715,8 +82754,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // every other mode (never read). Lockstep twin in the other world.
             const bool sac_named = a.ability_mode == Action::AbilityMode::SacNamedTutorPut;
             const bool tap_tutor = a.ability_mode == Action::AbilityMode::TapTutorPut;
+            // Sterling Grove's searched tutor candidate (SacTutorTop) rides the same target slot. Twin in the other world.
+            const bool sac_tutor_top = a.ability_mode == Action::AbilityMode::SacTutorTop;
             const SacNamedPinScope _sac_named_pin(sac_named ? a.sac_victim_id : 0,
-                                                  (sac_named || tap_tutor) ? &a.tutor_target.str() : nullptr);
+                                                  (sac_named || tap_tutor || sac_tutor_top) ? &a.tutor_target.str() : nullptr);
             // Maze's End I2: the fetched land's searched as-enters choice (chosen_x = pin + 1). Twin in the other world.
             const LandEntryPinScope _le_pin(tap_tutor && a.chosen_x > 0 ? a.chosen_x - 1 : -1);
             // Den Protector's searched regrowth (a turn-face-up action's tutor_target); null for every other
@@ -95633,6 +95674,9 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
         || pp.tap_draw_cost.has_value() || pp.sac_draw_cost.has_value()
         || pp.drain_cost.has_value() || pp.exile_opponent_top_cost.has_value()
         || pp.ice_counter_cost.has_value() || pp.lifelink_grant_cost.has_value()) { return true; }
+    // Sterling Grove: a {T}-less activation, so a Grove CAST this plan can be activated in the same phase
+    // (CollectActivationKeys' SacTutorTop row).
+    if (pp.sac_tutor_top_cost.has_value()) { return true; }
     // Blighted Steppe / Wellwisher: once their modes are in CollectActivationKeys the site-9 gate
     // CAN accept a key from them, and this predicate's contract is to be the SUPERSET of what the
     // gate accepts. Wellwisher is the live one -- a creature the plan cast this turn whose {T}
@@ -95841,10 +95885,19 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     // line here (the cast order deliberately ranks the watcher at 6 and Equipment at 8). A
     // battlefield-only test would miss exactly that case.
     std::vector<std::string> watched_cast_subtypes;
+    std::vector<const CardDefinition*> type_watchers;   // Enchantress's Presence (draw_on_cast_types)
     if (BpPutInHandEnabled() && BpCastSubtypeEnabled())
     {
         auto absorb = [&](const CardDefinition* w)
         {
+            // Enchantress's Presence (draw_on_cast_types): the same WATCHER route, keyed on the cast
+            // card's TYPE. Collected beside the subtypes; matched by CastTypeDrawWatcherMatches (the
+            // effect's own predicate). Empty for every other deck -> nothing collected.
+            if (w && !w->params.draw_on_cast_types.empty())
+            {
+                if (std::find(type_watchers.begin(), type_watchers.end(), w) == type_watchers.end())
+                { type_watchers.push_back(w); }
+            }
             if (!w || w->params.draw_on_cast_subtypes.empty()) { return; }
             for (const std::string& t : w->params.draw_on_cast_subtypes)
             {
@@ -95866,6 +95919,8 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     }
     auto cast_subtype_watched = [&](const CardDefinition& cd)
     {
+        for (const CardDefinition* w : type_watchers)
+        { if (CastTypeDrawWatcherMatches(w->params, cd.card)) { return true; } }
         for (const std::string& want : watched_cast_subtypes)
         {
             for (const std::string& cs : cd.card.m_subtypes)
@@ -119499,6 +119554,16 @@ public:
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (d && d->card.IsInstant() && d->params.tutor_to_top)
                 { tutor_ = true; break; }
+            }
+            // Sterling Grove's activation shares the window (GameEngine::UpkeepTutorOptions' battlefield half).
+            if (!tutor_)
+            {
+                for (const Permanent& p : pre.battlefield)
+                {
+                    if (p.controller_index != pre.active_player_index) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                    if (d && d->activated_tutor != nullptr) { tutor_ = true; break; }
+                }
             }
         }
         // PROFANE TUTOR's fetch (MTG_PROFANE_RESOLVE_FAN): a suspended to-hand tutor arriving at the next upkeep,

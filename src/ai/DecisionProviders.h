@@ -5177,6 +5177,24 @@ public:
 // threat counts once it arrives by next turn). A restriction; the search branches over what is kept (<= 4
 // names, inside the base width 6). Nothing missing -> the tutor is not cast. Replaced a width-32 hook.
 // MTG_WORLDFIRE_TUTOR_PIECES=0 -> the base list.
+// =============================================================================================
+// EnchantedEveningProvider -- the Enchanted Evening deck (GW enchantress / lock; ledger
+// docs/design/analysis-Enchanted Evening.md). Created at onboarding (2026-11-25) because every shipped
+// deck owns a provider (analyze-deck Stage 4a). An EMPTY derivation of DeckProvider (the Generic
+// surface), so it inherits every judgement hook byte-for-byte: play-neutral by construction. The lock
+// cluster (Enchanted Evening, Opalescence, Calming Verse, Parallax Wave, Force of Vigor) extends it.
+class EnchantedEveningProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. A winless-turn bound must price Enchantress's Presence draws off every "
+               "enchantment cast (each can find a castable card mid-turn), Sterling Grove's tutor-to-top "
+               "feeding those draws, and the Opalescence attack (every non-Aura enchantment a P/T = MV "
+               "creature, Enchanted Evening making every permanent one) before claiming no line wins." }; }
+    const char* Name() const override { return "EnchantedEvening"; }
+};
+
 class WorldfireProvider : public DeckProvider
 {
 public:

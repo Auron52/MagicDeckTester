@@ -680,6 +680,35 @@ std::vector<std::pair<int, std::string>> GameEngine::UpkeepTutorOptions(const Ga
         // Every name the provider's candidate rule returns (no tutor width -- the rule is the breadth).
         for (std::size_t i = 0; i < names.size(); ++i) { out.emplace_back(c.m_number, names[i]); }
     }
+    // Sterling Grove ("{1}, Sacrifice this enchantment: search ... put that card on top"): the same
+    // priority window, an ACTIVATION from the battlefield, so the tutored card is THIS turn's draw. The
+    // option's int is the source PERMANENT's card number (disjoint from every hand number: m_number is
+    // unique per card); AIEngine::CastUpkeepTutor dispatches on where that number is. One source per
+    // NAME (two Groves are the same ability of identical cards: the window takes one activation).
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->activated_tutor == nullptr || !d->params.sac_tutor_top_cost.has_value()) { continue; }
+        if (std::find(seen_sources.begin(), seen_sources.end(), p.card.m_name.str()) != seen_sources.end())
+        { continue; }
+        GameState trial = state;
+        bool payable = false;
+        {
+            RevealLogPause pause;
+            payable = TapForCostShared(trial, EffectiveActivationCost(state, state.active_player_index, p.card,
+                                                                      *d->params.sac_tutor_top_cost),
+                                       /*for_creature=*/false, nullptr, /*honor_legacy_cco=*/true);
+        }
+        if (!payable) { continue; }
+        seen_sources.push_back(p.card.m_name.str());
+        const auto names = RankedTutorCandidates(ResolveProvider(state), state,
+                                                 state.active_player_index, *d->activated_tutor);
+        std::vector<std::string> uniq;
+        for (const std::string& n : names)
+        { if (std::find(uniq.begin(), uniq.end(), n) == uniq.end()) { uniq.push_back(n); } }
+        for (const std::string& n : uniq) { out.emplace_back(p.card.m_number, n); }
+    }
     return out;
 }
 
@@ -884,6 +913,34 @@ void GameEngine::UpkeepTail(GameState& state)
             if (selected < 0 || selected >= static_cast<int>(names.size())) { continue; }
             // The upkeep prompt already selected the target. Suppress the normal cast's
             // redundant resolution-time repick while preserving event and reveal logging.
+            auto* chooser = g_play_tutor_chooser;
+            g_play_tutor_chooser = nullptr;
+            CastUpkeepTutor(state, number, names[static_cast<std::size_t>(selected)]);
+            g_play_tutor_chooser = chooser;
+        }
+        // Sterling Grove's activation in the same window (the autonomous options' battlefield half).
+        std::vector<int> grove_numbers;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->activated_tutor != nullptr && d->params.sac_tutor_top_cost.has_value())
+            { grove_numbers.push_back(p.card.m_number); }
+        }
+        for (int number : grove_numbers)
+        {
+            const auto opts = UpkeepTutorOptions(state);
+            std::vector<std::string> names;
+            for (const auto& o : opts) { if (o.first == number) { names.push_back(o.second); } }
+            if (names.empty()) { continue; }
+            const CardDefinition* d = nullptr;
+            for (const Permanent& p : state.battlefield)
+            { if (p.card.m_number == number) { d = CardDatabase::Instance().LookupCached(p.card); break; } }
+            if (!d) { continue; }
+            const std::string source = d->card.m_name.str() + " (upkeep activation)";
+            const int selected = (*g_play_tutor_chooser)(state, state.active_player_index,
+                                                          source, names, /*default: hold=*/-1, {});
+            if (selected < 0 || selected >= static_cast<int>(names.size())) { continue; }
             auto* chooser = g_play_tutor_chooser;
             g_play_tutor_chooser = nullptr;
             CastUpkeepTutor(state, number, names[static_cast<std::size_t>(selected)]);

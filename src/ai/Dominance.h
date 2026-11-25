@@ -690,7 +690,9 @@ static_assert(sizeof(Player) == 216,
 // (nothing to fold). Opponent POISON is folded below (Player::poison_counters, exact) -- now a live win term.
 // +8 bytes (2026-11-22, Beasts J): combat_resource_turn opens a restricted post-combat main
 // only in its stamped turn. It is folded into the mid-turn sim key and dead at the clean boundary.
-static_assert(sizeof(GameState) == 1736,   // combined upstream free turns and Beasts fields
+// +8 bytes (2026-11-25, Enchanted Evening / Sterling Grove): the DECK CONSTANT deck_has_enchantment_shroud (stamped
+// once in the runner's deck-trait pass -- nothing to fold). No padding hole was left beside the Gargaroth bools.
+static_assert(sizeof(GameState) == 1744,   // combined upstream free turns and Beasts fields + Sterling Grove's stamp
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

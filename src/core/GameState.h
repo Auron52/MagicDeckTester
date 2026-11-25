@@ -2203,6 +2203,11 @@ struct GameState
     //     (DecisionProvider::AttackChooseOneModes). DEFAULT FALSE, the safe direction (keeps the mode).
     bool                     deck_has_attack_choose_one   = true;
     bool                     deck_life_inert              = false;
+    // STERLING GROVE (Enchanted Evening, 2026-11-25): an ENCHANTMENT SHROUD GRANT on the mainboard
+    // (CardParams::grants_other_enchantments_shroud), gating EnchantmentShroudFromGrant's board walk inside every
+    // shroud predicate, so a clear bit PROVES it finds nothing. DEFAULT TRUE (an unstamped state -- a unit test --
+    // still sees the grant). A DECK CONSTANT, never folded (+8 bytes: see the Dominance.h size note).
+    bool                     deck_has_enchantment_shroud  = true;
     // THE SEARCHED ELDER GARGAROTH MODE (Plan::attack_choose_mode_choice): PACKED 2 bits per attack-trigger
     // ordinal (ordinal 0 lowest; a field of 0 = that ordinal unpinned, m + 1 = mode m: 0 token / 1 life /
     // 2 draw); -1 = nothing pinned (every trigger takes DecisionProvider::AttackChooseOneModes' front).

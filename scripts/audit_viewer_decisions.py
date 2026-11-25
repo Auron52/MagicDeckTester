@@ -495,6 +495,9 @@ MANIFEST = {
     # creature an opponent controls until this creature leaves" -- the board-click `target` (the
     # loyalty-chooser shape the mandatory ETB destroys use), on the enter AND the transform route.
     "etb_or_transform_exile_opp_creature_until_leaves": ("target", truthy),
+    # Oblivion Ring (Enchanted Evening, 2026-11-25): the MANDATORY both-sides ETB exile -- the same board-click
+    # `target` (loyalty-chooser shape) over the full legal set.
+    "etb_exile_nonland_until_leaves": ("target", truthy),
     "sac_draw_cost":         ("main_phase",           truthy),
     # "Enchant land": WHICH land carries the aura is a real decision and rides the existing
     # enchant_target plan-variant axis (one main_phase variant per legal land host), opened to
@@ -600,6 +603,10 @@ MANIFEST = {
     # theirs) are board clicks at activation through `target` (the loyalty-target chooser, Voracious precedent).
     "tap_fight_cost":                ("target",      present),
     "tap_tutor_put_cost":             ("main_phase",  present),
+    # Sterling Grove (Enchanted Evening, 2026-11-25): "{1}, Sacrifice: search for an enchantment, put it on top" --
+    # one main_phase plan variant per tutor candidate (every legal name + fail-to-find in human play); the upkeep
+    # window before the draw asks through the shared tutor chooser (the Enlightened Tutor upkeep prompt).
+    "sac_tutor_top_cost":             ("main_phase",  present),
     # ---- Maze's End (I1, 2026-11-17) ----
     # Maze's End's "{3}, {T}, Return this land to its owner's hand: Search ... for a Gate card": the same
     # TapTutorPut plan variants as Seahunter -- one per distinct Gate name + fail-to-find (human play gets
@@ -1769,6 +1776,9 @@ INERT_PARAMS = {
     "soulbond_damage_trigger_draw": "Tandem Lookout's soulbond PAYLOAD -- a granted MANDATORY draw trigger on both halves of the pair; no target, no mode, no 'may'. The decision on the card is WHICH partner, which is the soulbond attach_host board-click (with a decline arm)",
     "cant_be_countered": "Niv-Mizzet, Parun's 'this spell can't be countered' -- a static property, no choice (inert vs the passive opponent; read by a self-targeted Remand)",
     "draw_on_cast_subtypes": "Sram's on-cast draw is MANDATORY -- there is no 'may' at all (unlike Puresteel and Kor), so nothing is auto-resolved and there is no choice to surface",
+    "draw_on_cast_types": "Enchantress's Presence's on-cast draw (the Sram shape keyed on the cast card's TYPE) is MANDATORY -- no 'may', no target, nothing to surface",
+    "grants_other_enchantments_shroud": "Sterling Grove's static shroud grant -- no choice; it only REMOVES our own enchantments from every targeting site's legal set",
+    "sac_tutor_top_types": "Sterling Grove's search spec (the activation's tutor types) -- the choice is the sac_tutor_top_cost main_phase variant",
     "equip_scale_power_per_equipment": "Golem-Skin Gauntlets' dynamic +1/+0 per Equipment attached to the host. A static characteristic-modifying value with no target, mode, division or 'may'; the only decision on the card is WHICH host, which is the existing equip plan-line axis",
     "equip_scale_tough_per_equipment": "toughness twin of equip_scale_power_per_equipment; same reasoning -- a static value, no choice",
     "equip_grants_vigilance": "Cathar's / Accorder's Shield vigilance grant. A static keyword grant read only by the combat attack-tap; no target, no mode, no 'may'",
@@ -2717,6 +2727,8 @@ def modeled_tokens(card):
     if p.get("etb_modal_double_self_counters"):
         t.add("modal")
     if p.get("etb_or_transform_exile_opp_creature_until_leaves"):
+        t.add("target")
+    if p.get("etb_exile_nonland_until_leaves"):
         t.add("target")
     # Vampires B: Captivating Vampire's "Gain control of target creature" IS the `target` board-click
     # (then the five bodies of its cost, the same prompt) -- PayTapSubtypeCost / ApplyPermAbility.

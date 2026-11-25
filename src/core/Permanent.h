@@ -404,6 +404,12 @@ enum class PermAbilityMode
     // SEARCHED (Action::sac_victim_id = ours, Action::enchant_target = theirs), emitted out of band (never a
     // K block); the shared resolver reads both off TapFightPinScope. Appended LAST.
     TapFight,
+    // {1}, Sacrifice this enchantment: Search your library for an enchantment card, reveal it, then shuffle
+    // and put that card on top  (Sterling Grove; CardParams::sac_tutor_top_cost / sac_tutor_top_types). NO {T}
+    // (legal the turn it enters; in PermAbilityTaps' exclusion list), once per source (sacrificed). WHICH card
+    // is SEARCHED: one Action per tutor candidate (Action::tutor_target, the SacNamedPin target in both
+    // trailing passes); the resolver is ResolveSacTutorTop, which the upkeep window shares. Appended LAST.
+    SacTutorTop,
 };
 // Is `m` one of the two morph turn-face-up modes?
 inline bool IsTurnFaceUpMode(PermAbilityMode m)
@@ -417,6 +423,7 @@ inline bool IsTurnFaceUpMode(PermAbilityMode m)
 inline bool PermAbilityTaps(PermAbilityMode m)
 {
     return m != PermAbilityMode::SacDraw
+        && m != PermAbilityMode::SacTutorTop          // Sterling Grove: "{1}, Sacrifice" -- no {T}
         && m != PermAbilityMode::SelfBounce
         && m != PermAbilityMode::Drain
         && m != PermAbilityMode::ExileTop
