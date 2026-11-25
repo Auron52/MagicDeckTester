@@ -638,3 +638,25 @@ leaf's cutoff is still the bound) with a stored bound below the root cut, which 
 - On a per-deck turn-1 lookahead setting: *"I mentioned before that I prefer no deck-specific settings, but I think it is
   okay if we are running into tough problems here."* So a per-deck on/off is allowed as the fallback, chosen by
   measurement (value-leaf run), not as the first resort.
+
+#### D17 / D18: `_pabc` (dev seeds 19M x 600, units / heur)
+
+D17 (mtg_k17): units 0.919-1.012 but 5 games LATER (Maze 395, Merfolk 413, Shadowborn 26 / 536 / 566). Four of them
+were a pass 1 whose BOUND FAILED (`A1`): it was searched again from the root cut -- an unbounded pass 1, as heur's --
+and the bounded attempt's priced hits still went on the bootstrap, which refused pass 2 (Shadowborn 19520026 T3:
+pass 1 152 units vs heur's 147, heur's pass 2 found T6 instead of T7). Fixed in k18 (nothing priced after a failed bound).
+
+| deck | m4_ptc | m4_ptc_pab1 | **m4_ptc_pab1_pabc** (k18) | m4_pnt1_pab1_pabc (k18) |
+|---|---|---|---|---|
+| Hydras | 0.974 | 0.978 | **0.976** | 1.001 |
+| Martyr Lifegain | 0.967 | 0.981 | **0.979** | 1.012 |
+| Maze's End | 1.003 | 1.004 | **0.995** (1 earlier / 1 later) | 0.992 |
+| Merfolk Turns | 1.003 | 1.005 | **0.979** (1 earlier) | 0.976 |
+| Mill | 1.003 | 1.005 | **0.979** | 0.976 |
+| Sea Creatures | 0.922 | 0.916 | **0.916** | 0.992 |
+| Shadowborn Apostle | 0.997 | 0.966 | **0.927** | 0.923 |
+| Stuffy Doll | 1.001 | 0.966 | **0.962** | 0.963 |
+
+ONE setting below heur on all 8 decks, no per-deck switch: m4_ptc_pab1_pabc (pooled 0.976, 2 earlier / 1 later). The
+later game (Maze 395, T5 -> T6) is being checked at d8 b0 (`R395/`). Confirmation on FRESH seeds: HO3 (20M x 600; heur,
+m4_ptc, m4_ptc_pab1_pabc in ONE batch for a same-run CPU ratio; mtg_k18; `run_ho3.sh`) running.
