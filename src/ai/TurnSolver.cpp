@@ -114055,6 +114055,17 @@ namespace rgc
     inline std::size_t Cap()
     { static const std::size_t v = static_cast<std::size_t>(std::max(0, EnvInt("MTG_ROLLOUT_GAME_CACHE_CAP", 262144))); return v; }
     inline TranspositionTable::Key Key(TranspositionTable::Key k, std::uint64_t ctx) { Fold(k, 0xE3C0FFEEull); Fold(k, ctx); return k; }
+    // `_prgw` (A/B, 2026-11-25): a store WIDENS a narrower no-win. Without it the first answer stored under a key stays for
+    // the game, so a no-win proved only by turn W (a bounded pass's rollout) shadows every later wider answer at that key: the
+    // wider query misses, re-runs, and its result is dropped by emplace. The leaf table and the game line cache already let
+    // a wider refutation supersede (TranspositionTable::StoreNoWin, gamelc). A win (cutoff-independent) or a no-win with a
+    // larger bound replaces the whole entry (its leaf grade and cost belong to that run); a stored win is never replaced.
+    inline bool WidenOn()
+    {
+        static thread_local std::string k; static thread_local bool v = false;
+        if (k != valuearm::t_deck_key) { k = valuearm::t_deck_key; v = k.find("_prgw") != std::string::npos; }
+        return v;
+    }
     struct Reporter
     {
         ~Reporter()
@@ -115293,8 +115304,18 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             rgc::E e{ result, std::min(cutoff_turn, max_turns + 1), leafeval::t_tb, leafeval::t_life, win, 0 };
             for (std::size_t i = 0; i < sfxprobe::t_pending.size(); ++i)
             {
-                if (rgc::t_map.size() >= rgc::Cap()) { rgc::g_full.fetch_add(1, std::memory_order_relaxed); break; }
                 e.cost = i < sfxprobe::t_pending_u.size() ? std::max(0LL, gamework::t_used - sfxprobe::t_pending_u[i]) : -1;
+                if (rgc::WidenOn())
+                {
+                    const auto rk = rgc::Key(sfxprobe::t_pending[i], sfx_ctx);
+                    const auto ex = rgc::t_map.find(rk);
+                    if (ex != rgc::t_map.end())
+                    {
+                        if (!ex->second.win && (e.win || ex->second.bound < e.bound)) { ex->second = e; }
+                        continue;
+                    }
+                }
+                if (rgc::t_map.size() >= rgc::Cap()) { rgc::g_full.fetch_add(1, std::memory_order_relaxed); break; }
                 if (rgc::t_map.emplace(rgc::Key(sfxprobe::t_pending[i], sfx_ctx), e).second)
                 { rgc::g_stores.fetch_add(1, std::memory_order_relaxed); }
             }
