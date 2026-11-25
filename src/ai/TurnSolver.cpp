@@ -117806,6 +117806,11 @@ namespace p18
             // past-reach allowance of the whole decision budget (_pal100; the priced cap bounds it). Screened on P1..P16
             // and S2..S5, held out on H1/H2 (S5 0.959x heur CPU, 2 earlier / 0 later; H2 56 decks x 200 0.954x, 2 / 1).
             o.llw = o.lrf = o.llr = o.pkt = o.plx = o.pzb = true; o.pal = 1.0;
+            // ...and a CACHED in-window root-rollout trigger walks from pass 2, after the real pass 1, under the share
+            // rule (_ptc; USER 2026-11-25 "If it is better overall then sure"). Aspiration (_pab _pab1 _pabc) is the other
+            // half of the mode's default and lives at the pass loop (the _pab block). Held out on HO3 (20M x 600,
+            // 8 decks, 2026-11-25): 0.959x heur CPU, below heur on every deck. "_xptc" turns _ptc off (research arms).
+            o.ptc = k.find("_xptc") == std::string::npos;
         }
         else if (valuearm::t_deck_sampled_gate == 2 || valuearm::t_deck_sampled_gate == 5)
         {
@@ -127566,6 +127571,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 
     long long c_prev = 0, c_prev2 = 0;       // work units of passes k-1, k-2
     long long p18_ab_boot = 0;               // _pabb: a bounded pass 1's game-cache hits, priced at their stored cost
+    bool      p18_ab_p1 = false;             // _pabk: this decision's pass 1 ran bounded and its bound held
     bool      have_prev = false, have_prev2 = false;
     long long l_prev = -1, l_prev2 = -1;     // rollout-leaf units of passes k-1, k-2 (sampled gate _pqg only)
     long long pr_prev = 0, pr_prev2 = 0;     // PRICED work (workctr::t_priced, ns) of passes k-1, k-2: the priced gate
@@ -129273,17 +129279,26 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // left no-win entries at that bound, which a pass 1 at the same bound reads; an unbounded pass 1 cannot, and a
         // pass 1 that pays for them moves heur's gate -- E12 Merfolk T2: c1 15 -> 292 units, then a 39k pass 3).
         // _pabx: a failed bounded attempt is spent but kept out of the pass cost the start gate reads.
-        static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false, s_pabb = false, s_pabc = false;
-        static thread_local unsigned long long s_pab_seed = 0; static thread_local int s_pab_win = 0;
-        if (s_pab_key != valuearm::t_deck_key)
+        static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false, s_pabb = false, s_pabc = false, s_pabk = false;
+        static thread_local unsigned long long s_pab_seed = 0; static thread_local int s_pab_win = 0, s_pab_gate = -1;
+        if (s_pab_key != valuearm::t_deck_key || s_pab_gate != valuearm::t_deck_sampled_gate)
         {
-            s_pab_key = valuearm::t_deck_key; s_pab = s_pab_key.find("_pab") != std::string::npos;
+            s_pab_key = valuearm::t_deck_key; s_pab_gate = valuearm::t_deck_sampled_gate; s_pab = s_pab_key.find("_pab") != std::string::npos;
             s_pab1 = s_pab_key.find("_pab1") != std::string::npos; s_pabx = s_pab_key.find("_pabx") != std::string::npos;
             s_pabb = s_pab_key.find("_pabb") != std::string::npos; s_pabc = s_pab_key.find("_pabc") != std::string::npos;
+            // The sparse ladder (mode 4) runs aspiration by default: _pab + _pab1 + _pabc (HO3 2026-11-25; the USER ruled
+            // the mode must do LESS work for the same depth, never spend the saving on depth). "_xab" turns it off.
+            if (valuearm::t_deck_sampled_gate == 4 && s_pab_key.find("_xab") == std::string::npos) { s_pab = s_pab1 = s_pabc = true; }
+            // _pabk (A/B): CONSISTENT aspiration -- pass k >= 2 is bounded only when this decision's pass 1 was (and its
+            // bound held), so the gate's c_k / c_(k-1) never divides a bounded pass by an unbounded one (T1: pass 1 has no
+            // previous decision to bound it; a bounded pass 2 under-reads c2 and admits a pass 3 heur refuses, whose
+            // leaves then make T2's bounded pass 1 cache-cheap). _xpc (A/B): mode 4 without _pabc.
+            s_pabk = s_pab_key.find("_pabk") != std::string::npos;
+            if (s_pab_key.find("_xpc") != std::string::npos) { s_pabc = false; }
         }
         const bool p18_ab_top = s_pab && p16K == 0 && p16::t_hyb_nest == 1 && g_fsline_nest == 0 && g_rollout_nest == 0
                              && !vl_active && !vl_constant;
-        const int p18_ab_w = (pass_depth >= 2 && prev_committed == pass_depth - 1) ? prev_line.win_turn
+        const int p18_ab_w = (pass_depth >= 2 && prev_committed == pass_depth - 1 && (!s_pabk || p18_ab_p1)) ? prev_line.win_turn
                            : (pass_depth == 1 && s_pab1 && s_pab_seed == static_cast<unsigned long long>(state.game_seed)) ? s_pab_win : 0;
         const int p18_ab = (p18_ab_top && p18_ab_w >= state.turn_number && p18_ab_w <= max_turns) ? p18_ab_w : 0;
         const int pass_cut = (p16K > 0 && pass_depth == p16K && p16::t_oracle_W > 0)
@@ -129368,7 +129383,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // not): HO2 Mill 19410160 T2 c1 110 units (heur's unbounded 4825) -> a 62k pass 2; 19410210 131 -> 153k. The
         // bootstrap estimate reads pass 1 with its hits priced at their stored cost (rgc::E::cost).
         // (a pass 1 whose bound failed was searched again from the root cut -- an unbounded pass 1, as heur's: nothing to price)
-        if (pass_depth == 1) { p18_ab_boot = p18_asp_fail ? 0 : (s_pabb && p18_ab > 0) ? rgc::t_hit_sum - p18_hs0 : p18_pc_on ? rgc::t_pab_sum - p18_ps0 : 0; }
+        if (pass_depth == 1) { p18_ab_p1 = p18_ab > 0 && !p18_asp_fail; }
+        if (pass_depth == 1) { p18_ab_boot = p18_asp_fail ? 0 : (s_pabb && p18_ab > 0) ? rgc::t_hit_sum - p18_hs0 : p18_pc_on ? rgc::t_pab_sum - p18_ps0 : 0;
+                               if (p18_ab_boot > 0) { p16::Rec('B', 1, 0, p18_ab_boot, 0, line.win_turn, 0); } }   // trace: the price (leaf field)
         // K-predictor: record the PROBE's leaf count at this depth (leaf-independent structure the escalation
         // reuses to predict its own affordable depth). Only while the probe records; index guarded.
         long long cost = (budget ? budget->Used() : 0) - used_before;
