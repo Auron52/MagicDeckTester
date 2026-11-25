@@ -824,3 +824,6 @@ seeds; adopt only if every deck meets the bar (work down, paired win turns net <
   void. R395/RH3 rerun from the worktree (`R395c/`, `RH3c/`): all 12 rows identical -- the sparse-ladder landing stands.
 * RUNNING: HO5 held-out, live vs live_pab1_prgw_pabt_pabk, 22 decks x 400 g, base 25,000,000 (`build/scratch/p18g/HO5/`,
   auto-paused with SIGSTOP when the Worldfire value leaf leaves its phase-A tail: `HO5/PAUSED`, pid in `HO5/pid`).
+* HO5 DONE (held-out, 22 decks x 400 g, base 25M; no pause needed): live_pab1_prgw_pabt_pabk 0.9770u pooled, 10 earlier /
+  0 later (Blood Sun 8/0 -0.0225t, Maze 1/0, Shadowborn 1/0). Over 1.000u: Gods 1.013, Kitty Equipment 1.003. All other 20
+  at or under. USER decision surfaced: keep hunting a general Gods fix / per-deck measured opt-out / sparse-only.
