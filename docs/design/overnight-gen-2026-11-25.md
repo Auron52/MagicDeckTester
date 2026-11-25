@@ -69,3 +69,4 @@ still cut down the numbers somewhat."*
   and Talon Gates of Madara stay separate (*"those have actual differences ... the ability to be dropped from hand and
   ability to produce treasures"*); Basilisk Gate + The Black Gate merge (*"lands that do nothing in this deck except
   come in untapped and produce colourless"*). Committed on wip/maze-gen-claude before the queued run started.
+- **Revised again ~22:00 UTC by the USER: K=20** (*"it is possible we should consider your extra grouping as well to make it 20"*): Heap Gate + Planar Nexus + Talon Gates of Madara merge as well. 471,964 size-7 hands, floor ~3.8 h. Committed before the queued run started.
