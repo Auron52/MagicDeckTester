@@ -129216,9 +129216,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // SAMPLED GATE: the committing pass starts at the best win its sampled rollouts reached (a real line reaches it).
         const int p18_cut = (p18_K > 0 && p18_wb > 0) ? std::min(root_cut, p18_wb) : root_cut;
         long long used_before = budget ? budget->Used() : 0;
-        const long long pr_before = workctr::t_priced;   // priced start gate (see above)
+        long long pr_before = workctr::t_priced;   // priced start gate (see above)
         long long leaves_before = g_fs_leaf_evals;   // K-predictor: per-pass leaf-count delta (probe recording)
-        const long long p16_leaf0 = p16::t_leaf_units;   // MTG_P16_TRACE (print-only)
+        long long p16_leaf0 = p16::t_leaf_units;   // MTG_P16_TRACE (print-only)
         const long long lad_tl0 = g_tt_look_n, lad_th0 = g_tt_hit_n;
         // Arm the OVERRUN guard: this pass may exceed its estimate, but if its real cost blows past
         // the ceiling it is pathological -- abort and keep the best line we hold (see the anytime
@@ -129245,20 +129245,45 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         OrderOracleProbe _oop;   // MTG_ORDER_ORACLE (diagnostic; see g_oo_vals)
         _oop.Begin(tt, budget);
         // P17 aspiration oracle (measurement only): the committing pass starts at the recorded final win turn.
+        // _pab (A/B, sparse ladder research; the deck key -- the profile path -- holds "_pab", so a plain-heur arm can
+        // carry it): ASPIRATION FROM THE PASS BELOW. Pass k >= 2 starts at the win turn the completed rollout pass k-1
+        // of this decision reached (K2 heur: the committing pass equals it in ~85-90% of T2+ decisions). Sound: a pass
+        // that wins by the bound has the same best win as the unbounded pass, and one that does not is searched again
+        // from the root cut below. At every budget.
+        // _pab1: pass 1 too, at the win the previous top-level decision of this game committed (its bounded rollouts
+        // left no-win entries at that bound, which a pass 1 at the same bound reads; an unbounded pass 1 cannot, and a
+        // pass 1 that pays for them moves heur's gate -- E12 Merfolk T2: c1 15 -> 292 units, then a 39k pass 3).
+        // _pabx: a failed bounded attempt is spent but kept out of the pass cost the start gate reads.
+        static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false;
+        static thread_local unsigned long long s_pab_seed = 0; static thread_local int s_pab_win = 0;
+        if (s_pab_key != valuearm::t_deck_key)
+        {
+            s_pab_key = valuearm::t_deck_key; s_pab = s_pab_key.find("_pab") != std::string::npos;
+            s_pab1 = s_pab_key.find("_pab1") != std::string::npos; s_pabx = s_pab_key.find("_pabx") != std::string::npos;
+        }
+        const bool p18_ab_top = s_pab && p16K == 0 && p16::t_hyb_nest == 1 && g_fsline_nest == 0 && g_rollout_nest == 0
+                             && !vl_active && !vl_constant;
+        const int p18_ab_w = (pass_depth >= 2 && prev_committed == pass_depth - 1) ? prev_line.win_turn
+                           : (pass_depth == 1 && s_pab1 && s_pab_seed == static_cast<unsigned long long>(state.game_seed)) ? s_pab_win : 0;
+        const int p18_ab = (p18_ab_top && p18_ab_w >= state.turn_number && p18_ab_w <= max_turns) ? p18_ab_w : 0;
         const int pass_cut = (p16K > 0 && pass_depth == p16K && p16::t_oracle_W > 0)
-                           ? std::min(root_cut, p16::t_oracle_W) : p18_cut;
+                           ? std::min(root_cut, p16::t_oracle_W) : (p18_ab > 0 ? std::min(p18_cut, p18_ab) : p18_cut);
         SearchLine attempt = FSLineWin(state, pass_depth, max_turns, pass_cut, second_main, tt, &line_cache, budget);
         bool p18_asp_fail = false;
         if (pass_cut < root_cut && p16K == 0 && !(budget != nullptr && budget->Overrun()) && attempt.win_turn > pass_cut)
         {
             // The bound was too tight (no line wins by it): search the pass again from the ladder's own root cut.
             p18_asp_fail = true;
+            if (p18_ab > 0 && s_pabx && budget != nullptr)
+            {
+                used_before = budget->Used(); pr_before = workctr::t_priced; p16_leaf0 = p16::t_leaf_units; leaves_before = g_fs_leaf_evals;
+            }
             attempt = FSLineWin(state, pass_depth, max_turns, root_cut, second_main, tt, &line_cache, budget);
         }
         _oop.End(state, pass_depth, max_turns, second_main, attempt, budget);
         bool aborted = (budget != nullptr && budget->Overrun());
         if (budget != nullptr) { budget->SetOverrunLimit(0); }   // disarm
-        if (p18_on && p18_asp_fail) { p16::Rec('A', pass_depth, 0, 0, 0, pass_cut, 0); }
+        if ((p18_on || p18_ab > 0) && p18_asp_fail) { p16::Rec('A', pass_depth, 0, 0, 0, pass_cut, 0); }
 
         if (aborted)
         {
@@ -129314,6 +129339,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         line = attempt;
         committed_depth = pass_depth;
         prev_line = line; prev_committed = committed_depth;   // this pass completed
+        if (p18_ab_top) { s_pab_seed = static_cast<unsigned long long>(state.game_seed); s_pab_win = line.win_turn; }
         // K-predictor: record the PROBE's leaf count at this depth (leaf-independent structure the escalation
         // reuses to predict its own affordable depth). Only while the probe records; index guarded.
         long long cost = (budget ? budget->Used() : 0) - used_before;
