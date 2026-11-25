@@ -73448,6 +73448,14 @@ static bool LineCastIsRock(const Action& a)
 // MTG_LINE_KEEP_CRIT: ...and any other line of two or more held casts binds in the CRIT mode (kLineKeepCrit): the rung
 // tries a payment of it only when LineKeepCritGate (ManaPayment.cpp) finds a last-source colour, so the line pays no
 // scratch board for a payment that cannot strand it that way.
+// MTG_LINE_KEEP_SUSPEND (EngineFlags.h): a PAID suspend is one of the line's held payments too. ApplySuspend pays it
+// through the shared payer in the apply pre-pass, before every cast, and LineCastCostTotal already holds its cost, so
+// a {suspend + one cast} line is exactly a two-payment line the rung can strand (Worldfire: Keldon Halberdier's {R} off
+// Steam Vents, Ponder left with no {U}). A {0} suspend (Lotus Bloom) pays nothing and is not counted.
+static bool LineSuspendPaid(const Action& a)
+{
+    return a.kind == Action::Kind::Suspend && a.cost.ManaValue() > 0 && LineKeepSuspendOn();
+}
 template <class Next>
 static int LineKeepBoundOver(std::size_t n, Next&& next)
 {
@@ -73461,6 +73469,12 @@ static int LineKeepBoundOver(std::size_t n, Next&& next)
     for (std::size_t i = 0; i < n; ++i)
     {
         const Action& a = next(i);
+        if (LineSuspendPaid(a))
+        {
+            ++held;
+            if (held >= 2 && rock) { return kLineKeepFull; }
+            continue;
+        }
         if (!LineCastHeld(a)) { continue; }
         ++held;
         rock = rock || (rock_on && LineCastIsRock(a));
@@ -73483,6 +73497,8 @@ int LineNoncreatureMv(const std::vector<Action>& cands, const std::vector<int>& 
     for (int j : sel)
     {
         const Action& a = cands[j];
+        // A paid suspend's cost is no creature spell's (MTG_LINE_KEEP_SUSPEND): it counts whatever the card is.
+        if (LineSuspendPaid(a)) { mv += a.cost.ManaValue(); continue; }
         if (!LineCastHeld(a)) { continue; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr || !d->card.IsCreature()) { mv += a.cost.ManaValue(); }

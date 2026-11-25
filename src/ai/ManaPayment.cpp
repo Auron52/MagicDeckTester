@@ -11888,26 +11888,43 @@ LineReducerKeepStats g_lrk_stats;
 // RampLaterPayable's rule -- so the rest of the line is judged on a board that holds it: it resolves before the casts
 // after it, which meet its mana (Dragons s30094937 T4 {Dragonspeaker Shaman + Mind Stone}: the Shaman's generic is the
 // new Mind Stone's {C}). nullptr with the lever off, for a non-rock, and outside a spell payment.
+// MTG_LINE_KEEP_RITUAL (EngineFlags.h): ...and, when the spell this payment is FOR is a fixed-burst RITUAL (Seething
+// Song, Irencrag Feat, Pyretic Ritual: ritual_floating_mana), its float: it resolves before the casts after it, which
+// meet that mana. `ritual` is the float (RitualFloatAmount at no splice -- the least it adds) in its own colour; it
+// rides the same struct so every board the rest is judged on gets it (PutLineKeepRock). def stays nullptr for a
+// ritual, so none of the rock's own tests read it. Worldfire {Song, Song, Personal Tutor}: the second Song is the
+// first Song's float, and without it the rest read as 4 mana owed on a 1-land board -- the joint refused, no repair.
 struct LineKeepRock
 {
     const CardDefinition* def = nullptr;
     int                   number = 0;
+    ManaPool              ritual;
 };
-LineKeepRock LineKeepRockFor()
+LineKeepRock LineKeepRockFor(const GameState& state)
 {
     LineKeepRock r;
-    if (!LineKeepRockOn()) { return r; }
     const Card* pc = PayingSpellCard();
     if (pc == nullptr) { return r; }
     const CardDefinition* d = CardDatabase::Instance().LookupCached(*pc);
-    if (d == nullptr || !d->params.mana_rock || d->card.IsCreature() || d->params.enters_tapped) { return r; }
+    if (d == nullptr) { return r; }
+    if (LineKeepRitualOn() && d->params.ritual_floating_mana > 0 && !d->params.untap_x_mana_sources)
+    { AddColorToPool(r.ritual, d->params.ritual_float_color, RitualFloatAmount(state, *d, 0)); }
+    if (!LineKeepRockOn()) { return r; }
+    if (!d->params.mana_rock || d->card.IsCreature() || d->params.enters_tapped) { return r; }
     r.def = d;
     r.number = pc->m_number;
     return r;
 }
-// Put that rock, untapped, on a scratch board (a no-op without one).
+// Put that rock, untapped, on a scratch board (a no-op without one), and the ritual's float into its pool.
 void PutLineKeepRock(GameState& b, const LineKeepRock& rock)
 {
+    if (rock.ritual.Total() > 0)
+    {
+        ManaPool& f = b.floating_mana;
+        const ManaPool& r = rock.ritual;
+        f.white += r.white; f.blue += r.blue; f.black += r.black; f.red += r.red; f.green += r.green;
+        f.colorless += r.colorless; f.wild += r.wild;
+    }
     if (rock.def == nullptr) { return; }
     Permanent perm;
     perm.card             = rock.def->card;
@@ -12172,6 +12189,28 @@ static bool LineKeepCritGate(const GameState& s, const ManaCost& cost_in, const 
             if (tot[ci] - src_each[k] < rest_c[ci] + cost_c[ci]) { return true; }
         }
     }
+    // MTG_LINE_KEEP_CRIT_MULTI (EngineFlags.h): SEVERAL sources that are only together the last of colour c. The bill's
+    // mv - cost_c non-c pips can take c-capable sources, a whole source at a time: the largest first, while what they
+    // took is still short of those pips (the most units of c such a payment can burn). The test above is this one with
+    // one source, and the largest source is always taken first, so this only passes MORE payments to the exact judge.
+    // Worldfire {Seething Song + Brainstorm}: Song's {2}{R} took Steam Vents (1) + Saprazzan Skerry (2) and Brainstorm's
+    // {U} had nothing left; neither source alone was the last {U}.
+    if (LineKeepCritMultiOn() && n_src > 1)
+    {
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (!(owed & (1u << ci)) || mv <= cost_c[ci]) { continue; }
+            int units[kMaxSrc];
+            int nu = 0;
+            for (int k = 0; k < n_src; ++k) { if (src_mask[k] & (1u << ci)) { units[nu++] = src_each[k]; } }
+            if (nu < 2) { continue; }   // one source: the test above already asked
+            std::sort(units, units + nu, std::greater<int>());
+            const int nonc = mv - cost_c[ci];
+            int took = 0;
+            for (int k = 0; k < nu && took < nonc; ++k) { took += units[k]; }
+            if (tot[ci] - took < rest_c[ci] + cost_c[ci]) { return true; }
+        }
+    }
     return false;
 }
 
@@ -12262,7 +12301,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     // casts after it). The joint bound then also counts its mana -- still a necessary condition (a payment of this bill
     // off the board plus the rest off what is left and the rock pays the two together off board + rock) -- so the
     // amount pre-test is left to LineBillPayable's own, on the board with the rock.
-    const LineKeepRock rock = LineKeepRockFor();
+    const LineKeepRock rock = LineKeepRockFor(state);
     _ph.rock = rock.def != nullptr;
     // The rock cannot pay ITSELF: a repair pays this bill off the board and only the rest off what is left plus the
     // rock. For a rock whose mana is colourless only (Mind Stone {C}, Sol Ring {C}{C}; not a Signet, whose filter makes
@@ -12418,7 +12457,10 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     // any repair the tight test would have refused (expected none).
     static const bool s_tcheck = EnvOn("MTG_LKR_TIGHT_CHECK");
     bool tight_refused = false;
-    if ((rock.def == nullptr || tight) && !PaymentManaCovers(state, joint_creature, joint_t.ManaValue() - floating))
+    // (A ritual's float, MTG_LINE_KEEP_RITUAL, is mana the rest meets: it counts toward the amount as the float does.)
+    const int ritual_units = static_cast<int>(rock.ritual.Total());
+    if ((rock.def == nullptr || tight)
+        && !PaymentManaCovers(state, joint_creature, joint_t.ManaValue() - floating - ritual_units))
     {
         if (!(tight && s_tcheck)) { return none; }
         tight_refused = true;

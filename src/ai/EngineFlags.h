@@ -633,6 +633,48 @@ inline bool LineKeepCritOn()
     return heurarm::Flag(heurarm::LINE_KEEP_CRIT, env_on);
 }
 
+// MTG_LINE_KEEP_CRIT_MULTI (DEFAULT ON; =0 restores the one-source gate byte for byte) -- LineKeepCritGate's reach
+// filter also passes a payment whose bill can take units of a colour the rest of the line owes from SEVERAL sources
+// that are only together its last supply: for each owed colour c the bill's non-c pips may be paid by the largest
+// c-capable sources (source granularity), and the gate passes when what is left of c falls short of the rest's c plus
+// the bill's own. A superset of the one-source test (the largest source is always one of those taken), so it only adds
+// trials; the exact judge (the scratch trial and the hold-out repair) is unchanged and decides every payment.
+// Worldfire (mana-clean gate claude-queue-20261125a): {Seething Song + Brainstorm} on Steam Vents + Mercadian Bazaar +
+// Saprazzan Skerry -- the greedy paid Song with Vents' {R} + Skerry's {U}{U}, the Bazaar held, Brainstorm stranded; no
+// single source was the last {U} (Skerry 2 + Vents 1). docs/design/worldfire-apply-drop-2026-11-25.md.
+inline bool LineKeepCritMultiOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_KEEP_CRIT_MULTI", true);
+    return heurarm::Flag(heurarm::LINE_KEEP_CRIT_MULTI, env_on);
+}
+
+// MTG_LINE_KEEP_SUSPEND (DEFAULT ON; =0 restores the unbound suspend byte for byte) -- LineKeepBound counts a PAID
+// suspend (Action::Kind::Suspend whose cost has mana value > 0: Keldon Halberdier / Rift Bolt {R}, Profane Tutor
+// {1}{B}) as one of the line's held payments, and LineNoncreatureMv counts its cost (a suspend cost is not a creature
+// spell's). ApplySuspend pays it through the shared payer in the apply pre-pass, before every cast, and the line hold
+// (LineCastCostTotal) already carries it, so the rung's rest is right; only the bound left a {suspend + one cast} line
+// out. Worldfire: {suspend Keldon Halberdier + Ponder} on Mercadian Bazaar + Steam Vents -- the greedy paid {R} with
+// Vents (storage taps last), Ponder had no {U}. docs/design/worldfire-apply-drop-2026-11-25.md.
+inline bool LineKeepSuspendOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_KEEP_SUSPEND", true);
+    return heurarm::Flag(heurarm::LINE_KEEP_SUSPEND, env_on);
+}
+
+// MTG_LINE_KEEP_RITUAL (DEFAULT ON; =0 restores the float-blind rest byte for byte) -- when the spell a line-keep payment
+// is FOR is a fixed-burst ritual (ritual_floating_mana: Seething Song, Irencrag Feat, Pyretic / Desperate Ritual), the
+// rung judges the rest of the line (the witness, the complete judge, the joint test and every repair's check) on a
+// board that also holds the ritual's float, in its colour: it resolves before the casts after it, which meet that mana
+// (the MTG_LINE_KEEP_ROCK shape for a ritual). At no splice (the least the ritual adds). Without it a ritual line's rest
+// read as unpayable whatever paid the ritual, so the rung could never keep it: Worldfire {Seething Song, Seething Song,
+// Personal Tutor} on Steam Vents + Mercadian Bazaar + Saprazzan Skerry -- the greedy paid Song with Vents + Skerry and
+// Personal Tutor had no {U}. docs/design/worldfire-apply-drop-2026-11-25.md.
+inline bool LineKeepRitualOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_KEEP_RITUAL", true);
+    return heurarm::Flag(heurarm::LINE_KEEP_RITUAL, env_on);
+}
+
 // MTG_LINE_SPARE_FILTER_FEED (DEFAULT ON; =0 restores the plain over-count) -- LineSpareSourceMask's SHORT test
 // also reads the supply LEFT AFTER the generic pip eats a one-unit float that is the only feed of an untapped
 // filter land (the filter's credit goes with it). mana-clean item 6, treasure_hunt {Cascade Bluffs + Land's Edge +
