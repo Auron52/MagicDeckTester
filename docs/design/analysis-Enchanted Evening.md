@@ -27,7 +27,7 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
      follow-ups) for the USER's pre-combo-exception decision.
   2. Step 6: free-turn integration (trait in `DeckMayLockOpponent`, `DeckLockNeedsLandStrip` false, reach
      certificate OFF for this deck, fairness check per rulings 5, 6, 8-13: virtual board, Verse wipe point, hexproof
-     trample >= 5 test incl. castable Auras, FoV vs virtual Auras as a searched cast).
+     trample >= 5 test incl. castable Auras, FoV vs virtual Auras as a searched cast). **DONE 2026-11-25** (entry below).
   3. Step 7: FoV end-step pitch. 4. Step 8: folds (land play under the lock, fetch variants) + root-cause gi=12/gi=13
      (steps 3+5 notes). 5. Step 9: viewer wiring incl. ruling 14 (auto float + manual tap) and DECISIONS.md.
   Then: Stage 3 coverage loop, Stage 4 profile + provider audit (provider must NOT opt into `ClassifiesMainPhases`),
@@ -40,6 +40,14 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
   the search took a lock piece there 28 times).
 * Housekeeping: `build/wt/ee-base35` (scratch baseline build output) can be deleted.
 
+* **LOCK STEP 6 (free-turn integration + the USER fairness check, §3.2-§3.4) DONE (2026-11-25):** code 4a676a477 +
+  ff0c0014a (umbra-armor rules fix, test setup fix) + 9571ebde7 (log tags). Units 4233/4233; smoke 247/0
+  play-changed=0 (searched and d0), scenarios 677/677; card-field audit rc=0. Fairness check ON (shipped) vs the
+  prune-ON baseline: sanity 24/24 avg 5.7083 (was 22/24 6.7083), held-out 5.86 / 5.85 (was 6.81 / 6.84), units
+  -30..-43%; vs the check OFF it costs 0.67-1.00 turn. Real vetoes: 11 turns in 9 of 224 games, all clause 1.
+  Reach audit: never consulted. Slower games (sanity gi=1, gi=3) recover at d3 b0. Three USER questions (clause 3,
+  O-Ring vs virtual, evasion) in the "Lock-cluster step 6" section. NEXT: step 7 (Force of Vigor end-step pitch;
+  the virtual-Aura FoV pins must be offered at the pitch too).
 * **LOCK STEP 1 (type statics: Enchanted Evening + Opalescence) DONE (2026-11-26):** code a9d866afe, Scryfall snapshot
   aea0e800e (update rc=0, offline diff rc=0). Units 4191/4191 (13 new, `test/unit/test_enchanted_evening_lock1.cpp`).
   Smoke (Release, `MTG_PGO=0`): 247 passed / 0 failed / 0 new, play-changed=0 (searched and d0), scenarios
@@ -597,6 +605,94 @@ log does not carry):**
   and >= 2 untapped lands (a second Grove would have used the mana): 8 in 200 games (2 with Presence out = 2 lost
   Presence draws); OFF 0. Turn ends with EE in hand, uncast, at exactly 4 mana (the 5th mana as the holdup): ON 134,
   OFF 119 (+13%), amendment 132. Presence fetched: OFF 11, ON 4.
+
+## Lock-cluster step 6 (free-turn integration + the USER fairness check, §3.2-§3.4) -- 2026-11-25
+
+Code: 4a676a477 (WIP: trait, no reach certificate, `MTG_FREE_TURN_EE_FAIR` virtual board, key folds), ff0c0014a (test
+setup fix + umbra armor), 9571ebde7 (measurement-only log tags). Units 4233/4233 (9 new cases in
+`test/unit/test_enchanted_evening_lock6.cpp`; the 8 `EE lock step 6*` / `EE fairness*` cases RAN, `-tc` count 8/8).
+`audit_card_fields.py` offline rc=0 (hard fields match). Smoke (Release, `MTG_PGO=0`, ff0c0014a): 247 passed / 0
+failed / 0 new, play-changed=0 (searched and d0), scenarios 677/677 -- every other deck unmoved (masks zero for them).
+9571ebde7 only adds tags to an env-gated stderr line; the step-6 batch rerun on it is digest-identical per job.
+
+**What is built.** `GoldFishRunner::DeckHasEeLock` (EE + one of Opalescence / Calming Verse / Force of Vigor, main or
+wishable side) joins `DeckMayLockOpponent`; `DeckLockNeedsLandStrip` is false for it (no reach certificate);
+`deck_has_ee_lock` is stamped from it. `freeturn::LockHolds = LockHoldsOnBoard && eefair::Veto == kNone`. The virtual
+board (`opp_virtual_board` / `opp_virtual_spent`, one 64-bit mask per head, folded nonzero-gated into the sim key, the
+dominance signature and the route signature) records, after every opponent land turn (both worlds, and the executor's
+on-the-draw turn 0), what the head could cast with its lands that turn: one mana budget per turn, hand left to right,
+non-Aura nonland permanents first, then creature Auras that have a host. Cleared only by removal we actually cast
+(ruling 8): Calming Verse (every enchantment-now, i.e. all under EE; indestructible stays), the Wave + Opalescence sweep
+(targetable virtual creatures cost a counter each; ruling 17 unchanged: no loop, nothing), and Force of Vigor against
+virtual Auras (ruling 13, a SEARCHED pin appended after the board options, only while a hexproof threat exists).
+Veto clauses: 1 = a virtual creature now; 2 = a hexproof creature reaching power >= 5 with trample, counting every
+virtual Aura of its head (rulings 9 / 10, layers 7b + 7c); 3 = a hexproof creature with no able Wave loop. A hexproof
+non-threat under an able loop is contained.
+
+**Rules review (mtg-rules skill).** Checked: hexproof only stops opponents' targeting (CR 702.11b; the opponent's own
+Auras may target it; Verse does not target); Opalescence sets base P/T = MV in layer 7b, Aura bonuses on top in 7c, an
+MV-0 one dies as a 0/0 (704.5f); Auras are never animated; an Aura needs a host (303.4a); under EE + Opalescence an
+Equipment is a creature and cannot equip (301.5c), so Equipment never adds reach; indestructible survives the Verse.
+**One rules fix (ff0c0014a): umbra armor (CR 702.89a).** A "destroy all" does not destroy the creature an umbra
+enchants; the umbra is destroyed instead. The pool's Auras list holds Lion / Hyena / Spider Umbra next to Slippery
+Bogle and Gladecover Scout, so the old `VerseClears` wrongly erased a hexproof creature that survives. Now, with a live
+virtual umbra, ONE virtual creature (the hexproof one if any) survives the Verse bare; its Auras are cleared. New param
+`aura_umbra_armor` (Hyena, Spider, Lion, Crab, Indrik Umbra), read only here. Unit case added.
+**Test fix (not engine):** the lock6 fixture's all-Forest deck stamped `deck_has_enchantment_shroud` false, so two Groves
+never shrouded the Wave in the two ruling-17 cases; the EE list holds Grove, so the real stamp is true.
+
+**Disclosed gaps (all on the opponent's side unless stated):**
+* Rancor's return to hand is not modelled: a destroyed virtual Rancor is spent (generous to us; under the full lock the
+  opponent has no land to recast it).
+* Granted hexproof / shroud on a virtual creature (Alpha Authority, in the Auras list; Lightning Greaves) is not
+  modelled: such a creature is treated as targetable and swept (generous to us).
+* Evasion is not part of the hexproof test: a Bogle with Gryff's Boon (flying) or Spirit Mantle (protection from
+  creatures) cannot be chump-blocked, which ruling 9's containment argument assumes (see the USER question below).
+* Daybreak Coronet / Lion Umbra host restrictions ignored, and every virtual Aura of a head assumed on its one
+  creature (generous to the opponent).
+* Virtual mana (a recorded mana creature, a recorded Wild Growth) does not raise later budgets (generous to us).
+* Oblivion Ring cast by us is not credited against a virtual permanent (agent default; USER question below).
+* Design §6's scenario fixtures for the three lock configurations are not built (the unit cases cover each clause).
+
+**Measurement** (ONE pooled batch, `build/scratch/ee/l6/m6b.*`; d3 b10, no profile, `MTG_EE_USER_PRUNE` ON,
+`MTG_EE_GROVE_PRELOCK` OFF; arm 1 = fairness check ON (shipped), arm 0 = OFF (credit on the board alone); baseline = the
+rulings-15/16/17 prune-ON runs, no free-turn credit for this deck). avg = credited turn, unwon = 9.
+
+| family (seed) | baseline won / avg / units | ON won / avg / units | ON free turns (games) | OFF won / avg / units | OFF free turns (games) |
+|---|---|---|---|---|---|
+| sanity (7000 x24) | 22 / 6.7083 / 6.83M | 24 / 5.7083 / 4.77M | 49 (20) | 24 / 4.7083 / 3.18M | 72 (23) |
+| held-out (8000 x100) | 93 / 6.81 / 28.7M | 95 / 5.86 / 16.5M | 200 (74) | 97 / 5.19 / 10.9M | 258 (90) |
+| held-out (10000 x100) | 95 / 6.84 / 25.3M | 97 / 5.85 / 16.0M | 231 (83) | 99 / 5.05 / 13.1M | 302 (98) |
+
+* ON vs baseline: about one turn faster in every family. ON vs OFF: the check costs 1.00 / 0.67 / 0.80 turns (ON slower
+  in 16 / 57 / 60 games, faster in 0 / 1 / 2). The cost is mostly NOT executor vetoes: the board lock forms later in ON
+  in 17 / 55 / 61 games, because the search (whose rollouts apply the same check) no longer completes an EE +
+  Opalescence lock that a castable creature would break. It waits for the Wave or a Verse, or just attacks (hb gi=3: the
+  opponent could cast Kor Spiritdancer from round 1; ON never locks and wins T6, OFF locks round 4 and wins T4).
+* Real-game vetoes (a board lock the virtual board refused; bottom-trial playouts excluded by the new tags): sanity 0;
+  8000: 5 turns in 5 games (seeds 8016 Galadriel of Lothlorien, 8021 Neverwinter Hydra, 8031 Kumena's Speaker -- that
+  game still got 4 free turns later, 8053 Light-Paws, 8060 Ruby Medallion); 10000: 6 turns in 4 games (10006 Sigarda's
+  Aid, 10009 Dragon Tempest, 10027 Akoum Hellhound x3, 10047 Street Wraith). EVERY real veto is clause 1 (a castable
+  creature, or a castable artifact / enchantment that Opalescence animates); clauses 2 and 3 never fired in a real
+  game (clause 2 once in a sanity bottom trial: Gladecover Scout). The virtual board was non-empty in 21 / 92 / 93 of
+  the ON games.
+* Reach audit (`MTG_FREE_TURN_REACH_AUDIT=1`): no `[free-turn-reach]` line at all (checks = 0). The certificate is
+  never consulted for this deck, so it certifies nothing.
+* Slower than baseline: sanity gi=1 (6 -> 7) and gi=3 (6 -> 7); none in either held-out family. Both diverge at the T1
+  land choice (Temple Garden vs a fetch), budget noise at b10. d3 b0 repros (pinned ff0c0014a binary,
+  `build/scratch/ee/l6/b0-*`): gi=3 ON = T6 with 2 free turns (789 s, 6.51M units) -- RECOVERS. gi=1 ON = T5 with 2 free turns (2352 s, 19.4M units) -- RECOVERS (better than both b10 runs). Same-binary baseline at d3 b0 (`MTG_FREE_TURNS=0`): gi=1 T6 (32.1M units), gi=3 T6 (3.77M units), so ON is one turn faster on gi=1 and equal on gi=3 at unlimited budget. Neither slower game needs a fix.
+
+**USER questions (defaults taken, work not blocked).**
+1. Clause 3: with no able Wave loop (ruling 17), a hexproof creature the opponent could have cast vetoes the lock even
+   if it is not a threat (ruling 9's containment needs the loop's "blocker exiled and replaced"). Default: vetoes.
+   It never fired in this measurement.
+2. Should an Oblivion Ring that we actually cast be able to exile a virtual permanent (ruling 8: "only removal we
+   actually cast")? Default: not built (only Verse, the sweep and FoV count).
+3. Evasion: ruling 9 contains a hexproof creature below 5 power with trample because it can be chump-blocked forever.
+   The Auras list also has Gryff's Boon (flying) and Spirit Mantle (protection from creatures); our animated
+   enchantments have neither flying nor reach, so such a creature cannot be blocked and attacks freely. Should an
+   evasive hexproof creature also break the full lock (for example at any power, or only above some clock)? Default:
+   ruling 9 literally (trample and >= 5 only).
 
 ## Done items (formerly provisional Q1 / Q2 -- settled by standing CLAUDE.md rules, not USER questions)
 
