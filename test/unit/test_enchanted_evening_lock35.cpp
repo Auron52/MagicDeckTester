@@ -484,3 +484,48 @@ TEST_CASE("Force of Vigor destroying an Oblivion Ring returns the exiled card (b
         CHECK(back->controller_index == 1);
     });
 }
+
+TEST_CASE("EnchantedEveningProvider folds: a no-op Verse KEEP and a target-less Force of Vigor are not offered")
+{
+    static const EnchantedEveningProvider ee_prov;
+    // No enchantment we don't control (no EE): KEEP would destroy nothing -> only SWEEP-SELF is offered.
+    GameState s = L5Board();
+    s.m_provider = &ee_prov;
+    for (int k = 0; k < 5; ++k) { L5Put(s, "Forest", 101 + k); }
+    L5Put(s, kExpl, 40);
+    L5Put(s, "Plains", 100001, 1);
+    s.players[0].hand.push_back(L5Card(kVerse, 30));
+    CHECK(L5Pins(TurnSolver::EnumerateMainPlans(s, true), kVerse) == std::set<std::string>{ "VS" });
+    // The generic provider still offers both (the fold is this deck's).
+    GameState g = s;
+    g.m_provider = nullptr;
+    CHECK(L5Pins(TurnSolver::EnumerateMainPlans(g, true), kVerse) == std::set<std::string>{ "VK", "VS" });
+    // Under EE every opposing permanent is an enchantment: KEEP is back.
+    GameState e = s;
+    L5Put(e, kEE, 51);
+    RefreshTypeStatics(e);
+    CHECK(L5Pins(TurnSolver::EnumerateMainPlans(e, true), kVerse) == std::set<std::string>{ "VK", "VS" });
+
+    // Force of Vigor: never the empty set under this provider...
+    GameState f = L5Board();
+    f.m_provider = &ee_prov;
+    L5Put(f, kEE, 51);
+    for (int k = 0; k < 4; ++k) { L5Put(f, "Forest", 101 + k); }
+    L5Put(f, "Plains", 100001, 1);
+    RefreshTypeStatics(f);
+    f.players[0].hand.push_back(L5Card(kFoV, 30));
+    const std::set<std::string> fp = L5Pins(TurnSolver::EnumerateMainPlans(f, true), kFoV);
+    CHECK_FALSE(fp.empty());
+    CHECK(fp.count("FV") == 0);
+    CHECK(fp.count(DestroyUpToArtEnchPin({ 100001 })) == 1);
+    // ...and with no legal target at all (no artifact or enchantment anywhere) it is not offered.
+    GameState n = L5Board();
+    n.m_provider = &ee_prov;
+    for (int k = 0; k < 4; ++k) { L5Put(n, "Forest", 101 + k); }
+    L5Put(n, "Plains", 100001, 1);
+    n.players[0].hand.push_back(L5Card(kFoV, 30));
+    CHECK(L5Pins(TurnSolver::EnumerateMainPlans(n, true), kFoV).empty());
+    GameState ng = n;
+    ng.m_provider = nullptr;
+    CHECK(L5Pins(TurnSolver::EnumerateMainPlans(ng, true), kFoV) == std::set<std::string>{ "FV" });
+}

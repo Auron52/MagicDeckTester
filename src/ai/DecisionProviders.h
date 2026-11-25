@@ -5193,6 +5193,33 @@ public:
                "feeding those draws, and the Opalescence attack (every non-Aura enchantment a P/T = MV "
                "creature, Enchanted Evening making every permanent one) before claiming no line wins." }; }
     const char* Name() const override { return "EnchantedEvening"; }
+
+    // SOUND DOMINANCE FOLDS (lock steps 3 / 5, 2026-11-25; default ON, no flag -- CLAUDE.md "collapse wasted search").
+    // Premise, true of this list: nothing in it rewards casting an instant or sorcery as such (Enchantress's
+    // Presence draws on ENCHANTMENT spells only; no storm / prowess / graveyard count), so a cast that changes no
+    // permanent only spends mana and a card, and NOT casting it (always offered) reaches a weakly better state.
+    //   * Calming Verse KEEP with no enchantment we don't control: clause 1 destroys nothing, and KEEP's floated
+    //     lands leave the board as it was (an untapped land is at least as good as the mana it floats), or -- a
+    //     land it cannot float -- clause 2 fires, which is SWEEP-SELF's result (still offered). Withdrawn.
+    //   * Force of Vigor with no target (the "up to" empty set): resolves to nothing. Withdrawn; with no legal
+    //     target the cast is not offered at all.
+    // A list that adds a cast-count payoff must drop both.
+    void CalmingVerseVariants(const GameState& s, int controller, bool& keep, bool& sweep) const override
+    {
+        (void)sweep;
+        bool opposing = false;
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index != controller && p.card.IsEnchantment()) { opposing = true; break; } }
+        if (!opposing) { keep = false; }
+    }
+    void DestroyUpToArtEnchTargetOptions(const GameState& s, int controller,
+                                         std::vector<std::vector<int>>& options) const override
+    {
+        (void)s; (void)controller;
+        options.erase(std::remove_if(options.begin(), options.end(),
+                                     [](const std::vector<int>& o) { return o.empty(); }),
+                      options.end());
+    }
 };
 
 class WorldfireProvider : public DeckProvider

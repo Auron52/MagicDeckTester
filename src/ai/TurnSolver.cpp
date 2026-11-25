@@ -57704,15 +57704,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     //     beyond-horizon option first (DestroyUpToArtEnchPick), so a budgeted search spends on it first. Targets
     //     are taken off the EMISSION board: a permanent entering earlier in the same main phase is targetable from
     //     the next main phase's root (each main is its own search root), never unfindable.
-    // Rollout leaves keep the UNPINNED base (the provider's beyond-horizon pick). A REMAND variant never resolves: no
+    // Rollout leaves keep the UNPINNED base (the provider's beyond-horizon pick), EXCEPT a cast whose beyond-horizon
+    // resolution does nothing (FoV's pick is the empty set; a Verse KEEP the provider withdrew as a no-op): the
+    // playout does not spend mana and a card on it (2026-11-25: the playout's no-op casts stole the mana of real
+    // plays and skewed leaf values -- EE sanity gi=13 lost a turn at d3 b0). A REMAND variant never resolves: no
     // variants. Gated on the two params.
     {
         const bool dv_space = (g_search_candidate_enum || g_condemn_root_turn < 0) || HumanPlayActive();
         const std::size_t dv_n = actions.size();
         const int me = state.active_player_index;
-        bool fv_built = false;
+        bool fv_built = false, fv_noop_built = false, fv_noop = false;
         std::vector<std::string> fv_pins;
-        for (std::size_t i = 0; dv_space && i < dv_n; ++i)
+        std::vector<std::size_t> dv_drop;   // base casts withdrawn (descending erase after the loop)
+        for (std::size_t i = 0; i < dv_n; ++i)
         {
             if (actions[i].kind != Action::Kind::CastFromHand || actions[i].def == nullptr
                 || !actions[i].tutor_target.str().empty()) { continue; }
@@ -57727,13 +57731,41 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 bool untapped = false;
                 for (const Permanent& p : state.battlefield)
                 { if (p.controller_index == me && p.card.IsLand() && !p.tapped) { untapped = true; break; } }
-                actions[i].tutor_target = std::string("VK");
-                if (untapped)
+                bool keep = true, sweep = untapped;
+                ResolveProvider(state).CalmingVerseVariants(state, me, keep, sweep);   // restrict only
+                sweep = sweep && untapped;
+                if (!dv_space)
+                {
+                    // Beyond the horizon the unpinned cast resolves on the provider default: a withdrawn KEEP
+                    // there is a cast the provider proved does nothing (DecisionProvider::CalmingVerseVariants).
+                    if (!keep && ResolveProvider(state).CalmingVerseKeepDefault(state, me)) { dv_drop.push_back(i); }
+                    continue;
+                }
+                if (!keep && !sweep) { dv_drop.push_back(i); continue; }   // not casting covers it
+                actions[i].tutor_target = std::string(keep ? "VK" : "VS");
+                if (keep && sweep)
                 {
                     Action v = actions[i];               // copy BEFORE push_back (reallocation)
                     v.tutor_target = std::string("VS");
                     actions.push_back(std::move(v));
                 }
+                continue;
+            }
+            if (!dv_space)
+            {
+                // Beyond the horizon: the unpinned cast resolves on DestroyUpToArtEnchPick; when that pick is the
+                // empty set the cast only spends mana and the card (dominated by not casting it), so the playout
+                // does not make it.
+                if (!fv_noop_built)
+                {
+                    const std::vector<std::vector<int>> all
+                        = DestroyUpToArtEnchOptions(state, me, pp.destroy_up_to_artifacts_enchantments);
+                    const int k = ResolveProvider(state).DestroyUpToArtEnchPick(state, me, all);
+                    fv_noop = !(k >= 0 && k < static_cast<int>(all.size()))
+                           || all[static_cast<std::size_t>(k)].empty();
+                    fv_noop_built = true;
+                }
+                if (fv_noop) { dv_drop.push_back(i); }
                 continue;
             }
             if (!fv_built)
@@ -57760,14 +57792,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (std::find(fv_pins.begin(), fv_pins.end(), pin) != fv_pins.end()) { continue; }
                     fv_pins.push_back(pin);
                 }
-                // A provider may RESTRICT, never empty the menu: the unpinned base would then resolve on the
-                // provider's pick inside the search window (NO-GREEDY). An emptied menu falls back to every option.
-                if (fv_pins.empty()) { fv_pins = legal_pins; }
                 const auto fit = std::find(fv_pins.begin(), fv_pins.end(), front_pin);
                 if (fit != fv_pins.end() && fit != fv_pins.begin()) { std::rotate(fv_pins.begin(), fit, fit + 1); }
                 fv_built = true;
             }
-            if (fv_pins.empty()) { continue; }   // (unreachable: the empty set "FV" is always legal)
+            // A provider that withheld EVERY option withdrew the cast (not casting covers it). The unpinned base
+            // must never stay: it would resolve on the provider's pick inside the search window (NO-GREEDY).
+            if (fv_pins.empty()) { dv_drop.push_back(i); continue; }
             actions[i].tutor_target = fv_pins.front();
             for (std::size_t k = 1; k < fv_pins.size(); ++k)
             {
@@ -57776,6 +57807,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 actions.push_back(std::move(v));
             }
         }
+        for (auto it = dv_drop.rbegin(); it != dv_drop.rend(); ++it)
+        { actions.erase(actions.begin() + static_cast<std::ptrdiff_t>(*it)); }
     }
 
     // ETB CHOICE AXIS post-pass (AccomplishedAlchemist, 2026-10-18). A choice the card makes AS IT

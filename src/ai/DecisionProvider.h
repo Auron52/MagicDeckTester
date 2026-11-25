@@ -4886,6 +4886,12 @@ public:
     // UNPINNED cast: a rollout leaf beyond the horizon and the d0 runner (the permitted playout greedy). Base: KEEP.
     virtual bool CalmingVerseKeepDefault(const GameState& s, int controller) const
     { (void)s; (void)controller; return true; }
+    // ...and the variant MENU (restrict only: a provider may clear `keep` / `sweep`, never set one). TurnSolver's
+    // post-pass emits KEEP while `keep`, SWEEP-SELF while `sweep` and we control an untapped land; with neither the
+    // cast is not offered (not casting covers it). A withdrawn KEEP also stops the beyond-horizon (unpinned, KEEP
+    // default) cast. Base: both.
+    virtual void CalmingVerseVariants(const GameState& s, int controller, bool& keep, bool& sweep) const
+    { (void)s; (void)controller; (void)keep; (void)sweep; }
 
     // FORCE OF VIGOR clause 2 (CardParams::destroy_up_to_artifacts_enchantments; lock cluster step 5). "Destroy up to
     // N target artifacts and/or enchantments": the target SET is a SEARCHED cast axis -- TurnSolver's post-pass emits
