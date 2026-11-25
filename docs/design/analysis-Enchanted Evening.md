@@ -23,8 +23,14 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
   677/677 (EE is not in the suite yet). Sanity run (24 games, seed 7000, d3 b10, no profile): 23 won, avg 6.625; the
   lock formed in 18 of the 23 inspected (both sides 0 lands, opponent 0 permanents, later drops die, no fetch); the unwon game is a
   no-threat flood (Opalescence + Exploration only). SLOW-GAME 34-45 s on 3 games (no keep table yet). Coverage: EE + Opalescence `full`; missing = Calming Verse,
-  Force of Vigor, Parallax Wave. Notes for steps 2-8: "Lock-cluster step 1" section below the Cards table. NEXT:
-  step 2 (pre-float, §4.2).
+  Force of Vigor, Parallax Wave. Notes for steps 2-8: "Lock-cluster step 1" section below the Cards table.
+  (Correction: step 1's gi=14 also took 328 s / 7.52M units; the "34-45 s" above omitted it.)
+* **LOCK STEP 2 (pre-float at the lock, §4.2) DONE (2026-11-26):** code 67ab77dfe. Units 4196/4196 (5 new,
+  `test/unit/test_enchanted_evening_lock2.cpp`). Smoke (Release, `MTG_PGO=0`): 247 passed / 0 failed / 0 new, play-changed=0 (searched and d0), scenarios 677/677. Sanity run (same 24 games,
+  seed 7000, d3 b10): 23 won, avg 6.625 (unchanged); exactly ONE game's play moved (gi=7, T-index 21: EE completes the
+  lock, Presence draws Exploration, which is now cast off the floated {G}; same win turn); units per game within
+  +0.4% of step 1 (wall times inflated by a concurrent smoke run). Notes: "Lock-cluster step 2" section. NEXT: step 3
+  (Calming Verse, §4.3).
 
 ## USER rulings (verbatim, 2026-11-25)
 
@@ -170,6 +176,41 @@ Notes for the lock-cluster implementer: (a) Enchanted Evening must extend `Perma
 Vigor) should consult `PermanentHasShroud`; (c) any leave path it adds (Wave's exile, FoV's destroy, an Opalescence
 creature dying) must reach `FireLeavesBattlefieldTriggers` so O-Ring's linked card returns; (d) under Opalescence a
 Grove is a creature: `SacrificeSourceAsCost` already routes it through the creature death chokepoint.
+
+## Lock-cluster step 2 (pre-float at the lock) -- notes for the later steps
+
+* **What it does.** `PrefloatLandsAtTypeStaticsLock` (SpellEffects.h, beside `LandDiesToTypeStatics`) runs at the top of
+  the universal enter cascade (`FireEtbWatchers`), right BEFORE `RefreshTypeStatics`, so one site serves the executor,
+  the rollout and every put path. When the entrant carries a type static, its controller is the active player, and a
+  land of ours dies under the statics WITH the entrant but not WITHOUT it (`LandDiesUnderTypeStatics`, the
+  with/without test; EEs are counted so a second EE / Opalescence floats nothing), each such UNTAPPED land is tapped
+  into `floating_mana` through `g_lock_prefloat_hook` (ManaPayment.cpp `LockPrefloatInstaller` -> `ApplyEnginePreTap`,
+  `HumanPreTapOfferFor` the legality). A land drop under an active lock is never floated (it dies before priority).
+  Already-tapped lands (the cast's own payment, `BatchPrepayMainCasts`' whole-turn prepay, a human pre-tap) are
+  skipped: their mana is already spent or already floating, so nothing is lost or counted twice (unit test 2).
+* **Colour (no greedy pick).** One free face: float it. A dual floats ONE unit as `wild` (tapped as its first face, that
+  unit turned to wild) only under the new deck stamp `GameState::deck_float_wild_exact` (StampDeckTraits: every coloured
+  pip of the list is a colour every multi-colour land of the list makes; a hybrid pip by either half; phyrexian /
+  twobrid count as required) and for a one-mana tap; otherwise the dual dies untapped as before. TRUE for this list.
+  Default FALSE (unstamped states). The searched colour-split axis for a deck where the stamp fails is NOT built.
+  Only `Plain` / `Conversion` routes float (a sacrifice route would erase a permanent while the cascade's caller holds
+  slot indices). Fetchlands are not cracked (design §4.2).
+* **Phase end.** The float lives in `floating_mana`, which both worlds empty at every step/phase boundary
+  (`CrossManaBoundary`: `GameEngine::CombatPhase` / the rollout's combat, the end step), CR 500.4; unit test 3.
+* **Planner phase-boundary gate: nothing to build.** Each main phase is its own search node, enumerated from the real
+  post-lock state (lands dead, float emptied at combat), so a main-2 cast after a main-1 lock is never offered off
+  dead lands; within one phase the float equals the land mana it replaced (a dual as wild is exact under the stamp).
+  The dominance comparator stands down on a nonzero float (Dominance.h's mid-turn boundary assertion), so the float
+  cannot fold two distinct states. **Watch for the provider audit:** the Main2 classification
+  (`ClassifiesMainPhases`) assumes "main 1's apply leaves the moved cast its mana", which a main-1 lock breaks; this
+  deck's provider must NOT opt into it without accounting for the lock (default off today).
+* **Human play:** the pre-float fires in the viewer too (it is a dominance with no choice under the stamp: viewer
+  bucket "none", design §5); a human who pre-tapped some lands keeps that, the rest are floated.
+* **For step 3 (Calming Verse KEEP):** reuse `g_lock_prefloat_hook(state, controller, num)` per untapped land before
+  the Verse resolves (it is the §4.2 machinery and colour rule); the "dies with/without" filter is specific to the
+  type statics, so call the hook directly with Verse's own land list.
+* **Not covered (no such card in the list):** a non-land mana source that dies to the lock (an MV-0 mana rock or token:
+  Treasure, a 0-cost mana creature) is not floated; extend the doomed scan if a deck adds one.
 
 ## Done items (formerly provisional Q1 / Q2 -- settled by standing CLAUDE.md rules, not USER questions)
 
