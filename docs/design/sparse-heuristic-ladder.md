@@ -325,3 +325,13 @@ pass 2's committing pass = Melira 20.7 %, Goblins 15.0 %, Hydras 10.1 %, Landfal
 Alchemist 5.9 % (pass 2 better in 7 of 103 there), Martyr 5.5 %, Fungus 4.8 %. Pass 2 is INTERIOR work (0-3 % of its
 committing pass is rollout leaves) costing 0.34-1.9x pass 1's committing pass: the compound waves themselves under
 the cut. It runs inside every shape that runs FullSearchLine, so a saving here is general (USER: prefer those).
+
+#### Checkpoint 2026-11-25 ~02:40 UTC (Claude, worktree `.claude/worktrees/p18j-int-note`, branch `wip/p18k-claude`)
+State: wip/p18j-int rebased onto origin phase-1-2-deck-analyzer (1 conflict, ClearPerGameCaches, both lines kept);
+Release built (`build/scratch/p18g/mtg_k1`), units 4168/4168. Nothing running. Next, in order:
+1. Dev-seq pass 2 (general): find what its committing pass re-walks (compound waves under the cut) and cut what
+   provably cannot win by cut2 -- LOSSLESS first. A budget-wave re-price (pass 2 only on spare budget, inert at b0)
+   is the lossy-at-budget fallback and is the USER's call (surfaced 2026-11-25).
+2. Sparse mode's own waste: the cut root rollout (~0.5 % everywhere) and walk misses -- back off per game when the
+   lookahead does not pay; let a missed walk's work feed the ladder without moving its start gate.
+3. Re-measure every heur-preferring deck (bar: never more work, slightly better than even in the worst case).
