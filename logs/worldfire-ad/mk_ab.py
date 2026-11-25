@@ -10,6 +10,7 @@ ap.add_argument('out')
 ap.add_argument('--base', type=int, default=2710000)
 ap.add_argument('--n', type=int, default=400, help='games per arm, every deck but Worldfire')
 ap.add_argument('--wf', type=int, default=3000, help='games per arm, Worldfire standard and 2HG')
+ap.add_argument('--hg', type=int, default=0, help='games per arm in 2HG, every deck but Worldfire (0 = none)')
 ap.add_argument('--decks', default='', help='comma list (default: every suite deck)')
 ap.add_argument('--chunk', type=int, default=25)
 o = ap.parse_args()
@@ -34,6 +35,8 @@ for k in decks:
     shapes.append((k + 'play', k, n, False))
     if k == 'worldfire':
         shapes.append((k + '2hgplay', k, n, True))
+    elif o.hg > 0:
+        shapes.append((k + '2hgplay', k, o.hg, True))
 jobs = []
 for (tag, k, n, hg) in shapes:
     for off in range(0, n, o.chunk):
