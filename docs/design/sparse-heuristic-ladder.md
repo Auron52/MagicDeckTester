@@ -326,6 +326,48 @@ Alchemist 5.9 % (pass 2 better in 7 of 103 there), Martyr 5.5 %, Fungus 4.8 %. P
 committing pass is rollout leaves) costing 0.34-1.9x pass 1's committing pass: the compound waves themselves under
 the cut. It runs inside every shape that runs FullSearchLine, so a saving here is general (USER: prefer those).
 
+### K2-K4 (2026-11-25): the sparse ladder across dev-seq's two passes (`P18DvsWalk`)
+
+Same 8 decks x 200 games and seeds as K1 (`build/scratch/p18g/K2..K4`, tools `acct.py`, `acct2.py`, `p2acct.py`,
+`p2cmp.py`, `zdist.py`, `zback.py`). Heur is byte-identical across K1/K2 (the change acts only under mode 4).
+
+**What was wrong.** Pass 1 and pass 2 of a two-pass search are two FullSearchLine calls, and each ran its own sparse
+lookahead. The walk's line memo was a local of the call, so after a pass-1 walk commit pass 2 re-ran the root rollout
+(under a cut it could not win by) and the whole rollout ladder cold. Worse, the walk commits deeper than the heuristic
+ladder reaches (Martyr 18350002 T1: heur commits pass 3 on a rollout T5 and meets no latent, so it runs NO pass 2; the
+walk proves T5 at pass 5, meets a latent there, and pays a depth-5 pass 2). K1: mode 4's pass 2 = 15.7 % of Martyr's
+units vs heur's 9.9 %; on Martyr's walk-hit decisions heur's pass 2 totals 18k units, mode 4's 269k.
+
+**K2** (memo + epoch carried, pass 2 walks, pass-2 root rollout skipped when pass 1 proved it cannot win): passes 1-3
+of the pass-2 walk cost 0, but its passes 4-5 stayed expensive and a capped walk fell through to the cold ladder:
+units Hydras 1.025, Martyr 1.014 (worse). **K4** adds the root-cut clamp (pass 2 walks only to cut - T + 1), the
+ladder carry's dvs bookkeeping on the walk memo (tail skip / node keep / apply skip), and no cold-ladder fallback
+after a budget-cut pass-2 walk. Quality 0/0 on every deck; units vs heur:
+
+| deck | K1 | K4 |
+|---|---|---|
+| Hydras | 1.009 | **0.990** |
+| Martyr Lifegain | 1.004 | **0.966** |
+| Maze's End | 1.004 | 1.004 |
+| Merfolk Turns | 1.000 | 1.000 |
+| Mill | 1.011 | 1.012 |
+| Sea Creatures | 0.916 | 0.915 |
+| Shadowborn Apostle | 1.009 | 1.009 |
+| Stuffy Doll | 1.000 | 1.000 |
+
+Mode 4's pass 2 after a walk hit: Martyr 7.5 % (K2) -> 2.7 % of units, Hydras 4.8 % -> 1.3 %.
+
+**K3: `_ptp1` (arm key, research) -- the trigger is the ladder's own pass 1** (no root rollout; walk 2..W-T+1 when pass
+1's line wins in the window): 9 games earlier / 0 later, but units 1.07-1.34x heur (K3) / 0.97-1.30x (K4 code): the
+trigger fires on most decisions and most walks miss (Mill waste 37 % of units). Its hits are real (Stuffy 18580003
+T1: 3.2k vs heur 6.2k, a hit mode 4 misses because its root rollout is cut). Not adopted; kept default off.
+
+**What is left on the five even decks: the cut root rollout at T1.** `zdist.py` (K4): cut root rollouts cost 0.42 %
+(Maze's End), 0.54 % (Mill), 0.60 % (Merfolk Turns), 0.75 % (Shadowborn), 0.46 % (Stuffy) of units, and 90-99 % of
+them are T1 decisions, where the per-game back-off (`_pzb`, two consecutive cuts) cannot act yet. The T1 hits mostly
+win at the window edge (Hydras 46 of 48 at W = T+4), so a tighter rollout cut kills them; a one-cut back-off saves
+0.16 % on Maze's End and loses 2.6 % on Stuffy (`zback.py`). Walk misses are small (<= 0.08 %).
+
 #### Checkpoint 2026-11-25 ~02:40 UTC (Claude, worktree `.claude/worktrees/p18j-int-note`, branch `wip/p18k-claude`)
 State: wip/p18j-int rebased onto origin phase-1-2-deck-analyzer (1 conflict, ClearPerGameCaches, both lines kept);
 Release built (`build/scratch/p18g/mtg_k1`), units 4168/4168. Nothing running. Next, in order:
@@ -335,3 +377,10 @@ Release built (`build/scratch/p18g/mtg_k1`), units 4168/4168. Nothing running. N
 2. Sparse mode's own waste: the cut root rollout (~0.5 % everywhere) and walk misses -- back off per game when the
    lookahead does not pay; let a missed walk's work feed the ladder without moving its start gate.
 3. Re-measure every heur-preferring deck (bar: never more work, slightly better than even in the worst case).
+
+#### Checkpoint 2026-11-25 ~03:30 UTC (Claude)
+Done: P18DvsWalk (K4 above), unit tests 4168/4168 on the K4 binary (`build/scratch/p18g/mtg_k4`). Nothing running.
+Next: (1) the T1 trigger cost on Maze's End / Mill / Merfolk Turns / Shadowborn / Stuffy -- a trigger that costs ~0 where
+it does not pay (candidates: `_ptp1`'s free trigger with a miss bound; reusing a cut root rollout's work); (2) dev-seq
+pass 2 general (heur too): Martyr / Hydras ~9.8 % of units, still the biggest general headroom; (3) re-measure on
+held-out seeds, then the valueleaf.sh stage and per-deck flips.
