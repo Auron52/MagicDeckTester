@@ -221,9 +221,12 @@ TEST_CASE("Niv payment hole 1: a floated Generator Servant no longer disables th
         CHECK(FindNp(*g, 12) == nullptr);            // the Servant was sacrificed for the {C}{C}
     }
 
-    // Lever OFF: the PP_FLOAT_NZ decline, and the per-cast greedy strands Curiosity's {U} (the hole).
+    // Lever OFF: the PP_FLOAT_NZ decline, and the per-cast greedy strands Curiosity's {U} (the hole). The line-keep
+    // rung's multi-source gate (MTG_LINE_KEEP_CRIT_MULTI) catches this strand on its own (block below), so it is
+    // pinned off here too: this block shows the hole the prepay lever closes.
     {
         ArmNp off(heurarm::PREPAY_FLOAT_POOL, false);
+        ArmNp multi_off(heurarm::LINE_KEEP_CRIT_MULTI, false);
         GameState r0 = s;
         TurnSolver::ApplyPlan(r0, *p, true);
         const GameState e0 = RunExecutorNp(s, *p);
@@ -233,6 +236,23 @@ TEST_CASE("Niv payment hole 1: a floated Generator Servant no longer disables th
             CHECK(FindNp(*g, 33) != nullptr);
             CHECK(FindNp(*g, 8) == nullptr);
             CHECK(InHandNp(*g, 8));
+        }
+    }
+    // Prepay lever OFF, MTG_LINE_KEEP_CRIT_MULTI ON (its default): Niv's four non-{U} pips can take Saprazzan Skerry
+    // + Cascade Bluffs (2 + 2 of the board's 6 {U}), leaving 2 for the 3 the line owes, so the gate passes; the exact
+    // judge sees the greedy's strand and the hold-out keeps Curiosity's {U}. Both worlds cast both spells.
+    {
+        ArmNp off(heurarm::PREPAY_FLOAT_POOL, false);
+        ArmNp multi_on(heurarm::LINE_KEEP_CRIT_MULTI, true);
+        GameState r1 = s;
+        TurnSolver::ApplyPlan(r1, *p, true);
+        const GameState e1 = RunExecutorNp(s, *p);
+        for (const GameState* g : { static_cast<const GameState*>(&r1), &e1 })
+        {
+            INFO("prepay OFF, multi ON, world: " << WorldNp(g, &r1));
+            CHECK(FindNp(*g, 33) != nullptr);
+            CHECK(FindNp(*g, 8) != nullptr);
+            CHECK_FALSE(InHandNp(*g, 8));
         }
     }
 }
