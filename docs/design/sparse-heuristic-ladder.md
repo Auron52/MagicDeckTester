@@ -544,10 +544,21 @@ game cache (3-50 units, leaf 0), so its c2/c1 ratio refused pass 3; under `_pab`
 were cut at W (stored as no-win at that bound, not as wins), pass 1 paid 100-1000 units, and the gate admitted pass 3
 (Merfolk 18390157 T2: 39k on an 18k limit). Heur's K there is a by-product of what the previous decision cached.
 
-#### E13 (RUNNING at this checkpoint): `_pab1` (pass 1 bounded at the previous top-level decision's committed win in the
-same game, so it reads those no-win entries) and `_pabx` (a failed bounded attempt is spent but kept out of the gate's
-pass cost). Arms hx_pab_pabx, hx_pab1, hx_pab1_pabx, m4_ptc_pab1_pabx, m4_ptc_pnt1_pab1_pabx; binary mtg_k14, chain
-`build/scratch/p18g/build_k14.sh`, output `build/scratch/p18g/E13/` (DONE marker). Analyse: `merge.sh ME13 E12:'heur|hx_pab'
-E13:'<arms>' E6:'m4_ptc|m4_ptc_pnt1'`, then `summ.py ME13 heur ...`, `apair.py E13 <arm> heur` needs heur in the same
-run dir (use ME13). Next: if `_pab1` removes the deeper-commit cost, held-out (HO1 seeds 19M, 600 games) for the best arm
-per target deck; a sound bound changes tie order, so any later game needs the d8 b0 check.
+#### E13: `_pab1` (pass 1 bounded at the previous top-level decision's committed win in the same game) and `_pabx` (a
+failed bounded attempt kept out of the gate's pass cost). K1's seeds, 200 x 8, mtg_k14, units / heur (the CPU column of
+this run is contended by a concurrent reference scan: ignore it).
+
+| deck | hx_pab | hx_pab1 | hx_pab1_pabx | m4_ptc_pab1_pabx | m4_ptc_pnt1_pab1_pabx |
+|---|---|---|---|---|---|
+| Hydras | 0.999 | 0.998 | 0.998 | 0.988 | 0.999 |
+| Martyr Lifegain | 1.008 | **1.000** | 0.998 | 0.956 | 0.992 |
+| Maze's End | 0.993 | 0.998 | 1.031 | 1.038 | 1.051 |
+| Merfolk Turns | 1.017 | **0.999** | 0.998 | 1.000 | 1.002 |
+| Mill | 0.996 | **0.988** | 0.993 (1 earlier) | 1.034 (1 earlier) | 0.994 (1 earlier) |
+| Sea Creatures | 1.008 | 1.006 | 1.005 | 0.920 | 1.007 |
+| Shadowborn Apostle | 0.973 | **0.959** | 0.968 | 0.976 | 0.992 (1 earlier) |
+| Stuffy Doll | 0.979 | 0.994 | 0.959 (1 LATER) | 0.962 | 0.969 |
+
+`hx_pab_pabx` = `hx_pab` exactly (no pass-k fail to exclude). `_pab1` removes the deeper-commit cost (Merfolk 1.017 ->
+0.999, Martyr 1.008 -> 1.000) and deepens the saving on Mill / Shadowborn, quality 0/0. `_pabx` is the arm that moves win
+turns (1 later on Stuffy): dropped. E14 (running): m4_ptc_pab1, m4_ptc_pnt1_pab1, m4_pnt1_pab1 on mtg_k14 (`run_e14.sh`).
