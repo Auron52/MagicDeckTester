@@ -1,0 +1,4 @@
+g1483_d8_off: played=1 avg=5.0000 digest=e14e23257641bb9a ms=1760 units=22125 cpu=1450
+g1483_d8_on: played=1 avg=4.0000 digest=6f20b8633bc9a897 ms=254 units=4013 cpu=231
+g1483_play_off: played=1 avg=5.0000 digest=e14e23257641bb9a ms=1757 units=19142 cpu=1222
+g1483_play_on: played=1 avg=4.0000 digest=6f20b8633bc9a897 ms=1689 units=18427 cpu=1097
