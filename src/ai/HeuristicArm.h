@@ -1140,6 +1140,9 @@ enum Slot : int
     SCALED_ROUTE_ACTS,        // MTG_SCALED_ROUTE_ACTS  MTG_SCALED_LAND_ROUTE's "rest of the line" also counts the plan's PENDING trailing activations (PlanTraits::act_mana_total net of those paid and the one being paid), not only its unpaid casts; a payment made while an activation is pending is no longer subtracted from the cast hold. Maze's End 2HG s26701483 gi1483 T4 (USER 2026-11-25 "We should be using Baldur's Gate"): Archdruid's Charm {G}{G}{G} off three Gates stranded the second Maze's End {3}; holding one out pays Charm through Baldur's Gate's fed mode and the surplus pays the {3}. Default ON; =0 -> the casts-only rest
     FETCH_HINT_TAPPED,        // MTG_FETCH_HINT_TAPPED  REPORT-ONLY arm (USER 2026-11-22): a fetchland's deck-derived hand hint (HandFixingProduces) also counts the always-tapped fetchable lands (triomes). Default OFF (the USER: untapped reach only)
     ROLLOUT_FETCH_STATIC_HINT,// MTG_ROLLOUT_FETCH_STATIC_HINT  the playout's legacy land drop (SimulateLandPlayOne) reads a fetchland's static `produces`, not its deck-derived hand reach (Worldfire +11 -> -1 at the heath-wf A/B). Default ON; =0 -> the playout reads the deck-derived reach
+    LINE_KEEP_CRIT_MULTI,     // MTG_LINE_KEEP_CRIT_MULTI  the crit-mode gate (LineKeepCritGate) also passes a payment whose bill can spend SEVERAL sources that are only TOGETHER the last of a colour the rest owes (Worldfire Seething Song paid by Steam Vents + Saprazzan Skerry, Brainstorm left with no {U}); the exact judge decides as before. DEFAULT ON; =0 -> the one-source gate, byte-identical
+    LINE_KEEP_SUSPEND,        // MTG_LINE_KEEP_SUSPEND  LineKeepBound counts a PAID suspend (Keldon Halberdier / Rift Bolt {R}, Profane Tutor {1}{B}) as a held payment of the line, so {suspend + one cast} binds the rung (Worldfire: Halberdier's {R} off Steam Vents, Ponder left with no {U}); LineNoncreatureMv counts its cost. DEFAULT ON; =0 -> suspends unbound, byte-identical
+    LINE_KEEP_RITUAL,         // MTG_LINE_KEEP_RITUAL  the line-keep rung judges the rest of the line with the float of the RITUAL this payment is for (ritual_floating_mana, at no splice) on the board, as MTG_LINE_KEEP_ROCK puts the rock there (Worldfire {Song, Song, Personal Tutor}: the second Song is the first's float). DEFAULT ON; =0 -> the float-blind rest, byte-identical
     COUNT
 };
 
@@ -2224,6 +2227,9 @@ inline const char* Name(int slot)
         "MTG_SCALED_ROUTE_ACTS",
         "MTG_FETCH_HINT_TAPPED",
         "MTG_ROLLOUT_FETCH_STATIC_HINT",
+        "MTG_LINE_KEEP_CRIT_MULTI",
+        "MTG_LINE_KEEP_SUSPEND",
+        "MTG_LINE_KEEP_RITUAL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
