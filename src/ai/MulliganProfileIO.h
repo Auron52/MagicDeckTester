@@ -1389,9 +1389,10 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                                    || vp.contains("ladder") || vp.contains("leaf") || vp.contains("commit")
                                    || vp.contains("alpha") || vp.contains("exhaust_mult")
                                    || vp.contains("fit_alpha") || vp.contains("fit_lazy_r") || vp.contains("fit_gate") || vp.contains("rollout_from") || vp.contains("sampled_gate")
-                                   || vp.contains("emul_r")))
+                                   || vp.contains("emul_r") || vp.contains("one_head_only")))
             {
                 profile.value_play.ladder       = vp.value("ladder", std::string(""));
+                profile.value_play.one_head_only = vp.value("one_head_only", false);
                 profile.value_play.leaf         = vp.value("leaf", std::string(""));
                 profile.value_play.commit       = vp.value("commit", std::string(""));
                 profile.value_play.alpha        = vp.value("alpha", std::string(""));

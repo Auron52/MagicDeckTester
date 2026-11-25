@@ -212,6 +212,9 @@ inline thread_local int         t_deck_warm_none = 0;
 // 1 = value_play.commit "model" (both ladders: the emulated ladder's committing pass, or the escalation
 // ladder's value pass at its last depth before the heuristic escalation).
 inline thread_local int         t_deck_commit_model = 0;
+// A deck may ship a value sidecar for one-head games while retaining its measured
+// leafless search for 2HG. Scoped with the other per-deck shape fields.
+inline thread_local bool        t_deck_value_suppressed = false;
 // value_play.ladder "single": -1 unset | 2 = the FIT single pass (see ValuePlay). Same resolution order as the
 // other shape keys: the per-job arm wins, then the deck, then the env default.
 inline thread_local int         t_deck_single = -1;

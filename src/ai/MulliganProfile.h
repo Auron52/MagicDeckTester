@@ -72,6 +72,7 @@ struct ValuePlay
     std::string alpha;
     double exhaust_mult = 0.0;
     std::vector<double> emul_r;
+    bool one_head_only = false;          // use this sidecar's play shape only against one opponent head
     bool   enabled      = false;          // true => the ADOPTED policy: drives + locks play. false => recorded
                                           //         recommendation only (does NOT affect play; byte-identical).
     // (No escalation budget key: the escalation always runs on a fresh 0.5 x budget_ms -- USER 2026-09-11 /

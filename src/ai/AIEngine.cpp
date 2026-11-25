@@ -3209,12 +3209,12 @@ static const std::string& BpNameOf(const Action& a)
 namespace {
 struct DeckShapeScope
 {
-    int prev_l, prev_w, prev_c, prev_s, prev_a, prev_lr; double prev_x, prev_fa; int prev_fg; int prev_rf; int prev_sg; const std::vector<double>* prev_sr; const std::vector<double>* prev_er; std::string prev_k;
+    int prev_l, prev_w, prev_c, prev_s, prev_a, prev_lr; double prev_x, prev_fa; int prev_fg; int prev_rf; int prev_sg; const std::vector<double>* prev_sr; const std::vector<double>* prev_er; std::string prev_k; bool prev_suppressed;
     DeckShapeScope(const MulliganProfile& p)
         : prev_l(valuearm::t_deck_ladder), prev_w(valuearm::t_deck_warm_none), prev_c(valuearm::t_deck_commit_model),
           prev_s(valuearm::t_deck_single), prev_a(valuearm::t_deck_alpha_relaxed), prev_lr(valuearm::t_deck_fit_lazy_r),
           prev_x(valuearm::t_deck_exhaust_mult), prev_fa(valuearm::t_deck_fit_alpha), prev_fg(valuearm::t_deck_fit_gate_ladder), prev_rf(valuearm::t_deck_rollout_from), prev_sg(valuearm::t_deck_sampled_gate), prev_sr(valuearm::t_deck_esc_skip_r), prev_er(valuearm::t_deck_emul_r),
-          prev_k(valuearm::t_deck_key)
+          prev_k(valuearm::t_deck_key), prev_suppressed(valuearm::t_deck_value_suppressed)
     {
         valuearm::t_deck_ladder    = (p.value_play.ladder != "emulated") ? 0
                                    : (p.value_play.commit == "model") ? 2 : 1;
@@ -3235,11 +3235,28 @@ struct DeckShapeScope
         valuearm::t_deck_key       = p.value_source;
         valuearm::t_deck_esc_skip_r = &p.escalation_skip_r;
         valuearm::t_deck_emul_r     = &p.value_play.emul_r;
+        // A value leaf fitted to one-head play may lose both speed and quality in 2HG.
+        // Keep the whole baseline shape, not just its final leaf, for that format.
+        valuearm::t_deck_value_suppressed = p.value_play.one_head_only && gamesetup::OpponentHeads() > 1;
+        if (valuearm::t_deck_value_suppressed)
+        {
+            valuearm::t_deck_ladder = 0;
+            valuearm::t_deck_warm_none = 0;
+            valuearm::t_deck_commit_model = 0;
+            valuearm::t_deck_single = -1;
+            valuearm::t_deck_alpha_relaxed = -1;
+            valuearm::t_deck_exhaust_mult = 0.0;
+            valuearm::t_deck_fit_alpha = 0.0;
+            valuearm::t_deck_fit_lazy_r = -1;
+            valuearm::t_deck_fit_gate_ladder = -1;
+            valuearm::t_deck_rollout_from = 0;
+            valuearm::t_deck_sampled_gate = 0;
+        }
     }
     ~DeckShapeScope() { valuearm::t_deck_ladder = prev_l; valuearm::t_deck_warm_none = prev_w; valuearm::t_deck_commit_model = prev_c;
                         valuearm::t_deck_single = prev_s; valuearm::t_deck_alpha_relaxed = prev_a; valuearm::t_deck_fit_lazy_r = prev_lr;
                         valuearm::t_deck_exhaust_mult = prev_x; valuearm::t_deck_fit_alpha = prev_fa; valuearm::t_deck_fit_gate_ladder = prev_fg; valuearm::t_deck_rollout_from = prev_rf; valuearm::t_deck_sampled_gate = prev_sg; valuearm::t_deck_key = prev_k;
-                        valuearm::t_deck_esc_skip_r = prev_sr; valuearm::t_deck_emul_r = prev_er; }
+                        valuearm::t_deck_esc_skip_r = prev_sr; valuearm::t_deck_emul_r = prev_er; valuearm::t_deck_value_suppressed = prev_suppressed; }
 };
 }   // namespace
 

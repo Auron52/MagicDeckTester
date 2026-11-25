@@ -1735,6 +1735,7 @@ bool UseValueModel()
     // so the arm cannot come from a process-wide static. Unset (-1) => the env default below, which
     // keeps every non-batch path byte-identical.
     if (valuearm::t_arm.value_model >= 0) { return valuearm::t_arm.value_model != 0; }
+    if (valuearm::t_deck_value_suppressed) { return false; }
     // Per-deck emulated ladder committing on the HEURISTIC (value_play.ladder == "emulated", commit not
     // "model"): the model is attached for the ladder's warm-ups only (g_force_value_leaf), never as the
     // play leaf -- so the hybrid must not engage. Committing on the model (t_deck_ladder 2) is a value
