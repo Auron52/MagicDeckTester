@@ -3225,6 +3225,8 @@ public:
     static long long ChampionSearchedFrameUnpinnedForTest();
     static void ArmChampionCensusForTest();
     static std::vector<std::pair<int, int>> FaceUpBoundaryForTest(const GameState& state);
+    // ...and the face-up axis's pending test itself (FaceUpUncoveredPending: morph, Soulstoke, Force of Vigor's pitch).
+    static bool FaceUpPendingForTest(const GameState& state);
     // ...and its RESOLUTION node: a suspended tutor's search the real upkeep meets uncovered (a ripple free copy no
     // crossing could foresee) is searched at resolution, one copy per rank; returns the rank (-1 = one candidate).
     static int ChooseRealResolutionFetch(const GameState& state, int controller, const CardParams& pp,

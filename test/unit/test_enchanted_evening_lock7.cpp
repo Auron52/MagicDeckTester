@@ -363,3 +363,68 @@ TEST_CASE("EE lock step 7: the window runs AFTER the Wave + Opalescence sweep, i
         }
     }
 }
+
+// The DEFECT this case pins (2026-11-25): FaceUpUncoveredPending was true for ANY Force of Vigor in hand, while the
+// end-step menu could hold no FoV option at all (no green card to pitch and no mana; no target that can exist), so
+// every crossing of every nested rollout took the fanned path (one d3 b10 game ran > 3.3 h). Pending must now
+// imply that the end step CAN offer a cast: a sound over-approximation (never false while the window has an option).
+TEST_CASE("EE lock step 7: the crossing is pending only when the end step can offer a cast")
+{
+    auto pending_matches = [](const GameState& s, bool want, const char* what) {
+        INFO("case: " << std::string(what));
+        CHECK(TurnSolver::FaceUpPendingForTest(s) == want);
+        CHECK(EotFovMayOffer(s) == want);
+        if (!want) { CHECK(L7Opts(s).empty()); }   // soundness: "not pending" means the window has nothing
+        else       { CHECK_FALSE(L7Opts(s).empty()); }
+    };
+    // FoV alone, no land: nothing to pitch (it cannot exile itself) and no mana -> NOT pending (the defect: it was).
+    {
+        GameState s = L7Board();
+        s.players[0].hand.push_back(L7Card(kFoV, 30));
+        REQUIRE(AnyEotFovCandidate(s));
+        pending_matches(s, false, "fov-alone");
+        // A white card is no pitch either.
+        s.players[0].hand.push_back(L7Card(kOpal, 31));
+        pending_matches(s, false, "plus-white");
+        // A green card to pitch -> pending.
+        s.players[0].hand.push_back(L7Card(kExpl, 32));
+        pending_matches(s, true, "plus-green");
+    }
+    // FoV alone with four untapped Forests: the mana cost is payable -> pending; tap one -> not.
+    {
+        GameState s = L7Board();
+        for (int k = 0; k < 4; ++k) { L7Put(s, "Forest", 101 + k); }
+        RefreshTypeStatics(s);
+        s.players[0].hand.push_back(L7Card(kFoV, 30));
+        pending_matches(s, true, "four-forests");
+        for (Permanent& p : s.battlefield) { if (p.card.m_number == 101) { p.tapped = true; break; } }
+        pending_matches(s, false, "three-forests");
+    }
+    // No artifact or enchantment anywhere (no Enchanted Evening, no opponent land play, no fairness check): a green
+    // card to pitch is not enough -> not pending. An Exploration of ours on the battlefield is a target -> pending.
+    {
+        GameState s = L7Board();
+        s.battlefield.erase(std::remove_if(s.battlefield.begin(), s.battlefield.end(),
+                                           [](const Permanent& p) { return p.card.m_number == 51; }),
+                            s.battlefield.end());
+        RefreshTypeStatics(s);
+        for (const Permanent& p : s.battlefield)
+        { REQUIRE_FALSE((p.card.IsEnchantment() || p.card.HasType(CardType::Artifact))); }
+        s.players[0].hand.push_back(L7Card(kFoV, 30));
+        s.players[0].hand.push_back(L7Card(kExpl, 31));
+        REQUIRE_FALSE(s.opponent_plays_lands);
+        s.deck_has_crossing_land_put = false;   // stamped false for the list (no Burgeoning / Manabond); default true
+        pending_matches(s, false, "no-target");
+        L7Put(s, kExpl, 60);
+        RefreshTypeStatics(s);
+        pending_matches(s, true, "own-exploration");
+    }
+    // Every other deck: the stamp is off, so a FoV in hand is never pending.
+    {
+        GameState s = L7Board();
+        s.deck_has_eot_fov_pitch = false;
+        s.players[0].hand.push_back(L7Card(kFoV, 30));
+        s.players[0].hand.push_back(L7Card(kExpl, 31));
+        CHECK_FALSE(TurnSolver::FaceUpPendingForTest(s));
+    }
+}

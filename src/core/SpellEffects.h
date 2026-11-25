@@ -33079,6 +33079,11 @@ inline bool AnyEotFovCandidate(const GameState& s)
     return s.deck_has_eot_fov_pitch && EotFovHandIndex(s) >= 0;
 }
 struct EotFovOption { std::string pitch; std::string pin; };   // pitch "" = paid with mana
+inline bool EotFovOppOnly()   // TEMPORARY lever (per-job: heurarm EE_FOV_EOT_OPP_ONLY, so both arms pool in one batch)
+{
+    static const bool s_env = EnvOn("MTG_EE_FOV_EOT_OPP_ONLY");
+    return heurarm::Flag(heurarm::EE_FOV_EOT_OPP_ONLY, s_env);
+}
 // The FoV options on `t` (the end-step state after the entry's flips / puts), in menu order: target-pin major (the
 // provider's pick first), pitch class minor (hand order). Empty outside the opponent's end-step window, without a
 // FoV in hand, with no way to pay, or when the provider withdrew every target.
@@ -33113,8 +33118,7 @@ inline std::vector<EotFovOption> EotFovOptions(const GameState& t)
         = DestroyUpToArtEnchSearchPins(t, t.active_player_index, def->params.destroy_up_to_artifacts_enchantments);
     // TEMPORARY A/B lever (lock step 7 measurement, NOT a shipped default; delete after the A/B): keep only the target
     // sets with no permanent of ours. A LOSSY narrowing (an own target can matter), so a USER decision if wanted.
-    static const bool s_opp_only = EnvOn("MTG_EE_FOV_EOT_OPP_ONLY");
-    if (s_opp_only)
+    if (EotFovOppOnly())
     {
         pins.erase(std::remove_if(pins.begin(), pins.end(), [&](const std::string& pin) {
             std::vector<int> nums;
@@ -33133,6 +33137,79 @@ inline std::vector<EotFovOption> EotFovOptions(const GameState& t)
         for (const std::string& nm : pitch) { out.push_back(EotFovOption{ nm, pin }); }
     }
     return out;
+}
+// THE PRE-CROSSING PENDING TEST (TurnSolver's FaceUpUncoveredPending, BoundaryFan's face-up digit). True only when the
+// coming opponent end step CAN hold a FoV option, so a FoV in hand with no way to cast it never sends a crossing down
+// the fanned path. (Lock step 7 defect, 2026-11-25: "a FoV in hand" alone made every boundary of every nested
+// rollout pending while the end-step menu held "no cast" only -- one game ran > 3.3 h at d3 b10 under the
+// opponent-only arm.) The morph / Soulstoke shape: a cheap test on the state BEFORE the crossing, a SOUND
+// OVER-APPROXIMATION of "EotFovOptions is non-empty at the end step" -- it may say yes to a one-entry menu (the fan
+// then learns width 1, as before), it never says no to a real option. Each clause, with why it cannot lose one:
+//   * PAYMENT: another green card in hand, or the mana cost payable from our untapped sources now (pools empty, as
+//     the window pays). Between here and the opponent's end step our hand only shrinks (cleanup discard, the
+//     window's puts) and our permanents only tap (nothing of ours untaps in the opponent's turn; the opponent's
+//     untap step touches controller 1 only), so a payment possible there is possible here.
+//   * TARGETS (the opponent-only lever drops our own): an artifact or enchantment on the battlefield now (types
+//     only -- shroud, hexproof and the provider's restriction are ignored, which only widens the test); or a land
+//     the opponent may still play this turn that will be one (it plays lands and Enchanted Evening is out, or its
+//     dealt list holds an artifact / enchantment land); or a VIRTUAL Aura of the fairness check (ruling 13: the
+//     check is armed or already holds a virtual board, and the head's dealt list holds a creature Aura and a
+//     hexproof card -- FovVirtualAuraClasses needs both); or a land WE put in the opponent's turn (Burgeoning).
+//   An unknown list card counts as every kind (conservative).
+inline bool EotFovListMayOffer(std::size_t slot, bool want_land)
+{
+    // Per pool slot: bit 0 = an artifact / enchantment land, bit 1 = a creature Aura and a hexproof card.
+    static const std::vector<std::uint8_t> kFlags = [] {
+        std::vector<std::uint8_t> out;
+        for (const opponentdeck::DeckSpec& spec : opponentdeck::Pool())
+        {
+            bool land = false, aura = false, hex = false;
+            for (const std::pair<const char*, int>& e : spec.cards)
+            {
+                const CardDefinition* d = CardDatabase::Instance().Lookup(std::string(e.first));
+                if (d == nullptr) { land = aura = hex = true; continue; }
+                if (d->card.IsLand() && (d->card.HasType(CardType::Artifact) || d->card.IsEnchantment())) { land = true; }
+                if (d->params.is_aura && !d->params.is_land_aura) { aura = true; }
+                if (d->card.HasKeyword(Keyword::Hexproof)) { hex = true; }
+            }
+            out.push_back(static_cast<std::uint8_t>((land ? 1 : 0) | ((aura && hex) ? 2 : 0)));
+        }
+        return out;
+    }();
+    if (kFlags.empty()) { return true; }
+    return (kFlags[slot % kFlags.size()] & (want_land ? 1 : 2)) != 0;
+}
+inline bool EotFovMayOffer(const GameState& s)
+{
+    if (!AnyEotFovCandidate(s)) { return false; }
+    const int me = s.active_player_index;
+    const bool opp_only = EotFovOppOnly();
+    bool target = s.deck_has_crossing_land_put && !opp_only;
+    for (std::size_t i = 0; !target && i < s.battlefield.size(); ++i)
+    {
+        const Permanent& q = s.battlefield[i];
+        if (opp_only && q.controller_index == me) { continue; }
+        target = q.card.HasType(CardType::Artifact) || q.card.IsEnchantment();
+    }
+    const bool two = opponentdeck::HasSecondHead(s);
+    if (!target && s.opponent_plays_lands)
+    {
+        target = eefair::StaticsOf(s).ee || EotFovListMayOffer(s.opponent_slot, true)
+              || (two && EotFovListMayOffer(s.opponent2_slot, true));
+    }
+    if (!target && (eefair::Armed(s) || eefair::Any(s)))
+    {
+        target = EotFovListMayOffer(s.opponent_slot, false) || (two && EotFovListMayOffer(s.opponent2_slot, false));
+    }
+    if (!target) { return false; }
+    const std::vector<Card>& hand = s.players[static_cast<std::size_t>(me)].hand;
+    const int fi = EotFovHandIndex(s);
+    for (int j = 0; j < static_cast<int>(hand.size()); ++j)
+    { if (j != fi && hand[static_cast<std::size_t>(j)].HasColor(Color::Green)) { return true; } }
+    TapSpeculationScope _spec;
+    GameState u = s;
+    EotFloatingPools::Empty(u);
+    return TapForCostDirect(u, hand[static_cast<std::size_t>(fi)].m_mana_cost, /*for_creature=*/false);
 }
 // Cast it on the live state: pay (exile the pitched card, or tap for the mana cost), resolve clause 2 on the pin
 // (ResolveDestroyUpToArtEnch re-checks every target, CR 608.2b), then the card goes to our graveyard (608.2n). A

@@ -119512,15 +119512,17 @@ static Installer s_installer;
 // (EotPutOptions), so a live untapped put source with a matching card in hand makes it pending too (the menu then
 // crosses every flip entry with the put options). False for every deck without such a source.
 // FORCE OF VIGOR'S OFF-TURN PITCH (Enchanted Evening lock step 7): the same window casts a Force of Vigor in our hand
-// for its alternative cost or with mana left untapped (EotFovOptions), so a FoV in hand makes it pending too (the
-// menu crosses every flip / put entry with the FoV options, "no cast" first). False for every deck without the card.
+// for its alternative cost or with mana left untapped (EotFovOptions), so a FoV that CAN be cast there makes it
+// pending too (EotFovMayOffer: a way to pay and a target that can exist at the end step -- a sound
+// over-approximation of a non-empty FoV menu; a FoV in hand alone is NOT enough, see its comment). The menu crosses
+// every flip / put entry with the FoV options, "no cast" first. False for every deck without the card.
 static bool FaceUpUncoveredPending(const GameState& state)
 {
     return (state.deck_has_morph || state.deck_has_eot_tap_put || state.deck_has_eot_fov_pitch)
         && state.scripted_eot_face_up < 0
         && g_bp_enum_depth == 0 && !t_rollout_narrow
         && !HumanPlayActive() && !EchoEdgeFoldHere(state)
-        && (AnyEotFaceUpCandidate(state) || AnyEotPutCandidate(state) || AnyEotFovCandidate(state));
+        && (AnyEotFaceUpCandidate(state) || AnyEotPutCandidate(state) || EotFovMayOffer(state));
 }
 // MAZE'S END I3 -- THE CROSSING LAND PUTS (SpellEffects.h, "THE CROSSING LAND PUTS"): Manabond's end-step yes/no
 // (+ each dumped land's as-enters choice) and Burgeoning's which-land per trigger on the opponent's land play.
@@ -120839,6 +120841,7 @@ std::int64_t TurnSolver::ChooseRealCrossingLands(GameState& state, int depth, in
     if (chosen != -2) { state.scripted_crossing_lands = chosen; }
     return chosen;
 }
+bool TurnSolver::FaceUpPendingForTest(const GameState& state) { return FaceUpUncoveredPending(state); }
 std::vector<std::pair<int, int>> TurnSolver::FaceUpBoundaryForTest(const GameState& state)
 {
     std::vector<std::pair<int, int>> out;

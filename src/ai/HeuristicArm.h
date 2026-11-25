@@ -1136,6 +1136,7 @@ enum Slot : int
     EE_USER_PRUNE,            // MTG_EE_USER_PRUNE  Enchanted Evening (USER rulings 15 / 16, 2026-11-25/26; EnchantedEveningProvider): no second Sterling Grove onto the battlefield while one stays (except a plan that sacrifices one for its tutor), and the Grove / Idyllic Tutor targets limited to missing lock pieces (EE, Opalescence, Parallax Wave), one mana Aura while mana is short, then Enchantress's Presence. Default ON (USER-requested prune); =0 -> the unrestricted search (the A/B arm; adoption is the USER's)
     EE_GROVE_PRELOCK,         // MTG_EE_GROVE_PRELOCK  AMENDMENT ARM of MTG_EE_USER_PRUNE (the USER's "maybe we'll need an exception prior to the full combo being assembled"): while Enchanted Evening is not on our battlefield and an Opalescence is ours or in hand, a second Sterling Grove may be cast and Sterling Grove is a tutor target (ordered last) -- the Grove as a 2/2 Opalescence attacker. Default OFF (the USER's call); inert while the prune is off
     FREE_TURN_EE_FAIR,        // MTG_FREE_TURN_EE_FAIR  Enchanted Evening lock step 6 (USER rulings 5, 6, 8-13, 17): the free-turn fairness check's VIRTUAL BOARD -- the nonland permanents the opponent could have cast with its lands since the game began or the last Calming Verse wipe veto the lock (eefair::, SpellEffects.h). Default ON (USER-requested); =0 -> no virtual board (the A/B arm)
+    EE_FOV_EOT_OPP_ONLY,      // MTG_EE_FOV_EOT_OPP_ONLY  TEMPORARY A/B lever (Enchanted Evening lock step 7; DELETE after its A/B): the opponent-end-step Force of Vigor offers only target sets with no permanent of ours. A LOSSY narrowing, so its default is the USER's. Default OFF (the full menu)
     COUNT
 };
 
@@ -2216,6 +2217,7 @@ inline const char* Name(int slot)
         "MTG_EE_USER_PRUNE",
         "MTG_EE_GROVE_PRELOCK",
         "MTG_FREE_TURN_EE_FAIR",
+        "MTG_EE_FOV_EOT_OPP_ONLY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
