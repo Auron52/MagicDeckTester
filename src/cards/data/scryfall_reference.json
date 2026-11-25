@@ -2284,6 +2284,15 @@
     "toughness": "15",
     "type_line": "Legendary Creature — Eldrazi"
   },
+  "Enchantress's Presence": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Whenever you cast an enchantment spell, draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "End-Raze Forerunners": {
     "cmc": 8.0,
     "keywords": [
@@ -5540,6 +5549,15 @@
     "toughness": null,
     "type_line": "Artifact — Equipment"
   },
+  "Oblivion Ring": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "When this enchantment enters, exile another target nonland permanent.\nWhen this enchantment leaves the battlefield, return the exiled card to the battlefield under its owner's control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Oboro, Palace in the Clouds": {
     "cmc": 0.0,
     "keywords": [],
@@ -7539,6 +7557,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Sterling Grove": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{W}",
+    "oracle_text": "Other enchantments you control have shroud. (They can't be the targets of spells or abilities.)\n{1}, Sacrifice this enchantment: Search your library for an enchantment card, reveal it, then shuffle and put that card on top.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Stingscourger": {
     "cmc": 2.0,
     "keywords": [
@@ -7689,6 +7716,15 @@
     "keywords": [],
     "mana_cost": "",
     "oracle_text": "{T}, Pay 1 life: Add {R} or {W}.\n{1}, {T}, Sacrifice this land: Draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Sunpetal Grove": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control a Forest or a Plains.\n{T}: Add {G} or {W}.",
     "power": null,
     "toughness": null,
     "type_line": "Land"
