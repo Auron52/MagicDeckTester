@@ -114046,6 +114046,7 @@ namespace rgc
     struct E { int result; int bound; long long tb; long long life; bool win; long long cost; };
     inline thread_local std::unordered_map<TranspositionTable::Key, E, TranspositionTable::KeyHash> t_map;
     inline thread_local long long t_hit_cost = -1;
+    inline thread_local long long t_hit_sum = 0;   // running sum of answered hits' stored costs (this thread; data only, `_pabb`)
     inline std::atomic<long long> g_hits{0}, g_win_hits{0}, g_lookups{0}, g_stores{0}, g_full{0};
     inline std::size_t Cap()
     { static const std::size_t v = static_cast<std::size_t>(std::max(0, EnvInt("MTG_ROLLOUT_GAME_CACHE_CAP", 262144))); return v; }
@@ -115244,6 +115245,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             rgc::t_hit_cost = e.cost;
             if (e.win)
             {
+                rgc::t_hit_sum += std::max(0LL, e.cost);
                 rgc::g_hits.fetch_add(1, std::memory_order_relaxed); rgc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
                 if (p17::On()) { ++p17::t_rgc_hit; }
                 if (e.result <= cutoff_turn) { return e.result; }
@@ -115252,6 +115254,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             }
             if (nowin_armed && cutoff_turn <= e.bound)
             {
+                rgc::t_hit_sum += std::max(0LL, e.cost);
                 rgc::g_hits.fetch_add(1, std::memory_order_relaxed);
                 if (p17::On()) { ++p17::t_rgc_hit; }
                 if (cutoff_turn >= max_turns) { leafeval::Publish(e.tb); leafeval::PublishLife(e.life); }
@@ -127557,6 +127560,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     int        prev_committed = committed_depth;
 
     long long c_prev = 0, c_prev2 = 0;       // work units of passes k-1, k-2
+    long long p18_ab_boot = 0;               // _pabb: a bounded pass 1's game-cache hits, priced at their stored cost
     bool      have_prev = false, have_prev2 = false;
     long long l_prev = -1, l_prev2 = -1;     // rollout-leaf units of passes k-1, k-2 (sampled gate _pqg only)
     long long pr_prev = 0, pr_prev2 = 0;     // PRICED work (workctr::t_priced, ns) of passes k-1, k-2: the priced gate
@@ -129137,6 +129141,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                             : kDefaultGrowth;
             if (p18_qg && p18_K > 0 && have_prev2 && l_prev2 == 0 && ratio > kDefaultGrowth) { ratio = kDefaultGrowth; }
             double estimate = static_cast<double>(c_prev) * ratio;
+            if (p18_ab_boot > 0 && !(have_prev2 && c_prev2 > 0)) { estimate = static_cast<double>(c_prev + p18_ab_boot) * ratio; }
             const double remaining = static_cast<double>(budget->Remaining()) + p18_credit;
             bool fits = g_reserve_value_pass ? (estimate + estimate <= gate_alpha * remaining)
                                              : (estimate <= gate_alpha * remaining);
@@ -129263,12 +129268,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // left no-win entries at that bound, which a pass 1 at the same bound reads; an unbounded pass 1 cannot, and a
         // pass 1 that pays for them moves heur's gate -- E12 Merfolk T2: c1 15 -> 292 units, then a 39k pass 3).
         // _pabx: a failed bounded attempt is spent but kept out of the pass cost the start gate reads.
-        static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false;
+        static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false, s_pabb = false;
         static thread_local unsigned long long s_pab_seed = 0; static thread_local int s_pab_win = 0;
         if (s_pab_key != valuearm::t_deck_key)
         {
             s_pab_key = valuearm::t_deck_key; s_pab = s_pab_key.find("_pab") != std::string::npos;
             s_pab1 = s_pab_key.find("_pab1") != std::string::npos; s_pabx = s_pab_key.find("_pabx") != std::string::npos;
+            s_pabb = s_pab_key.find("_pabb") != std::string::npos;
         }
         const bool p18_ab_top = s_pab && p16K == 0 && p16::t_hyb_nest == 1 && g_fsline_nest == 0 && g_rollout_nest == 0
                              && !vl_active && !vl_constant;
@@ -129277,6 +129283,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         const int p18_ab = (p18_ab_top && p18_ab_w >= state.turn_number && p18_ab_w <= max_turns) ? p18_ab_w : 0;
         const int pass_cut = (p16K > 0 && pass_depth == p16K && p16::t_oracle_W > 0)
                            ? std::min(root_cut, p16::t_oracle_W) : (p18_ab > 0 ? std::min(p18_cut, p18_ab) : p18_cut);
+        const long long p18_hs0 = rgc::t_hit_sum;
         SearchLine attempt = FSLineWin(state, pass_depth, max_turns, pass_cut, second_main, tt, &line_cache, budget);
         bool p18_asp_fail = false;
         if (pass_cut < root_cut && p16K == 0 && !(budget != nullptr && budget->Overrun()) && attempt.win_turn > pass_cut)
@@ -129349,6 +129356,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         committed_depth = pass_depth;
         prev_line = line; prev_committed = committed_depth;   // this pass completed
         if (p18_ab_top) { s_pab_seed = static_cast<unsigned long long>(state.game_seed); s_pab_win = line.win_turn; }
+        // _pabb: a bounded pass 1 answered from the game cache is no predictor of pass 2 (its leaves are, pass 2's are
+        // not): HO2 Mill 19410160 T2 c1 110 units (heur's unbounded 4825) -> a 62k pass 2; 19410210 131 -> 153k. The
+        // bootstrap estimate reads pass 1 with its hits priced at their stored cost (rgc::E::cost).
+        if (pass_depth == 1) { p18_ab_boot = (s_pabb && p18_ab > 0) ? rgc::t_hit_sum - p18_hs0 : 0; }
         // K-predictor: record the PROBE's leaf count at this depth (leaf-independent structure the escalation
         // reuses to predict its own affordable depth). Only while the probe records; index guarded.
         long long cost = (budget ? budget->Used() : 0) - used_before;
