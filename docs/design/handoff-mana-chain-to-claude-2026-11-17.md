@@ -296,6 +296,10 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**16:28 UTC 11-25:** Baldur DONE (wip/baldur-fed 944b839ce, contains maze-rank3; report logs/baldur-fed/report.md). Cause: MTG_SCALED_LAND_ROUTE read "rest of line" from the casts-only line hold, so pending Maze activations were invisible. Fix MTG_SCALED_ROUTE_ACTS default ON (activations priced as generic; X>=4 floor per USER "unless 2-3 or less"; early exit). g1483 back to T4 (= base digest 6f20b863). A/B 22,000 jobs fresh seeds: Maze play -1, Maze 2HG 0, Merfolk 0, Goblins 0; 3 slower recover at d8 b0. CPU Maze x1.011, others ~1.00. Units 4177/4177.
+- Maze-holdup successor running (A/B on the box now). beam-adopt in K attribution / final A/B. g803 waiting on fold0 attribution runs.
+- Integration branch wip/land-1125b being prepared off origin a71e43b32: baldur-fed (incl rank3) + land-heath + gate-1124 cherry-picked. Hold-up / beam / g803 / gate-1125 join it when they report; then one landing.
+
 **14:37 UTC 11-25:** Status check. Box fully used: gate-1125 resumed 14:27 (PGO mana_clean batch, 21 cores); lane: g803 attribution arms (attr.json, before/after) + maze-holdup cut2 slice; beam-adopt agent building in wip/beam-staged. Baldur ab2 DONE, agent on build 3. g803 identity arms NOT byte-identical: agent attributing to eot_seen->Visit / domin archive side effects in the skipped fans. maze-holdup at 273K, told to hand off after cut2. Push queue empty; nothing ready to land yet (batch waits on Baldur, hold-up, g803, beam-adopt).
 
 **14:15 UTC 11-25:** Beam (wip/beam-staged b584c7a16, report logs/beam-staged/report.md). 303,000-game pooled A/B, fresh seeds.
