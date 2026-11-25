@@ -17,6 +17,14 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
   (type refresh + Opalescence SBA + pre-float first) under the 250K handoff rule. Then: Stage 3 coverage loop, Stage 4
   profile, provider audit, suite addition (all three tiers, 3x Hinata gate), Stage 5 verification incl. 5d sweep.
 * No USER question is open (rulings 8-13 answered the design's two questions).
+* **LOCK STEP 1 (type statics: Enchanted Evening + Opalescence) DONE (2026-11-26):** code a9d866afe, Scryfall snapshot
+  aea0e800e (update rc=0, offline diff rc=0). Units 4191/4191 (13 new, `test/unit/test_enchanted_evening_lock1.cpp`).
+  Smoke (Release, `MTG_PGO=0`): 247 passed / 0 failed / 0 new, play-changed=0 (searched and d0), scenarios
+  677/677 (EE is not in the suite yet). Sanity run (24 games, seed 7000, d3 b10, no profile): 23 won, avg 6.625; the
+  lock formed in 18 of the 23 inspected (both sides 0 lands, opponent 0 permanents, later drops die, no fetch); the unwon game is a
+  no-threat flood (Opalescence + Exploration only). SLOW-GAME 34-45 s on 3 games (no keep table yet). Coverage: EE + Opalescence `full`; missing = Calming Verse,
+  Force of Vigor, Parallax Wave. Notes for steps 2-8: "Lock-cluster step 1" section below the Cards table. NEXT:
+  step 2 (pre-float, §4.2).
 
 ## USER rulings (verbatim, 2026-11-25)
 
@@ -99,7 +107,7 @@ Exploration, Windswept Heath, Plains, Idyllic Tutor, Wooded Foothills. Fetch-hol
 | group | cards | owner | status |
 |---|---|---|---|
 | simple | Sunpetal Grove, Oblivion Ring, Enchantress's Presence, Sterling Grove | implementer agent A | DONE (f986f6e19, b5b8dd3cb): coverage `full` x4; units 4178/4178; smoke (Release) 247 PASS, play-changed=0; Scryfall snapshot 61e5bc848 (offline diff rc=0) |
-| lock cluster | Enchanted Evening, Opalescence, Calming Verse, Parallax Wave, Force of Vigor | design agent B -> `docs/design/enchanted-evening-lock-design.md`, then an implementer | design in progress |
+| lock cluster | Enchanted Evening, Opalescence, Calming Verse, Parallax Wave, Force of Vigor | design agent B -> `docs/design/enchanted-evening-lock-design.md`, then an implementer | design DONE (84a576461); step 1 (EE + Opalescence type statics) DONE a9d866afe / aea0e800e; steps 2-9 to do |
 
 ## Lock-cluster design (84a576461, `docs/design/enchanted-evening-lock-design.md`)
 
@@ -121,9 +129,41 @@ lock has removed unless floated). The implementer must model the targeting legal
 | Enchantress's Presence | 2 | `draw_on_cast_types` ["Enchantment"] | `FireOnCastTriggers` (both cast paths) draws via `TrickDraw`; site-10 put-in-hand fan reads the same predicate (`CastTypeDrawWatcherMatches`) | none (mandatory draw) | -- |
 | Oblivion Ring | 2/3 | `etb_exile_nonland_until_leaves` | shared enter cascade (`ResolveEtbExileNonlandUntilLeaves`, every entry path); LTB in `FireLeavesBattlefieldTriggers` (`ReturnExiledUntilLeaves`); link = `kExileUntilLeavesBase` marker + `linked_exile_number` (already folded) | A: `target` (board click, full legal set) | -- (target SEARCHED, D1 below) |
 | Sterling Grove | 3 | `grants_other_enchantments_shroud`, `sac_tutor_top_cost` {1}, `sac_tutor_top_types` [Enchantment]; derived `CardDefinition::activated_tutor`; deck stamp `deck_has_enchantment_shroud` | shroud: `EnchantmentShroudFromGrant` inside `LandHasShroud` / `CreatureHasShroud` / new `PermanentHasShroud` (so Aura host selection, equip/aura creature targeting and O-Ring all honour it); hook for EE = `PermanentIsEnchantmentNow`. Activation: new `PermAbilityMode::SacTutorTop` (CollectActions emission one variant per `RankedTutorCandidates` name; pin = `SacNamedPin.target` in BOTH trailing passes; `ApplyPermAbility` -> `ResolveSacTutorTop`; site-9 key + `CardHasPostEntryActivation`); upkeep window: `GameEngine::UpkeepTutorOptions` battlefield half + `AIEngine::CastUpkeepTutor` battlefield dispatch (shared by both worlds) + the BoundaryFan `tutor_` liveness + the human-play upkeep prompt | A: `main_phase` plan variants (tutor target); upkeep = the tutor chooser prompt | -- (lead activation, D2 below) |
+| Enchanted Evening | 3 (lock step 1) | `static_all_permanents_enchantments`; deck stamp `deck_has_type_statics` | `RefreshTypeStatics` (layer 4, every battlefield copy, both sides) at every `RefreshDevotionCreatures` chokepoint (enter-cascade top, `OnCreatureDies`, the leave helpers, bounce, Replenish, scenario loader); deaths at `TypeStaticsSbaCheckpoint` (inside `LegendRuleSbaCheckpoint`: post-resolution both worlds, land drop, end step; + `ResolvePassiveOpponentLandTurn`, both spawn sites, both turn starts) | none (static) | -- |
+| Opalescence | 3 (lock step 1) | `static_animate_other_nonaura_enchantments_mv` | same refresh (layer 4 + 7b: other non-Aura enchantments = MV/MV creatures; two animate each other); 0/0s die at the checkpoint through `OnCreatureDies` (LTB fires: O-Ring returns its card); orphaned Auras (Sprawl / Wild Growth) swept; fetch on play suppressed both sides (`LandDiesToTypeStatics` in `PlayLandCore` and `PlayLeftmostLandFrom`), opponent Karoo finds no land | A: existing `attackers` | -- |
 
 Provider: `EnchantedEveningProvider` (empty `DeckProvider` derivation, `Certificate()` = NotAssessed), routed FIRST on
-`grants_other_enchantments_shroud || draw_on_cast_types` (lock-cluster params to be OR-ed in by its implementer).
+`grants_other_enchantments_shroud || draw_on_cast_types || static_all_permanents_enchantments ||
+static_animate_other_nonaura_enchantments_mv` (Calming Verse / Parallax Wave / Force of Vigor params to be OR-ed in by
+their implementers).
+
+## Lock-cluster step 1 (type statics) -- notes for the later steps
+
+* **Where the state lives.** The refresh writes the permanent's own `Card` copy; what it added is recorded ON THE CARD
+  (`Card::m_ts_mask` + `m_ts_saved_power/_tough`, in Card's tail padding: `sizeof(Card)` 136, `sizeof(Permanent)` 336,
+  `sizeof(GameState)` 1744 -- all unchanged; `deck_has_type_statics` sits in a pad byte). A card that leaves keeps its
+  bits, so an O-Ring / Parallax Wave return (step 4) is undone and re-derived by the first refresh after it re-enters;
+  build the Wave's return through the enter cascade (or call `RefreshTypeStatics`) and nothing else is needed.
+  Off-battlefield cards are NOT scrubbed (readers there use the definition, the Card.h convention); flagged only.
+* **Deaths happen only at `TypeStaticsSbaCheckpoint`** (never inside the refresh: the enter cascade's callers hold slot
+  indices). A new effect that can make a 0/0 outside a stack resolution / land drop / end step (Parallax Wave's
+  opponent-end-step sweep, step 4; Calming Verse is a resolution, so it is covered) must call
+  `TypeStaticsSbaCheckpoint(state)` itself at a point that holds no battlefield index, in both worlds.
+* **Step 2 (pre-float) hook:** the lock completes inside `FireEtbWatchers` (the second of EE / Opalescence entering),
+  and the lands die at the next checkpoint. `TypeStaticsOnBattlefield(state)` / `LandDiesToTypeStatics` are the
+  presence tests to reuse; the pre-float must run before the refresh that makes the lands creatures (or at least before
+  the checkpoint) in the shared resolution path. The whole-turn PREPAY (`BatchPrepayMainCasts`) may already have
+  tapped lands before the lock-completing cast: check it when building step 2.
+* **Wasted search to collapse later (step 8):** under EE + Opalescence our fetch-on-play variants (one per fetch target)
+  all collapse to "the fetch enters and dies"; and any land play is dominated by holding it. Not folded in step 1.
+* **Audit of the definition-reading battlefield sites (§2.1):** all 23 listed sites plus the new ones a fresh scan found
+  (SE.h `PipFreeOutletOnBoard`, TS `AuraPlanHostKeyOn`, `HasteUnlockedManaOf`, the `poolaudit` diagnostic, Shadowborn /
+  AntiLifegain / LandfallElementals / Stompy / Merfolk provider overrides) are param-gated, provider-gated (this deck
+  routes to `EnchantedEveningProvider`, an empty `DeckProvider`), or read a hand / library / cast card. **No site needs a
+  fix.** Note for step 3: keep Calming Verse on its own param, NOT `destroy_all_enchantments` (ManaPayment's
+  `ApplyEnablerWipeRecheck` keys on that one; unaudited for this deck).
+* **2HG:** a second head's land that dies goes to `players[1].graveyard` (the second head has no tracked graveyard; nothing
+  reads it).
 
 Notes for the lock-cluster implementer: (a) Enchanted Evening must extend `PermanentIsEnchantmentNow`
 (SpellEffects.h) so the Grove grant covers every permanent; (b) every own-target site it adds (Parallax Wave, Force of
