@@ -13,8 +13,14 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
   brief carries the orchestrator default for G >= 2 Groves (sweep still spends the Wave's counters on opponent
   creatures, ruling 7 literally). Its own handoff (if any) = `logs/ee/lock4-handoff2.md`. Smoke may move a Saproling
   Burst deck (fading now placed on every entry route): root-cause, do NOT accept GT without the orchestrator.
-* NEXT, strictly serial (same files), one narrow Opus agent each, 250K handoff rule in every brief:
-  1. USER ruling 15 (Grove policy): provider prune "no second Sterling Grove while one is out, except after
+* **RULINGS 15/16/17 (Grove copies, tutor targets, no finite sweep tail) DONE (2026-11-25):** 0e80072ed + fe22e545f +
+  6840da137 + de901bc9e. `MTG_EE_USER_PRUNE` DEFAULT ON (USER-requested; ADOPTION IS THE USER'S: held-out 200 games
+  ON 188 won / avg 6.825 vs OFF 189 / 6.775, units -54%; the amendment arm `MTG_EE_GROVE_PRELOCK`, DEFAULT OFF, 188 /
+  6.795). Units 4225/4225; smoke 247/0 play-changed=0 on both 0e80072ed and de901bc9e. Two slower games do not
+  recover at d3 b0 (Grove as a 2/2 Opalescence attacker). Details + firing counts: "Ruling 15/16/17 prune" section.
+  NEXT = lock step 6 (below, item 2).
+* (superseded list, kept for the order) NEXT, strictly serial (same files), one narrow Opus agent each, 250K handoff rule in every brief:
+  1. DONE -- USER ruling 15 (Grove policy): provider prune "no second Sterling Grove while one is out, except after
      sacrificing the first in the same window" + tutor-target ORDER combo pieces first (EE, Opalescence, Wave; mana
      enchantments + Presence after; orchestrator also applies it to Idyllic Tutor, surfaced to the USER). Measure the
      24-game sanity + b0 checks; REPORT games with mana-efficiency loss pre-combo and lost Presence draws (ruling 15
@@ -28,8 +34,10 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
   suite addition (all three tiers, 3x Hinata gate: watch step-1 gi=14 328 s), Stage 5 verification incl. 5d sweep,
   fetch-hold review (Heath, Foothills), Stage 6 report (disclose ruling 12's attack-everything optimism). Push later
   via the push queue as one batch.
-* Open USER question: whether ruling 15's tutor ordering should also apply to Idyllic Tutor (default: yes). The
-  G >= 2 sweep default is moot-ish after ruling 15 (kept as fallback).
+* Idyllic Tutor question ANSWERED (ruling 16: yes, and prune). The G >= 2 sweep default is REPLACED by ruling 17
+  (no loop -> the sweep does nothing). Open USER questions: (a) adopt `MTG_EE_USER_PRUNE` ON (as shipped now) / OFF /
+  with the amendment `MTG_EE_GROVE_PRELOCK`; (b) the 4-vs-5 mana breakpoint (the 4-band fired 32 times in 200 games;
+  the search took a lock piece there 28 times).
 * Housekeeping: `build/wt/ee-base35` (scratch baseline build output) can be deleted.
 
 * **LOCK STEP 1 (type statics: Enchanted Evening + Opalescence) DONE (2026-11-26):** code a9d866afe, Scryfall snapshot
@@ -272,12 +280,13 @@ lock has removed unless floated). The implementer must model the targeting legal
 | Sunpetal Grove | 1 | `produces` G/W, `checkland_subtypes` Forest/Plains | shared `LandWouldEnterTapped` | none | -- |
 | Enchantress's Presence | 2 | `draw_on_cast_types` ["Enchantment"] | `FireOnCastTriggers` (both cast paths) draws via `TrickDraw`; site-10 put-in-hand fan reads the same predicate (`CastTypeDrawWatcherMatches`) | none (mandatory draw) | -- |
 | Oblivion Ring | 2/3 | `etb_exile_nonland_until_leaves` | shared enter cascade (`ResolveEtbExileNonlandUntilLeaves`, every entry path); LTB in `FireLeavesBattlefieldTriggers` (`ReturnExiledUntilLeaves`); link = `kExileUntilLeavesBase` marker + `linked_exile_number` (already folded) | A: `target` (board click, full legal set) | -- (target SEARCHED, D1 below) |
-| Sterling Grove | 3 | `grants_other_enchantments_shroud`, `sac_tutor_top_cost` {1}, `sac_tutor_top_types` [Enchantment]; derived `CardDefinition::activated_tutor`; deck stamp `deck_has_enchantment_shroud` | shroud: `EnchantmentShroudFromGrant` inside `LandHasShroud` / `CreatureHasShroud` / new `PermanentHasShroud` (so Aura host selection, equip/aura creature targeting and O-Ring all honour it); hook for EE = `PermanentIsEnchantmentNow`. Activation: new `PermAbilityMode::SacTutorTop` (CollectActions emission one variant per `RankedTutorCandidates` name; pin = `SacNamedPin.target` in BOTH trailing passes; `ApplyPermAbility` -> `ResolveSacTutorTop`; site-9 key + `CardHasPostEntryActivation`); upkeep window: `GameEngine::UpkeepTutorOptions` battlefield half + `AIEngine::CastUpkeepTutor` battlefield dispatch (shared by both worlds) + the BoundaryFan `tutor_` liveness + the human-play upkeep prompt | A: `main_phase` plan variants (tutor target); upkeep = the tutor chooser prompt | -- (lead activation, D2 below) |
+| Sterling Grove | 3 | `grants_other_enchantments_shroud`, `sac_tutor_top_cost` {1}, `sac_tutor_top_types` [Enchantment]; derived `CardDefinition::activated_tutor`; deck stamp `deck_has_enchantment_shroud` | shroud: `EnchantmentShroudFromGrant` inside `LandHasShroud` / `CreatureHasShroud` / new `PermanentHasShroud` (so Aura host selection, equip/aura creature targeting and O-Ring all honour it); hook for EE = `PermanentIsEnchantmentNow`. Activation: new `PermAbilityMode::SacTutorTop` (CollectActions emission one variant per `RankedTutorCandidates` name; pin = `SacNamedPin.target` in BOTH trailing passes; `ApplyPermAbility` -> `ResolveSacTutorTop`; site-9 key + `CardHasPostEntryActivation`); upkeep window: `GameEngine::UpkeepTutorOptions` battlefield half + `AIEngine::CastUpkeepTutor` battlefield dispatch (shared by both worlds) + the BoundaryFan `tutor_` liveness + the human-play upkeep prompt | A: `main_phase` plan variants (tutor target); upkeep = the tutor chooser prompt | -- (lead activation, D2 below); rulings 15/16: Grove-copy plan prune + tutor-target prune (`MTG_EE_USER_PRUNE`, DEFAULT ON, USER adoption pending; amendment `MTG_EE_GROVE_PRELOCK` OFF) |
+| Idyllic Tutor | (existing) | `tutor_to_hand`, `tutor_types` [Enchantment] | `EnchantedEveningProvider::TutorCandidates` (ruling 16, shared with the Grove's tutor) + `TutorNeedsCandidate` (nothing kept -> not cast) | tutor chooser (full list; the prune's ranking first) | USER adoption of `MTG_EE_USER_PRUNE` |
 | Enchanted Evening | 3 (lock step 1) | `static_all_permanents_enchantments`; deck stamp `deck_has_type_statics` | `RefreshTypeStatics` (layer 4, every battlefield copy, both sides) at every `RefreshDevotionCreatures` chokepoint (enter-cascade top, `OnCreatureDies`, the leave helpers, bounce, Replenish, scenario loader); deaths at `TypeStaticsSbaCheckpoint` (inside `LegendRuleSbaCheckpoint`: post-resolution both worlds, land drop, end step; + `ResolvePassiveOpponentLandTurn`, both spawn sites, both turn starts) | none (static) | -- |
 | Calming Verse | 3 (lock step 3) | `destroy_opp_enchantments_then_own_if_untapped_land` (its OWN param, never `destroy_all_enchantments`) | shared `ResolveCalmingVerse` (SpellEffects.h) at both worlds' sorcery resolution (`EffectHandler` beside Worldfire / `apply_one`); destroys through `DestroyRemoveTogether` + `DestroyFireTogether` (one simultaneous event, triggers after both clauses, every leave reaches the chokepoints); KEEP floats via `g_lock_prefloat_hook`; searched axis KEEP "VK" / SWEEP-SELF "VS" in the CollectActions post-pass, `#DV` in both plan signatures | A: `main_phase` plan variants ("tap all lands first" / "leave lands") | -- (EE provider withdraws a no-op KEEP, notes below) |
 | Force of Vigor | 2 (lock step 5: HARD CAST only; clause 1 pitch PARTIAL -> step 7) | `destroy_up_to_artifacts_enchantments` 2 | shared `ResolveDestroyUpToArtEnch` (re-checks each target, CR 608.2b), same destroy halves; target SET searched: `DestroyUpToArtEnchOptions` (identity classes, every 0..2 multiset), pinned "FV<n>[,<m>]", `#DV` | A: `main_phase` plan variants (step 9 may move it to the `target` multi-target row) | pitch (step 7); coverage says `full` (pattern checker) but the pitch clause is NOT modelled |
 | Opalescence | 3 (lock step 1) | `static_animate_other_nonaura_enchantments_mv` | same refresh (layer 4 + 7b: other non-Aura enchantments = MV/MV creatures; two animate each other); 0/0s die at the checkpoint through `OnCreatureDies` (LTB fires: O-Ring returns its card); orphaned Auras (Sprawl / Wild Growth) swept; fetch on play suppressed both sides (`LandDiesToTypeStatics` in `PlayLandCore` and `PlayLeftmostLandFrom`), opponent Karoo finds no land | A: existing `attackers` | -- |
-| Parallax Wave | 3 (lock step 4) | `fading_counters` 5, `fade_exile_target_creature`; deck stamp `deck_has_wave_opal_sweep` (EE provider `WaveOpalSweepRule` + Wave + Opalescence in the list) | fading: put by the cast sites pre-push AND by the shared enter cascade on every other route (a self-exiled Wave returns with five), `PerformUpkeepFading` at our upkeep; activation `PermAbilityMode::FadeExileCreature` (cost = one fade counter; one searched Action per admitted target, `FadeExileAdmittedTargets` beside CounterDestroy's, identity-class fold; `ApplyPermAbility` -> `ResolveFadeExileCreature`; `PermAbilitySourceLive` re-checks counter + target); exile via `FadeExilePermanent` (linked = `kExileUntilLeavesBase` marker + digest in `linked_exile_number`; token ceases to exist; leave chokepoints); return via `ReturnExiledUntilLeaves` from `FireLeavesBattlefieldTriggers`; ruling-7 sweep `PerformWaveOpalSweep` in BOTH opponent_turn lambdas (loop on targeting legality, finite linked tail when no loop, top-up) | A: `main_phase` plan variants (exile target; step 9 may move it to `target`); the sweep has no viewer decline yet (step 9) | sweep finite-tail default = USER question (step-4 notes) |
+| Parallax Wave | 3 (lock step 4) | `fading_counters` 5, `fade_exile_target_creature`; deck stamp `deck_has_wave_opal_sweep` (EE provider `WaveOpalSweepRule` + Wave + Opalescence in the list) | fading: put by the cast sites pre-push AND by the shared enter cascade on every other route (a self-exiled Wave returns with five), `PerformUpkeepFading` at our upkeep; activation `PermAbilityMode::FadeExileCreature` (cost = one fade counter; one searched Action per admitted target, `FadeExileAdmittedTargets` beside CounterDestroy's, identity-class fold; `ApplyPermAbility` -> `ResolveFadeExileCreature`; `PermAbilitySourceLive` re-checks counter + target); exile via `FadeExilePermanent` (linked = `kExileUntilLeavesBase` marker + digest in `linked_exile_number`; token ceases to exist; leave chokepoints); return via `ReturnExiledUntilLeaves` from `FireLeavesBattlefieldTriggers`; ruling-7 sweep `PerformWaveOpalSweep` in BOTH opponent_turn lambdas (loop on targeting legality, no loop -> nothing, USER ruling 17; top-up) | A: `main_phase` plan variants (exile target; step 9 may move it to `target`); the sweep has no viewer decline yet (step 9) | -- (finite tail deleted, ruling 17) |
 
 Provider: `EnchantedEveningProvider` (empty `DeckProvider` derivation, `Certificate()` = NotAssessed), routed FIRST on
 `grants_other_enchantments_shroud || draw_on_cast_types || static_all_permanents_enchantments ||
@@ -485,7 +494,7 @@ Not built, recorded (each has a counterexample, so a fold would be LOSSY -> USER
 Notes for the later steps:
 * **Step 6 (fairness check):** clear the VIRTUAL opponent creatures inside `PerformWaveOpalSweep` (comment hook
   there); treat the sweep as able to clear them only when `WaveSelfTargetEnablers` succeeds (the loop) -- not a
-  `1 + G` counter formula -- and, under the finite tail, only as far as the counters go. A hexproof virtual creature
+  `1 + G` counter formula (the finite tail is deleted, ruling 17: no loop -> no exile). A hexproof virtual creature
   is never exiled (ruling 9).
 * **Step 7 (FoV pitch):** shares the opponent's end-step window; the sweep runs BEFORE it.
 * **Step 8 (folds):** F1 / F2 above, identity folds of OWN targets, and the branching cost the activation adds (one
@@ -494,6 +503,100 @@ Notes for the later steps:
   `main_phase` plan variants; `exile_target` in the JSON).
 * A fading sacrifice of an animated Wave goes through `PerformUpkeepFading`'s plain erase (no `OnCreatureDies`): no
   dies-reader in this list, noted.
+
+## Ruling 15/16/17 prune (Grove copies, tutor targets, no finite sweep tail) -- 2026-11-25
+
+Code: 0e80072ed (rulings 15/16: `MTG_EE_USER_PRUNE`, heurarm `EE_USER_PRUNE`, DEFAULT ON), fe22e545f (ruling 17: the
+sweep's finite tail DELETED), 6840da137 (comment), de901bc9e (amendment arm `MTG_EE_GROVE_PRELOCK`, heurarm
+`EE_GROVE_PRELOCK`, DEFAULT OFF). All in `EnchantedEveningProvider` (DecisionProviders.cpp "the USER's Grove / tutor
+prune") except ruling 17 (`PerformWaveOpalSweep`, SpellEffects.h). Units 4225/4225 (9 new,
+`test/unit/test_enchanted_evening_grove_prune.cpp`: A, B1-B7, lever off, amendment; lock4 sweep cases updated for
+ruling 17 + a 1-Grove/2-counter loop case). Smoke on 0e80072ed: 247 passed / 0 failed / 0 new, play-changed=0 (searched
+and d0). Smoke on de901bc9e: 247 passed / 0 failed / 0 new, play-changed=0 (searched and d0).
+
+**What is built (the action model).**
+* (A) Grove copies -- `PlanListFilterLive` / `PlanListAdmit` (every plan enumeration, root + breakpoint continuation,
+  main 1 + main 2): a plan that casts Sterling Grove is kept only when `ours + Grove casts - Grove sacrifice
+  activations in the plan <= 1`. A Grove sacrifice (`SacTutorTop`) is in a plan as a LEAD activation (before every
+  cast: the Presence draw off the second Grove takes the tutored card) or a TRAIL one (after the casts): both satisfy
+  "only play the second one when sacrificing the first". The activation is emitted only while its {1} is payable and
+  the tutor keeps a target, so an unsacrificeable Grove blocks the second copy (the lost-Presence-draw case). Not
+  restricted: the beyond-horizon playout (permitted greedy); a breakpoint continuation entered after the second
+  Grove's cast may still hold two (the sweep then does nothing, ruling 17).
+* (B) Tutor targets -- `TutorCandidates` for an enchantment tutor (Grove's sacrifice tutor, Idyllic Tutor; upkeep
+  window included): (1) missing lock pieces, EE > Opalescence > Parallax Wave (EE is in both lock routes and is the
+  5-drop; Opalescence is the land lock's other half and the Wave loop's animator; the Wave locks only beside
+  Opalescence); (2) ONE mana Aura while mana is needed; (3) Presence while no lock piece is fetchable or mana is
+  needed; nothing else; no copy of anything in hand or on our battlefield. Mana is counted as the engine credits it:
+  each of our lands one unit (an uncracked fetch one unit of what it finds), each land Aura on our land its extra
+  unit (Utopia Sprawl its LOCKED colour), tapped or not. "Needed" = total < 4 or white < 2; at exactly 4 (with 2
+  white) only when no lock piece is fetchable; at >= 5 with 2 white never. Mana Aura = Wild Growth, or Utopia Sprawl
+  when short of white with a Forest host (or a fetch that finds one) or with 2+ Forests; whichever is left if only
+  one is. Empty list -> Idyllic Tutor is not cast (`TutorNeedsCandidate`), the Grove is not activated; the idle pass
+  is untouched (unit-tested).
+* Ruling 17 -- with the self-exile loop impossible (2+ Groves, or 1 Grove and fewer counters than Grove + self) the
+  end-step sweep spends NO counter. With the prune ON, 2+ Groves do not arise at turn ends in any measured game (0 of
+  224 ON games); they still arise with the lever OFF (57 turn ends in 200 games) and under the amendment arm (52 in
+  200), and via a continuation after a second Grove's Presence draw (not seen).
+
+**Measurements (d3 b10, no profile; one pooled batch per sample, arms paired per game).**
+
+| sample | arm | won | avg turn | Munits |
+|---|---|---|---|---|
+| sanity seed 7000 (24) | step-4 base (CLI) | 22 | 6.7083 | 18.54 |
+| | OFF (ruling 17 only) | 22 | 6.7083 | 18.55 |
+| | ON | 22 | 6.7083 | 6.83 (-63%) |
+| held-out seed 8000 (100) | OFF | 95 | 6.7500 | 57.38 |
+| | ON | 93 | 6.8100 | 28.74 (-50%) |
+| | ON + amendment | 93 | 6.7700 | 30.18 |
+| held-out seed 10000 (100) | OFF | 94 | 6.8000 | 59.54 |
+| | ON | 95 | 6.8400 | 25.27 (-58%) |
+| | ON + amendment | 95 | 6.8200 | 27.22 |
+| both held-out (200) | OFF / ON / ON+amend | 189 / 188 / 188 | 6.775 / 6.825 / 6.795 | 116.9 / 54.0 / 57.4 |
+
+Ruling 17 alone moved no game of the sanity set (OFF == step-4 base per game; units +0.05%). ON vs OFF net: sanity 0
+(gi=2 faster, gi=23 slower), seed 8000 +6 turns (10 slower, 4 faster), seed 10000 +4 (11 slower, 7 faster). ON +
+amendment vs OFF: +2 and +2. Neither arm meets the "net <= 0 per deck" adoption bar on this sample; the unit cost
+halves.
+
+**Slower games at seed 8000 (ON vs OFF) and their d3 b0 repros (ON arm):**
+
+| gi | OFF b10 | ON b10 | ON b0 | first divergence | verdict |
+|---|---|---|---|---|---|
+| 4 | 8 | unwon | running at commit (`build/scratch/ee/gp/b0.err`, job `b0ho1g4`) | T6: ON casts Wild Growth + Grove, tutors EE (locks T7, 3 life short at T8); OFF casts Verse + Grove | search choice, no denied option at the root |
+| 8 | 6 | 7 | 6 | T1 land: ON Forest, OFF Foothills | recovers (budget) |
+| 14 | 7 | 8 | 7 | T6: ON Verse + Grove; OFF Wave + Grove | recovers |
+| 19 | 5 | 6 | 6 | T1 land order; at b0 T3: OFF Idyllic -> Sterling Grove (B1 refuses) | NOT recovered -- Grove as a 2/2 Opalescence attacker |
+| 32 | 7 | 8 | 7 | T2 Idyllic: OFF Sterling Grove, ON Opalescence | recovers |
+| 45 | 5 | 6 | 5 | T2 land: ON Foothills, OFF Forest | recovers |
+| 48 | 7 | 8 | 7 | T4: ON sacrifices the Grove for Opalescence | recovers |
+| 55 | 7 | 8 | 7 | T1 land | recovers |
+| 91 | 6 | 7 | 7 | T3: OFF casts the SECOND Grove (rule A refuses); both Groves attack under Opalescence | NOT recovered -- same mechanism |
+| 92 | 8 | unwon | 8 | T1 land | recovers |
+| sanity 23 | 6 | 7 | 6 | T5: ON sacrifices the Grove for Wave | recovers |
+
+Root cause of the two that do not recover: the deck also wins by an Opalescence BEATDOWN, where a Sterling Grove is a
+cheap 2/2 attacker (MV 2). The prune's reason (two Groves make the Wave loop impossible) only binds once the lock is
+assembling. The amendment arm `MTG_EE_GROVE_PRELOCK` (DEFAULT OFF) restores both lines while Enchanted Evening is not
+ours and an Opalescence is ours or in hand (the second Grove may be cast; Sterling Grove is the LAST tutor target).
+It recovers gi=19 (6 -> 5), gi=91 (7 -> 6), and also gi=8, 45, 92 at b10 (5 faster, 1 slower vs ON at seed 8000;
+-2 net vs ON at seed 10000). The seed-10000 slower games were not b0-checked (an extra sample).
+
+**Prune firing (real tutor resolutions, rebuilt from the traces by `build/scratch/ee/gp/prune_stats.py`; the replica
+agrees with the engine on 120 of 124 ON resolutions -- the other 4 are fetch-crack timing / Sprawl colour, which the
+log does not carry):**
+* OFF arms (200 games, 116 resolutions): 65 picks the rule would refuse -- 17 never-offered (B1: 15 Sterling Grove, 1
+  Exploration, 1 Oblivion Ring), 29 duplicates (B2: 18 Opalescence, 4 Wave, 3 EE, 4 Presence), 9 mana Auras with mana
+  fine (B4), 5 the other mana Aura (B3), 5 Presence while a lock piece was fetchable and mana fine (B5).
+* ON arms (200 games, 115 resolutions): picks Opalescence 55, EE 32, Wave 9, Sprawl 12, Wild Growth 3, Presence 4.
+* The 4-mana band (exactly 4, >= 2 white): 32 ON resolutions -- Opalescence 24, EE 3, Wave 1, Presence 1, Sprawl 3
+  (the Sprawl / Presence ones are all-pieces-held boards). OFF fetched mana in that band 1 of 20 times.
+* Grove-copy rule: OFF cast a Grove beside one already ours 35 times (14 phases also held a Grove sacrifice); ON 17 times, every one
+  beside a sacrifice in the same phase. Turn ends with 2+ Groves: OFF 57, ON 0.
+* Mana-efficiency / Presence (USER follow-ups 1-2): ON turn ends before the lock with a Grove ours, a Grove in hand
+  and >= 2 untapped lands (a second Grove would have used the mana): 8 in 200 games (2 with Presence out = 2 lost
+  Presence draws); OFF 0. Turn ends with EE in hand, uncast, at exactly 4 mana (the 5th mana as the holdup): ON 134,
+  OFF 119 (+13%), amendment 132. Presence fetched: OFF 11, ON 4.
 
 ## Done items (formerly provisional Q1 / Q2 -- settled by standing CLAUDE.md rules, not USER questions)
 
