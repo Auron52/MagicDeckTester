@@ -764,3 +764,30 @@ leafless (constant-leaf) passes; a learned leaf stays excluded. Chain `build/scr
 arms `live` / `live_pab1` (= _pab + _pab1) / `live_pab1_pabv` (`mkfleet_pv.py`, binary `mtg_l1`). Read with `ident.py`
 (untouched decks: digest+units identical) and `summ.py`. Next: decks that move get a large held-out round on fresh
 seeds; adopt only if every deck meets the bar (work down, paired win turns net <= 0, every later game recovers at d8 b0).
+
+##### Screen results so far (PV1/PV2/PV3, 200 games/deck, seeds 23.0M, mtg_l1; units vs `live`; CPU unusable across runs)
+
+- Untouched (byte-identical, same units): ~41 of 63 decks. Touched: the plain-heur decks + Gods, Bruna, Alchemist, Kitty, ...
+- `live_pab1` pooled 0.978u, 12 earlier / 7 later. `_pabv` (leafless passes) adds ~nothing (Kitty 0.993, Snow 0.994,
+  Goblins 1.004): DROP it.
+- Per deck (units): pab1 / +pabc / +pabk / +pabc+pabk -- Worldfire 0.811/0.794/0.817/0.798, Shadowborn
+  0.969/0.933/0.975/0.943, Stuffy 0.966/0.952/0.983/0.969, Blood Sun 0.966/0.958/0.969/0.962 (net -0.045 t), Maze
+  0.992/0.968/0.992/0.969, Mill 0.992/0.987/0.991/0.985, Merfolk Turns 0.999/0.985/0.999/0.985, **Gods
+  1.037/1.037/1.013/1.013, Beasts 1.009/1.009/1.007/1.007, Martyr 1.009/1.009/1.000/1.000**.
+- All 7 later games (Blood Sun 13/70/89/161, Gods 184, Stuffy 119, Worldfire 83) are digest-IDENTICAL between live and
+  live_pab1 at d8 b0 (RPV1): budget effects, not unfindable lines.
+- MECHANISM of the over-payers (`pvdec.py` on PV3's traced live vs live_pab1_pabc): nearly all extra units are a few
+  DEEPER commits. A bounded pass MISSES cache entries the unbounded pass hits (Martyr 23350123 T3 c1 12 -> 208; Beasts
+  23050104 T1 889 -> 1545, bounded by a mulligan trial game's commit on the same seed), so the gate's c2/c1 ratio falls
+  and admits a pass that then runs ~10x its estimate (23k / 51k); Gods 23250150 T2: bound failed (A2) and the unbounded
+  re-search ran 123k vs heur's 107 (its leaves miss the rgc entries heur's earlier decisions left).
+- NEXT (fix candidate, sound): an entry cached at the UNBOUNDED cut fully answers a bounded query (win <= W, win > W =
+  no win by W, no-win at the larger cut = no-win by W); let the bounded rgc / game-line-cache lookup read the unbounded
+  entries (rgc lookup at TurnSolver.cpp ~115262 already sees `e.bound` vs `t_pab_ucut` for `_pabc`). Then re-screen the
+  22 touched decks (`mkfleet_pv.py`, same seeds, arm names carry the markers), then a large fresh held-out round.
+
+##### Landing status
+- Rebased tree: unit 4175/4175 (incl. a3806f78a `_pabv`). Smoke 246/247: `creatureburn2hg_smoke_d5_s1001` 5.7600 ->
+  5.7200 (faster, 3 searched play-changed). ORIGIN'S OWN binary (f9e182ad4, worktree `.claude/worktrees/origin-f9e`)
+  gives exactly 5.7200/edad33099d097e0b: upstream's Creature Burn leaf adoption left the 2HG key un-accepted. Accept it
+  with our landing (say so in the commit). Then E.8 sparse stage on the heur-ladder decks, accept, ONE batched landing.
