@@ -72587,10 +72587,15 @@ std::vector<ManaCost> MazesEndProvider::PaymentHoldUp(const GameState& s, int co
             if (o.generic == m.generic && o.white == m.white && o.blue == m.blue && o.black == m.black
                 && o.red == m.red && o.green == m.green) { dup = true; break; }
         }
-        if (!dup) { out.push_back(m); }
+        if (!dup)
+        {
+            // Cheapest first, ties in hand order: an insertion into the sorted list (std::stable_sort's order, without
+            // its scratch buffer -- CPU 2026-11-25, this runs on every outermost payment).
+            out.push_back(m);
+            for (std::size_t k = out.size() - 1; k > 0 && out[k - 1].ManaValue() > out[k].ManaValue(); --k)
+            { std::swap(out[k - 1], out[k]); }
+        }
     }
-    std::stable_sort(out.begin(), out.end(),
-                     [](const ManaCost& a, const ManaCost& b) { return a.ManaValue() < b.ManaValue(); });
     return out;
 }
 

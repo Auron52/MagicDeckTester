@@ -25,6 +25,7 @@
 #include <deque>     // PaySnapScratch's stable-address pool
 #include <functional>
 #include <initializer_list>   // ManaCostDigest packs byte fields
+#include <limits>
 #include <map>       // the payable-order decider's per-shape candidate order (PoSortedCandidates)
 #include <optional>    // TapForCostShared's MTG_RAMP_FEED_ROUTE scope
 #include <type_traits> // derive the hybrid-assignment array size from ManaCost's pip capacity
@@ -11152,22 +11153,26 @@ static bool HoldSupplyMaxPossible(const HoldSupplyMax& h, const ManaCost& need)
 
 std::atomic<unsigned long long> g_phg_claims{0}, g_phg_claim_bad{0}, g_phg_cut{0}, g_phg_cut_bad{0};
 std::atomic<unsigned long long> g_phg_nf{0}, g_phg_nf_bad{0};
+std::atomic<unsigned long long> g_phg_dom{0}, g_phg_dom_bad{0}, g_phg_held{0}, g_phg_held_bad{0};
 struct ProviderHoldGateStats
 {
     ~ProviderHoldGateStats()
     {
         if (!HoldVerifyOn() && !EnvOn("MTG_ANY_FILTER_ROUTE_STATS")) { return; }
         std::fprintf(stderr, "[provider-hold-gate] kept-claims=%llu MISMATCH=%llu | trial-cuts=%llu MISMATCH=%llu"
-                     " | infeasible-claims=%llu MISMATCH=%llu\n",
+                     " | infeasible-claims=%llu MISMATCH=%llu | dominance-claims=%llu MISMATCH=%llu"
+                     " | held-claims=%llu MISMATCH=%llu\n",
                      g_phg_claims.load(), g_phg_claim_bad.load(), g_phg_cut.load(), g_phg_cut_bad.load(),
-                     g_phg_nf.load(), g_phg_nf_bad.load());
+                     g_phg_nf.load(), g_phg_nf_bad.load(), g_phg_dom.load(), g_phg_dom_bad.load(),
+                     g_phg_held.load(), g_phg_held_bad.load());
     }
 };
 ProviderHoldGateStats g_phg_stats;
 
 // MTG_PROVIDER_HOLD_STATS=1 (diagnostic only, printed at exit): where the provider hold-up's per-payment work goes.
 enum PhsSlot { kPhsEntry, kPhsNoTargets, kPhsTrial, kPhsKeptHall, kPhsKeptSolve, kPhsJointNo, kPhsJointYes,
-               kPhsSingle, kPhsFired, kPhsUnpayable, kPhsCount };
+               kPhsSingle, kPhsFired, kPhsUnpayable, kPhsKeptDom, kPhsDeadDom, kPhsHeldHall, kPhsHeldSolve,
+               kPhsAmountSkip, kPhsGated, kPhsCount };
 std::atomic<unsigned long long> g_phs[kPhsCount];
 bool PhsOn()
 {
@@ -11181,7 +11186,8 @@ struct ProviderHoldWorkStats
     {
         if (!PhsOn()) { return; }
         static const char* const n[kPhsCount] = { "entry", "no-targets", "trial", "kept-hall", "kept-solve",
-            "joint-no", "joint-yes", "single-tries", "fired", "unpayable" };
+            "joint-no", "joint-yes", "single-tries", "fired", "unpayable", "kept-dom", "dead-dom", "held-hall",
+            "held-solve", "amount-skip", "gated" };
         std::fprintf(stderr, "[provider-hold-work]");
         for (int i = 0; i < kPhsCount; ++i) { std::fprintf(stderr, " %s=%llu", n[i], g_phs[i].load()); }
         std::fprintf(stderr, "\n");
@@ -11202,18 +11208,40 @@ struct HoldTargets
 
 // The target loop of HoldOutFor, given the board BEFORE the payment (`state`, `available` as they were then), the
 // board the greedy's payment left (`paid`) and the sources it tapped.
+// PAYABILITY IS MONOTONE (the cuts below; exact). `a` <= `b` field by field (generic and every pip; neither with an
+// X, hybrid, Phyrexian or {2/B} pip): any payment of `b` contains one of `a` (drop the extra mana), so on one board
+// `b` payable => `a` payable, and `a` unpayable => `b` unpayable.
+static bool HoldCostWithin(const ManaCost& a, const ManaCost& b)
+{
+    const auto plain = [](const ManaCost& m) {
+        return !m.has_x && m.x_pips == 0 && m.twobrid_count == 0 && m.hybrid_count == 0 && m.phyrexian_count == 0;
+    };
+    return plain(a) && plain(b) && a.generic <= b.generic && a.white <= b.white && a.blue <= b.blue
+        && a.black <= b.black && a.red <= b.red && a.green <= b.green && a.colorless <= b.colorless;
+}
+
 static int HoldOutTargets(const GameState& state, const GameState& paid, const ManaCost& cost_in,
-                          const HoldTargets& ht, const std::vector<int>& tapped, bool for_creature,
+                          const HoldTargets& ht, const std::vector<int>* tapped_in, bool for_creature,
                           ManaPool* available, bool honor_legacy_cco, bool* stranded)
 {
     // The paid board's counted supply, read once for every target (the gate's COVERS(target, 0)).
     const bool gate = ht.gate;
+    const bool verify = gate && HoldVerifyOn();
     HoldSupply after;
     if (gate) { ScanHoldSupply(paid, after); }
+    // CPU (2026-11-25; exact, the provider hold-up only -- `gate`): what the loop has already learnt about earlier
+    // targets, read through HoldCostWithin. A target within one the paid board KEEPS is kept. A target that contains
+    // one that came to NOTHING (not kept, and no held payment kept it: the board cannot pay the bill and it together,
+    // or no single source held out keeps it) comes to nothing too -- the paid board cannot keep it, the joint payment
+    // does not exist, and a held board that kept it would have kept the smaller one. Either way the loop moves on, as
+    // it would after the full tests. MTG_PROVIDER_HOLD_VERIFY runs the full tests behind every such claim.
+    ManaCost known_kept[8], known_dead[8];
+    int n_kept = 0, n_dead = 0;
+    const auto note = [](ManaCost* arr, int& n, const ManaCost& t) { if (n < 8) { arr[n++] = t; } };
     const auto kept = [&](const ManaCost& target) {
         if (gate && HoldSupplyCovers(after, target, 0))
         {
-            if (HoldVerifyOn())
+            if (verify)
             {
                 g_phg_claims.fetch_add(1, std::memory_order_relaxed);
                 if (!RampLaterPayable(paid, target, nullptr)) { g_phg_claim_bad.fetch_add(1, std::memory_order_relaxed); }
@@ -11224,6 +11252,48 @@ static int HoldOutTargets(const GameState& state, const GameState& paid, const M
         const bool k = RampLaterPayable(paid, target, nullptr);
         if (k) { Phs(kPhsKeptSolve); }
         return k;
+    };
+    // The greedy's tapped sources, made on the first target that reaches the held trials (PayProviderHoldUp passes
+    // none: most payments never get there).
+    std::vector<int> tapped_local;
+    const std::vector<int>* tapped = tapped_in;
+    // The full test of one target: 1 = kept by the paid board, 0 = nothing keeps it, 2 + held = held payment.
+    const auto full = [&](const ManaCost& target, bool count) -> int {
+        if (kept(target)) { return 1; }
+        // No payment of this bill keeps the target when the board cannot pay the two together.
+        if (!RampLaterPayable(state, AddManaCosts(cost_in, target), nullptr)) { if (count) { Phs(kPhsJointNo); } return 0; }
+        if (count) { Phs(kPhsJointYes); }
+        if (count && stranded != nullptr) { *stranded = true; }
+        if (tapped == nullptr) { PaymentTapped(state, paid, tapped_local, nullptr); tapped = &tapped_local; }
+        for (int held : *tapped)
+        {
+            if (count) { Phs(kPhsSingle); }
+            RampScratch b(state);
+            ManaPool av_b = available ? *available : ManaPool{};
+            if (!PayHolding(b.Board(), held, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
+            { continue; }
+            // CPU (2026-11-25; exact): COVERS(target, 0) on the held board proves the kept test without its solve.
+            bool k = false;
+            if (gate)
+            {
+                HoldSupply hs;
+                ScanHoldSupply(b.Board(), hs);
+                if (HoldSupplyCovers(hs, target, 0))
+                {
+                    if (verify)
+                    {
+                        g_phg_held.fetch_add(1, std::memory_order_relaxed);
+                        if (!RampLaterPayable(b.Board(), target, nullptr))
+                        { g_phg_held_bad.fetch_add(1, std::memory_order_relaxed); }
+                    }
+                    if (count) { Phs(kPhsHeldHall); }
+                    k = true;
+                }
+            }
+            if (!k) { if (count) { Phs(kPhsHeldSolve); } k = RampLaterPayable(b.Board(), target, nullptr); }
+            if (k) { return 2 + held; }
+        }
+        return 0;
     };
     const std::vector<ManaCost>& targets = ht.list;
     for (std::size_t i = 0; i < targets.size(); ++i)
@@ -11244,21 +11314,27 @@ static int HoldOutTargets(const GameState& state, const GameState& paid, const M
             if (!RampLaterPayable(paid, target, nullptr)) { g_phg_cut_bad.fetch_add(1, std::memory_order_relaxed); }
             continue;
         }
-        if (kept(target)) { continue; }
-        // No payment of this bill keeps the target when the board cannot pay the two together.
-        if (!RampLaterPayable(state, AddManaCosts(cost_in, target), nullptr)) { Phs(kPhsJointNo); continue; }
-        Phs(kPhsJointYes);
-        if (stranded != nullptr) { *stranded = true; }
-        for (int held : tapped)
+        if (gate)
         {
-            Phs(kPhsSingle);
-            RampScratch b(state);
-            ManaPool av_b = available ? *available : ManaPool{};
-            if (!PayHolding(b.Board(), held, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
-            { continue; }
-            if (!RampLaterPayable(b.Board(), target, nullptr)) { continue; }
-            return held;
+            int claim = -1;   // 1 kept, 0 nothing
+            for (int j = 0; j < n_kept && claim < 0; ++j) { if (HoldCostWithin(target, known_kept[j])) { claim = 1; } }
+            for (int j = 0; j < n_dead && claim < 0; ++j) { if (HoldCostWithin(known_dead[j], target)) { claim = 0; } }
+            if (claim >= 0)
+            {
+                Phs(claim == 1 ? kPhsKeptDom : kPhsDeadDom);
+                if (verify)
+                {
+                    g_phg_dom.fetch_add(1, std::memory_order_relaxed);
+                    const int r = full(target, /*count=*/false);
+                    if ((claim == 1) != (r == 1) || (claim == 0 && r >= 2))
+                    { g_phg_dom_bad.fetch_add(1, std::memory_order_relaxed); }
+                }
+                continue;
+            }
         }
+        const int r = full(target, /*count=*/true);
+        if (r >= 2) { return r - 2; }
+        if (gate) { if (r == 1) { note(known_kept, n_kept, target); } else { note(known_dead, n_dead, target); } }
     }
     return 0;
 }
@@ -11280,7 +11356,7 @@ static int HoldOutFor(const GameState& state, const ManaCost& cost_in, const Hol
     bool filter_tapped = false;
     PaymentTapped(state, a.Board(), tapped, &filter_tapped);
     if (need_filter && !filter_tapped) { return 0; }
-    return HoldOutTargets(state, a.Board(), cost_in, targets, tapped, for_creature, available, honor_legacy_cco,
+    return HoldOutTargets(state, a.Board(), cost_in, targets, &tapped, for_creature, available, honor_legacy_cco,
                           stranded);
 }
 
@@ -11319,6 +11395,20 @@ static bool ProviderHoldUpTargets(const GameState& state, const ManaCost& cost_i
     };
     const ManaCost rest = RampLaterBill(cost_in);
     Phs(kPhsEntry);
+    // THE AMOUNT BOUND, read once per need (CPU 2026-11-25; exact). PaymentManaCovers(state, need) is MONOTONE in need:
+    // both arms compare one sum of non-negative per-source credits (SourceMaxNetLive is a max over non-negative
+    // yields plus non-negative aura / lens bonuses; the sac-fodder and on-demand terms are counts) against `need`, so
+    // the early stop answers exactly as the full sum would. Every target of one payment asks it on the same board, so a
+    // need at or below one proved covered is covered, and one at or above one proved short is short.
+    int amt_yes = 0;                                   // largest need proved covered (needs <= 0 always are)
+    int amt_no = std::numeric_limits<int>::max();      // smallest need proved short
+    const auto amount_covers = [&](int need) {
+        if (need <= amt_yes) { return true; }
+        if (need >= amt_no) { return false; }
+        const bool ok = PaymentManaCovers(state, /*for_creature=*/false, need);
+        if (ok) { amt_yes = need; } else { amt_no = need; }
+        return ok;
+    };
     const std::vector<ManaCost> holds = prov.PaymentHoldUp(state, state.active_player_index);
     // COST (Fluctuator A/B 2026-11-03: a hold-up card is in hand for ~3,100 payments a game, each a scratch trial). An
     // entry the board cannot pay together with the bill is dropped on the payer's own AMOUNT bound before any
@@ -11345,20 +11435,24 @@ static bool ProviderHoldUpTargets(const GameState& state, const ManaCost& cost_i
         if (target.blue < hold.blue)   { target.blue = hold.blue; }
         if (target.green < hold.green) { target.green = hold.green; }
         if (ug_raise && hold.red == 0) { target.generic += hold.generic; }
-        if (!PaymentManaCovers(state, /*for_creature=*/false, AddManaCosts(cost_in, target).ManaValue() - floating))
-        { continue; }
         // CPU (2026-11-24; byte-identical): a target equal to one already listed is dropped. HoldOutTargets takes the
         // targets in order and its answer for one depends only on the boards and the target, so a repeat's answer is
         // the first copy's -- which either returned (the repeat is never reached) or moved on (so would the repeat).
         if (std::find(ht.list.begin(), ht.list.end(), target) != ht.list.end()) { continue; }
         // THE GATE (exact): the list's loop moves past a target the paid board keeps, so one every payment keeps is
-        // dropped here (kept under MTG_PROVIDER_HOLD_VERIFY, marked, and checked on the paid board).
+        // dropped here (kept under MTG_PROVIDER_HOLD_VERIFY, marked, and checked on the paid board). CPU (2026-11-25;
+        // exact): it is read BEFORE the amount bound below -- each of the three tests only drops the target, so their
+        // order changes nothing listed, and the one-scan gate decides most targets without the bound's board walk.
         if (proved_kept(target))
         {
+            Phs(kPhsGated);
             if (!verify || ht.list.size() >= 64) { continue; }
             ht.gated |= std::uint64_t{1} << ht.list.size();
+            ht.list.push_back(target);
+            continue;
         }
-        else if (drop_unpayable(target)) { continue; }
+        if (!amount_covers(AddManaCosts(cost_in, target).ManaValue() - floating)) { Phs(kPhsAmountSkip); continue; }
+        if (drop_unpayable(target)) { Phs(kPhsUnpayable); continue; }
         ht.list.push_back(target);
     }
     // Under VERIFY a list of gated targets only still runs the trial (to check them); otherwise none is left.
@@ -11392,9 +11486,8 @@ static bool PayProviderHoldUp(GameState& state, const ManaCost& cost_in, const H
     RampScratch pre(state);
     ManaPool av_pre = available ? *available : ManaPool{};
     if (!TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco)) { return false; }
-    std::vector<int> tapped;
-    PaymentTapped(pre.Board(), state, tapped, nullptr);
-    const int held = HoldOutTargets(pre.Board(), state, cost_in, targets, tapped, for_creature,
+    // The greedy's tapped sources are read by HoldOutTargets only if a target reaches its held trials.
+    const int held = HoldOutTargets(pre.Board(), state, cost_in, targets, nullptr, for_creature,
                                     available ? &av_pre : nullptr, honor_legacy_cco, nullptr);
     Phs(kPhsTrial);
     if (held == 0) { return true; }
