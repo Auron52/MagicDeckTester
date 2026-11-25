@@ -57826,58 +57826,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             if (!fv_built)
             {
-                const std::vector<std::vector<int>> all
-                    = DestroyUpToArtEnchOptions(state, me, pp.destroy_up_to_artifacts_enchantments);
-                std::vector<std::vector<int>> offered = all;
-                ResolveProvider(state).DestroyUpToArtEnchTargetOptions(state, me, offered);
-                const int front = ResolveProvider(state).DestroyUpToArtEnchPick(state, me, all);
-                auto pin_of = [&](const std::vector<int>& opt)
-                {
-                    std::vector<int> nums;
-                    for (int bi : opt) { nums.push_back(state.battlefield[static_cast<std::size_t>(bi)].card.m_number); }
-                    return DestroyUpToArtEnchPin(nums);
-                };
-                std::vector<std::string> legal_pins;
-                for (const auto& o : all) { legal_pins.push_back(pin_of(o)); }
-                const std::string front_pin = (front >= 0 && front < static_cast<int>(all.size()))
-                                            ? legal_pins[static_cast<std::size_t>(front)] : std::string();
-                for (const auto& o : offered)
-                {
-                    const std::string pin = pin_of(o);
-                    if (std::find(legal_pins.begin(), legal_pins.end(), pin) == legal_pins.end()) { continue; }   // restrict only
-                    if (std::find(fv_pins.begin(), fv_pins.end(), pin) != fv_pins.end()) { continue; }
-                    fv_pins.push_back(pin);
-                }
-                const auto fit = std::find(fv_pins.begin(), fv_pins.end(), front_pin);
-                if (fit != fv_pins.end() && fit != fv_pins.begin()) { std::rotate(fv_pins.begin(), fit, fit + 1); }
-                // USER ruling 13 (lock step 6): while a hexproof creature the opponent could have cast threatens the
-                // lock (eefair::ThreatOnHead), Force of Vigor may target the VIRTUAL Auras it could carry. Appended
-                // AFTER the board options (searched, never automatic): each class (one per Aura name and head), two
-                // of one class, every pair of classes, and every admitted real single with each class. Empty for
-                // every other deck (no virtual board).
-                {
-                    const std::vector<std::vector<int>> vcls = eefair::FovVirtualAuraClasses(state);
-                    const int vmax = pp.destroy_up_to_artifacts_enchantments;
-                    std::vector<int> real_singles;
-                    for (const auto& o : offered)
-                    {
-                        if (o.size() != 1) { continue; }
-                        const std::string pin = pin_of(o);
-                        if (std::find(legal_pins.begin(), legal_pins.end(), pin) == legal_pins.end()) { continue; }
-                        real_singles.push_back(state.battlefield[static_cast<std::size_t>(o.front())].card.m_number);
-                    }
-                    auto add = [&](const std::vector<int>& nums) {
-                        const std::string pin = DestroyUpToArtEnchPin(nums);
-                        if (std::find(fv_pins.begin(), fv_pins.end(), pin) == fv_pins.end()) { fv_pins.push_back(pin); }
-                    };
-                    for (std::size_t x = 0; x < vcls.size() && vmax >= 1; ++x) { add({ vcls[x][0] }); }
-                    for (std::size_t x = 0; x < vcls.size() && vmax >= 2; ++x)
-                    {
-                        if (vcls[x].size() >= 2) { add({ vcls[x][0], vcls[x][1] }); }
-                        for (std::size_t y = x + 1; y < vcls.size(); ++y) { add({ vcls[x][0], vcls[y][0] }); }
-                        for (int r : real_singles) { add({ r, vcls[x][0] }); }
-                    }
-                }
+                fv_pins = DestroyUpToArtEnchSearchPins(state, me, pp.destroy_up_to_artifacts_enchantments);
                 fv_built = true;
             }
             // A provider that withheld EVERY option withdrew the cast (not casting covers it). The unpinned base
@@ -119562,12 +119511,16 @@ static Installer s_installer;
 // INCANDESCENT SOULSTOKE (agent F, 2026-11-14): the same window puts an Elemental creature card from hand
 // (EotPutOptions), so a live untapped put source with a matching card in hand makes it pending too (the menu then
 // crosses every flip entry with the put options). False for every deck without such a source.
+// FORCE OF VIGOR'S OFF-TURN PITCH (Enchanted Evening lock step 7): the same window casts a Force of Vigor in our hand
+// for its alternative cost or with mana left untapped (EotFovOptions), so a FoV in hand makes it pending too (the
+// menu crosses every flip / put entry with the FoV options, "no cast" first). False for every deck without the card.
 static bool FaceUpUncoveredPending(const GameState& state)
 {
-    return (state.deck_has_morph || state.deck_has_eot_tap_put) && state.scripted_eot_face_up < 0
+    return (state.deck_has_morph || state.deck_has_eot_tap_put || state.deck_has_eot_fov_pitch)
+        && state.scripted_eot_face_up < 0
         && g_bp_enum_depth == 0 && !t_rollout_narrow
         && !HumanPlayActive() && !EchoEdgeFoldHere(state)
-        && (AnyEotFaceUpCandidate(state) || AnyEotPutCandidate(state));
+        && (AnyEotFaceUpCandidate(state) || AnyEotPutCandidate(state) || AnyEotFovCandidate(state));
 }
 // MAZE'S END I3 -- THE CROSSING LAND PUTS (SpellEffects.h, "THE CROSSING LAND PUTS"): Manabond's end-step yes/no
 // (+ each dumped land's as-enters choice) and Burgeoning's which-land per trigger on the opponent's land play.

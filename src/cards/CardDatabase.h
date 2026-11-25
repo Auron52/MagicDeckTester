@@ -5465,8 +5465,14 @@ struct CardParams
     // Force of Vigor clause 2 (lock cluster step 5; ResolveDestroyUpToArtEnch): "Destroy up to N target artifacts
     // and/or enchantments." N = this value (2). The target SET (0..N distinct permanents, either side, shroud and an
     // opponent's hexproof honoured) is a searched cast axis pinned on tutor_target "FV<n>[,<m>]". The off-turn pitch
-    // (clause 1) is a separate later param.
+    // (clause 1) is alt_cost_exile_green_off_turn below.
     int                      destroy_up_to_artifacts_enchantments = 0;
+    // Force of Vigor clause 1 (lock cluster step 7; EotFovOptions / EotFovApply in SpellEffects.h): "If it's not your
+    // turn, you may exile a green card from your hand rather than pay this spell's mana cost." An alternative cost
+    // (CR 118.9) usable only off our turn: the engine offers it in the OPPONENT'S END-STEP window (the morph window,
+    // EotFaceUpMenu's FoV half), searched (which green card is pitched x the target pins), stamped per deck as
+    // GameState::deck_has_eot_fov_pitch. Mainboard only.
+    bool                     alt_cost_exile_green_off_turn = false;
     // Parallax Wave (lock cluster step 4; PermAbilityMode::FadeExileCreature, ResolveFadeExileCreature in SpellEffects.h):
     // "Remove a fade counter from this enchantment: Exile target creature. When this enchantment leaves the battlefield,
     // each player returns to the battlefield all cards they own exiled with it." The fade counters are fading_counters'

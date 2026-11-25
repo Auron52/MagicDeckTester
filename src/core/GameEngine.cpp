@@ -389,7 +389,21 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         // opponent-end-step window put (only an opponent EXTRA turn reaches one; our own end step swept every other).
         // The window below (flips, then Soulstoke puts) runs after it, so ITS puts meet our end step. Deck-gated.
         if (state.deck_has_eot_tap_put) { PerformEndStepDelayedSacrifices(state); }
+        // ...and Force of Vigor's off-turn cast (lock step 7), last in that window. MTG_EE_FOV_PITCH_LOG=1
+        // (MEASUREMENT ONLY; no behaviour): one stderr line per FoV this lambda casts.
+        static const bool s_fov_log = EnvOn("MTG_EE_FOV_PITCH_LOG");
+        std::string fov_note;
+        std::string* const prior_fov_note = t_eot_fov_note;
+        if (s_fov_log && state.deck_has_eot_fov_pitch) { t_eot_fov_note = &fov_note; }
         PerformOpponentEndStepFaceUp(state);
+        t_eot_fov_note = prior_fov_note;
+        if (!fov_note.empty())
+        {
+            std::fprintf(stderr, "[ee-fov] job=%s gi=%d real=%d seed=%llu round=%d %s\n",
+                         escstats::t_job != nullptr ? escstats::t_job : "-", escstats::t_gi,
+                         t_ee_fair_real_game ? 1 : 0, static_cast<unsigned long long>(state.game_seed),
+                         state.turn_number, fov_note.c_str());
+        }
         opponentdeck::EndOfTurnCleanup(state);
         DayNightTurnBoundary(state);
     };

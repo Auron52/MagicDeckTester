@@ -23081,6 +23081,68 @@ inline bool DestroyUpToArtEnchPinTargets(const std::string& pin, std::vector<int
     if (any) { numbers.push_back(n); }
     return true;
 }
+// THE SEARCHED TARGET PINS of a Force of Vigor cast (lock steps 5 / 6 / 7): one "FV<n>[,<m>]" pin per option of
+// DestroyUpToArtEnchOptions the provider admits (DestroyUpToArtEnchTargetOptions: restrict / order only), the
+// provider's DestroyUpToArtEnchPick rotated to the front, then the VIRTUAL-Aura pins of the fairness check (USER
+// ruling 13). ONE builder for the main-phase cast post-pass (TurnSolver.cpp) and the opponent-end-step pitch
+// (EotFovOptions, lock step 7), so both offer exactly the same target menu. Empty = the provider withdrew the cast.
+inline std::vector<std::string> DestroyUpToArtEnchSearchPins(const GameState& state, int me, int n_max)
+{
+    std::vector<std::string> fv_pins;
+    const std::vector<std::vector<int>> all
+        = DestroyUpToArtEnchOptions(state, me, n_max);
+    std::vector<std::vector<int>> offered = all;
+    ResolveProvider(state).DestroyUpToArtEnchTargetOptions(state, me, offered);
+    const int front = ResolveProvider(state).DestroyUpToArtEnchPick(state, me, all);
+    auto pin_of = [&](const std::vector<int>& opt)
+    {
+        std::vector<int> nums;
+        for (int bi : opt) { nums.push_back(state.battlefield[static_cast<std::size_t>(bi)].card.m_number); }
+        return DestroyUpToArtEnchPin(nums);
+    };
+    std::vector<std::string> legal_pins;
+    for (const auto& o : all) { legal_pins.push_back(pin_of(o)); }
+    const std::string front_pin = (front >= 0 && front < static_cast<int>(all.size()))
+                                ? legal_pins[static_cast<std::size_t>(front)] : std::string();
+    for (const auto& o : offered)
+    {
+        const std::string pin = pin_of(o);
+        if (std::find(legal_pins.begin(), legal_pins.end(), pin) == legal_pins.end()) { continue; }   // restrict only
+        if (std::find(fv_pins.begin(), fv_pins.end(), pin) != fv_pins.end()) { continue; }
+        fv_pins.push_back(pin);
+    }
+    const auto fit = std::find(fv_pins.begin(), fv_pins.end(), front_pin);
+    if (fit != fv_pins.end() && fit != fv_pins.begin()) { std::rotate(fv_pins.begin(), fit, fit + 1); }
+    // USER ruling 13 (lock step 6): while a hexproof creature the opponent could have cast threatens the
+    // lock (eefair::ThreatOnHead), Force of Vigor may target the VIRTUAL Auras it could carry. Appended
+    // AFTER the board options (searched, never automatic): each class (one per Aura name and head), two
+    // of one class, every pair of classes, and every admitted real single with each class. Empty for
+    // every other deck (no virtual board).
+    {
+        const std::vector<std::vector<int>> vcls = eefair::FovVirtualAuraClasses(state);
+        const int vmax = n_max;
+        std::vector<int> real_singles;
+        for (const auto& o : offered)
+        {
+            if (o.size() != 1) { continue; }
+            const std::string pin = pin_of(o);
+            if (std::find(legal_pins.begin(), legal_pins.end(), pin) == legal_pins.end()) { continue; }
+            real_singles.push_back(state.battlefield[static_cast<std::size_t>(o.front())].card.m_number);
+        }
+        auto add = [&](const std::vector<int>& nums) {
+            const std::string pin = DestroyUpToArtEnchPin(nums);
+            if (std::find(fv_pins.begin(), fv_pins.end(), pin) == fv_pins.end()) { fv_pins.push_back(pin); }
+        };
+        for (std::size_t x = 0; x < vcls.size() && vmax >= 1; ++x) { add({ vcls[x][0] }); }
+        for (std::size_t x = 0; x < vcls.size() && vmax >= 2; ++x)
+        {
+            if (vcls[x].size() >= 2) { add({ vcls[x][0], vcls[x][1] }); }
+            for (std::size_t y = x + 1; y < vcls.size(); ++y) { add({ vcls[x][0], vcls[y][0] }); }
+            for (int r : real_singles) { add({ r, vcls[x][0] }); }
+        }
+    }
+    return fv_pins;
+}
 inline void ResolveDestroyUpToArtEnch(GameState& state, int controller, const CardDefinition& def,
                                       const std::string& pin)
 {
@@ -32886,7 +32948,24 @@ struct EotFaceUpOption
     std::vector<int>         ids;      // physical card numbers, in flip (= payment) order
     std::vector<std::string> regrow;   // per id: the pinned regrowth NAME ("" = none / the provider's pick)
     std::vector<EotPutStep>  puts;     // Soulstoke puts after the flips, in order (empty = none)
+    // FORCE OF VIGOR at the opponent's end step (Enchanted Evening lock step 7), after the flips and puts:
+    // fov = cast one; fov_pitch = the NAME of the green hand card exiled for the alternative cost ("" = paid with
+    // mana left untapped); fov_pin = the target pin ("FV<n>[,<m>]", DestroyUpToArtEnchSearchPins).
+    bool                     fov = false;
+    std::string              fov_pitch;
+    std::string              fov_pin;
 };
+// > 0 while PerformOpponentEndStepFaceUp runs: the only place the engine is inside the OPPONENT'S turn with a
+// window for us to cast, so Force of Vigor's "if it's not your turn" alternative cost is offered only under it.
+inline thread_local int t_opp_end_step_window = 0;
+struct OppEndStepWindowScope
+{
+    OppEndStepWindowScope()  { ++t_opp_end_step_window; }
+    ~OppEndStepWindowScope() { --t_opp_end_step_window; }
+};
+// MTG_EE_FOV_PITCH_LOG (measurement only): the executor's opponent_turn lambda installs a string here and prints
+// what EotFovApply cast (GameEngine.cpp). nullptr everywhere else.
+inline thread_local std::string* t_eot_fov_note = nullptr;
 inline bool AnyEotPutCandidate(const GameState& s);                                         // defined below
 inline std::vector<std::vector<EotPutStep>> EotPutOptions(const GameState& t, bool front_only);   // defined below
 inline bool EotPutApply(GameState& state, const std::vector<EotPutStep>& puts);              // defined below
@@ -32961,6 +33040,147 @@ inline bool EotFaceUpPayAll(GameState& s, const std::vector<int>& ids)
     }
     return true;
 }
+// ---- FORCE OF VIGOR CLAUSE 1 AT THE OPPONENT'S END STEP (Enchanted Evening lock step 7; design §4.5) ----------
+// "If it's not your turn, you may exile a green card from your hand rather than pay this spell's mana cost." An
+// ALTERNATIVE cost (CR 118.9: it replaces the mana cost; only one alternative cost per spell; the mana value stays 4),
+// chosen as the spell is cast (CR 601.2b) and paid with the other costs (601.2h). The card being cast is already on
+// the stack then (601.2a), so the FoV cannot exile ITSELF; another FoV copy is a green card and is legal. The
+// condition is read at casting: it holds on any opponent turn, never on ours.
+// THE WINDOW. Against the passive opponent the opponent's END STEP weakly dominates every other point of its turn:
+// its whole turn (land drop, fetch, the fairness check's virtual deployments) has happened, nothing it does follows,
+// and the lock check (freeturn::NoteOpponentTurnEnd) reads the board after it. So the cast is offered there, in the
+// morph window, AFTER the USER ruling-7 Wave + Opalescence sweep (PerformWaveOpalSweep runs earlier in both
+// opponent_turn lambdas) and after the window's flips / puts.
+// THE CHOICE IS SEARCHED (NO-GREEDY): {no cast} + {pitch class} x {target pin}. Target pins = the main-phase cast's
+// exact menu (DestroyUpToArtEnchSearchPins: identity-folded real targets the provider admits -- the EE provider
+// drops the empty set -- then the fairness check's virtual-Aura pins, USER ruling 13). Pitch classes = the distinct
+// NAMES of the green cards in hand other than this FoV (identical cards are one class: the IDENTITY fold).
+// SOUND FOLD (mana at the opponent's end step has no other use): when the mana cost is payable from what we left
+// untapped (after the window's flips / puts), the cast is offered paid with that mana ONLY -- a pitch would exile a
+// card for the same effect. Premise, true of this pool: a mana payment at the opponent's end step costs nothing
+// later (everything untaps at our untap step; no source of the list deals damage, sacrifices itself or stays
+// tapped). A list that adds such a source must drop the fold.
+// "No cast" is always rank 0 (the front): beyond the horizon (a narrowed playout, the d0 runner) the consumer never
+// casts (the permitted playout greedy), and the window is free for every deck without the card.
+// HUMAN PLAY: not offered yet -- the viewer's `eot_cast` decision is lock step 9 (the window's human route asks
+// the face_up / eot_put prompts only).
+inline int EotFovHandIndex(const GameState& s)
+{
+    const std::vector<Card>& hand = s.players[static_cast<std::size_t>(s.active_player_index)].hand;
+    for (int i = 0; i < static_cast<int>(hand.size()); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(i)]);
+        if (d != nullptr && d->params.alt_cost_exile_green_off_turn) { return i; }
+    }
+    return -1;
+}
+inline bool AnyEotFovCandidate(const GameState& s)
+{
+    return s.deck_has_eot_fov_pitch && EotFovHandIndex(s) >= 0;
+}
+struct EotFovOption { std::string pitch; std::string pin; };   // pitch "" = paid with mana
+// The FoV options on `t` (the end-step state after the entry's flips / puts), in menu order: target-pin major (the
+// provider's pick first), pitch class minor (hand order). Empty outside the opponent's end-step window, without a
+// FoV in hand, with no way to pay, or when the provider withdrew every target.
+inline std::vector<EotFovOption> EotFovOptions(const GameState& t)
+{
+    std::vector<EotFovOption> out;
+    if (!t.deck_has_eot_fov_pitch || t_opp_end_step_window == 0) { return out; }
+    const int fi = EotFovHandIndex(t);
+    if (fi < 0) { return out; }
+    const std::vector<Card>& hand = t.players[static_cast<std::size_t>(t.active_player_index)].hand;
+    const Card& fov = hand[static_cast<std::size_t>(fi)];
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(fov);
+    bool hard = false;
+    {
+        TapSpeculationScope _spec;
+        GameState u = t;
+        EotFloatingPools::Empty(u);
+        hard = TapForCostDirect(u, fov.m_mana_cost, /*for_creature=*/false);
+    }
+    std::vector<std::string> pitch;
+    if (!hard)
+    {
+        for (int j = 0; j < static_cast<int>(hand.size()); ++j)
+        {
+            if (j == fi || !hand[static_cast<std::size_t>(j)].HasColor(Color::Green)) { continue; }
+            const std::string nm = hand[static_cast<std::size_t>(j)].m_name.str();
+            if (std::find(pitch.begin(), pitch.end(), nm) == pitch.end()) { pitch.push_back(nm); }
+        }
+        if (pitch.empty()) { return out; }
+    }
+    const std::vector<std::string> pins
+        = DestroyUpToArtEnchSearchPins(t, t.active_player_index, def->params.destroy_up_to_artifacts_enchantments);
+    for (const std::string& pin : pins)
+    {
+        if (hard) { out.push_back(EotFovOption{ std::string(), pin }); continue; }
+        for (const std::string& nm : pitch) { out.push_back(EotFovOption{ nm, pin }); }
+    }
+    return out;
+}
+// Cast it on the live state: pay (exile the pitched card, or tap for the mana cost), resolve clause 2 on the pin
+// (ResolveDestroyUpToArtEnch re-checks every target, CR 608.2b), then the card goes to our graveyard (608.2n). A
+// pin whose card has left our hand (a stale pin) casts nothing: the "no cast" entry covers it.
+inline void EotFovApply(GameState& state, const EotFaceUpOption& o)
+{
+    const int me = state.active_player_index;
+    std::vector<Card>& hand = state.players[static_cast<std::size_t>(me)].hand;
+    const int fi = EotFovHandIndex(state);
+    if (fi < 0) { return; }
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(fi)]);
+    int pj = -1;
+    if (!o.fov_pitch.empty())
+    {
+        for (int j = 0; j < static_cast<int>(hand.size()); ++j)
+        {
+            if (j != fi && hand[static_cast<std::size_t>(j)].HasColor(Color::Green)
+                && hand[static_cast<std::size_t>(j)].m_name.str() == o.fov_pitch) { pj = j; break; }
+        }
+        if (pj < 0) { return; }
+    }
+    else if (!TapForCostDirect(state, hand[static_cast<std::size_t>(fi)].m_mana_cost, /*for_creature=*/false)) { return; }
+    const Card fov = hand[static_cast<std::size_t>(fi)];
+    Card pitched;
+    if (pj >= 0)
+    {
+        pitched = hand[static_cast<std::size_t>(pj)];
+        // Erase the higher index first so the other stays valid.
+        const int hi = std::max(fi, pj), lo = std::min(fi, pj);
+        hand.erase(hand.begin() + hi);
+        hand.erase(hand.begin() + lo);
+        state.exile.push_back(pitched);
+    }
+    else { hand.erase(hand.begin() + fi); }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "cast",
+                      fov.m_name.str() + " at the opponent's end step"
+                      + (pj >= 0 ? " (exiling " + pitched.m_name.str() + " from hand instead of its mana cost)"
+                                 : " (paid with mana left untapped)"));
+    }
+    if (t_eot_fov_note != nullptr)
+    {
+        std::string tg;
+        std::vector<int> nums;
+        (void)DestroyUpToArtEnchPinTargets(o.fov_pin, nums);
+        for (int num : nums)
+        {
+            std::string nm = "virtual";
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.card.m_number != num) { continue; }
+                nm = std::string(q.controller_index == me ? "own:" : "opp:") + q.card.m_name.str();
+                break;
+            }
+            if (!tg.empty()) { tg += '|'; }
+            tg += nm;
+        }
+        *t_eot_fov_note = "pitch=" + (pj >= 0 ? pitched.m_name.str() : std::string("<mana>")) + " targets=" + (tg.empty() ? "-" : tg);
+    }
+    ResolveDestroyUpToArtEnch(state, me, *def, o.fov_pin);
+    state.players[static_cast<std::size_t>(me)].graveyard.push_back(fov);
+}
+
 // The menu: every JOINTLY PAYABLE subset of the candidates (paid in the provider's order), crossed with each
 // flipped Den Protector's regrowth target (every distinct name in our graveyard now, the provider's
 // GyReturnToHandPick first). Entry 0 = the FRONT: the greedy "flip every one that still fits, in order", every
@@ -32973,7 +33193,38 @@ inline bool EotFaceUpPayAll(GameState& s, const std::vector<int>& ids)
 // (EotPutOptions: the put FRONT first, "put nothing" last), so the entry order is flips-major and rank 0 is
 // still the front of both. Without a live put source the menu is exactly the flip menu (every morph deck).
 inline std::vector<EotFaceUpOption> EotFaceUpMenuFlips(const GameState& s);
+inline void EotFaceUpApply(GameState& state, const EotFaceUpOption& o);   // defined below
+inline std::vector<EotFaceUpOption> EotFaceUpMenuNoFov(const GameState& s);
+// FORCE OF VIGOR (lock step 7): with a FoV in hand each flip / put entry is followed by its FoV options, built on
+// the state that entry leaves (EotFovOptions): entry-major, "no cast" first, so rank 0 is still the front of all.
+// Without a FoV in hand (every other deck) the menu is exactly the flip / put menu.
 inline std::vector<EotFaceUpOption> EotFaceUpMenu(const GameState& s)
+{
+    if (!AnyEotFovCandidate(s)) { return EotFaceUpMenuNoFov(s); }
+    std::vector<EotFaceUpOption> base = EotFaceUpMenuNoFov(s);
+    const bool base_empty = base.empty();
+    if (base_empty) { base.emplace_back(); }   // nothing to flip or put: the one "do nothing" entry
+    std::vector<EotFaceUpOption> menu;
+    for (const EotFaceUpOption& e : base)
+    {
+        GameState t = s;
+        EotFloatingPools::Empty(t);
+        if (!e.ids.empty() || !e.puts.empty()) { TapSpeculationScope _spec; EotFaceUpApply(t, e); }
+        menu.push_back(e);
+        for (EotFovOption& f : EotFovOptions(t))
+        {
+            EotFaceUpOption o = e;
+            o.fov = true;
+            o.fov_pitch = std::move(f.pitch);
+            o.fov_pin = std::move(f.pin);
+            menu.push_back(std::move(o));
+            if (menu.size() >= 0x7FFF) { return menu; }
+        }
+    }
+    if (base_empty && menu.size() == 1) { menu.clear(); }   // no FoV option either: the window is empty, as before
+    return menu;
+}
+inline std::vector<EotFaceUpOption> EotFaceUpMenuNoFov(const GameState& s)
 {
     if (!AnyEotPutCandidate(s)) { return EotFaceUpMenuFlips(s); }
     std::vector<EotFaceUpOption> flips = EotFaceUpMenuFlips(s);
@@ -33116,6 +33367,7 @@ inline void EotFaceUpApply(GameState& state, const EotFaceUpOption& o)
         TurnFaceDownPermanentUp(state, me, idx);
     }
     if (!o.puts.empty()) { (void)EotPutApply(state, o.puts); }   // Soulstoke, after the flips (agent F)
+    if (o.fov) { EotFovApply(state, o); }   // Force of Vigor, last (lock step 7)
 }
 // THE CONSUMER, at the opponent's notional end step in BOTH opponent_turn lambdas (GameEngine::RunTurnFrom,
 // TurnSolver's SimulateEndAndStartNextTurn), after that end step's self-sacrifice sweep. The pin is consumed
@@ -33128,7 +33380,8 @@ inline void PerformOpponentEndStepFaceUp(GameState& state)
     const int pin = state.scripted_eot_face_up;
     state.scripted_eot_face_up = -1;
     const bool fu_any = AnyEotFaceUpCandidate(state);
-    if (!fu_any && !AnyEotPutCandidate(state)) { return; }
+    if (!fu_any && !AnyEotPutCandidate(state) && !AnyEotFovCandidate(state)) { return; }
+    const OppEndStepWindowScope _window;   // Force of Vigor's "if it's not your turn" (EotFovOptions)
     if (g_play_face_up_chooser != nullptr || g_play_eot_put_chooser != nullptr)
     {
         for (; fu_any && g_play_face_up_chooser != nullptr; )

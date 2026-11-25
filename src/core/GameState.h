@@ -2244,6 +2244,10 @@ struct GameState
     bool                     deck_has_wave_opal_sweep     = false;
     // ENCHANTED EVENING LOCK (lock step 6): see opp_virtual_board above. A DECK CONSTANT, never folded. Same pad.
     bool                     deck_has_ee_lock             = false;
+    // FORCE OF VIGOR'S OFF-TURN PITCH (lock step 7): the MAINBOARD holds an alt_cost_exile_green_off_turn card, so the
+    // opponent-end-step window (EotFaceUpMenu's FoV half) looks for it in our hand. DEFAULT FALSE. A DECK CONSTANT,
+    // never folded. Same pad.
+    bool                     deck_has_eot_fov_pitch       = false;
     // THE SEARCHED ELDER GARGAROTH MODE (Plan::attack_choose_mode_choice): PACKED 2 bits per attack-trigger
     // ordinal (ordinal 0 lowest; a field of 0 = that ordinal unpinned, m + 1 = mode m: 0 token / 1 life /
     // 2 draw); -1 = nothing pinned (every trigger takes DecisionProvider::AttackChooseOneModes' front).

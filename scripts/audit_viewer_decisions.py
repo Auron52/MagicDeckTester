@@ -631,6 +631,10 @@ MANIFEST = {
     # legal target under human play (`exile_target` on the action; the Steelbane shape). The opponent-end-step sweep
     # (USER ruling 7, the deck default) gets its decline entry in lock step 9's end-step decision.
     "fade_exile_target_creature": ("main_phase", truthy),
+    # Force of Vigor clause 1 (lock step 7): the off-turn pitch at the opponent's end step -- cast or not, which green
+    # card is exiled, the targets. The engine searches it (EotFaceUpMenu's FoV half); the viewer's `eot_cast` decision
+    # is lock step 9, so until then this type is EXPECTED and does not surface (a known, owed MISS).
+    "alt_cost_exile_green_off_turn": ("eot_cast", truthy),
     # ---- Maze's End (I2, 2026-11-17) ----
     # Gateway Plaza "When this land enters, sacrifice it unless you pay {1}": pay or sacrifice is asked at
     # the entry (ResolveEtbSacUnlessPay, every land-entry route) on the `dig` chooser -- one examined card
