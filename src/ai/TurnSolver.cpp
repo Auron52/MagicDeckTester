@@ -129367,7 +129367,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // _pabb: a bounded pass 1 answered from the game cache is no predictor of pass 2 (its leaves are, pass 2's are
         // not): HO2 Mill 19410160 T2 c1 110 units (heur's unbounded 4825) -> a 62k pass 2; 19410210 131 -> 153k. The
         // bootstrap estimate reads pass 1 with its hits priced at their stored cost (rgc::E::cost).
-        if (pass_depth == 1) { p18_ab_boot = (s_pabb && p18_ab > 0) ? rgc::t_hit_sum - p18_hs0 : p18_pc_on ? rgc::t_pab_sum - p18_ps0 : 0; }
+        // (a pass 1 whose bound failed was searched again from the root cut -- an unbounded pass 1, as heur's: nothing to price)
+        if (pass_depth == 1) { p18_ab_boot = p18_asp_fail ? 0 : (s_pabb && p18_ab > 0) ? rgc::t_hit_sum - p18_hs0 : p18_pc_on ? rgc::t_pab_sum - p18_ps0 : 0; }
         // K-predictor: record the PROBE's leaf count at this depth (leaf-independent structure the escalation
         // reuses to predict its own affordable depth). Only while the probe records; index guarded.
         long long cost = (budget ? budget->Used() : 0) - used_before;
