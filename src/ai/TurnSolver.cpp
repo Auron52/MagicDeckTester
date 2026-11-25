@@ -117774,7 +117774,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, b2 = false, b3 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false, llw = false, lrf = false, pkt = false, plx = false, pzb = false, pms = false, tp1 = false, zh = false, cx = false, pcr = false, nt1 = false, ptc = false, ptg = false, ptgs = false, t1g = false, pnc = false; int pch = 99; double pts = 0.5, pzc = 0.01, pal = 0.1; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false, llw = false, lrf = false, pkt = false, plx = false, pzb = false, pms = false, tp1 = false, zh = false, cx = false, pcr = false, nt1 = false, ptc = false, ptg = false, ptgs = false, t1g = false, pnc = false, pzr = false, pzrt = false; int pch = 99; double pts = 0.5, pzc = 0.01, pal = 0.1; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
     // Mode 2 is the measured fast shape. Keep mode 1 as the original raw sampler for reproducible
     // research; arm-key suffixes below remain diagnostic overrides of either starting shape.
     inline Knob Knobs()
@@ -117835,7 +117835,13 @@ namespace p18
         if (k.find("_pnc") != std::string::npos) { o.pnc = true; }    // the pass-1 hook's guarded walk without the chain reach (A/B)
         { const std::size_t q = k.find("_pch"); if (q != std::string::npos) { o.pch = std::max(1, std::atoi(k.c_str() + q + 4)); } }   // chain looks pch passes ahead
         if (k.find("_pt1g") != std::string::npos) { o.t1g = true; }   // turn 1: no root rollout; the guarded pass-1 trigger (A/B)
-        if (k.find("_ptc") != std::string::npos) { o.ptc = true; }    // a CACHED root-rollout trigger walks from pass 2, after pass 1 (A/B)
+        if (k.find("_ptc") != std::string::npos) { o.ptc = true; }
+        // _pzr (A/B): the lookahead is NOT memo-epoch isolated and nothing it spends is refunded: a root rollout that
+        // misses (cut at its cap or no win in the window) and a walk that misses warm pass 1's memos instead of being
+        // thrown away, and pass 1's gate cost carries their units (p18_z_add), so the start gate still reads pass 1 at
+        // about the cost heur's own pass 1 has. _pzrt: the root rollout also runs on the decision's rollout table.
+        if (k.find("_pzr") != std::string::npos) { o.pzr = true; }
+        if (k.find("_pzrt") != std::string::npos) { o.pzrt = true; }    // a CACHED root-rollout trigger walks from pass 2, after pass 1 (A/B)
         { const std::size_t q = k.find("_pts"); if (q != std::string::npos) { o.pts = std::atof(k.c_str() + q + 4) / 100.0; } }   // ...if pass 1's rollout share >= pts
         num("_pf", o.f);                                      // ROBUST-OR-EXACT margin F (0 = off)
         o.nocredit = k.find("_pfnc") != std::string::npos;   // the fallback ladder gates on the real remaining budget
@@ -128404,7 +128410,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // leaves the ladder's own K (Hinata 13220014 T1: pass 1 9125 -> 246 units after the root rollout; Gods
             // 13210007 T1: a pass 3 the ladder refuses). Under their own epoch the lookahead's entries can never hit
             // after it, so a miss hands the ladder exactly the memo state it would have had.
-            P18EpochIsolate _p18_epoch(true, p18_dvs);
+            P18EpochIsolate _p18_epoch(!kn.pzr, p18_dvs);
+            const long long zr0 = gamework::t_used; const bool zr_lrf = p18_lrf; if (kn.pzr) { p18_lrf = false; }
             // ...and no store into the game-level caches (the rollout game cache, the game line cache, the in-window
             // cache), whose hits are not charged as their recompute. The lookahead still READS them. NOT the workctr
             // mute: the plan / mana caches charge a hit as the recompute it stands for (priced ledger), so warming them
@@ -128459,7 +128466,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
               rgc::t_hit_cost = -1;
               // Cut at the window's edge: the trigger only asks whether a rollout wins inside the window, so the
               // rollout stops there (an extra-turn chain rolled out to its end cost Extra Turns 11x heur).
-              r0 = FSLineWin(state, 0, max_turns, z_cutv, second_main, &ztt, &zc, budget);
+              r0 = FSLineWin(state, 0, max_turns, z_cutv, second_main, kn.pzrt ? tt : &ztt, &zc, budget);
               z_ptrip = _pc.Tripped(); }
             const bool z_cut = (!unl && budget != nullptr && budget->Overrun()) || z_ptrip;
             if (!unl && budget != nullptr) { budget->SetOverrunLimit(z_ol); }
@@ -128521,6 +128528,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // A miss hands the decision to the ordinary ladder from pass 1 -- or, under _pms (mode 5), to the priced
             // sampled gate below (p18_K stays 1).
             if (p18_done || !kn.pms) { p18_ll_done = true; p18_K = 0; p18_wb = 0; }
+            p18_lrf = zr_lrf;
+            if (kn.pzr && !p18_done) { p18_z_add = gamework::t_used - zr0; }   // _pzr: the lookahead's spend is pass 1's
         }
         if (kn.ll && !kn.verify && !p18_llw)   // (an `_pllw` key also contains `_pll`)
         {

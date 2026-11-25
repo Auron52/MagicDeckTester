@@ -561,4 +561,38 @@ this run is contended by a concurrent reference scan: ignore it).
 
 `hx_pab_pabx` = `hx_pab` exactly (no pass-k fail to exclude). `_pab1` removes the deeper-commit cost (Merfolk 1.017 ->
 0.999, Martyr 1.008 -> 1.000) and deepens the saving on Mill / Shadowborn, quality 0/0. `_pabx` is the arm that moves win
-turns (1 later on Stuffy): dropped. E14 (running): m4_ptc_pab1, m4_ptc_pnt1_pab1, m4_pnt1_pab1 on mtg_k14 (`run_e14.sh`).
+turns (1 later on Stuffy): dropped. E14 (done, below): m4_ptc_pab1, m4_ptc_pnt1_pab1, m4_pnt1_pab1 on mtg_k14 (`run_e14.sh`).
+
+#### E14: `_pab1` combined with mode 4 (same seeds, mtg_k14; heur = E12's, hx_pab1 = E13's; units / heur)
+
+| deck | hx_pab1 | m4_ptc | m4_ptc_pab1 | m4_ptc_pnt1 | m4_ptc_pnt1_pab1 | m4_pnt1_pab1 |
+|---|---|---|---|---|---|---|
+| Hydras | 0.998 | 0.989 | **0.988** | 1.000 | 0.999 | 0.999 |
+| Martyr Lifegain | 1.000 | **0.964** | **0.964** | 0.998 | 0.999 | 1.000 |
+| Maze's End | 0.998 | 1.004 | 1.002 | 1.000 | 0.999 | **0.998** |
+| Merfolk Turns | 0.999 | 1.003 | 1.002 | 1.003 | 1.015 | **0.999** |
+| Mill | **0.988** | 1.008 | 1.000 | 0.997 | 0.987 (1 LATER) | **0.989** |
+| Sea Creatures | 1.006 | **0.915** | 0.922 | 1.000 | 1.006 | 1.007 |
+| Shadowborn Apostle | **0.959** | 1.005 | 0.976 | 0.995 | 0.962 | **0.960** |
+| Stuffy Doll | 0.994 | 0.999 | **0.993** | 1.000 | 0.997 | 0.997 |
+
+The two savings add: m4_ptc_pab1 keeps the turn-1 walk's gain (Sea / Martyr / Hydras) and adds `_pab1`'s (Shadowborn
+1.005 -> 0.976, Mill 1.008 -> 1.000). With the turn-1 lookahead chosen per deck (m4_ptc_pab1 on Hydras / Martyr / Sea /
+Stuffy, m4_pnt1_pab1 elsewhere) every one of the 8 decks is below heur: Hydras 0.988, Martyr 0.964, Maze 0.998, Merfolk
+0.999, Mill 0.989, Sea 0.922, Shadowborn 0.960, Stuffy 0.993. Sea's `_pab1` cost (+0.6 %) is ONE turn-1 decision
+(18500017): the bounded passes 2-3 were cheaper (953 / 3582 vs 983 / 3778), the gate's estimate c3^2/c2 fell from 14.5k to
+13.5k against ~12.6k remaining x alpha, and it admitted a 17.9k pass 4. HO2 (held out: m4_ptc_pab1, m4_pnt1_pab1 on HO1's
+seeds, paired with HO1's heur / m4_ptc) running.
+
+**Where m4_ptc's turn-1 cost is on the decks it does not help** (`gdiv.py`, `uncharged.py`, `zcost.py`, HO1): every
+paired decision class is cheaper than heur, also in the games whose turn-1 play diverged. The loss is UNCHARGED work:
+the root rollout's misses are refunded from the budget, so they show in the batch's units but not in the decisions'
+`used`. Turn-1 root rollouts that miss cost (% of heur's units) Hydras 0.86, Martyr 0.56, Maze 0.35, Merfolk 0.56, Mill
+0.45, Sea 0.84, Shadowborn 0.74, Stuffy 0.68, and almost all of them are CUT at the 1 % cap (Mill 542 of 550, Maze 1313
+of 1325), not completed no-wins. The lookahead is epoch-isolated, so a miss's turn solves cannot warm pass 1's memos.
+
+**E15 (queued behind HO2): `_pzr`** -- no epoch isolation and no refund in the lookahead; a miss's spend (root rollout
++ missed walk, `gamework::t_used`) goes on pass 1's gate cost through the old `p18_z_add` hook, so the gate reads pass 1
+at about heur's cost while pass 1 reuses the turn solves. `_pzrt` also runs the root rollout on the decision's rollout
+table. Arms m4_ptc_pzr, m4_ptc_pzrt, m4_ptc_pab1_pzr on mtg_k15 (`build_k15.sh`).
+
