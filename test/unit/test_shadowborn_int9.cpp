@@ -65,6 +65,17 @@ Permanent Perm9(const std::string& name, int number, bool fresh = false, bool ta
 }
 const ShadowbornProvider& Prov9() { static const ShadowbornProvider p; return p; }
 
+// The run's searched-play flag (thread_local g_searched_play; every AIEngine constructor sets it from its depth). A
+// test of a SEARCHED-only branch must set it itself: left alone it reads whatever the last AIEngine built on this
+// thread wrote, so the case passed only when an earlier depth-3 test (Servant haste keep) ran before it in the same
+// process and failed alone or in a unit_par.sh shard (docs/design/unit-test-order-dependency.md).
+struct Searched9
+{
+    bool saved = g_searched_play;
+    explicit Searched9(bool on) { TurnSolver::SetSearchedPlay(on); }
+    ~Searched9() { TurnSolver::SetSearchedPlay(saved); }
+};
+
 struct Arm9
 {
     heurarm::Arm saved;
@@ -180,6 +191,14 @@ TEST_CASE("INT-9 free casts: a revealed Thrumming Stone is cast and the legend r
     s0.battlefield.push_back(Perm9(kStone9, 40));
     s0.players[0].hand.push_back(Card9(kStone9, 60));
     Lib9(s0, { kStone9, kSw9, kSw9, kSw9, kSw9, kSw9, kSw9, kSw9, kSw9 });
+    {
+        // Depth 0 (the d0 runner) keeps the provider's keep: the twin pass is searched play only, so ONE cast.
+        const Searched9 d0(false);
+        const std::vector<Action> d0_casts = Casts9(s0, kStone9);
+        REQUIRE(d0_casts.size() == 1);
+        CHECK(d0_casts.front().legend_keep == 0);
+    }
+    const Searched9 searched(true);
     const std::vector<Action> casts = Casts9(s0, kStone9);
     REQUIRE(casts.size() == 2);                       // ONE ripple variant x the two keep answers
     CHECK(casts[0].legend_keep + casts[1].legend_keep == 3);

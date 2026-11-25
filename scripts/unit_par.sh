@@ -26,14 +26,15 @@ PER=$(( (TOTAL + SHARDS - 1) / SHARDS ))
 seq 0 $(( SHARDS - 1 )) | xargs -P "$JOBS" -I{} bash -c '
   i={}; f=$(( i * '"$PER"' + 1 )); l=$(( (i + 1) * '"$PER"' ))
   [ "$f" -le '"$TOTAL"' ] || exit 0
-  "'"$BIN"'" --first=$f --last=$l "${@}" > "'"$DIR"'/shard_$i.log" 2>&1; echo $? > "'"$DIR"'/shard_$i.rc"' _ "${EXTRA[@]}"
+  "'"$BIN"'" --first=$f --last=$l --duration=true "${@}" > "'"$DIR"'/shard_$i.log" 2>&1; echo $? > "'"$DIR"'/shard_$i.rc"' _ "${EXTRA[@]}"
 fail=0; ran=0
 for rc in "$DIR"/shard_*.rc; do
   i=${rc##*_}; i=${i%.rc}; log="$DIR/shard_$i.log"
-  # "[doctest] test cases: <all> | <p> passed | <f> failed | <s> skipped": count what this shard RAN (p + f).
-  line=$(grep -E '^\[doctest\] test cases:' "$log" | tail -1)
-  p=$(echo "$line" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+'); f=$(echo "$line" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+')
-  ran=$(( ran + ${p:-0} + ${f:-0} ))
+  # Count what this shard RAN from --duration's one "<seconds> s: <name>" line per executed case. NOT the summary
+  # line: doctest computes "passed" as (cases passing the filters) - failed, and the cases --first/--last skip still
+  # pass the filters, so every shard's summary reports the WHOLE suite (it read 33360 / 4170 on 8 shards).
+  n=$(grep -cE '^[0-9]+\.[0-9]+ s: ' "$log")
+  ran=$(( ran + ${n:-0} ))
   if [ "$(cat "$rc")" != 0 ]; then fail=1; echo "=== shard $i FAILED (rc=$(cat "$rc")) ==="; grep -nE 'ERROR|FATAL|failed' "$log" | head -40; fi
 done
 echo "[unit_par] $ran / $TOTAL test cases in $SHARDS shards on $JOBS cores; $( [ $fail = 0 ] && echo PASS || echo FAIL )"

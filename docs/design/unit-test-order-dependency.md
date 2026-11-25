@@ -1,5 +1,27 @@
 # Unit-test order dependency (found 2026-11-21 by sharding the unit run)
 
+## RESOLVED 2026-11-25 (branch wip/int9-fix): the TEST was wrong, the engine is fine
+
+- **The state:** `g_searched_play` (`src/core/SpellEffects.h`, `thread_local`, default false). The legend-keep twin
+  pass (`TurnSolver.cpp`, "LEGEND-KEEP PASS", CR 704.5j) is gated on it BY DESIGN: searched play twins the cast
+  keep-old / keep-new, the d0 runner keeps the provider's keep. Every `AIEngine` constructor writes it from its
+  depth (`SetSearchedPlay(lookahead_depth > 0)`), and the Servant test builds `AIEngine(..., 3, 20)` and never
+  restores it. The INT-9 Stone test never set it, so it saw true only when a depth>0 engine had been built earlier
+  on the same thread.
+- **Why it "flipped with no code change" on 2026-11-25:** the binary and the code did not change, the RUNNER did.
+  The serial suite (Servant sorts before Shadowborn) still passes 4167/4167 on the same binary; the 11-25 runs went
+  through `scripts/unit_par.sh`, whose shard holding the INT-9 case starts in a fresh process.
+- **Not an engine defect:** real games cannot inherit it, because every game's `AIEngine` constructor sets the flag
+  unconditionally (both directions) before any decision.
+- **Fix:** the test sets searched play itself through a restoring scope (`Searched9`) and also checks the d0 side
+  (one cast, `legend_keep == 0`). No engine change.
+- **`unit_par.sh` count bug fixed in the same branch:** doctest reports "passed" as (cases passing the filters) -
+  failed, and cases `--first/--last` skip still pass the filters, so every shard's summary reported the whole suite
+  (33360 / 4170 on 8 shards -> exit 3 even when green). Shards really do run only their range; the script now counts
+  executed cases from `--duration=true`'s per-case lines.
+
+The original 2026-11-21 notes follow.
+
 ## Why it matters
 
 The USER (2026-11-21): *"Nothing should be single-threaded if we can avoid it..."*. `build/Release/mtg-test`
