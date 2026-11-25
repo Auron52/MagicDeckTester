@@ -2902,6 +2902,47 @@
      "seed": 30091000,
      "src": "b8173fdad445e9d9709a65b3e26ff3150668a778",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 1127,
+      "CONTINUATION-DIFFERS": 468,
+      "DOMINATED-LAND": 158007,
+      "DROP-COVERED": 3858,
+      "ORACLE-GAP": 3747,
+      "PHANTOM": 99380
+     },
+     "commit": "d88b4bfe0131d6e6cc66bd91413b1442f51319bf",
+     "date": "2026-11-25T19:58:01Z",
+     "decisions": 1008545,
+     "deck": "decks/Dragons/Dragons.cod",
+     "deck_sha": "bbd021b5a5942d387b78b3aea0aa1a9f9be1afb8",
+     "game_index": 96000,
+     "games": 100000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 4874,
+     "life_breakpoints": [],
+     "ms_off": 10339988,
+     "ms_on": 17662038,
+     "report": "logs/mana_clean/claude-queue-20261125a/report.md",
+     "run": "claude-queue-20261125a",
+     "seed": 30096000,
+     "src": "773d4e440d5cc5578fdfd9992801ebf13ebcdcfe",
+     "verdict": "issues"
     }
    ]
   },
@@ -3521,6 +3562,53 @@
      "run": "claude-dragonstorm-swap-20261117",
      "seed": 30082000,
      "src": "c19b4de92077d4d5e16298615a6a4eda69d748ed",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 728,
+      "APPLY-DROP-ORDER": 68,
+      "CAPPED": 27,
+      "CAPPED-DECISION": 276,
+      "CONTINUATION-DIFFERS": 577,
+      "DECISION-COST": 4,
+      "DOMINATED-LAND": 224536,
+      "DROP-COVERED": 43693,
+      "ENUM-GAP": 33,
+      "HIDDEN-INFO": 1338,
+      "ORACLE-GAP": 5,
+      "PHANTOM": 153960
+     },
+     "commit": "d88b4bfe0131d6e6cc66bd91413b1442f51319bf",
+     "date": "2026-11-25T19:58:01Z",
+     "decisions": 554643,
+     "deck": "decks/Dragonstorm/Dragonstorm.cod",
+     "deck_sha": "17f46a90e1cd37244694f59e77e16fc1fba93e4f",
+     "game_index": 87000,
+     "games": 72000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 1137,
+     "life_breakpoints": [],
+     "ms_off": 8304505,
+     "ms_on": 62964004,
+     "report": "logs/mana_clean/claude-queue-20261125a/report.md",
+     "run": "claude-queue-20261125a",
+     "seed": 30087000,
+     "src": "773d4e440d5cc5578fdfd9992801ebf13ebcdcfe",
      "verdict": "issues"
     }
    ]
@@ -5937,6 +6025,51 @@
      "run": "claude-queue-20261120c",
      "seed": 30010000,
      "src": "9cf4511809181f0cd0ae54aba836797288ef56db",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP-ORDER": 91,
+      "CAPPED-DECISION": 62,
+      "CONTINUATION-DIFFERS": 1,
+      "DECISION-COST": 1,
+      "DOMINATED-LAND": 460,
+      "DROP-COVERED": 1307,
+      "ENUM-GAP": 18,
+      "HIDDEN-INFO": 58,
+      "ORACLE-GAP": 3,
+      "PHANTOM": 20375
+     },
+     "commit": "d88b4bfe0131d6e6cc66bd91413b1442f51319bf",
+     "date": "2026-11-25T19:58:01Z",
+     "decisions": 284868,
+     "deck": "decks/Hydras/Hydras.cod",
+     "deck_sha": "54f5c279ff883a4927fd47a4b565b00c24bbc13b",
+     "game_index": 15000,
+     "games": 29000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 174,
+     "life_breakpoints": [],
+     "ms_off": 14739272,
+     "ms_on": 35409788,
+     "report": "logs/mana_clean/claude-queue-20261125a/report.md",
+     "run": "claude-queue-20261125a",
+     "seed": 30015000,
+     "src": "773d4e440d5cc5578fdfd9992801ebf13ebcdcfe",
      "verdict": "issues"
     }
    ]
@@ -9143,6 +9276,47 @@
      "seed": 30020000,
      "src": "9cf4511809181f0cd0ae54aba836797288ef56db",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 695,
+      "DOMINATED-LAND": 140753,
+      "DROP-COVERED": 1658401,
+      "ENUM-GAP": 341,
+      "HIDDEN-INFO": 3,
+      "PHANTOM": 723
+     },
+     "commit": "d88b4bfe0131d6e6cc66bd91413b1442f51319bf",
+     "date": "2026-11-25T19:58:01Z",
+     "decisions": 207066,
+     "deck": "decks/Mill/Mill.cod",
+     "deck_sha": "470d27a576f82fa68f57fc4d0eba5f836bbe1676",
+     "game_index": 25000,
+     "games": 23000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 341,
+     "life_breakpoints": [],
+     "ms_off": 28678624,
+     "ms_on": 32015359,
+     "report": "logs/mana_clean/claude-queue-20261125a/report.md",
+     "run": "claude-queue-20261125a",
+     "seed": 30025000,
+     "src": "773d4e440d5cc5578fdfd9992801ebf13ebcdcfe",
+     "verdict": "issues"
     }
    ]
   },
@@ -11910,6 +12084,47 @@
      "seed": 30117000,
      "src": "31070f52fd9cbeedeae1f418caa1ba79a487d21a",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 185,
+      "DOMINATED-LAND": 16121,
+      "DOMINATED-LIFE": 26807,
+      "DROP-COVERED": 18,
+      "ORACLE-GAP": 26,
+      "PHANTOM": 137
+     },
+     "commit": "d88b4bfe0131d6e6cc66bd91413b1442f51319bf",
+     "date": "2026-11-25T19:58:01Z",
+     "decisions": 79508,
+     "deck": "decks/Prevent Damage/Prevent Damage.cod",
+     "deck_sha": "2fc5f5fe998de96a2f49a0d5f8565ba1fa92a5b6",
+     "game_index": 122000,
+     "games": 8000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 26,
+     "life_breakpoints": [],
+     "ms_off": 16101691,
+     "ms_on": 28225531,
+     "report": "logs/mana_clean/claude-queue-20261125a/report.md",
+     "run": "claude-queue-20261125a",
+     "seed": 30122000,
+     "src": "773d4e440d5cc5578fdfd9992801ebf13ebcdcfe",
+     "verdict": "issues"
     }
    ]
   },
@@ -12142,6 +12357,51 @@
      "run": "claude-queue-20261120c",
      "seed": 30005000,
      "src": "9cf4511809181f0cd0ae54aba836797288ef56db",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 94,
+      "APPLY-DROP-ORDER": 83,
+      "CONTINUATION-DIFFERS": 14,
+      "DOMINATED-LAND": 15178,
+      "DOMINATED-LIFE": 1,
+      "DROP-COVERED": 3,
+      "ENUM-GAP": 61,
+      "HIDDEN-INFO": 5,
+      "ORACLE-GAP": 5,
+      "PHANTOM": 8196
+     },
+     "commit": "d88b4bfe0131d6e6cc66bd91413b1442f51319bf",
+     "date": "2026-11-25T19:58:01Z",
+     "decisions": 366772,
+     "deck": "decks/Sea Creatures/Sea Creatures.cod",
+     "deck_sha": "0e59aa40cddeda18c231ae9c574ce20b2c2f0d59",
+     "game_index": 10000,
+     "games": 35000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 243,
+     "life_breakpoints": [],
+     "ms_off": 22786483,
+     "ms_on": 39181718,
+     "report": "logs/mana_clean/claude-queue-20261125a/report.md",
+     "run": "claude-queue-20261125a",
+     "seed": 30010000,
+     "src": "773d4e440d5cc5578fdfd9992801ebf13ebcdcfe",
      "verdict": "issues"
     }
    ]
@@ -13279,6 +13539,48 @@
      "run": "claude-queue-20261120c",
      "seed": 30115000,
      "src": "9cf4511809181f0cd0ae54aba836797288ef56db",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 58,
+      "APPLY-DROP-ORDER": 238,
+      "CONTINUATION-DIFFERS": 176,
+      "DOMINATED-LAND": 58271,
+      "DROP-COVERED": 4135,
+      "HIDDEN-INFO": 113,
+      "PHANTOM": 90276
+     },
+     "commit": "d88b4bfe0131d6e6cc66bd91413b1442f51319bf",
+     "date": "2026-11-25T19:58:01Z",
+     "decisions": 232076,
+     "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+     "deck_sha": "a23edb97dcaeb1e61888de6616f4f35299abf43d",
+     "game_index": 120000,
+     "games": 27000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 296,
+     "life_breakpoints": [],
+     "ms_off": 22526052,
+     "ms_on": 30372309,
+     "report": "logs/mana_clean/claude-queue-20261125a/report.md",
+     "run": "claude-queue-20261125a",
+     "seed": 30120000,
+     "src": "773d4e440d5cc5578fdfd9992801ebf13ebcdcfe",
      "verdict": "issues"
     }
    ]
@@ -14617,6 +14919,48 @@
      "seed": 30005000,
      "src": "9cf4511809181f0cd0ae54aba836797288ef56db",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 24,
+      "APPLY-DROP-ORDER": 206,
+      "CONTINUATION-DIFFERS": 458,
+      "DOMINATED-LAND": 10584,
+      "DROP-COVERED": 700,
+      "ORACLE-GAP": 5,
+      "PHANTOM": 19262
+     },
+     "commit": "d88b4bfe0131d6e6cc66bd91413b1442f51319bf",
+     "date": "2026-11-25T19:58:01Z",
+     "decisions": 117040,
+     "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+     "deck_sha": "def77920f02ed0e272fdf789a611ac2226198d64",
+     "game_index": 10000,
+     "games": 14000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 235,
+     "life_breakpoints": [],
+     "ms_off": 16499673,
+     "ms_on": 23786088,
+     "report": "logs/mana_clean/claude-queue-20261125a/report.md",
+     "run": "claude-queue-20261125a",
+     "seed": 30010000,
+     "src": "773d4e440d5cc5578fdfd9992801ebf13ebcdcfe",
+     "verdict": "issues"
     }
    ]
   },
@@ -15110,6 +15454,50 @@
      "run": "claude-queue-20261119c",
      "seed": 30095000,
      "src": "b3acc4dad01f9d8737268986cc577b2689c445fd",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 4440,
+      "APPLY-DROP-ORDER": 242,
+      "CONTINUATION-DIFFERS": 2069,
+      "DOMINATED-LAND": 323727,
+      "DOMINATED-LIFE": 6662,
+      "DROP-COVERED": 618367,
+      "ENUM-GAP": 365,
+      "HIDDEN-INFO": 43,
+      "PHANTOM": 59384
+     },
+     "commit": "d88b4bfe0131d6e6cc66bd91413b1442f51319bf",
+     "date": "2026-11-25T19:58:01Z",
+     "decisions": 709709,
+     "deck": "decks/Treasure Hunt/Treasure Hunt.txt",
+     "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
+     "game_index": 100000,
+     "games": 100000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 5047,
+     "life_breakpoints": [],
+     "ms_off": 30989021,
+     "ms_on": 30173324,
+     "report": "logs/mana_clean/claude-queue-20261125a/report.md",
+     "run": "claude-queue-20261125a",
+     "seed": 30100000,
+     "src": "773d4e440d5cc5578fdfd9992801ebf13ebcdcfe",
      "verdict": "issues"
     }
    ]
@@ -15885,6 +16273,53 @@
      "seed": 30315000,
      "src": "f7cce0693b6a16d779df5ac756af16100e3b677d",
      "verdict": "clean"
+    }
+   ]
+  },
+  "worldfire": {
+   "runs": [
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 6938,
+      "APPLY-DROP-ORDER": 451,
+      "CONTINUATION-DIFFERS": 17374,
+      "DOMINATED-LAND": 41616,
+      "DROP-COVERED": 26699,
+      "HIDDEN-INFO": 17,
+      "ORACLE-GAP": 3,
+      "PHANTOM": 620104
+     },
+     "commit": "d88b4bfe0131d6e6cc66bd91413b1442f51319bf",
+     "date": "2026-11-25T19:58:01Z",
+     "decisions": 266025,
+     "deck": "decks/Worldfire/Worldfire.cod",
+     "deck_sha": "127cb53f5af31a3a4f47afc063f2b5fda7cde3d5",
+     "game_index": 0,
+     "games": 23000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 7392,
+     "life_breakpoints": [],
+     "ms_off": 39552184,
+     "ms_on": 55310474,
+     "report": "logs/mana_clean/claude-queue-20261125a/report.md",
+     "run": "claude-queue-20261125a",
+     "seed": 30000000,
+     "src": "773d4e440d5cc5578fdfd9992801ebf13ebcdcfe",
+     "verdict": "issues"
     }
    ]
   }
