@@ -384,3 +384,70 @@ Next: (1) the T1 trigger cost on Maze's End / Mill / Merfolk Turns / Shadowborn 
 it does not pay (candidates: `_ptp1`'s free trigger with a miss bound; reusing a cut root rollout's work); (2) dev-seq
 pass 2 general (heur too): Martyr / Hydras ~9.8 % of units, still the biggest general headroom; (3) re-measure on
 held-out seeds, then the valueleaf.sh stage and per-deck flips.
+
+### E1-E8 (2026-11-25): where mode 4's cost and saving live; the cached-trigger walk (`_ptc`)
+
+Same 8 decks x 200 games and seeds as K1-K4 (`build/scratch/p18g/E1..E8`, merged with K2's heur arm in `ME*`; tools
+`lacct.py`, `zcls_heur.py`, `reachk.py`, `conf.py`, `cpot.py`, `hookacct.py`, `simt1.py`). Units / heur; quality 0/0 on
+every arm below unless noted.
+
+1. **Every walk that misses is one the ladder would not follow** (`reachk.py`, K4): no walk-miss has heur's committed
+   K >= its target pass. Walks that HIT past heur's reach (K < kto) are still a saving on Martyr / Sea (deep leafless
+   cheaper than heur's shallower rollout passes) and a coin flip on Mill / Shadowborn.
+2. **The root-rollout cap is not the lever** (E1, `_pzc20/30/50`): Hydras 0.970, Maze's End 0.984-0.995 better; Mill
+   1.031-1.062, Shadowborn 1.019-1.038, Martyr 0.986 worse.
+3. **ALL of mode 4's effect is on turn 1** (E4 `_pnt1` = no lookahead on turn 1: 1.000 +- 0.001 on all 8 decks; `simt1.py`).
+   Mill's +1.2 % and Shadowborn's +0.9 % are turn 1; so are Sea's -8.5 %, Martyr's -3.4 %, Hydras' -1.0 %. Later turns
+   never walked: their root rollout is answered from the rollout game cache (0 units), which prices nothing.
+4. **`rgc::E::cost`** (data only, byte-identical: 160/160 m4 jobs equal): every game-cache entry now stores the units its
+   rollout spent from that key's state, so a cached root rollout can be priced. Walking on it at once (`_pzh`) is
+   1.03-1.16x: past-reach walks (Mill +17 %); with the priced reach and no extension (`_pcx`, `_pcr` chain) still
+   1.00-1.02x, because in cached decisions the ladder's rollouts are cached too and the walk's q-prices overestimate
+   them (`conf.py`: the chain refuses decisions heur did reach).
+5. **`_ptc` (cached trigger walks AFTER the ladder's pass 1)**: a cached in-window root rollout arms the pass-1 hook;
+   the ladder's rollout pass 1 runs as heur's does, then the walk from pass 2 is priced on pass 1's REAL cost and
+   per-leaf rollout cost (cache hits included), with the chain reach and no extension, and only when pass 1 spent
+   >= 50 % of its cost on rollouts (`_pts`; `cpot.py`: below that the deeper passes are cache-cheap and a walk only
+   duplicates their tree -- Hydras 15 % of units there, 0.02 % to save). A refusal costs nothing (`hookacct.py`).
+   Without the share rule `_ptc` was 1.03-1.15x (E5).
+
+| deck | m4 | m4_ptc | m4_ptc_pnt1 | m4_ptc_pnt1_pnc (no chain) | m4_pzh_pcr_pnt1 |
+|---|---|---|---|---|---|
+| Hydras | **0.990** | **0.989** | 1.000 | 1.001 | 1.011 |
+| Martyr Lifegain | 0.966 | **0.964** | 0.998 | 0.998 | 0.998 |
+| Sea Creatures | **0.915** | **0.915** | 1.000 | 1.001 | 1.001 |
+| Mill | 1.012 | 1.008 | **0.997** | 1.010 | 1.001 |
+| Shadowborn Apostle | 1.009 | 1.005 | **0.995** | 1.006 | 0.991 |
+| Maze's End | 1.004 | 1.004 | 1.000 | 0.996 | 0.995 |
+| Merfolk Turns | 1.000 | 1.003 | 1.003 | 1.007 | 1.012 |
+| Stuffy Doll | 1.000 | 0.999 | 1.000 | 1.000 | 1.002 |
+
+Rejected: the guarded pass-1 trigger on turn 1 (`_pt1g`, 1.000 on every deck: the turn-1 saving IS pass 1's rollouts,
+which only a trigger before pass 1 can skip); `_ptp1` guarded everywhere (`_ptgs` 0.994-1.003, no turn-1 saving);
+the walk without the chain reach (`_pnc`).
+
+**So:** turn 1's root-rollout walk is worth -1 to -8.5 % on Hydras / Martyr / Sea and +1 % on Mill / Shadowborn, and no
+per-decision signal we have separates them (win-turn means, Z0 cost, leafless growth all overlap). Proposal: `_ptc` in
+the default mode 4 (never worse than m4 by more than 0.003 here), and the turn-1 lookahead a PER-DECK choice made by
+measurement in the value-leaf run's sparse stage (on for Hydras / Martyr / Sea, off for Mill / Shadowborn here). Held-out
+check HO1 (600 games x 8 decks, seeds 19,000,000; heur, m4, m4_ptc, m4_ptc_pnt1) running.
+
+#### HO1 (held out, 8 decks x 600 games, seeds 19,000,000, binary `mtg_k11`; quality 0/0 on every arm)
+
+| deck | m4 | m4_ptc | m4_ptc_pnt1 |
+|---|---|---|---|
+| Hydras | 0.975 | **0.974** | 1.000 |
+| Martyr Lifegain | **0.967** | **0.967** | 1.001 |
+| Sea Creatures | 0.923 | **0.922** | 1.000 |
+| Mill | 1.005 | 1.003 | **0.999** |
+| Shadowborn Apostle | 1.001 | **0.997** | **0.997** |
+| Maze's End | 1.003 | 1.003 | 0.999 |
+| Merfolk Turns | 1.002 | 1.003 | 1.001 |
+| Stuffy Doll | 1.002 | 1.001 | 1.000 |
+
+Units / heur (CPU agrees to ~0.5 %). The screen's -0.3 to -0.5 % on Mill / Shadowborn shrinks to -0.1 / -0.3 % held out.
+**Why Mill cannot move much under this design** (heur arm, M24, rollout vs tree units by pass): the COMMITTING pass's
+rollouts are 86.5 % of Mill's units (T1 30.9 + T2+ 55.6), its superseded passes 4.8 % (rollouts 2.3 + 2.5, tree 0.2 +
+1.6); Shadowborn 74.2 % / 13.5 %; Sea 57.0 % / 36.4 %. Skipping superseded work can only reach that second number, and a
+walk has to prove its win leafless to skip any of it. What is left on Mill is the committing pass's own rollouts (class
+(2): leaves that cannot change the decision), which the USER's 2026-11-19 scope allows only with lossless ideas.
