@@ -12039,14 +12039,21 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
     // And an activation's own payment is not taken out of the cast hold it was never in. Same route, same
     // feasibility test: a payment is replaced only when the greedy's provably strands the declared line and a
     // hold-out keeps it payable. Executor, rollout and walks alike; no plan traits in scope -> as before.
+    // ACTIVATIONS ONLY (the casts' rest is empty): that rest is all generic, so the route can rescue it only through a
+    // fed mode that makes MORE generic mana than the plain path out of the same sources -- X >= {feeder} + 2 (Baldur's
+    // Gate / City: four or more; at X <= {feeder} + 1 the feeders + the plain tap make as much, and the rest is a
+    // count the greedy's payment leaves just the same). The USER's own bound ("unless the amount generated is 2-3 or
+    // less"); it also keeps the trial off the many Maze's End payments with a small Baldur's Gate up.
+    bool acts_only = false;
     if (ScaledRouteActsOn() && !g_line_hold_has_acts)
     {
         if (const PlanTraits* pt = CurrentPlanTraits(); pt != nullptr && pt->act_mana_total > 0)
         {
             const bool paying_act = g_act_line_current.ManaValue() > 0;
             if (paying_act) { later = g_line_unpaid_cost; }
-            later.generic += std::max(0, pt->act_mana_total - g_act_line_paid.ManaValue()
-                                         - g_act_line_current.ManaValue());
+            const int acts = std::max(0, pt->act_mana_total - g_act_line_paid.ManaValue() - g_act_line_current.ManaValue());
+            acts_only = acts > 0 && later.ManaValue() <= 0;
+            later.generic += acts;
         }
     }
     later.generic = std::max(0, later.generic - g_line_reducer_credit);
@@ -12081,7 +12088,8 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr || !IsScaledManaLand(*d) || LandTypeChangedToIsland(state, p)) { continue; }
         const ArmCredit _arm(grow);
-        if (ScaledManaCreatureCount(state, &p) >= 1) { scaled_up = true; break; }
+        const int need_x = acts_only ? d->params.mana_per_creature_feeder_generic + 2 : 1;
+        if (ScaledManaCreatureCount(state, &p) >= need_x) { scaled_up = true; break; }
     }
     if (!scaled_up) { return 0; }
     // The cast being paid, if it is a mana rock that enters untapped (Sol Ring): the rest of the line meets its mana.
