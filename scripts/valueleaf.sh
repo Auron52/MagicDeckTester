@@ -961,12 +961,21 @@ phase_rows() {
     # of where the cap happens to sit. NOT inferred from `queued - sum(played=)`: that reads a 500-game
     # shortfall when the true count is 0, because a job stopped mid-chunk never prints a played= line
     # at all -- conflating the two holes BatchRunner.h warns "mean opposite things".
-    local _half=$(( ROWS_WALL_SEC / 2 )) _queued _slow _pct
-    _queued=$(python3 -c "import json,sys; print(sum(j['games'] for j in json.load(open(sys.argv[1]))['jobs']))" \
-              "$ALL_ROWS.manifest.json" 2>/dev/null || echo 0)
-    _slow=$(grep -ho "SLOW-GAME [0-9]*ms" "$VLQ/rows.batch.log" 2>/dev/null \
-            | sed -E 's/[^0-9]*([0-9]+)ms/\1/' | awk -v t="$((_half*1000))" '$1>=t' | wc -l)
-    log "PHASE A: $_slow/$_queued games ran >= ${_half}s (half the ${ROWS_WALL_SEC}s cap)"
+    #
+    # CUMULATIVE ACROSS RESUMES (2026-11-25). A resumed phase A queues only the MISSING games, and those
+    # are by construction the slowest ones (the games still running when the last run stopped). Counting
+    # this batch's slow games over this batch's manifest therefore read Worldfire as "2/3 = 66% super
+    # slow" when the phase as a whole was 2 of 2,500 (0.08%, under kitty v3's 0.12%). So the numerator is
+    # every SLOW-GAME line any run of this phase has printed (banked in rows.slow.txt, deduped on the
+    # repro seed+index, the latest run's figure kept), and the denominator is every game the phase owns.
+    local _half=$(( ROWS_WALL_SEC / 2 )) _queued _slow _pct _row
+    grep -h "SLOW-GAME" "$VLQ/rows.batch.log" 2>/dev/null >> "$VLQ/rows.slow.txt" || true
+    _queued=0
+    for _row in "${DECK_TABLE[@]}"; do _queued=$(( _queued + ${_row##*|} )); done
+    _slow=$(grep -h "SLOW-GAME" "$VLQ/rows.slow.txt" 2>/dev/null \
+            | sed -nE 's/.*SLOW-GAME ([0-9]+)ms.*--seed ([0-9]+) --game-index ([0-9]+).*/\2_\3 \1/p' \
+            | awk -v t="$((_half*1000))" '{ms[$1]=$2} END { for (k in ms) if (ms[k] >= t) c++; print c+0 }')
+    log "PHASE A: $_slow/$_queued games ran >= ${_half}s (half the ${ROWS_WALL_SEC}s cap; all runs of this phase)"
     if [ "${ROWS_SLOW_FAIL_PCT:-0}" -gt 0 ] && [ "$_queued" -gt 0 ]; then
         _pct=$(( _slow * 100 / _queued ))
         if [ "$_pct" -ge "$ROWS_SLOW_FAIL_PCT" ]; then
