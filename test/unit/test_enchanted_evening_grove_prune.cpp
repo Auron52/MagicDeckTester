@@ -393,3 +393,41 @@ TEST_CASE("EE prune A: a second Sterling Grove is cast only beside a sacrifice o
     // ...and the idle pass is still offered.
     CHECK_FALSE(TurnSolver::IdlePassWithAxes(u).empty());
 }
+
+TEST_CASE("EE prune amendment arm MTG_EE_GROVE_PRELOCK: before EE is ours, with an Opalescence, the Grove is a beater")
+{
+    struct PreScope
+    {
+        heurarm::Arm saved = heurarm::t_arm;
+        PreScope() { heurarm::t_arm[heurarm::EE_GROVE_PRELOCK] = 1; }
+        ~PreScope() { heurarm::t_arm = saved; }
+    };
+    GameState s = GpBoard();
+    AddLands(s, 2, 2);
+    GpPut(s, kGrove, 204);
+    s.players[0].hand.push_back(GpCard(kGrove, 206));
+    s.players[0].hand.push_back(GpCard(kOpal, 207));
+    CHECK_FALSE(eeprune::GrovePrelockException(s, 0));   // default OFF
+    {
+        PreScope on;
+        CHECK(eeprune::GrovePrelockException(s, 0));
+        int lone = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+        { int c = 0, sc = 0; if (PlanCastsGrove(p, &c, &sc) && sc == 0) { ++lone; } }
+        CHECK(lone > 0);                                   // the second Grove alone is a plan again
+        const std::vector<std::string> cands = Cands(s, IdyllicTutor());
+        REQUIRE_FALSE(cands.empty());
+        CHECK(cands.back() == kGrove);                     // a tutor target, ordered last
+        CHECK(cands.front() == kEE);
+        // Enchanted Evening ours: the lock is assembling -- the exception is off, the prune binds again.
+        GameState t = s;
+        GpPut(t, kEE, 208);
+        CHECK_FALSE(eeprune::GrovePrelockException(t, 0));
+        const std::vector<std::string> c2 = Cands(t, IdyllicTutor());
+        CHECK(std::find(c2.begin(), c2.end(), kGrove) == c2.end());
+        // No Opalescence anywhere: off.
+        GameState u = GpBoard();
+        AddLands(u, 2, 2);
+        CHECK_FALSE(eeprune::GrovePrelockException(u, 0));
+    }
+}

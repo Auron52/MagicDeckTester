@@ -5261,6 +5261,9 @@ Census CensusOf(const GameState& s, int controller);
 bool LockPieceFetchable(const Census& c);
 bool ManaNeeded(const Census& c);           // B4: < 4 or < 2 white; at exactly 4 only with no lock piece fetchable
 bool PreferSprawl(const Census& c);         // B3: short of white (with a Forest host) or 2+ Forests
+// The amendment arm MTG_EE_GROVE_PRELOCK (heurarm EE_GROVE_PRELOCK, DEFAULT OFF): the pre-lock Grove beater exception
+// is live -- the amendment on, Enchanted Evening not on our battlefield, an Opalescence ours or in hand.
+bool GrovePrelockException(const GameState& s, int controller);
 }
 
 class WorldfireProvider : public DeckProvider

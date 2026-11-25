@@ -39278,6 +39278,31 @@ bool ManaNeeded(const Census& c)
 bool PreferSprawl(const Census& c)
 { return (c.white < 2 && (c.forests >= 1 || c.fetch_forest)) || c.forests >= 2; }
 
+// THE PRE-LOCK GROVE BEATER EXCEPTION (amendment arm, DEFAULT OFF; the USER decides). Root cause of the two held-out
+// games the prune makes slower even at d3 b0 (seed 8000 gi=19, gi=91): the OFF arm's faster win is an Opalescence
+// BEATDOWN in which a Sterling Grove is a cheap 2/2 attacker (MV 2 under Opalescence) -- gi=19 tutors it with Idyllic
+// Tutor (rule B1 refuses), gi=91 casts the second copy before the lock (rule A refuses). The prune's own reason (two
+// Groves make the Wave self-exile loop impossible) only binds once the lock is assembled, so before Enchanted Evening
+// is ours, with an Opalescence ours or in hand, the exception restores both: the second Grove cast, and Sterling Grove
+// as a tutor target ordered LAST (after every kept name).
+bool GrovePrelockException(const GameState& s, int controller)
+{
+    static const bool env = EnvOn("MTG_EE_GROVE_PRELOCK");   // DEFAULT OFF (an amendment arm); =1 the exception
+    if (!heurarm::Flag(heurarm::EE_GROVE_PRELOCK, env)) { return false; }
+    bool opal = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (IsEE(d)) { return false; }
+        opal = opal || IsOpal(d);
+    }
+    if (opal) { return true; }
+    for (const Card& h : s.players[static_cast<std::size_t>(controller)].hand)
+    { if (IsOpal(CardDatabase::Instance().LookupCached(h))) { return true; } }
+    return false;
+}
+
 }   // namespace eeprune
 
 std::vector<std::string>
@@ -39294,6 +39319,7 @@ EnchantedEveningProvider::TutorCandidates(const GameState& s, int controller, co
     const bool piece = eeprune::LockPieceFetchable(c);
     const std::string* ee = nullptr; const std::string* opal = nullptr; const std::string* wave = nullptr;
     const std::string* wg = nullptr; const std::string* sprawl = nullptr; const std::string* pres = nullptr;
+    const std::string* grove = nullptr;
     for (const std::string& nm : all)
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
@@ -39303,6 +39329,7 @@ EnchantedEveningProvider::TutorCandidates(const GameState& s, int controller, co
         else if (eeprune::IsWildGrowth(d)) { if (wg == nullptr) { wg = &nm; } }
         else if (eeprune::IsSprawl(d))     { if (sprawl == nullptr) { sprawl = &nm; } }
         else if (eeprune::IsPresence(d))   { if (pres == nullptr) { pres = &nm; } }
+        else if (eeprune::IsGrove(d))      { if (grove == nullptr) { grove = &nm; } }
     }
     std::vector<std::string> kept;
     if (ee != nullptr && !c.have_ee)     { kept.push_back(*ee); }
@@ -39315,6 +39342,7 @@ EnchantedEveningProvider::TutorCandidates(const GameState& s, int controller, co
         if (m != nullptr) { kept.push_back(*m); }
     }
     if (pres != nullptr && !c.have_presence && (!piece || mana)) { kept.push_back(*pres); }
+    if (grove != nullptr && eeprune::GrovePrelockException(s, controller)) { kept.push_back(*grove); }   // amendment
     return kept;
 }
 
@@ -39325,6 +39353,7 @@ bool EnchantedEveningProvider::PlanListFilterLive(const GameState& s) const
 {
     if (!eeprune::On()) { return false; }
     const int me = s.active_player_index;
+    if (eeprune::GrovePrelockException(s, me)) { return false; }   // the amendment: a second Grove is a beater
     int in_hand = 0;
     for (const Card& h : s.players[static_cast<std::size_t>(me)].hand)
     { if (eeprune::IsGrove(CardDatabase::Instance().LookupCached(h))) { ++in_hand; } }
