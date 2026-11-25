@@ -596,3 +596,31 @@ of 1325), not completed no-wins. The lookahead is epoch-isolated, so a miss's tu
 at about heur's cost while pass 1 reuses the turn solves. `_pzrt` also runs the root rollout on the decision's rollout
 table. Arms m4_ptc_pzr, m4_ptc_pzrt, m4_ptc_pab1_pzr on mtg_k15 (`build_k15.sh`).
 
+**E15 result: `_pzr` REJECTED (refuted premise).** Units / heur (K1 seeds): m4_ptc_pzr Hydras 0.979, Martyr 0.980, Maze
+0.983, Merfolk 0.956, Mill 1.016, Sea 0.892, Shadowborn 0.966, Stuffy 0.993 -- but **3 games LATER** (Maze 137, Mill 41,
+Mill 177; 1 earlier, Martyr), same on `_pzrt` / `_pab1_pzr`. Pass 1 reuses NOTHING of a missed root rollout: over the
+T1 misses (paired with m4_ptc) pass 1 is cheaper by 0 % of the root rollout's units on 6 decks, 2 % Maze, 4 % Mill. So
+every saving is the gate made more conservative by the charged units: Mill 41 T1 (cut Z0 181 units, pass 1 2779 both
+arms) -> the bootstrap refused pass 2, win T6 instead of T5; Mill 177 T1 (a missed walk's 3.6k charged) -> pass 1
+only, T5 instead of T4. A missed root rollout's work is not recoverable through the memos; the knobs stay, inert.
+
+**HO2 (held out, 600 x 8, seeds 19M paired with HO1's heur / m4_ptc; units / heur):**
+
+| deck | m4_ptc | m4_ptc_pab1 | m4_pnt1_pab1 |
+|---|---|---|---|
+| Hydras | **0.974** | 0.978 | 1.003 |
+| Martyr Lifegain | **0.967** | 0.981 | 1.015 |
+| Maze's End | 1.003 | 1.004 (1 earlier) | 1.000 (1 earlier) |
+| Merfolk Turns | 1.003 | 1.005 (1 earlier) | 1.002 (1 earlier) |
+| Mill | 1.003 | 1.005 | 1.001 |
+| Sea Creatures | 0.922 | **0.916** | 0.992 |
+| Shadowborn Apostle | 0.997 | 0.966 | **0.962** |
+| Stuffy Doll | 1.001 | **0.966** | **0.966** |
+
+`_pab1`'s held-out costs (`apair.py`, `bootx.py`): aspiration fails (Martyr +0.73 %, Hydras +0.35 %) and deeper commits
+through heur's gate, of two kinds. (a) BOOTSTRAP: a bounded pass 1 answered from the game cache (Mill 19410160 T2: 110
+units, heur's 4825) admits a pass 2 of 62k (19410210: 131 -> 153k): Mill +0.93 % in 2 decisions -> `_pabb` (D16). (b)
+the mirror (Martyr +1.5 %, 23 decisions): heur's pass 1 was the cache-cheap one (4-26 units vs our 112-196), so heur's
+c2/c1 refused pass 3 and ours admits it (E12's mechanism; same win). The HO seeds are now the DEV set; the final
+per-deck choice is confirmed on fresh seeds (HO3, 20M).
+
