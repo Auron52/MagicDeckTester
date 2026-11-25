@@ -5309,13 +5309,9 @@ public:
     int TapTutorPutEval(const GameState& s, const CardDefinition& source, const std::string& target) const override;
     // F6: mana-source tap order -- Baldur's Gate (live fed mode) and an untapped Maze's End pay LAST (see the definition).
     int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
-    // Maze's End hold-up (MTG_MAZE_HOLD_UP, heurarm MAZE_HOLD_UP; DEFAULT OFF, a payment PREFERENCE awaiting its A/B):
+    // Maze's End hold-up (MTG_MAZE_HOLD_UP, heurarm MAZE_HOLD_UP; DEFAULT ON since 2026-11-25, a payment PREFERENCE):
     // the costs of the hand's spells, cheapest first. See DecisionProvider::PaymentHoldUp.
     std::vector<ManaCost> PaymentHoldUp(const GameState& s, int controller) const override;
-    // ...and its RESERVE mode (MTG_MAZE_HOLD_RESERVE, heurarm MAZE_HOLD_RESERVE; DEFAULT OFF): {G}{G}{U} shaped by the
-    // hand and the library, falling back {G}{G} -> {G} -> {U}. See DecisionProvider::PaymentReserve.
-    bool PaymentReserve(const GameState& s, int controller, const Card* paying, const ManaCost& rest,
-                        std::vector<ManaCost>& chain) const override;
     // I4: the Gate tap ORDER (Guild Summit, Heap Gate's cost): pure-mana Gates first, Baldur's Gate next, a Gate
     // with a live non-mana {T} ability last; ManaSourceRank inside each tier (ledger decisions 10 / 30).
     void EtbTapSubtypeOrder(const GameState& s, int controller, std::vector<int>& idx) const override;
