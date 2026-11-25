@@ -805,3 +805,22 @@ seeds; adopt only if every deck meets the bar (work down, paired win turns net <
   decisions (side searches reading a cache the bounded passes left thinner); +pabk 1.040 -> 1.026 on those blocks.
 * RUNNING (lane, 2 threads): PT2 = live_pab1_prgw_pabt (18 decks) + live_pab1_prgw_pabt_pabk (22 decks), same seeds.
   Output build/scratch/p18g/PT2/, DONE marker PT2.DONE; merge with PW1/PT1 for summ.py.
+
+### Results (same seeds, 22 decks x 200 g) and the Gods holdout
+
+| package | units | earlier/later | decks over 1.000u |
+|---|---|---|---|
+| _pab1 _prgw | 0.9677 | 12/7 | Gods 1.014, Martyr 1.008, Beasts 1.003 |
+| + _pabt | 0.9610 | 12/5 | Gods 1.014, Martyr 1.008 |
+| **+ _pabt _pabk** | **0.9628** | **12/3** | **Gods 1.013** |
+| + _pabw (cap a bounded attempt at c_(k-1)) | 0.9674 | 14/19 | REJECTED: an aborted attempt leaves cache state that moves play in 9 decks (backup/p18-pabw-rejected) |
+| + _pabp (bound only at a proven in-window win) | 0.9996 | 0/0 | REJECTED: removes nearly all the saving; Shadowborn 1.005, Stuffy 1.001 (backup/p18-pabp-rejected) |
+
+* The 3 later games of the best package (Blood Sun 13, 70; Worldfire 83) give heur's digest at d8 b0 (`RPT2/`, `RPT2L/`).
+* Gods (census PC1, `MTG_TURN_CENSUS`): the whole +96,752 units sit in 5 decisions, all a FAILED bound whose refutation
+  ("no win by W", W a leaf-derived win past the window) plus the re-search ran up to 9x heur's pass. pvdec read only the
+  first trace section's `used`, which hid it. Saving and loss share one source: leaf-derived bounds.
+* RPV1 (the earlier plain-_pab1 d8 b0 run) was launched from the stale primary checkout (Blood Sun provider=Generic);
+  void. R395/RH3 rerun from the worktree (`R395c/`, `RH3c/`): all 12 rows identical -- the sparse-ladder landing stands.
+* RUNNING: HO5 held-out, live vs live_pab1_prgw_pabt_pabk, 22 decks x 400 g, base 25,000,000 (`build/scratch/p18g/HO5/`,
+  auto-paused with SIGSTOP when the Worldfire value leaf leaves its phase-A tail: `HO5/PAUSED`, pid in `HO5/pid`).
