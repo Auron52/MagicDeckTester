@@ -33109,8 +33109,24 @@ inline std::vector<EotFovOption> EotFovOptions(const GameState& t)
         }
         if (pitch.empty()) { return out; }
     }
-    const std::vector<std::string> pins
+    std::vector<std::string> pins
         = DestroyUpToArtEnchSearchPins(t, t.active_player_index, def->params.destroy_up_to_artifacts_enchantments);
+    // TEMPORARY A/B lever (lock step 7 measurement, NOT a shipped default; delete after the A/B): keep only the target
+    // sets with no permanent of ours. A LOSSY narrowing (an own target can matter), so a USER decision if wanted.
+    static const bool s_opp_only = EnvOn("MTG_EE_FOV_EOT_OPP_ONLY");
+    if (s_opp_only)
+    {
+        pins.erase(std::remove_if(pins.begin(), pins.end(), [&](const std::string& pin) {
+            std::vector<int> nums;
+            (void)DestroyUpToArtEnchPinTargets(pin, nums);
+            for (int num : nums)
+            {
+                for (const Permanent& q : t.battlefield)
+                { if (q.card.m_number == num && q.controller_index == t.active_player_index) { return true; } }
+            }
+            return false;
+        }), pins.end());
+    }
     for (const std::string& pin : pins)
     {
         if (hard) { out.push_back(EotFovOption{ std::string(), pin }); continue; }

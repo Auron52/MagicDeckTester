@@ -48,6 +48,7 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
   Reach audit: never consulted. Slower games (sanity gi=1, gi=3) recover at d3 b0. Three USER questions (clause 3,
   O-Ring vs virtual, evasion) in the "Lock-cluster step 6" section. NEXT: step 7 (Force of Vigor end-step pitch;
   the virtual-Aura FoV pins must be offered at the pitch too).
+* **LOCK STEP 7 (Force of Vigor end-step cast, §4.5) BUILT, NOT CLOSED (2026-11-25):** code a26942ea0 + the WIP after it. Units 4239/4239, smoke 247/0 play-changed=0, coverage all `full`. m7 vs step 6 (fairness ON): sanity 24/5.6250 (was 5.7083), 8000 95/5.89 (5.86), 10000 98/5.76 (5.85), units +9..+23%; 39 real casts, all mana-paid, 17 on our own permanents (optimizer's curse, step 8). OPEN DEFECT: an over-wide `FaceUpUncoveredPending` (FoV in hand, menu width 1) nests boundary rollouts without bound (m7o ho1 gi=9). Resume from `logs/ee/lock7-handoff.md`; then step 8 (folds + root-cause gi=12/gi=13).
 * **LOCK STEP 1 (type statics: Enchanted Evening + Opalescence) DONE (2026-11-26):** code a9d866afe, Scryfall snapshot
   aea0e800e (update rc=0, offline diff rc=0). Units 4191/4191 (13 new, `test/unit/test_enchanted_evening_lock1.cpp`).
   Smoke (Release, `MTG_PGO=0`): 247 passed / 0 failed / 0 new, play-changed=0 (searched and d0), scenarios
@@ -292,7 +293,7 @@ lock has removed unless floated). The implementer must model the targeting legal
 | Idyllic Tutor | (existing) | `tutor_to_hand`, `tutor_types` [Enchantment] | `EnchantedEveningProvider::TutorCandidates` (ruling 16, shared with the Grove's tutor) + `TutorNeedsCandidate` (nothing kept -> not cast) | tutor chooser (full list; the prune's ranking first) | USER adoption of `MTG_EE_USER_PRUNE` |
 | Enchanted Evening | 3 (lock step 1) | `static_all_permanents_enchantments`; deck stamp `deck_has_type_statics` | `RefreshTypeStatics` (layer 4, every battlefield copy, both sides) at every `RefreshDevotionCreatures` chokepoint (enter-cascade top, `OnCreatureDies`, the leave helpers, bounce, Replenish, scenario loader); deaths at `TypeStaticsSbaCheckpoint` (inside `LegendRuleSbaCheckpoint`: post-resolution both worlds, land drop, end step; + `ResolvePassiveOpponentLandTurn`, both spawn sites, both turn starts) | none (static) | -- |
 | Calming Verse | 3 (lock step 3) | `destroy_opp_enchantments_then_own_if_untapped_land` (its OWN param, never `destroy_all_enchantments`) | shared `ResolveCalmingVerse` (SpellEffects.h) at both worlds' sorcery resolution (`EffectHandler` beside Worldfire / `apply_one`); destroys through `DestroyRemoveTogether` + `DestroyFireTogether` (one simultaneous event, triggers after both clauses, every leave reaches the chokepoints); KEEP floats via `g_lock_prefloat_hook`; searched axis KEEP "VK" / SWEEP-SELF "VS" in the CollectActions post-pass, `#DV` in both plan signatures | A: `main_phase` plan variants ("tap all lands first" / "leave lands") | -- (EE provider withdraws a no-op KEEP, notes below) |
-| Force of Vigor | 2 (lock step 5: HARD CAST only; clause 1 pitch PARTIAL -> step 7) | `destroy_up_to_artifacts_enchantments` 2 | shared `ResolveDestroyUpToArtEnch` (re-checks each target, CR 608.2b), same destroy halves; target SET searched: `DestroyUpToArtEnchOptions` (identity classes, every 0..2 multiset), pinned "FV<n>[,<m>]", `#DV` | A: `main_phase` plan variants (step 9 may move it to the `target` multi-target row) | pitch (step 7); coverage says `full` (pattern checker) but the pitch clause is NOT modelled |
+| Force of Vigor | 2 + 3 (lock step 5: hard cast; lock step 7: clause 1 pitch at the opponent's end step, `alt_cost_exile_green_off_turn`) | `destroy_up_to_artifacts_enchantments` 2 | shared `ResolveDestroyUpToArtEnch` (re-checks each target, CR 608.2b), same destroy halves; target SET searched: `DestroyUpToArtEnchOptions` (identity classes, every 0..2 multiset), pinned "FV<n>[,<m>]", `#DV` | A: `main_phase` plan variants (step 9 may move it to the `target` multi-target row); B: the end-step pitch = `eot_cast` (step 9; NOT yet offered in human play, the audit manifest expects it) | none: the pitch is modelled (step 7: the morph window's FoV half, searched {no cast} + {pin} x {pitched green class}, mana-paid when payable); coverage `full` |
 | Opalescence | 3 (lock step 1) | `static_animate_other_nonaura_enchantments_mv` | same refresh (layer 4 + 7b: other non-Aura enchantments = MV/MV creatures; two animate each other); 0/0s die at the checkpoint through `OnCreatureDies` (LTB fires: O-Ring returns its card); orphaned Auras (Sprawl / Wild Growth) swept; fetch on play suppressed both sides (`LandDiesToTypeStatics` in `PlayLandCore` and `PlayLeftmostLandFrom`), opponent Karoo finds no land | A: existing `attackers` | -- |
 | Parallax Wave | 3 (lock step 4) | `fading_counters` 5, `fade_exile_target_creature`; deck stamp `deck_has_wave_opal_sweep` (EE provider `WaveOpalSweepRule` + Wave + Opalescence in the list) | fading: put by the cast sites pre-push AND by the shared enter cascade on every other route (a self-exiled Wave returns with five), `PerformUpkeepFading` at our upkeep; activation `PermAbilityMode::FadeExileCreature` (cost = one fade counter; one searched Action per admitted target, `FadeExileAdmittedTargets` beside CounterDestroy's, identity-class fold; `ApplyPermAbility` -> `ResolveFadeExileCreature`; `PermAbilitySourceLive` re-checks counter + target); exile via `FadeExilePermanent` (linked = `kExileUntilLeavesBase` marker + digest in `linked_exile_number`; token ceases to exist; leave chokepoints); return via `ReturnExiledUntilLeaves` from `FireLeavesBattlefieldTriggers`; ruling-7 sweep `PerformWaveOpalSweep` in BOTH opponent_turn lambdas (loop on targeting legality, no loop -> nothing, USER ruling 17; top-up) | A: `main_phase` plan variants (exile target; step 9 may move it to `target`); the sweep has no viewer decline yet (step 9) | -- (finite tail deleted, ruling 17) |
 
@@ -693,6 +694,77 @@ rulings-15/16/17 prune-ON runs, no free-turn credit for this deck). avg = credit
    enchantments have neither flying nor reach, so such a creature cannot be blocked and attacks freely. Should an
    evasive hexproof creature also break the full lock (for example at any power, or only above some clock)? Default:
    ruling 9 literally (trample and >= 5 only).
+
+## Lock-cluster step 7 (Force of Vigor clause 1: the off-turn cast at the opponent's end step, §4.5) -- 2026-11-25
+
+Code: a26942ea0 (param `alt_cost_exile_green_off_turn`, stamp `deck_has_eot_fov_pitch`, the window, the shared pin
+builder, `MTG_EE_FOV_PITCH_LOG`, 6 unit cases) + the step-7 WIP commit after it (this section, the Cards-table row, a
+TEMPORARY A/B lever `MTG_EE_FOV_EOT_OPP_ONLY`, default OFF, to be deleted after its A/B). Units 4239/4239 on
+a26942ea0 (the 6 `EE lock step 7*` cases RAN, `-tc` count 6/6). Coverage (`analyze_deck.py --coverage-only`): 18
+cards, every one `full`, missing none. Smoke (Release, `MTG_PGO=0`, a26942ea0): 247 passed / 0 failed / 0 new,
+play-changed=0 (searched and d0), scenarios 677/677. Every other deck is unmoved (the stamp is false for them).
+
+**What is built.** The morph window (`PerformOpponentEndStepFaceUp`, both `opponent_turn` lambdas, AFTER the ruling-7
+`PerformWaveOpalSweep` and before `freeturn::NoteOpponentTurnEnd`) gets a FoV half: `EotFaceUpMenu` follows each flip /
+put entry with its FoV options (`EotFovOptions`, built on the state that entry leaves), "no cast" FIRST, so rank 0 is
+the front (the playout never casts there) and the existing BoundaryFan face-up digit, `Plan::eot_face_up_choice`,
+`scripted_eot_face_up` and `ChooseRealCrossingFaceUp` carry it unchanged (`FaceUpUncoveredPending` ORs in the stamp and
+a FoV in hand). Options = {target pin} x {pitched green card class}: the pins are the main-phase cast's EXACT menu
+(`DestroyUpToArtEnchSearchPins`, extracted verbatim from TurnSolver's FoV post-pass: identity-folded real targets the
+provider admits -- the EE provider drops the empty set -- the provider's pick first, then the fairness check's
+virtual-Aura pins, ruling 13); the pitch classes = distinct NAMES of the green cards in hand other than this FoV (a
+second FoV is legal). SOUND FOLD: when {2}{G}{G} is payable from what we left untapped, the cast is offered mana-paid
+only (the mana has no other use at the opponent's end step; premise true of this pool: no source costs life,
+sacrifices itself or stays tapped). Only inside `OppEndStepWindowScope` ("if it's not your turn"). HUMAN PLAY: not
+offered yet (the viewer's `eot_cast` decision is step 9; `audit_viewer_decisions.py` now EXPECTS `eot_cast` for the
+param -- an owed MISS until step 9).
+
+**Rules review (mtg-rules skill + CR).** Alternative cost (CR 118.9: replaces the mana cost, one alternative cost per
+spell, mana value stays 4), chosen at 601.2b, targets at 601.2c before costs are paid at 601.2h; the card is on the
+stack from 601.2a, so it cannot exile itself, while another FoV copy is a legal green card; "green" = the hand card's
+colour (lands are colourless); "if it's not your turn" holds only inside the opponent's turn; an instant may be cast in
+its end step; mana empties between steps (CR 500.4: the window pays from untapped sources only, pools saved and
+restored); each target re-checked on resolution (608.2b) through the shared `ResolveDestroyUpToArtEnch`; the card goes
+to our graveyard last (608.2n); the pitched card to exile; Grove's shroud and an opponent's hexproof honoured by the
+shared legality test. Not modelled (no reader in this list, disclosed): the off-turn cast does not bump our
+spells-cast counters (Presence counts enchantment spells only). No violation found.
+
+**Measurement** (ONE pooled batch `build/scratch/ee/l7/m7.*`, d3 b10, no profile, `MTG_EE_USER_PRUNE` ON,
+`MTG_EE_GROVE_PRELOCK` OFF, fairness ON; baseline = step 6's fairness-ON arm, `l6/m6b` san1 / ho1 / hb1; analyser
+`l7/an7.py`). avg = credited turn, unwon = 9.
+
+| family (seed) | step 6 won / avg / units | step 7 won / avg / units | faster | slower | real FoV end-step casts (games) |
+|---|---|---|---|---|---|
+| sanity (7000 x24) | 24 / 5.7083 / 4.77M | 24 / 5.6250 / 5.19M (+8.8%) | 2 | 0 | 3 (3) |
+| held-out (8000 x100) | 95 / 5.86 / 16.5M | 95 / 5.89 / 19.4M (+17.6%) | 2 | 5 | 17 (15) |
+| held-out (10000 x100) | 97 / 5.85 / 16.0M | 98 / 5.76 / 19.8M (+23.4%) | 9 | 2 | 19 (17) |
+
+* **Every real cast was MANA-PAID (39 of 39); the pitch was never chosen** (it is offered: unit cases; the search
+  just never preferred exiling a card). Targets: opponent permanents 23 (Mountain 9, Plains 3, other lands), our own 17
+  (Wild Growth 4, Sterling Grove 3, Exploration 3, Utopia Sprawl 2, Presence 1, O-Ring 1), virtual Auras 2.
+* **Own-target casts look like an optimizer's-curse defect, not a line**: e.g. ho1 gi=4 / 9 / 27 / 44 destroy our own
+  Wild Growth / Sprawl at rounds 2-4. The window adds ~10-60 dominated-looking own-target options per boundary while a
+  FoV sits in hand, and a noisy d3 leaf can rank one above "no cast". The step-8 own-target fold (design §7 / steps 3+5
+  notes) is the place; an opponent-only narrowing is LOSSY and therefore a USER decision (below).
+* Slower games, d3 b0 repros (pinned binary `build/Release/mtg-b7`, `l7/b0-*`): ho1 gi=9 T4 (step 6 b10 T4: RECOVERS),
+  ho1 gi=44 T5 (=5: RECOVERS), hb1 gi=32 T6 (step 6 T7: RECOVERS, 2542 s). ho1 gi=3 still RUNNING at handoff (> 3 h 50 m);
+  ho1 gi=40, gi=84, hb1 gi=90 queued behind it in the same script.
+* **A/B arm `MTG_EE_FOV_EOT_OPP_ONLY=1` (m7o, temporary lever): KILLED, a DEGENERATE game.** san1 finished: 24 /
+  5.6250 / 4.89M (= the full menu's avg, -5.7% units). ho1 / hb1 were at 96 / 95 of 100 when ho1 gi=9 (seed 8009; 761 ms
+  in m7) had run 3.3 h at b10 with 9 of 24 workers busy; killed. Single-game repro under gdb (`l7/g9.*`) reproduces
+  it (> 2 min). Stack: an unbounded nesting BoundaryChooseByRollout -> SimulateToEnd -> SolveWithLookahead ->
+  BoundaryChooseByRollout ... (40+ levels). **Verdict: a STEP-7 DEFECT.** `FaceUpUncoveredPending` is true whenever a FoV
+  is in hand, while the end-step menu may hold NO FoV option (width 1: no target the provider admits, or no green card
+  and no mana). For morph / Soulstoke "pending" always meant a real choice; for FoV it does not, and it puts every
+  boundary of every nested rollout on the crossing-copy path (`fan.Copies()`). The full-menu arm hides it because own
+  targets nearly always make the menu wide and a cast removes the FoV from hand; the narrower arm exposes it. The same
+  over-wide pending probably accounts for part of m7's +9..+23% units. Fix owed (handoff): make the pending test
+  require a FoV option that can exist at the end step, and/or skip the crossing-copy path when the learned width is 1;
+  then re-run m7 and the m7o A/B.
+
+**USER question (default taken, nothing blocked).** Should the end-step Force of Vigor be restricted to opponent
+targets? It is a lossy narrowing (an own target can matter: a second Sterling Grove's shroud blocks the Wave loop), so
+it is the USER's. Default: the full menu (as committed); the opponent-only arm is measured after the pending fix.
 
 ## Done items (formerly provisional Q1 / Q2 -- settled by standing CLAUDE.md rules, not USER questions)
 
