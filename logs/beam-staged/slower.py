@@ -48,6 +48,9 @@ def slower(ab, arms):
     return out
 
 
+SKIP8, SKIPNC = set(), set()   # replays already requested by an earlier mk (see --since)
+
+
 def single(j, gi, name):
     x = copy.deepcopy(j)
     x.update({"name": name, "games": 1, "seed": j["seed"] + gi, "game_index": gi})
@@ -58,18 +61,32 @@ def mk(ab, arms, od):
     os.makedirs(od, exist_ok=True)
     S = slower(ab, arms.split(","))
     d8, nc, idx = [], [], []
-    seen = set()
+    seen, seen8 = set(), set()
+    done8 = set()
+    if os.path.isdir(os.path.join(od, "d8wins")):
+        done8 = set(f[:-5] for f in os.listdir(os.path.join(od, "d8wins")) if f.endswith(".wins"))
     for s in S:
         tag = f"{s['row']}_{s['arm']}_s{s['seed']}_g{s['gi']}"
-        x = single(s["job"], s["gi"], tag + "_d8")
-        x.update({"depth": 8, "budget_ms": 0, "ignore_play_profile": True, "abandon_units": 40000000})
-        d8.append(x)
+        # At depth 8 no beam regime is live (d5/d3 only), so staging and MTG_ESC_BEAM_D5_ALL are inert there: the
+        # d8 b0 replay depends only on the K flag. One replay per (row, seed, gi, K).
+        k8 = 1 if (s["job"].get("flags") or {}).get("MTG_LEAF_KILL_ONLY_NOM2") else 0
+        t8 = f"{s['row']}_K{k8}_s{s['seed']}_g{s['gi']}_d8"
+        if t8 not in seen8 and t8 not in done8 and t8 not in SKIP8:
+            seen8.add(t8)
+            x = single(s["job"], s["gi"], t8)
+            x.pop("flags", None)
+            for kk in ("esc_beam_stage_frac", "esc_beam_stage_geo"):
+                x.pop(kk, None)
+            if k8:
+                x["flags"] = {"MTG_LEAF_KILL_ONLY_NOM2": True}
+            x.update({"depth": 8, "budget_ms": 0, "ignore_play_profile": True, "abandon_units": 40000000})
+            d8.append(x)
         nc.append(single(s["job"], s["gi"], tag + "_nc"))
         ka = (s["row"], s["seed"], s["gi"])
-        if ka not in seen:
+        if ka not in seen and f"{s['row']}_A_s{s['seed']}_g{s['gi']}_nc" not in SKIPNC:
             seen.add(ka)
             nc.append(single(s["ajob"], s["gi"], f"{s['row']}_A_s{s['seed']}_g{s['gi']}_nc"))
-        idx.append(dict(tag=tag, row=s["row"], arm=s["arm"], seed=s["seed"], gi=s["gi"], t=s["t"], ta=s["ta"]))
+        idx.append(dict(tag=tag, t8=t8, row=s["row"], arm=s["arm"], seed=s["seed"], gi=s["gi"], t=s["t"], ta=s["ta"]))
     json.dump({"jobs": d8}, open(os.path.join(od, "d8.json"), "w"), indent=1)
     json.dump({"jobs": nc}, open(os.path.join(od, "nc.json"), "w"), indent=1)
     json.dump(idx, open(os.path.join(od, "index.json"), "w"), indent=1)
@@ -82,7 +99,7 @@ def verdict(ab, od):
     NC = wins(os.path.join(od, "ncwins")) if os.path.isdir(os.path.join(od, "ncwins")) else {}
     tally = {}
     for e in idx:
-        d8 = D8.get(e["tag"] + "_d8", {}).get(e["gi"])
+        d8 = D8.get(e["t8"], {}).get(e["gi"])
         nca = NC.get(f"{e['row']}_A_s{e['seed']}_g{e['gi']}_nc", {}).get(e["gi"])
         ncv = NC.get(e["tag"] + "_nc", {}).get(e["gi"])
         if d8 is not None and d8 <= e["ta"]:
@@ -104,6 +121,11 @@ def verdict(ab, od):
 
 if __name__ == "__main__":
     if sys.argv[1] == "mk":
+        # --since <earlier d8.json,...>: skip replays an earlier (partial-data) mk already queued
+        if "--since" in sys.argv:
+            for f in sys.argv[sys.argv.index("--since") + 1].split(","):
+                for j in json.load(open(f))["jobs"]:
+                    (SKIP8 if j["name"].endswith("_d8") else SKIPNC).add(j["name"])
         mk(sys.argv[2], sys.argv[3], sys.argv[4])
     else:
         verdict(sys.argv[2], sys.argv[3])
