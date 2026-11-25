@@ -472,3 +472,21 @@ digit -- `p16::Oracle()` reads a numeric first field as the seed; the per-deck s
 So with K known, Mill has 2.9 % and Shadowborn 6.0 % to bank (11 % with the final bound too). Mode 4 banks only the
 decisions whose win a leafless walk can PROVE in the window; the rest of the ceiling is choosing K without foresight
 (P17-handoff's open problem, mode 2 / 5's priced gate).
+
+#### E9-E10: mode 5 and the skip-leaves ladder on today's code (K1's seeds, 200 x 8; units / heur)
+
+- Mode 5 (`m5` = mode 4 + mode 2's priced gate on a miss): Hydras 0.977, Sea 0.893, Merfolk Turns 0.973, Martyr 0.964 (better
+  than m4 on three), Mill 1.005, Shadowborn 1.008, Maze's End 1.050, Stuffy 1.023; quality 0/0. `m5_ptc_pnt1` = 1.000 on every
+  deck: mode 2's bootstrap runs passes 1-3 exactly, and at T2+ the committing K is <= 3, so its gate never acts after turn 1.
+- `rollout_from: 2` (P16 skip-leaves; pass 1 leafless on every decision): Mill 4.31x, Maze's End 2.64x, Shadowborn 1.35x
+  (pass 2 forced on rollouts where heur commits pass 1; 48 earlier / 7 later), Hydras 0.929 / Martyr 0.949. Not a candidate.
+
+#### Checkpoint 2026-11-25 ~07:30 UTC (Claude)
+
+State: `wip/p18k-claude` 00c8f7e24 + this note; nothing running. Shipped default mode 4 is unchanged (all new levers are
+arm keys). Proposal awaiting the USER: (a) `_ptc` into default mode 4; (b) a per-deck turn-1 switch (`_pnt1`) chosen by the
+value-leaf run's sparse stage -- on for Hydras / Martyr / Sea (HO1 0.974 / 0.967 / 0.922), off for Mill / Shadowborn (HO1
+0.999 / 0.997). Mill and Shadowborn are EVEN, not yet "slightly better": their remaining ceiling (OR1: 2.9 % / 6.0 %, of
+which T2+ 1.7 % / 2.0 %) needs the committing depth K chosen without foresight at T2+, where mode 2's priced gate does not
+act (its exact bootstrap covers K <= 3). Next candidates: a guarded priced-K at T2+ after pass 1 (pass k leafless when the
+priced gate admits k+1 by a margin, pass-1 q from real rollouts, the `_ptc` share rule), A/B'd for quality.
