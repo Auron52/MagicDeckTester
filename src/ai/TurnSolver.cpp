@@ -114039,8 +114039,13 @@ static std::uint64_t SfxProbeCtx(const GameState& state);   // defined after gam
 // mana cache off). A served answer is one such path. Measured as a play change.
 namespace rgc
 {
-    struct E { int result; int bound; long long tb; long long life; bool win; };
+    // cost: the work units the stored rollout spent from this key's state to its end (a start key: the whole rollout; a
+    // turn-boundary key: its suffix). Data only -- no reader of the answer looks at it. t_hit_cost: the cost of the
+    // last hit's entry on this thread (-1 = the last outermost lookup missed); the sparse ladder prices a root rollout
+    // answered from the cache with it (`_pzh`).
+    struct E { int result; int bound; long long tb; long long life; bool win; long long cost; };
     inline thread_local std::unordered_map<TranspositionTable::Key, E, TranspositionTable::KeyHash> t_map;
+    inline thread_local long long t_hit_cost = -1;
     inline std::atomic<long long> g_hits{0}, g_win_hits{0}, g_lookups{0}, g_stores{0}, g_full{0};
     inline std::size_t Cap()
     { static const std::size_t v = static_cast<std::size_t>(std::max(0, EnvInt("MTG_ROLLOUT_GAME_CACHE_CAP", 262144))); return v; }
@@ -114067,6 +114072,7 @@ namespace sfxprobe
     struct E { int result; int cutoff; std::uint64_t epoch; bool start; std::uint64_t ctx; };
     inline thread_local std::unordered_map<TranspositionTable::Key, E, TranspositionTable::KeyHash> t_map;
     inline thread_local std::vector<TranspositionTable::Key> t_pending;
+    inline thread_local std::vector<long long> t_pending_u;   // gamework::t_used when each t_pending key was taken
     inline thread_local bool t_collect = false;
     // [0] start-key match, [1] suffix-key match; each split same-decision / earlier-decision
     inline std::atomic<long long> g_roll{0}, g_roll_u{0};
@@ -114076,7 +114082,7 @@ namespace sfxprobe
     // same-cutoff matches whose FRESH rollout was not clean (a bind or truncation), and how many of those disagree
     inline std::atomic<long long> g_eqc_fresh_unclean{0}, g_eqc_dis_unclean{0};
     inline std::atomic<int> g_printed{0};
-    inline void Clear() { t_map.clear(); t_pending.clear(); t_collect = false; }
+    inline void Clear() { t_map.clear(); t_pending.clear(); t_pending_u.clear(); t_collect = false; }
     struct Reporter
     {
         ~Reporter()
@@ -114159,6 +114165,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             if (CanonSimKeyOn()) { Fold(bk, FsOrderSig(state)); }
             if (t_rollout_narrow) { Fold(bk, kRolloutNarrowTag); }
             sfxprobe::t_pending.push_back(bk);
+            sfxprobe::t_pending_u.push_back(gamework::t_used);
         }
         if (chain_only && (g_et_chain_trial_aborted || EtChainTrialBudgetExceeded()))
         { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
@@ -115230,9 +115237,11 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         rgc::g_lookups.fetch_add(1, std::memory_order_relaxed);
         if (p17::On()) { ++p17::t_rgc_look; }
         const auto it = rgc::t_map.find(rgc::Key(key, sfx_ctx));
+        rgc::t_hit_cost = -1;
         if (it != rgc::t_map.end())
         {
             const rgc::E& e = it->second;
+            rgc::t_hit_cost = e.cost;
             if (e.win)
             {
                 rgc::g_hits.fetch_add(1, std::memory_order_relaxed); rgc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
@@ -115258,8 +115267,9 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             auto it = sfxprobe::t_map.find(key);
             if (it != sfxprobe::t_map.end()) { sfx_copy = it->second; sfx_hit = &sfx_copy; }
         }
-        sfxprobe::t_pending.clear();
+        sfxprobe::t_pending.clear(); sfxprobe::t_pending_u.clear();
         sfxprobe::t_pending.push_back(key);   // [0] = this rollout's own start key
+        sfxprobe::t_pending_u.push_back(gamework::t_used);
         sfxprobe::t_collect = true;
     }
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
@@ -115272,15 +115282,16 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         const bool win = result <= max_turns;
         if (rgc_clean && (win || (nowin_armed && NoWinStoreUngradedOn())))
         {
-            const rgc::E e{ result, std::min(cutoff_turn, max_turns + 1), leafeval::t_tb, leafeval::t_life, win };
+            rgc::E e{ result, std::min(cutoff_turn, max_turns + 1), leafeval::t_tb, leafeval::t_life, win, 0 };
             for (std::size_t i = 0; i < sfxprobe::t_pending.size(); ++i)
             {
                 if (rgc::t_map.size() >= rgc::Cap()) { rgc::g_full.fetch_add(1, std::memory_order_relaxed); break; }
+                e.cost = i < sfxprobe::t_pending_u.size() ? std::max(0LL, gamework::t_used - sfxprobe::t_pending_u[i]) : -1;
                 if (rgc::t_map.emplace(rgc::Key(sfxprobe::t_pending[i], sfx_ctx), e).second)
                 { rgc::g_stores.fetch_add(1, std::memory_order_relaxed); }
             }
         }
-        if (!sfx_on) { sfxprobe::t_pending.clear(); }
+        if (!sfx_on) { sfxprobe::t_pending.clear(); sfxprobe::t_pending_u.clear(); }
     }
     if (sfx_on)
     {
@@ -115328,7 +115339,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             for (std::size_t i = 0; i < sfxprobe::t_pending.size() && sfxprobe::t_map.size() < (1u << 22); ++i)
             { sfxprobe::t_map.emplace(sfxprobe::t_pending[i], sfxprobe::E{ result, std::min(cutoff_turn, max_turns + 1), g_decision_epoch, i == 0, sfx_ctx }); }
         }
-        sfxprobe::t_pending.clear();
+        sfxprobe::t_pending.clear(); sfxprobe::t_pending_u.clear();
     }
     if (ko_vcopy)
     {
@@ -117763,7 +117774,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, b2 = false, b3 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false, llw = false, lrf = false, pkt = false, plx = false, pzb = false, pms = false, tp1 = false; double pzc = 0.01, pal = 0.1; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false, llw = false, lrf = false, pkt = false, plx = false, pzb = false, pms = false, tp1 = false, zh = false, cx = false, pcr = false, nt1 = false, ptc = false, ptg = false, ptgs = false, t1g = false, pnc = false; int pch = 99; double pts = 0.5, pzc = 0.01, pal = 0.1; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
     // Mode 2 is the measured fast shape. Keep mode 1 as the original raw sampler for reproducible
     // research; arm-key suffixes below remain diagnostic overrides of either starting shape.
     inline Knob Knobs()
@@ -117814,6 +117825,18 @@ namespace p18
             } };
         num("_pz", o.z); num("_pcv", o.cvf);
         if (k.find("_ptp1") != std::string::npos) { o.tp1 = true; }   // the sparse ladder's pass-1 trigger (A/B)
+        if (k.find("_pzh") != std::string::npos) { o.zh = true; }     // a cached root rollout priced at its stored cost (A/B)
+        if (k.find("_pcx") != std::string::npos) { o.cx = true; }     // ...and its walk never passes the priced reach (A/B)
+        if (k.find("_pnx") != std::string::npos) { o.pkt = o.plx = false; }   // no walk past the priced reach at all (A/B)
+        if (k.find("_pcr") != std::string::npos) { o.pcr = true; }     // a cached trigger's walk stops on a CHAIN-predicted short reach (A/B)
+        if (k.find("_pnt1") != std::string::npos) { o.nt1 = true; }   // no lookahead on turn 1 (A/B)
+        if (k.find("_ptgs") != std::string::npos) { o.ptg = o.ptgs = true; }   // _ptp1's walk guarded (+ the share rule) (A/B)
+        else if (k.find("_ptg") != std::string::npos) { o.ptg = true; }       // _ptp1's walk guarded: chain reach, no extension (A/B)
+        if (k.find("_pnc") != std::string::npos) { o.pnc = true; }    // the pass-1 hook's guarded walk without the chain reach (A/B)
+        { const std::size_t q = k.find("_pch"); if (q != std::string::npos) { o.pch = std::max(1, std::atoi(k.c_str() + q + 4)); } }   // chain looks pch passes ahead
+        if (k.find("_pt1g") != std::string::npos) { o.t1g = true; }   // turn 1: no root rollout; the guarded pass-1 trigger (A/B)
+        if (k.find("_ptc") != std::string::npos) { o.ptc = true; }    // a CACHED root-rollout trigger walks from pass 2, after pass 1 (A/B)
+        { const std::size_t q = k.find("_pts"); if (q != std::string::npos) { o.pts = std::atof(k.c_str() + q + 4) / 100.0; } }   // ...if pass 1's rollout share >= pts
         num("_pf", o.f);                                      // ROBUST-OR-EXACT margin F (0 = off)
         o.nocredit = k.find("_pfnc") != std::string::npos;   // the fallback ladder gates on the real remaining budget
         // _pfa<10F>: ASYMMETRIC band (thr, thr*F] -- a price that fits admits as is (a deeper commit measured harmless), only
@@ -128122,6 +128145,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // commits the first in-window win for the current turn only. Without a commit the spend since u0 is refunded
     // (_plrf), so the ladder continues on exactly its own budget. Returns true when it committed.
     bool p18_llw = false, p18_lrf = false, p18_llr = false, p18_pkt = false, p18_plx = false; double p18_pal = 0.1;
+    bool p18_chain = false; int p18_pch = 99;   // _pcr: the walk's reach is checked by extrapolating the ladder's gate to its target pass
     bool p18_we = true;   // the walk's in-window leaves rolled out (p18::t_walk_edge); arm key `_pwe0` = off (A/B only)
     long long p18_z_add = 0;            // the root rollout's units: they warmed pass 1's rollouts, so its gate cost carries them
     FSLineCache p18w_cache;             // keys fold the remaining depth: walk k+1 reuses walk k
@@ -128191,6 +128215,20 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         bool won = false;
         for (int k = kfrom; k <= kto; ++k)
         {
+            // _pcr: CHAIN REACH -- before pass k, the ladder's own gate extrapolated from the priced costs so far
+            // (c_j = c_{j-1}^2 / c_{j-2}) through the target pass; a pass predicted beyond the reach ends the walk now,
+            // before its cost is spent (a walk the ladder could not follow to its target is a refunded miss anyway).
+            if (p18_chain && !unl && k >= 2)
+            {
+                double a = cm2, b = cm1, sp = spent; bool short_ = false;
+                for (int j = k; j <= std::min(kto, k + p18_pch - 1); ++j)
+                {
+                    const double e = b * (a > 0.0 ? b / a : kDefaultGrowth);
+                    if (e > gate_alpha * std::max(0.0, rem_ref - sp)) { short_ = true; break; }
+                    sp += e; a = b; b = e;
+                }
+                if (short_) { p16::Rec('W', k, 0, 0, 4, max_turns + 1, 0); ran_all = false; break; }
+            }
             double est_k = 0.0;
             long long beyond = 0;   // > 0: this pass is past the predicted reach, with this allowance
             if (!unl && k >= 2)
@@ -128296,6 +128334,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     };
     struct P18NoStore { bool on; explicit P18NoStore(bool o) : on(o) { if (on) { ++p18::t_nostore; } }
                         ~P18NoStore() { if (on) { --p18::t_nostore; } } };
+    bool p18_t1g = false;               // _pt1g: this decision's pass-1 hook is the guarded turn-1 trigger
+    bool p18_tpc = false;               // _ptc: the pass-1 hook was armed by a cached root-rollout trigger
     bool p18_tp1 = false;               // _ptp1: the walk's trigger is the ladder's pass 1, not a root rollout (see below)
     double p18_credit = 0.0;            // ROBUST-OR-EXACT fallback: the pricing spend the heuristic ladder's gate gives back
     bool p18_rx = false;                // REFUSE-EXACT: the ladder below continues past p18_K on its own gate
@@ -128346,7 +128386,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         bool p18_ll_done = false;         // _pll: the lookahead decided this decision (commit or ladder fallback)
         p18_llw = kn.llw && !kn.verify; p18_lrf = kn.lrf; p18_llr = kn.llr; p18_pkt = kn.pkt; p18_plx = kn.plx; p18_pal = kn.pal;
         p18_we = valuearm::t_deck_key.find("_pwe0") == std::string::npos;
-        if (p18_llw)
+        if (p18_llw && kn.nt1 && state.turn_number == 1) { p18_ll_done = true; p18_K = 0; p18_wb = 0; }   // _pnt1 (A/B): no lookahead on turn 1
+        else if (p18_llw)
         {
             // EPOCH-ISOLATED: the per-decision memos (the rollout main-1 solve memo, the enumeration and greedy-Solve
             // memos) are scoped on g_decision_epoch, and the root rollout and the walk would otherwise warm them for
@@ -128396,7 +128437,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             const bool dw2     = p18_dvs != nullptr && p18_dvs->pass == 2;
             const bool p2_walk = dw2 && p18_dvs->walk_won;
             // _ptp1: no root rollout at all -- the trigger is the ladder's own pass 1 (see the hook after it).
-            p18_tp1 = kn.tp1 && !p2_walk;
+            p18_tp1 = (kn.tp1 || (kn.t1g && state.turn_number == 1)) && !p2_walk;
+            p18_t1g = kn.t1g && state.turn_number == 1 && p18_tp1;
             const bool z_none  = p2_walk || p18_tp1
                               || (dw2 && p18_dvs->z_done && z_cutv <= p18_dvs->z_cut && p18_dvs->z_win > z_cutv);
             if (!z_skip && !z_none)
@@ -128405,6 +128447,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
               P18PricedCap _pc(!unl && budget != nullptr
                   ? std::max(budget->OverrunLimit() - u0, static_cast<long long>(0.1 * static_cast<double>(budget->Limit()))) : 0);
               FSLineCache zc; TranspositionTable ztt;
+              rgc::t_hit_cost = -1;
               // Cut at the window's edge: the trigger only asks whether a rollout wins inside the window, so the
               // rollout stops there (an extra-turn chain rolled out to its end cost Extra Turns 11x heur).
               r0 = FSLineWin(state, 0, max_turns, z_cutv, second_main, &ztt, &zc, budget);
@@ -128415,11 +128458,22 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (!z_skip && !z_none) { p18::t_zcuts = z_cut ? p18::t_zcuts + 1 : 0; }
             if (p18_dvs != nullptr && p18_dvs->pass == 1 && !z_skip && !z_cut)
             { p18_dvs->z_done = true; p18_dvs->z_win = r0.win_turn; p18_dvs->z_cut = z_cutv; }
-            if (!p18_tp1) { p16::Rec('Z', 0, (budget ? budget->Used() : 0) - u0, 0, z_none ? 7 : z_skip ? 6 : (z_cut ? 3 : 0), r0.win_turn, 0); }
+            // (trace: the leaf field carries the cached entry's stored cost when the rollout was answered from the game cache)
+            if (!p18_tp1) { p16::Rec('Z', 0, (budget ? budget->Used() : 0) - u0, (z_skip || z_none) ? 0 : std::max(0LL, rgc::t_hit_cost), z_none ? 7 : z_skip ? 6 : (z_cut ? 3 : 0), r0.win_turn, 0); }
             // r = the root rollout's units. Answered from the rollout table (0 units: an earlier decision rolled it
             // out), it prices nothing, so the walk stops at leafless pass 1 and the ladder's own costs gate the rest.
-            const long long z = (budget ? budget->Used() : 0) - u0;
+            const long long z_meas = (budget ? budget->Used() : 0) - u0;
+            // _pzh (A/B): a root rollout answered from the rollout game cache (0 units) is priced at what the cached
+            // rollout cost from this state when it was computed (rgc::E::cost), so its walk is gated as a computed one.
+            const long long z = (z_meas > 0 || !kn.zh || z_skip || z_none || z_cut || rgc::t_hit_cost <= 0) ? z_meas : rgc::t_hit_cost;
             p18_z_add = 0;
+            // _ptc (A/B): a root rollout answered from the game cache (it cost nothing, so it prices nothing) that wins
+            // inside the window arms the pass-1 hook instead of walking now: the ladder's rollout pass 1 runs as heur's
+            // does, and the walk from pass 2 is gated on its REAL cost and rollout price (cache hits included), with
+            // the chain reach and no past-reach extension. A refusal there costs nothing.
+            if (kn.ptc && !p18_tp1 && !p2_walk && z_meas == 0 && !z_skip && !z_none && !z_cut
+                && r0.win_turn <= state.turn_number + depth - 1)
+            { p18_tp1 = p18_tpc = true; }
             // A root rollout answered from cache (0 units: an earlier decision of this game rolled it out) prices
             // nothing and, on P15, led to 7 commits in 333 walks while its pass-1 walks cost Hinata / Mill / Landfall
             // Elementals 1.5-5%: no walk.
@@ -128444,7 +128498,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             }
             else if (!p18_tp1 && z > 0 && r0.win_turn <= state.turn_number + depth - 1)
             { const double q = static_cast<double>(z) / static_cast<double>(r0.win_turn - state.turn_number + 1);
+              // _pcx (A/B): a walk on a CACHED trigger (z priced from the stored cost) never extends past the priced
+              // reach (no _pkt / _plx): ME2 2026-11-25, its past-reach walks were almost all deeper than the ladder goes.
+              const bool cx = kn.cx && z_meas == 0;
+              const bool pkt_s = p18_pkt, plx_s = p18_plx;
+              if (cx) { p18_pkt = p18_plx = false; }
+              p18_chain = kn.pcr && z_meas == 0;
               p18_done = p18_walk(1, std::max(1, r0.win_turn - state.turn_number + 1), u0, 0.0, 0.0, q, r0.win_turn);
+              p18_pkt = pkt_s; p18_plx = plx_s; p18_chain = false;
               if (p18_done && p18_dvs != nullptr && p18_dvs->pass == 1)
               { p18_dvs->walk_won = true; p18_dvs->walk_k = committed_depth; p18_dvs->walk_win = line.win_turn; p18_dvs->walk_q = q; } }
             else if (p18_lrf && !unl && budget != nullptr) { p18_refund(u0); }
@@ -129255,6 +129316,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // pass sees every in-window win the leafless pass does), so leafless passes 2..W-T+1 are walked -- pass 2 gated
         // on pass 1's real cost exactly as the ladder gates its own pass 2 -- and the first proven in-window win
         // commits. A miss refunds the walk and the ladder continues at pass 2 on exactly its own budget and costs.
+        // (_ptc: only when pass 1 spent at least pts of its cost on rollouts -- ME5 2026-11-25: where the game cache answered
+        // pass 1's rollouts the deeper passes are cheap too and a walk only duplicates their tree.)
+        if (p18_tp1 && (p18_tpc || p18_t1g || p18::Knobs().ptgs) && pass_depth == 1 && static_cast<double>(std::max(0LL, l_prev)) < p18::Knobs().pts * static_cast<double>(c_prev))
+        { p18_tp1 = false; }
         if (p18_tp1 && pass_depth == 1 && !p18_done && p18_K == 0 && depth >= 2 && !line.truncated
             && line.win_turn > state.turn_number && line.win_turn <= state.turn_number + depth - 1 && line.win_turn <= root_cut)
         {
@@ -129268,7 +129333,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 P18EpochIsolate _e(true, p18_dvs); P18NoStore _n(true);
                 p18_pu0 = workctr::t_priced;
                 const long long u0 = budget ? budget->Used() : 0;
+                const bool pkt_s = p18_pkt, plx_s = p18_plx;
+                if (p18_tpc || p18_t1g || p18::Knobs().ptg) { p18_pkt = p18_plx = false; p18_chain = !p18::Knobs().pnc; p18_pch = p18::Knobs().pch; }
                 won = p18_walk(2, W - state.turn_number + 1, u0, 0.0, static_cast<double>(c_prev), q, W);
+                p18_pkt = pkt_s; p18_plx = plx_s; p18_chain = false; p18_pch = 99;
             }
             if (won)
             {
