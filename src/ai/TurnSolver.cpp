@@ -118064,10 +118064,10 @@ inline thread_local bool g_esc_beam_static = false;
 // needs a larger unspent share. An unlimited budget (or none) never cuts: every plan is admitted -- complete at
 // unlimited budget, a price under a finite one, and a larger budget admits proportionally more (USER 2026-10-06:
 // "everything should be findable at unlimited or large budgets"). It replaced the fixed-width cut (which refused
-// every plan beyond W at any budget) and the flat-share stagings: on Creature Giving / Anti-Lifegain / Dragonstorm it
-// played net -34 (5000 games each) and -16 in 2HG against the fixed cut at x1.00 / x0.98 units, and every slower game
-// recovered at d8 b0. The width and leaf depth are the deck's value_play beam_width / beam_leafdepth; there is no
-// flag that selects another shape.
+// every plan beyond W at any budget) and the flat-share stagings. Against the fixed cut on Creature Giving /
+// Anti-Lifegain / Dragonstorm (5000 play + 2000 2HG games each): net -34 play / -14 2HG on the first seeds, -15 / -1 on
+// fresh ones, at x1.02-1.06 units (logs/beam-staged/ab_tables.txt SG50, logs/beam-adopt/ab_table.txt). The width and
+// leaf depth are the deck's value_play beam_width / beam_leafdepth; there is no flag that selects another shape.
 // g_esc_beam_live: a beam is configured for the escalation in progress (set with the width, even where a leafless
 // line runs it at width 0) -- what the answer-context fold below keys on.
 inline thread_local bool g_esc_beam_live = false;
