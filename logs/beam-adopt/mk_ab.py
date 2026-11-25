@@ -16,6 +16,7 @@ ap.add_argument("out"); ap.add_argument("--kdecks", default="")
 ap.add_argument("--games", type=int, default=5000); ap.add_argument("--games-2hg", type=int, default=2000)
 ap.add_argument("--kgames", type=int, default=1000); ap.add_argument("--kgames-2hg", type=int, default=500)
 ap.add_argument("--chunk", type=int, default=250); ap.add_argument("--kchunk", type=int, default=125)
+ap.add_argument("--cost", default="", help="census dir: order jobs heaviest first by its K-off ms/game")
 a = ap.parse_args()
 txt = open(os.path.join(R, "test/regression_cases.sh")).read()
 blk = txt[txt.index("declare -A DECK_FILE=("):]
@@ -46,6 +47,18 @@ for key in main:
 b = 50100000
 for key in kd:
     b += 1000 * emit(key, a.kgames, a.kgames_2hg, a.kchunk, b)
+cost = {}
+if a.cost:
+    for ln in open(os.path.join(a.cost, "batch.out")):
+        m = re.match(r"^(\w+?)_d3b10_K0_s\d+: played=(\d+) avg=\S+ digest=\S+ ms=(\d+)", ln)
+        if m:
+            cost[m.group(1)] = int(m.group(3)) / int(m.group(2))
+def est(j):
+    key = re.match(r"^(\w+?)(2hg)?_[BF]_s", j["name"]).group(1)
+    return cost.get(key, 500) * j["games"] * (1.8 if "opponent_heads" in j else 1.0)
+for arm in jobs:
+    jobs[arm].sort(key=est, reverse=True)
+print(f"est {sum(est(j) for j in jobs['B']) / 1000:.0f} core-s/arm (d3 b10 ms/game proxy)")
 os.makedirs(a.out, exist_ok=True)
 for arm, js in jobs.items():
     json.dump({"jobs": js}, open(os.path.join(a.out, f"ab_{arm}.json"), "w"), indent=1)
