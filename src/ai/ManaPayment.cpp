@@ -11172,7 +11172,7 @@ ProviderHoldGateStats g_phg_stats;
 // MTG_PROVIDER_HOLD_STATS=1 (diagnostic only, printed at exit): where the provider hold-up's per-payment work goes.
 enum PhsSlot { kPhsEntry, kPhsNoTargets, kPhsTrial, kPhsKeptHall, kPhsKeptSolve, kPhsJointNo, kPhsJointYes,
                kPhsSingle, kPhsFired, kPhsUnpayable, kPhsKeptDom, kPhsDeadDom, kPhsHeldHall, kPhsHeldSolve,
-               kPhsAmountSkip, kPhsGated, kPhsCount };
+               kPhsAmountSkip, kPhsGated, kPhsUndo, kPhsCopy, kPhsPreMade, kPhsCount };
 std::atomic<unsigned long long> g_phs[kPhsCount];
 bool PhsOn()
 {
@@ -11187,13 +11187,61 @@ struct ProviderHoldWorkStats
         if (!PhsOn()) { return; }
         static const char* const n[kPhsCount] = { "entry", "no-targets", "trial", "kept-hall", "kept-solve",
             "joint-no", "joint-yes", "single-tries", "fired", "unpayable", "kept-dom", "dead-dom", "held-hall",
-            "held-solve", "amount-skip", "gated" };
+            "held-solve", "amount-skip", "gated", "undo-pay", "copy-pay", "pre-made" };
         std::fprintf(stderr, "[provider-hold-work]");
         for (int i = 0; i < kPhsCount; ++i) { std::fprintf(stderr, " %s=%llu", n[i], g_phs[i].load()); }
         std::fprintf(stderr, "\n");
     }
 };
 ProviderHoldWorkStats g_phs_stats;
+
+// The board-field snapshot a successful payment is undone by (MTG_PAY_REFINE's, and the pay-first hold-up's: see
+// PayProviderHoldUp). Defined here, ahead of both readers.
+struct PayRefineSnap
+{
+    std::vector<PermPaySnap> bf;
+    std::vector<int>         charge;
+    ManaPool                 fm, fcm, fbm;
+    int                      fhc = 0;
+    GameState::PrepayWildTrue pwt;   // MTG_PREPAY_WILD_TRUE record (restored with the float)
+    ManaPool                 av;
+    int                      life = 0, opp_life = 0, energy = 0;
+    bool                     oll = false;
+    decltype(GameState::player_dealt_damage_this_turn) pdd{};   // Needle Drop's damaged-this-turn bits ride with oll
+    std::size_t              gy = 0;
+    PayRollbackLedger        ledger;
+
+    void Take(const GameState& s, const ManaPool* available)
+    {
+        const int a = s.active_player_index;
+        SnapPayFields(s.battlefield, bf);
+        charge.resize(s.battlefield.size());
+        for (std::size_t i = 0; i < s.battlefield.size(); ++i) { charge[i] = s.battlefield[i].charge_counters; }
+        fm = s.floating_mana; fcm = s.floating_creature_mana; fbm = s.floating_bigspell_mana;
+        fhc = s.floating_haste_c;
+        pwt = s.prepay_wild_true;
+        av = available != nullptr ? *available : ManaPool{};
+        life = s.players[a].life; opp_life = s.players[1 - a].life; energy = s.players[a].energy_counters;
+        oll = s.opponent_lost_life_this_turn; pdd = s.player_dealt_damage_this_turn;
+        gy = s.players[a].graveyard.size();
+        ledger = s.pay_ledger;
+    }
+    void RestoreAvailable(ManaPool* available) const { if (available != nullptr) { *available = av; } }
+    // In place, field by field (the size invariant holds: the caller checked the battlefield did not change size).
+    void Restore(GameState& s, ManaPool* available) const
+    {
+        const int a = s.active_player_index;
+        RestorePayFields(s.battlefield, bf);
+        for (std::size_t i = 0; i < s.battlefield.size() && i < charge.size(); ++i) { s.battlefield[i].charge_counters = charge[i]; }
+        s.floating_mana = fm; s.floating_creature_mana = fcm; s.floating_bigspell_mana = fbm;
+        s.floating_haste_c = fhc;
+        s.prepay_wild_true = pwt;
+        if (available != nullptr) { *available = av; }
+        s.players[a].life = life; s.players[1 - a].life = opp_life; s.players[a].energy_counters = energy;
+        s.opponent_lost_life_this_turn = oll; s.player_dealt_damage_this_turn = pdd;
+        s.pay_ledger = ledger;
+    }
+};
 
 // The hold-up's targets, and how the payer reads them (ProviderHoldUpTargets fills it; HoldOutTargets reads it).
 struct HoldTargets
@@ -11202,6 +11250,37 @@ struct HoldTargets
     std::uint64_t gated = 0;     // MTG_PROVIDER_HOLD_VERIFY: targets the gate proved kept (kept in the list, checked)
     std::uint64_t infeasible = 0;   // ...and targets it proved unpayable with the bill (kept in the list, checked)
     bool gate = false;           // the paid board's kept test may use COVERS(target, 0) (the provider hold-up only)
+    // Every target the loop tests passed the payer's AMOUNT bound with the bill on this board (ProviderHoldUpTargets'
+    // amount_covers), so the joint test's own bound -- the same PaymentManaCovers query on the same board -- is
+    // known true and is not asked again (CPU 2026-11-25; exact).
+    bool joint_amount_ok = false;
+};
+
+// The board BEFORE the payment, as the target loop reads it (the joint bound, PaymentTapped, the held trials). The
+// trial path holds it (`board`). The pay-first path (PayProviderHoldUp) makes it only when a target first reaches one
+// of those reads: a scratch copy of the paid board with the payment undone field by field (`undo`). Most payments
+// never get there -- every target is kept by the paid board -- so the copy is saved (see PayProviderHoldUp).
+struct HoldPre
+{
+    const GameState*           board = nullptr;
+    const GameState*           paid  = nullptr;
+    const PayRefineSnap*       undo  = nullptr;
+    std::optional<RampScratch> made;
+    // HoldUndoSafe held for this payment (the pay-first path only): the loop's solves on the paid board and on the
+    // made board run IN PLACE and are undone (HoldSolveInPlace) instead of on a copy each.
+    bool                       in_place = false;
+    GameState* MadeMutable() { Get(); return made ? &made->Board() : nullptr; }
+    const GameState& Get()
+    {
+        if (board == nullptr)
+        {
+            made.emplace(*paid);
+            undo->Restore(made->Board(), nullptr);
+            board = &made->Board();
+            Phs(kPhsPreMade);
+        }
+        return *board;
+    }
 };
 
 }   // namespace
@@ -11220,7 +11299,39 @@ static bool HoldCostWithin(const ManaCost& a, const ManaCost& b)
         && a.black <= b.black && a.red <= b.red && a.green <= b.green && a.colorless <= b.colorless;
 }
 
-static int HoldOutTargets(const GameState& state, const GameState& paid, const ManaCost& cost_in,
+// MTG_PROVIDER_HOLD_UNDO_VERIFY's count for HoldSolveInPlace (printed with the undo's, below).
+static std::atomic<unsigned long long> g_phu_solve_chk{0}, g_phu_solve_bad{0};
+static bool HoldUndoVerifyOn();
+static void HoldUndoDiff(const char* where, const GameState& got, const GameState& want);
+
+// RampLaterPayable(board, later, nullptr), solved on `board` ITSELF and undone (CPU 2026-11-25; exact). RampLaterPayable
+// copies the whole board for its backtracker solve; the solve only taps (a failed pass restores every level it
+// tapped, and a successful one leaves taps, Depletion / storage / charge counters, life and energy, the ledger),
+// which PayRefineSnap puts back field by field -- on a board where no payment changes a zone (HoldUndoSafe), the
+// precondition PayProviderHoldUp already holds. MTG_PROVIDER_HOLD_UNDO_VERIFY compares the board after every such
+// solve with a full copy taken before it.
+static bool HoldSolveInPlace(GameState& board, const ManaCost& later, bool amount_known = false)
+{
+    if (!amount_known && !RampLaterAmountCovers(board, later)) { return false; }
+    const bool verify = HoldUndoVerifyOn();
+    std::optional<RampScratch> full;
+    if (verify) { full.emplace(board); }
+    if (verify && amount_known && !RampLaterAmountCovers(board, later))
+    { g_phu_solve_bad.fetch_add(1, std::memory_order_relaxed); std::fprintf(stderr, "[provider-hold-undo] MISMATCH: joint amount\n"); }
+    static thread_local PayRefineSnap u;   // reused capacity; nothing below re-enters the hold-up
+    u.Take(board, nullptr);
+    const bool ok = RampLaterSolveConsume(board, later);
+    u.Restore(board, nullptr);
+    if (verify)
+    {
+        g_phu_solve_chk.fetch_add(1, std::memory_order_relaxed);
+        if (!(board == full->Board()))
+        { g_phu_solve_bad.fetch_add(1, std::memory_order_relaxed); HoldUndoDiff("solve", board, full->Board()); }
+    }
+    return ok;
+}
+
+static int HoldOutTargets(HoldPre& pre, GameState& paid, const ManaCost& cost_in,
                           const HoldTargets& ht, const std::vector<int>* tapped_in, bool for_creature,
                           ManaPool* available, bool honor_legacy_cco, bool* stranded)
 {
@@ -11249,7 +11360,7 @@ static int HoldOutTargets(const GameState& state, const GameState& paid, const M
             Phs(kPhsKeptHall);
             return true;
         }
-        const bool k = RampLaterPayable(paid, target, nullptr);
+        const bool k = pre.in_place ? HoldSolveInPlace(paid, target) : RampLaterPayable(paid, target, nullptr);
         if (k) { Phs(kPhsKeptSolve); }
         return k;
     };
@@ -11261,14 +11372,23 @@ static int HoldOutTargets(const GameState& state, const GameState& paid, const M
     const auto full = [&](const ManaCost& target, bool count) -> int {
         if (kept(target)) { return 1; }
         // No payment of this bill keeps the target when the board cannot pay the two together.
-        if (!RampLaterPayable(state, AddManaCosts(cost_in, target), nullptr)) { if (count) { Phs(kPhsJointNo); } return 0; }
+        const ManaCost joint_bill = AddManaCosts(cost_in, target);
+        bool joint;
+        if (pre.in_place) { joint = HoldSolveInPlace(*pre.MadeMutable(), joint_bill, ht.joint_amount_ok); }
+        else if (ht.joint_amount_ok)
+        {
+            RampScratch jc(pre.Get());
+            joint = RampLaterSolveConsume(jc.Board(), joint_bill);
+        }
+        else { joint = RampLaterPayable(pre.Get(), joint_bill, nullptr); }
+        if (!joint) { if (count) { Phs(kPhsJointNo); } return 0; }
         if (count) { Phs(kPhsJointYes); }
         if (count && stranded != nullptr) { *stranded = true; }
-        if (tapped == nullptr) { PaymentTapped(state, paid, tapped_local, nullptr); tapped = &tapped_local; }
+        if (tapped == nullptr) { PaymentTapped(pre.Get(), paid, tapped_local, nullptr); tapped = &tapped_local; }
         for (int held : *tapped)
         {
             if (count) { Phs(kPhsSingle); }
-            RampScratch b(state);
+            RampScratch b(pre.Get());
             ManaPool av_b = available ? *available : ManaPool{};
             if (!PayHolding(b.Board(), held, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
             { continue; }
@@ -11290,7 +11410,13 @@ static int HoldOutTargets(const GameState& state, const GameState& paid, const M
                     k = true;
                 }
             }
-            if (!k) { if (count) { Phs(kPhsHeldSolve); } k = RampLaterPayable(b.Board(), target, nullptr); }
+            // CPU (2026-11-25; exact): the held board is this iteration's scratch and is not read again, so the solve
+            // consumes it (RampLaterPayable's own body, less its copy of a board nobody else holds).
+            if (!k)
+            {
+                if (count) { Phs(kPhsHeldSolve); }
+                k = RampLaterAmountCovers(b.Board(), target) && RampLaterSolveConsume(b.Board(), target);
+            }
             if (k) { return 2 + held; }
         }
         return 0;
@@ -11304,7 +11430,7 @@ static int HoldOutTargets(const GameState& state, const GameState& paid, const M
         if (i < 64 && (ht.infeasible >> i) & 1u)
         {
             g_phg_nf.fetch_add(1, std::memory_order_relaxed);
-            if (RampLaterPayable(state, AddManaCosts(cost_in, target), nullptr))
+            if (RampLaterPayable(pre.Get(), AddManaCosts(cost_in, target), nullptr))
             { g_phg_nf_bad.fetch_add(1, std::memory_order_relaxed); }
             continue;
         }
@@ -11356,7 +11482,9 @@ static int HoldOutFor(const GameState& state, const ManaCost& cost_in, const Hol
     bool filter_tapped = false;
     PaymentTapped(state, a.Board(), tapped, &filter_tapped);
     if (need_filter && !filter_tapped) { return 0; }
-    return HoldOutTargets(state, a.Board(), cost_in, targets, &tapped, for_creature, available, honor_legacy_cco,
+    HoldPre pre;
+    pre.board = &state;
+    return HoldOutTargets(pre, a.Board(), cost_in, targets, &tapped, for_creature, available, honor_legacy_cco,
                           stranded);
 }
 
@@ -11457,6 +11585,7 @@ static bool ProviderHoldUpTargets(const GameState& state, const ManaCost& cost_i
     }
     // Under VERIFY a list of gated targets only still runs the trial (to check them); otherwise none is left.
     if (ht.list.empty()) { Phs(kPhsNoTargets); }
+    ht.joint_amount_ok = true;   // every unmarked target passed amount_covers (the marked ones never reach the joint test)
     return !ht.list.empty();
 }
 
@@ -11479,23 +11608,175 @@ static int ProviderHoldUpHold(const GameState& state, const ManaCost& cost_in, c
 // When a source is to be held out, the board (and `available`) are put back as they were -- a copy-assign from the
 // pre-payment copy, so every byte is the trial path's -- and the held payment is made, exactly as there. The
 // pre-payment copy also stands in for the real board in the target loop (the joint bound, the held trials).
+// THE UNDONE PAYMENT (CPU 2026-11-25; exact, MTG_PROVIDER_HOLD_UNDO_VERIFY checks it). The pre-payment copy above was
+// made on every pay-first payment (2.0M on the 120-game slice) and read by only ~1 in 4: the target loop reads the
+// board before the payment only when a target is not kept by the paid board, and the board is put back only when a
+// source is held out. So the copy is replaced by PayRefineSnap -- the field snapshot MTG_PAY_REFINE already undoes a
+// successful payment with (taps, Depletion / charge / storage counters, the sac-fodder and damage marks, the three
+// floating pools and the haste {C}, the prepay-wild record, `available`, both lives, energy, the lost-life and
+// dealt-damage marks, the rollback ledger) -- and the board before the payment is a copy of the paid board with that
+// snapshot restored, made when the loop first reads it (HoldPre); a held payment restores the real board in place.
+// THE ONE PRECONDITION: the payment changes no zone. A field restore cannot undo a sacrifice (a Treasure, an on-demand
+// crack, a Skirk-style outlet eating fodder: CommitPaySacSacrifices) or a graveyard exile (Deathrite), and a granted
+// mana face can be any of those. HoldUndoSafe reads that off the board before paying, conservatively: any such
+// source the active player controls, any permanent without a definition, any granted mana, and the full copy is made
+// as before. After the payment the zone sizes are checked against it; a change would mean a new zone-changing route
+// the predicate misses, and the run stops there (it cannot be put back, and play must not quietly diverge).
+static bool HoldUndoVerifyOn()
+{
+    static const bool on = EnvOn("MTG_PROVIDER_HOLD_UNDO_VERIFY");
+    return on;
+}
+static std::atomic<unsigned long long> g_phu_undo_chk{0}, g_phu_undo_bad{0}, g_phu_undo_fire{0}, g_phu_undo_fire_bad{0};
+struct ProviderHoldUndoStats
+{
+    ~ProviderHoldUndoStats()
+    {
+        if (!HoldUndoVerifyOn()) { return; }
+        std::fprintf(stderr, "[provider-hold-undo] checks=%llu MISMATCH=%llu | fired-restores=%llu MISMATCH=%llu"
+                     " | in-place-solves=%llu MISMATCH=%llu\n",
+                     g_phu_undo_chk.load(), g_phu_undo_bad.load(), g_phu_undo_fire.load(),
+                     g_phu_undo_fire_bad.load(), g_phu_solve_chk.load(), g_phu_solve_bad.load());
+    }
+};
+static ProviderHoldUndoStats g_phu_undo_stats;
+
+static bool HoldUndoSafe(const GameState& s)
+{
+    if (s.deck_has_mana_grant) { return false; }
+    const int a = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != a) { continue; }
+        const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { return false; }
+        const CardParams& q = d->params;
+        if (q.sac_for_mana_amount > 0 || q.gy_land_exile_mana || q.sac_creature_outlet) { return false; }
+    }
+    return true;
+}
+
+// The zone sizes a field restore relies on (see above).
+struct HoldZoneSizes
+{
+    std::size_t n[9] = {};
+    explicit HoldZoneSizes(const GameState& s)
+    {
+        n[0] = s.battlefield.size(); n[1] = s.exile.size(); n[2] = s.stack.size();
+        n[3] = s.players[0].graveyard.size(); n[4] = s.players[1].graveyard.size();
+        n[5] = s.players[0].hand.size(); n[6] = s.players[1].hand.size();
+        n[7] = s.players[0].library.size(); n[8] = s.players[1].library.size();
+    }
+    bool operator==(const HoldZoneSizes&) const = default;
+};
+
+// MTG_PROVIDER_HOLD_UNDO_VERIFY: which parts of two boards differ (the first mismatches only).
+static void HoldUndoDiff(const char* where, const GameState& got, const GameState& want)
+{
+    static std::atomic<int> s_printed{0};
+    if (s_printed.fetch_add(1) >= 20) { return; }
+    std::fprintf(stderr, "[provider-hold-undo] MISMATCH at %s T%d:", where, got.turn_number);
+    if (got.battlefield.size() != want.battlefield.size()) { std::fprintf(stderr, " battlefield-size"); }
+    else
+    {
+        for (std::size_t i = 0; i < got.battlefield.size(); ++i)
+        {
+            if (got.battlefield[i] == want.battlefield[i]) { continue; }
+            const Permanent& x = got.battlefield[i];
+            const Permanent& y = want.battlefield[i];
+            std::fprintf(stderr, " perm[%zu]=%s(tapped %d/%d counters %d dmg %d/%d)", i, x.card.m_name.str().c_str(),
+                         x.tapped ? 1 : 0, y.tapped ? 1 : 0, x.counters == y.counters ? 1 : 0, x.damage, y.damage);
+        }
+    }
+    for (int k = 0; k < 2; ++k) { if (!(got.players[k] == want.players[k])) { std::fprintf(stderr, " players[%d]", k); } }
+    if (!(got.floating_mana == want.floating_mana)) { std::fprintf(stderr, " floating_mana"); }
+    if (!(got.floating_creature_mana == want.floating_creature_mana)) { std::fprintf(stderr, " floating_creature_mana"); }
+    if (!(got.floating_bigspell_mana == want.floating_bigspell_mana)) { std::fprintf(stderr, " floating_bigspell_mana"); }
+    if (got.floating_haste_c != want.floating_haste_c) { std::fprintf(stderr, " floating_haste_c"); }
+    if (got.floating_prepay_c != want.floating_prepay_c) { std::fprintf(stderr, " floating_prepay_c"); }
+    if (!(got.prepay_wild_true == want.prepay_wild_true)) { std::fprintf(stderr, " prepay_wild_true"); }
+    if (!(got.pay_ledger == want.pay_ledger)) { std::fprintf(stderr, " pay_ledger"); }
+    if (got.mv_cast_this_turn != want.mv_cast_this_turn) { std::fprintf(stderr, " mv_cast_this_turn"); }
+    if (got.scripted_early_ondemand_crack != want.scripted_early_ondemand_crack) { std::fprintf(stderr, " early_crack"); }
+    if (got.opponent_lost_life_this_turn != want.opponent_lost_life_this_turn) { std::fprintf(stderr, " oll"); }
+    if (!(got.player_dealt_damage_this_turn == want.player_dealt_damage_this_turn)) { std::fprintf(stderr, " pdd"); }
+    if (!(got.exile == want.exile)) { std::fprintf(stderr, " exile"); }
+    if (!(got.stack == want.stack)) { std::fprintf(stderr, " stack"); }
+    std::fprintf(stderr, "\n");
+}
+
 static bool PayProviderHoldUp(GameState& state, const ManaCost& cost_in, const HoldTargets& targets,
                               bool for_creature, ManaPool* available, bool honor_legacy_cco)
 {
     g_phu_trial.fetch_add(1, std::memory_order_relaxed);
-    RampScratch pre(state);
     ManaPool av_pre = available ? *available : ManaPool{};
+    if (!HoldUndoSafe(state))
+    {
+        // A payment that may change a zone: the whole board is copied, as before.
+        Phs(kPhsCopy);
+        RampScratch pre(state);
+        if (!TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco)) { return false; }
+        HoldPre hp;
+        hp.board = &pre.Board();
+        // The greedy's tapped sources are read by HoldOutTargets only if a target reaches its held trials.
+        const int held = HoldOutTargets(hp, state, cost_in, targets, nullptr, for_creature,
+                                        available ? &av_pre : nullptr, honor_legacy_cco, nullptr);
+        Phs(kPhsTrial);
+        if (held == 0) { return true; }
+        Phs(kPhsFired);
+        if (ProviderHoldProbeOn()) { return true; }   // diagnostic: the cost without the play (see ProviderHoldProbeOn)
+        g_phu_fired.fetch_add(1, std::memory_order_relaxed);
+        state = pre.Board();
+        if (available != nullptr) { *available = av_pre; }
+        // As the trial path: the held payment, and should the board disagree, the greedy's.
+        bool ok = PayHolding(state, held, cost_in, for_creature, available, honor_legacy_cco);
+        if (!ok) { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
+        return ok;
+    }
+    Phs(kPhsUndo);
+    const bool verify = HoldUndoVerifyOn();
+    std::optional<RampScratch> full;   // MTG_PROVIDER_HOLD_UNDO_VERIFY: the copy the undo stands in for
+    if (verify) { full.emplace(state); }
+    PayRefineSnap undo;
+    undo.Take(state, available);
+    const HoldZoneSizes zones(state);
     if (!TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco)) { return false; }
-    // The greedy's tapped sources are read by HoldOutTargets only if a target reaches its held trials.
-    const int held = HoldOutTargets(pre.Board(), state, cost_in, targets, nullptr, for_creature,
-                                    available ? &av_pre : nullptr, honor_legacy_cco, nullptr);
+    if (!(HoldZoneSizes(state) == zones))
+    {
+        std::fprintf(stderr, "[provider-hold-undo] FATAL: a payment HoldUndoSafe passed changed a zone (T%d, %s); "
+                     "extend HoldUndoSafe\n", state.turn_number, cost_in.ToString().c_str());
+        std::abort();
+    }
+    if (verify)
+    {
+        g_phu_undo_chk.fetch_add(1, std::memory_order_relaxed);
+        RampScratch t(state);
+        undo.Restore(t.Board(), nullptr);
+        if (!(t.Board() == full->Board()))
+        { g_phu_undo_bad.fetch_add(1, std::memory_order_relaxed); HoldUndoDiff("trial", t.Board(), full->Board()); }
+    }
+    int held = 0;
+    {
+        HoldPre hp;
+        hp.paid = &state;
+        hp.undo = &undo;
+        hp.in_place = true;
+        // The greedy's tapped sources are read by HoldOutTargets only if a target reaches its held trials.
+        held = HoldOutTargets(hp, state, cost_in, targets, nullptr, for_creature, available ? &av_pre : nullptr,
+                              honor_legacy_cco, nullptr);
+    }
     Phs(kPhsTrial);
     if (held == 0) { return true; }
     Phs(kPhsFired);
     if (ProviderHoldProbeOn()) { return true; }   // diagnostic: the cost without the play (see ProviderHoldProbeOn)
     g_phu_fired.fetch_add(1, std::memory_order_relaxed);
-    state = pre.Board();
-    if (available != nullptr) { *available = av_pre; }
+    undo.Restore(state, available);
+    if (verify)
+    {
+        g_phu_undo_fire.fetch_add(1, std::memory_order_relaxed);
+        if (!(state == full->Board()) || (available != nullptr && !(*available == av_pre)))
+        { g_phu_undo_fire_bad.fetch_add(1, std::memory_order_relaxed); HoldUndoDiff("fired", state, full->Board()); }
+    }
     // As the trial path: the held payment, and should the board disagree, the greedy's.
     bool ok = PayHolding(state, held, cost_in, for_creature, available, honor_legacy_cco);
     if (!ok) { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
@@ -12559,51 +12840,6 @@ int FloatTotal(const GameState& s)
     return s.floating_mana.Total() + s.floating_creature_mana.Total() + s.floating_bigspell_mana.Total();
 }
 
-struct PayRefineSnap
-{
-    std::vector<PermPaySnap> bf;
-    std::vector<int>         charge;
-    ManaPool                 fm, fcm, fbm;
-    int                      fhc = 0;
-    GameState::PrepayWildTrue pwt;   // MTG_PREPAY_WILD_TRUE record (restored with the float)
-    ManaPool                 av;
-    int                      life = 0, opp_life = 0, energy = 0;
-    bool                     oll = false;
-    decltype(GameState::player_dealt_damage_this_turn) pdd{};   // Needle Drop's damaged-this-turn bits ride with oll
-    std::size_t              gy = 0;
-    PayRollbackLedger        ledger;
-
-    void Take(const GameState& s, const ManaPool* available)
-    {
-        const int a = s.active_player_index;
-        SnapPayFields(s.battlefield, bf);
-        charge.resize(s.battlefield.size());
-        for (std::size_t i = 0; i < s.battlefield.size(); ++i) { charge[i] = s.battlefield[i].charge_counters; }
-        fm = s.floating_mana; fcm = s.floating_creature_mana; fbm = s.floating_bigspell_mana;
-        fhc = s.floating_haste_c;
-        pwt = s.prepay_wild_true;
-        av = available != nullptr ? *available : ManaPool{};
-        life = s.players[a].life; opp_life = s.players[1 - a].life; energy = s.players[a].energy_counters;
-        oll = s.opponent_lost_life_this_turn; pdd = s.player_dealt_damage_this_turn;
-        gy = s.players[a].graveyard.size();
-        ledger = s.pay_ledger;
-    }
-    void RestoreAvailable(ManaPool* available) const { if (available != nullptr) { *available = av; } }
-    // In place, field by field (the size invariant holds: the caller checked the battlefield did not change size).
-    void Restore(GameState& s, ManaPool* available) const
-    {
-        const int a = s.active_player_index;
-        RestorePayFields(s.battlefield, bf);
-        for (std::size_t i = 0; i < s.battlefield.size() && i < charge.size(); ++i) { s.battlefield[i].charge_counters = charge[i]; }
-        s.floating_mana = fm; s.floating_creature_mana = fcm; s.floating_bigspell_mana = fbm;
-        s.floating_haste_c = fhc;
-        s.prepay_wild_true = pwt;
-        if (available != nullptr) { *available = av; }
-        s.players[a].life = life; s.players[1 - a].life = opp_life; s.players[a].energy_counters = energy;
-        s.opponent_lost_life_this_turn = oll; s.player_dealt_damage_this_turn = pdd;
-        s.pay_ledger = ledger;
-    }
-};
 
 void PayRefineAfter(GameState& state, const ManaCost& cost_in, bool for_creature, ManaPool* available,
                     bool honor_legacy_cco, const PayRefineSnap& pre)
