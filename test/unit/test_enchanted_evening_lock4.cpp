@@ -432,12 +432,13 @@ TEST_CASE("Wave + Opalescence end-step sweep (USER ruling 7) with 0, 1 and 4 Gro
             REQUIRE(L4Find(g, 60) != nullptr);
             if (groves == 4)
             {
-                // Impossible loop: the finite tail spends one counter per opponent creature (the orchestrator's
-                // ruling-7 default) -- 5 - 3 = 2, then our upkeep took one; the Wave never left.
-                CHECK(L4Count(g, 1) == 0);
-                CHECK(L4Find(g, 60)->fade_counters == 1);
+                // Impossible loop: the sweep does NOTHING (USER ruling 17: "we don't want to spend them until the
+                // combo is active again") -- every opponent creature stays, every counter is kept (5, then our upkeep
+                // took one); the Wave never left.
+                CHECK(L4Count(g, 1) == 3);
+                CHECK(L4Find(g, 60)->fade_counters == 4);
                 CHECK_FALSE(L4Find(g, 60)->entered_this_turn);
-                CHECK(g.exile.empty());                       // tokens cease to exist
+                CHECK(g.exile.empty());
             }
             else
             {
@@ -456,10 +457,10 @@ TEST_CASE("Wave + Opalescence end-step sweep (USER ruling 7) with 0, 1 and 4 Gro
     }
 }
 
-TEST_CASE("Wave sweep, no loop possible (2 Groves, or too few counters): linked exiles until the counters run out")
+TEST_CASE("Wave sweep, no loop possible (2 Groves, or too few counters): nothing is exiled, every counter is kept")
 {
-    // ORCHESTRATOR DEFAULT (pending the USER): ruling 7 literally -- every targetable opponent creature, one counter
-    // each, LINKED (the Wave stays on the battlefield, CR 607.2a); the rest stay when the counters run out.
+    // USER ruling 17 (2026-11-25): "No, we don't want to spend them until the combo is active again." With the
+    // self-exile loop impossible the end-step sweep spends no counter (the step-4 "finite tail" is deleted).
     GameState s = L4SweepBoard(2, 0);
     L4Put(s, kPres, 100041, 1);   // two opponent CARD creatures first in battlefield order, then four tokens
     L4Put(s, kExpl, 100042, 1);
@@ -470,37 +471,41 @@ TEST_CASE("Wave sweep, no loop possible (2 Groves, or too few counters): linked 
         GameState t = s;
         PerformWaveOpalSweep(t);
         REQUIRE(L4Find(t, 60) != nullptr);
-        CHECK(L4Find(t, 60)->fade_counters == 0);          // all five spent
-        CHECK(L4Count(t, 1) == 1);                          // the sixth stays
-        CHECK(L4Find(t, 700004) != nullptr);
-        const Card* c = L4InExile(t, 100041);
-        REQUIRE(c != nullptr);
-        CHECK(CardIsExileUntilLeaves(*c));                  // linked to the Wave
-        CHECK(ExileUntilLeavesSource(*c) == 60);
-        CHECK(L4Find(t, 60)->linked_exile_number != 0);
+        CHECK(L4Find(t, 60)->fade_counters == 5);          // nothing spent
+        CHECK(L4Count(t, 1) == 6);                          // every opponent creature stays
+        CHECK(t.exile.empty());
+        CHECK(L4Find(t, 60)->linked_exile_number == 0);
         CHECK(L4Find(t, 70) != nullptr);                    // the Groves never left
         CHECK(L4Find(t, 71) != nullptr);
         CHECK_FALSE(L4Find(t, 60)->entered_this_turn);
     }
-    // Both worlds through our upkeep: the Wave at zero cannot lose a counter and is sacrificed (CR 702.32a); its
-    // linked cards return to the opponent, the exiled tokens do not.
+    // Both worlds through our upkeep: the Wave keeps its counters (fading takes one), nothing was exiled.
     L4Worlds w;
     w.EndTurn(s);
     w.Check([](const GameState& g) {
-        CHECK(L4Find(g, 60) == nullptr);
+        REQUIRE(L4Find(g, 60) != nullptr);
+        CHECK(L4Find(g, 60)->fade_counters == 4);
         CHECK(L4Find(g, 100041) != nullptr);
         CHECK(L4Find(g, 100042) != nullptr);
-        CHECK(L4Find(g, 700004) != nullptr);
-        CHECK(L4Count(g, 1) == 3);
-        CHECK(L4InExile(g, 100041) == nullptr);
+        CHECK(L4Count(g, 1) == 6);
+        CHECK(g.exile.empty());
     });
     {
-        GameState t = L4SweepBoard(1, 2);   // one Grove but one counter: the loop needs two -> one linked exile
+        GameState t = L4SweepBoard(1, 2);   // one Grove but one counter: the loop needs two (Grove + self) -> nothing
         L4Find(t, 60)->fade_counters = 1;
         PerformWaveOpalSweep(t);
         REQUIRE(L4Find(t, 60) != nullptr);
-        CHECK(L4Find(t, 60)->fade_counters == 0);
-        CHECK(L4Count(t, 1) == 1);
+        CHECK(L4Find(t, 60)->fade_counters == 1);
+        CHECK(L4Count(t, 1) == 2);
+        CHECK(L4Find(t, 70) != nullptr);
+        CHECK(t.exile.empty());
+    }
+    {
+        GameState t = L4SweepBoard(1, 2);   // one Grove, two counters: exactly Grove + self -> the loop runs (0 room
+        L4Find(t, 60)->fade_counters = 2;   // this cycle), the Wave returns with five and the next cycle clears both
+        PerformWaveOpalSweep(t);
+        REQUIRE(L4Find(t, 60) != nullptr);
+        CHECK(L4Count(t, 1) == 0);
         CHECK(L4Find(t, 70) != nullptr);
     }
 }

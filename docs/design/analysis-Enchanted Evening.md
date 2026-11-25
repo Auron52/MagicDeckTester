@@ -228,6 +228,13 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
    - Presence stays on offer (ordered after lock pieces and the mana option) when no lock piece is fetchable, or when mana
      is also missing. Never a second copy.
 
+17. On the step-4 end-step sweep's "finite tail" (when the Wave self-exile loop is impossible -- 2+ Sterling Groves
+   shroud the Wave, or 1 Grove with too few counters for Grove + self -- the step-4 orchestrator default spent the
+   Wave's fading counters on opponent creatures, one linked exile each): *"No, we don't want to spend them until the
+   combo is active again."* (2026-11-25) -- so with the loop impossible the sweep does NOTHING: no counter is spent,
+   the Wave keeps its counters until the loop is possible again. The tail is DELETED (not levered) in
+   `PerformWaveOpalSweep` (ruling-15/16 change set, see "Ruling 15/16/17 prune" below).
+
 Reading: the lock is credited through the EXISTING free-turn rule (`MTG_FREE_TURNS`, default ON,
 `src/core/FreeTurns.h`, `docs/design/opponent-lockdown-free-turns.md`): a locked opponent turn does not advance the
 round. The deck's lock cards must join `GoldFishRunner::DeckMayLockOpponent`. Under EE + Opalescence the attackers are
