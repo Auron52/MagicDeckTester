@@ -669,3 +669,49 @@ m4_ptc, m4_ptc_pab1_pabc in ONE batch for a same-run CPU ratio; mtg_k18; `run_ho
   (all-modes) `_pab1` question stays open pending results.
 - Maze 395 (the one D18 later game): reproduced at d5 b20 (arm T6, heur T5); at d8 b0 the arm wins T5 with heur's exact
   digest -- recovers.
+
+#### HO3 (FRESH seeds 20M x 600 x 8, mtg_k18, heur in the SAME batch; cpu = same-run CPU / heur, u = units / heur)
+
+| deck | m4_ptc | **m4_ptc_pab1_pabc** |
+|---|---|---|
+| Hydras | 0.971c 0.973u | 0.976c 0.973u |
+| Martyr Lifegain | 0.968c 0.979u | 0.974c 0.978u |
+| Maze's End | 0.998c 1.003u | 0.962c 0.983u (0 / **1 later**, 227) |
+| Merfolk Turns | 0.993c 1.002u | 0.982c 0.990u |
+| Mill | 1.009c 1.004u | 0.987c 0.988u |
+| Sea Creatures | 0.898c 0.895u | 0.895c 0.892u |
+| Shadowborn Apostle | 0.992c 1.001u | 0.897c 0.910u (1 earlier / 1 later, 454) |
+| Stuffy Doll | 1.002c 0.998u | 0.984c 0.980u (1 earlier) |
+| pooled | 0.988c 0.995u | **0.959c 0.973u**, 2 / 2 |
+
+Both later games recover at d8 b0 with heur's digest (`RH3/`: Maze 227 T6 = T6, Shadowborn 454 T5 = T5). Maze over
+D18 + HO3 is 1 earlier / 2 later -- net +1, which fails the per-deck bar. Both have ONE mechanism (`RH3/L`, `RH3/S`):
+pass 1 costs exactly heur's (28 / 39 units, cache-answered, same win), `_pabc`'s price refuses pass 2, heur's pass 2
+(56k / 39k on an 18k limit) finds a turn earlier. The priced entries are the arm's own previous-decision bounded rollouts
+(no-win at bound W); heur's are unbounded (wins or no-win at the root cut) and answer its pass 1 free.
+
+**Mode 4 default = the candidate** (k19, commit 7f2831b70): `_ptc` in `p18::Knobs` mode 4, `_pab` `_pab1` `_pabc` at the
+pass loop when the sampled gate is 4; `_xptc` / `_xab` opt out. C19 (k19, arm `m4`, HO3's seeds) = HO3's
+m4_ptc_pab1_pabc job for job (480/480 digests and units). Unit tests 4168/4168. A `B` trace record carries the price.
+
+**Calibration (C19 vs HO3 heur, `pabx.py`, `gatex3.py`, `cdx.py`, `uncharged.py`):**
+- c1 + price is 4-11x heur's own c1 (geometric mean) -- but as a predictor of the NEXT pass's cost it is far better than
+  heur's c1 x 6: the refused heur passes ran 20k-162k on an 18k limit. Most of `_pabc`'s saving on Maze / Mill / Merfolk is
+  the gate refusing passes that heur's gate admits on a cache-answered pass 1 and that then overrun.
+- Pricing the hits at any fraction f does not fix the opposite drift (deeper than heur: 29 decisions at f = 0, 21 at
+  f = 1) while the shallower ones grow 17 -> 69: a bounded pass 1 is cheaper than heur's for a real reason (it skips the
+  unbounded pass's chain of improving incumbents), which no cache price recovers.
+- The refunded lookahead (untraced units) costs over heur: Hydras +1.3 %, Martyr +2.8 %, Maze +0.4 %, Merfolk +0.7 %,
+  Mill +0.85 %, Sea +2.6 %, Shadowborn +1.3 %, Stuffy +0.7 % -- the turn-1 root rollout, CUT at the 1 % cap in 79-91 % of
+  T1 decisions on Maze / Merfolk / Mill / Shadowborn; wins spread right up to the cap (q90 166-178 of 180), so a tighter
+  cap loses them (as E1 found).
+- **When a deeper pass helps** (HO3 heur, decisions with >= 2 passes): a deeper pass improves pass 1's win 0 % (W-T=1,
+  n=1569), 0.6 % (2, n=2966), 5.1 % (3, n=3674), 16.2 % (4 = the window edge, n=8124). Among C19's priced refusals that
+  heur went deeper on (104), heur's deeper pass improved 4 -- all at the edge; the edge holds -0.35 % Maze, -0.29 % Mill,
+  -0.12 % Merfolk, -1.25 % Shadowborn of the saving.
+
+D20 (k20, HO3's seeds): `_pabk` (consistent aspiration: pass k >= 2 bounded only when pass 1 was) changes little
+(Maze 227 still later); `_pabk_xpc` (no price) is Maze 0.997u 0/0 but Mill 1.005u, Merfolk 1.000u, Shadowborn 1/1 (511).
+
+**`_pce` (k21, commit b59c18710): no price when pass 1's win is at the window edge (W >= T + depth - 1).** HO4 (FRESH
+seeds 21M x 600 x 8; heur, m4, m4_pce in one batch; `build_k21.sh`) running.
