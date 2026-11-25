@@ -129279,7 +129279,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // left no-win entries at that bound, which a pass 1 at the same bound reads; an unbounded pass 1 cannot, and a
         // pass 1 that pays for them moves heur's gate -- E12 Merfolk T2: c1 15 -> 292 units, then a 39k pass 3).
         // _pabx: a failed bounded attempt is spent but kept out of the pass cost the start gate reads.
-        static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false, s_pabb = false, s_pabc = false, s_pabk = false;
+        static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false, s_pabb = false, s_pabc = false, s_pabk = false, s_pce = false;
         static thread_local unsigned long long s_pab_seed = 0; static thread_local int s_pab_win = 0, s_pab_gate = -1;
         if (s_pab_key != valuearm::t_deck_key || s_pab_gate != valuearm::t_deck_sampled_gate)
         {
@@ -129295,6 +129295,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // leaves then make T2's bounded pass 1 cache-cheap). _xpc (A/B): mode 4 without _pabc.
             s_pabk = s_pab_key.find("_pabk") != std::string::npos;
             if (s_pab_key.find("_xpc") != std::string::npos) { s_pabc = false; }
+            // _pce (A/B): _pabc prices nothing when pass 1's win sits at the window edge (W >= T + depth - 1). HO3 heur:
+            // a deeper pass improves a pass-1 win 0 % / 0.6 % / 5.1 % / 16.2 % of the time at W - T = 1 / 2 / 3 / 4, and every
+            // priced refusal heur's deeper pass improved on (4 of 104, incl. both later games) was at the edge.
+            s_pce = s_pab_key.find("_pce") != std::string::npos;
         }
         const bool p18_ab_top = s_pab && p16K == 0 && p16::t_hyb_nest == 1 && g_fsline_nest == 0 && g_rollout_nest == 0
                              && !vl_active && !vl_constant;
@@ -129384,7 +129388,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // bootstrap estimate reads pass 1 with its hits priced at their stored cost (rgc::E::cost).
         // (a pass 1 whose bound failed was searched again from the root cut -- an unbounded pass 1, as heur's: nothing to price)
         if (pass_depth == 1) { p18_ab_p1 = p18_ab > 0 && !p18_asp_fail; }
-        if (pass_depth == 1) { p18_ab_boot = p18_asp_fail ? 0 : (s_pabb && p18_ab > 0) ? rgc::t_hit_sum - p18_hs0 : p18_pc_on ? rgc::t_pab_sum - p18_ps0 : 0;
+        if (pass_depth == 1) { p18_ab_boot = (p18_asp_fail || (s_pce && line.win_turn >= state.turn_number + depth - 1)) ? 0 : (s_pabb && p18_ab > 0) ? rgc::t_hit_sum - p18_hs0 : p18_pc_on ? rgc::t_pab_sum - p18_ps0 : 0;
                                if (p18_ab_boot > 0) { p16::Rec('B', 1, 0, p18_ab_boot, 0, line.win_turn, 0); } }   // trace: the price (leaf field)
         // K-predictor: record the PROBE's leaf count at this depth (leaf-independent structure the escalation
         // reuses to predict its own affordable depth). Only while the probe records; index guarded.
