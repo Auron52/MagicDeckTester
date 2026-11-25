@@ -22731,6 +22731,7 @@ inline bool DestroyUpToArtEnchPinTargets(const std::string& pin, std::vector<int
         n = n * 10 + (ch - '0');
         any = true;
     }
+    if (!any && pin.size() > 2) { numbers.clear(); return false; }   // a trailing comma ("FV1,") is malformed
     if (any) { numbers.push_back(n); }
     return true;
 }

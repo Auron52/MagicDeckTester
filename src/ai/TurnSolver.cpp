@@ -57760,11 +57760,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (std::find(fv_pins.begin(), fv_pins.end(), pin) != fv_pins.end()) { continue; }
                     fv_pins.push_back(pin);
                 }
+                // A provider may RESTRICT, never empty the menu: the unpinned base would then resolve on the
+                // provider's pick inside the search window (NO-GREEDY). An emptied menu falls back to every option.
+                if (fv_pins.empty()) { fv_pins = legal_pins; }
                 const auto fit = std::find(fv_pins.begin(), fv_pins.end(), front_pin);
                 if (fit != fv_pins.end() && fit != fv_pins.begin()) { std::rotate(fv_pins.begin(), fit, fit + 1); }
                 fv_built = true;
             }
-            if (fv_pins.empty()) { continue; }   // a provider withheld every option: the unpinned base stays
+            if (fv_pins.empty()) { continue; }   // (unreachable: the empty set "FV" is always legal)
             actions[i].tutor_target = fv_pins.front();
             for (std::size_t k = 1; k < fv_pins.size(); ++k)
             {
