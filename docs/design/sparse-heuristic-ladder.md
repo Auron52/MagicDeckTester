@@ -53,6 +53,9 @@ This document is the canonical description; those two are the measurement logs.
   portion of the cost."* So the BAR: on every deck whose best alternative is heur, the sparse ladder is never more
   work and at least slightly better than even in the worst case (quality even); significant gains where the ladder's
   superseded rollouts are a large share (Sea, Hydras), small but positive where they are not (Mill, Maze's End).
+  *"If there is other headroom I would like us to consider whether that is headroom that we can take benefit of in
+  other modes."* So any saving found outside the superseded rollouts (escalation path 2, committing-pass leaves that
+  cannot change the decision) is sized for EVERY shape (heur, mode 3, value leaf), not only the sparse ladder.
 
 ## The keys
 
