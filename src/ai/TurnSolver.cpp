@@ -118991,23 +118991,20 @@ static inline int FsChildCut(const GameState& s, int cutoff, int best_win, int m
     return std::min(cutoff, best_win);
 }
 
-// THE FAN'S OVERRUN STOP (MTG_FAN_OVERRUN_STOP, DEFAULT ON; =0 walks the rest of the fan). Once the pass has
-// overrun (SearchBudget::Overrun: the pass ceiling, the per-decision unit or PRICED ceiling, a void game), every
-// FSLineWin below returns {no win} at its entry without searching, so a boundary fan's remaining crossings can only
-// hand back no-win lines that no `best` adopts (the plan / tail loops keep a STRICTLY better line; the single-main
-// site keeps its first crossing, so it stops only once it has one), and the pass is rolled back by its ladder. But
-// each crossing is a full simulated end step + opponent turn + upkeep that no unit and no priced kind bills: a
-// Burgeoning / Manabond crossing-land odometer is a product of up to 12 menu widths (Maze's End 2HG, 4 Burgeonings:
-// 8 put ordinals per crossing). Maze's End 2HG s38200803 gi803 walked such a fan for ~55 min after its T5 decision's
-// ceiling had tripped, charging nothing. The stop counts the truncation (g_fs_trunc_events), so nothing downstream
-// mistakes the cut fan for a complete one. Inert unless a ceiling is armed and tripped: an unlimited search never
-// overruns.
-static inline bool FanOverrunStop(const SearchBudget* budget)
+// THE DEAD-TAIL FAN SKIP (MTG_DEAD_TAIL_FAN_SKIP, DEFAULT ON; =0 walks the fan). An FSLineTail whose cutoff is BELOW
+// its own turn (`state.turn_number > cutoff`) is a dead node: its caller already holds a line winning by this turn
+// (FsChildCut tightens the cut to best - 1), so nothing this tail returns can be adopted, and every child FSLineWin a
+// boundary crossing reaches is refused at its entry (`turn > cutoff`, a boundary win at this same turn included)
+// before it reads the budget or charges a unit. Walking the boundary fan there is pure waste: each crossing is a full
+// simulated end step + opponent turn + upkeep that nothing bills. Maze's End 2HG s38200803 gi803 T5 (four Burgeonings,
+// two opponent land plays): the d0 tails of the root's later main-phase plans ran at cutoff 4 and walked a crossing-land
+// odometer of ~10^8 crossings (widths 2,7,9,9,11,11,12,11,12) at ~40 us each with 42 units charged, ~55 min of CPU for
+// a decision whose answer was already fixed. Skipping the fan leaves every unit, budget read and adopted line as it
+// was (the refused children charged and read nothing); only a no-win tail's unadoptable boundary pins differ.
+static inline bool DeadTailFanSkip(const GameState& state, int cutoff)
 {
-    static const bool s_on = EnvOn("MTG_FAN_OVERRUN_STOP", true);   // DEFAULT ON (exact: post-overrun children are no-wins); =0 disables
-    if (!s_on || budget == nullptr || !budget->Overrun()) { return false; }
-    ++g_fs_trunc_events;
-    return true;
+    static const bool s_on = EnvOn("MTG_DEAD_TAIL_FAN_SKIP", true);   // DEFAULT ON (exact: a dead node's fan is unadoptable); =0 disables
+    return s_on && state.turn_number > cutoff;
 }
 
 struct EotStateSet
@@ -119795,9 +119792,6 @@ public:
     int FaceUpPin() const { return fu_ && fu_width_ > 1 ? fu_rank_ : -2; }
     int HornPin() const { return horn_ && horn_width_ > 1 ? horn_rank_ : -2; }
     int UpkeepLegendPin() const { return ulk_ && ulk_width_ > 1 ? ulk_menu_[ulk_rank_] : -2; }
-    // TMPDIAG g803
-    int ClNobsDiag() const { return cl_nobs_; }
-    std::string ClWidthsDiag() const { std::string w; for (int j = 0; j < std::min(cl_nobs_, kCrossingLandMaxOrdinals); ++j) { w += std::to_string(cl_sizes_[j]) + ","; } return w; }
     // The crossing-land pin to RECORD: the ranks this crossing resolved, when any ordinal had a choice (-2 = none).
     std::int64_t CrossingLandPin() const
     {
@@ -121075,55 +121069,6 @@ static inline int DepthAcrossTurn(const GameState& after_transition, int depth_a
     // A FREE turn (MTG_FREE_TURNS) is not a new round either: same give-back (USER-accepted default 2026-11-21).
     return after_transition.InSameRoundTurn() ? depth_after + 1 : depth_after;
 }
-// TMPDIAG g803 (remove before commit)
-struct TmpClFanDiag
-{
-    static bool On() { static const bool v = EnvOn("MTG_TMPDIAG_CLFAN"); return v; }
-    bool on = false; long long n = 0, ok = 0, uniq = 0; int maxnobs = 0; std::string widths; int site = 0;
-    std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> seen;
-    std::chrono::steady_clock::time_point t0; const GameState* st = nullptr; int depth = 0; long long u0 = 0;
-    const SearchBudget* b = nullptr; double cross_ms = 0; std::chrono::steady_clock::time_point tc;
-    void Begin() { if (on) { tc = std::chrono::steady_clock::now(); } }
-    TmpClFanDiag(const GameState& s, int d, int site_, const SearchBudget* bud)
-        : on(On()), site(site_), st(&s), depth(d), b(bud)
-    { if (on) { t0 = std::chrono::steady_clock::now(); u0 = bud ? bud->Used() : 0; } }
-    static inline std::atomic<long long> g_x[3], g_cutnext[3], g_bwin[3], g_edge[3];
-    struct Dump { ~Dump() { if (!On()) { return; } for (int i = 1; i < 3; ++i) { std::fprintf(stderr, "[tmp-cltot] site=%d cross=%lld cutnext=%lld bwin=%lld edge=%lld\n", i, g_x[i].load(), g_cutnext[i].load(), g_bwin[i].load(), g_edge[i].load()); } } };
-    static inline Dump s_dump;
-    template <class F> void Note(bool okk, const F& f, const GameState& sx, int cut = -999, int cutoff = -999)
-    {
-        if (!on) { return; }
-        const long long xx = ++g_x[site];
-        if (okk && cut != -999 && sx.turn_number > cut) { ++g_cutnext[site]; }
-        if (okk && OpponentHasLost(sx)) { ++g_bwin[site]; }
-        if (cutoff != -999 && cutoff <= st->turn_number) { ++g_edge[site]; }
-        if ((xx & ((1 << 18) - 1)) == 0)
-        {
-            std::fprintf(stderr, "[tmp-clprog] site=%d x=%lld cutnext=%lld bwin=%lld edge=%lld T%d d%d cutoff=%d cut=%d sxT%d nest=%d ovr=%d pex=%d used=%lld lim=%lld fanx=%lld\n", site, xx,
-                         g_cutnext[site].load(), g_bwin[site].load(), g_edge[site].load(), st->turn_number, depth, cutoff, cut, sx.turn_number, g_fsline_nest,
-                         b && b->OverrunQuiet() ? 1 : 0, decisionwork::PricedExceededQuiet() ? 1 : 0, b ? b->Used() : -1LL, b ? b->Limit() : -1LL, n);
-        }
-        cross_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tc).count();
-        if (n + 1 == 1000 || n + 1 == 100000)
-        {
-            std::fprintf(stderr, "[tmp-clbig] site=%d fan_n=%lld T%d d%d nobs=%d widths=%s cross_ms=%.1f ovr=%d pex=%d used=%lld\n", site, n + 1,
-                         st->turn_number, depth, f.ClNobsDiag(), f.ClWidthsDiag().c_str(), cross_ms, b && b->OverrunQuiet() ? 1 : 0,
-                         decisionwork::PricedExceededQuiet() ? 1 : 0, b ? b->Used() : -1LL);
-        }
-        ++n; if (okk) { ++ok; if (seen.insert(BuildDedupKey(sx)).second) { ++uniq; } }
-        if (f.ClNobsDiag() > maxnobs) { maxnobs = f.ClNobsDiag(); widths = f.ClWidthsDiag(); }
-    }
-    ~TmpClFanDiag()
-    {
-        if (!on || n < 20) { return; }
-        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-        std::string hand;
-        for (const Card& c : st->players[0].hand) { hand += c.m_name.str() + ";"; }
-        std::fprintf(stderr, "[tmp-clfan] site=%d T%d d%d nest=%d cross=%lld ok=%lld uniq=%lld maxnobs=%d widths=%s ms=%.1f cross_ms=%.1f units=%lld hand=%s\n",
-                     site, st->turn_number, depth, g_fsline_nest, n, ok, uniq, maxnobs, widths.c_str(), ms, cross_ms,
-                     b ? b->Used() - u0 : -1LL, hand.c_str());
-    }
-};
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
                                          int cutoff, bool second_main, TranspositionTable* tt,
                                          FSLineCache* lc, SearchBudget* budget,
@@ -121926,9 +121871,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     // child's continuation.
                     BoundaryFan fan(s3, /*with_echo=*/true);
                     std::optional<GameState> s3_fan;
-                    while (fan.Next())
+                    const bool fan_dead = DeadTailFanSkip(state, cutoff);
+                    while (!fan_dead && fan.Next())
                     {
-                        if (FanOverrunStop(budget)) { break; }
                         GameState* sxp = &s3;
                         if (fan.Copies()) { s3_fan = s3; fan.Stamp(*s3_fan); sxp = &*s3_fan; }
                         GameState& sx = *sxp;
@@ -122033,17 +121978,13 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             BoundaryFan fan(s2, /*with_echo=*/true);
             std::optional<GameState> s2_fan;   // a per-pin copy, only when fanning (s2 stays the pre-boundary state)
             bool m2_lt_ok = true;   // P5b-3: no crossing's line came back truncated
-            TmpClFanDiag _tmpd(s2, depth, 1, budget);   // TMPDIAG g803
-            while (fan.Next())
+            const bool fan_dead = DeadTailFanSkip(state, cutoff);
+            while (!fan_dead && fan.Next())
             {
-                if (FanOverrunStop(budget)) { break; }
                 GameState* sxp = &s2;
                 if (fan.Copies()) { s2_fan = s2; fan.Stamp(*s2_fan); sxp = &*s2_fan; }
                 GameState& sx = *sxp;
-                _tmpd.Begin();
-                const bool _tmp_ok = fan.Cross(sx);   // TMPDIAG g803
-                _tmpd.Note(_tmp_ok, fan, sx, _tmp_ok ? FsChildCut(sx, cutoff, best.win_turn, max_turns, budget) : -999, cutoff);
-                if (!_tmp_ok)
+                if (!fan.Cross(sx))
                 {
                     if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT sim failed\n", m2t_sum(q).c_str()); }
                     continue;
@@ -122203,9 +122144,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     // exactly where an uncovered obligation comes from (its cast, or the cast a tutor fed).
                     BoundaryFan fan(s, /*with_echo=*/true);
                     std::optional<GameState> s_fan;
-                    while (fan.Next())
+                    const bool fan_dead = DeadTailFanSkip(state, cutoff);
+                    while (!fan_dead && fan.Next())
                     {
-                        if (FanOverrunStop(budget)) { break; }
                         GameState* sxp = &s;
                         if (fan.Copies()) { s_fan = s; fan.Stamp(*s_fan); sxp = &*s_fan; }
                         GameState& sx = *sxp;
@@ -122430,16 +122371,12 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             int  best_ulk = -2;
             std::vector<int> best_dredge;
             bool have      = false;
-            TmpClFanDiag _tmpd(state, depth, 2, budget);   // TMPDIAG g803
+            if (DeadTailFanSkip(state, cutoff)) { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }
             while (fan.Next())
             {
-                if (have && FanOverrunStop(budget)) { break; }
                 GameState s = state;
                 fan.Stamp(s);
-                _tmpd.Begin();
-                const bool _tmp_ok = fan.Cross(s);   // TMPDIAG g803
-                _tmpd.Note(_tmp_ok, fan, s, _tmp_ok ? (have ? FsChildCut(s, cutoff, best_tail.win_turn, max_turns, budget) : cutoff) : -999, cutoff);
-                if (!_tmp_ok) { continue; }
+                if (!fan.Cross(s)) { continue; }
                 ExpireStagedCards(s);
                 const int cut = have ? FsChildCut(s, cutoff, best_tail.win_turn, max_turns, budget) : cutoff;
                 if (eot_seen != nullptr && !eot_seen->Visit(BuildDedupKey(s), s, cut, DepthAcrossTurn(s, depth), max_turns)) { continue; }
