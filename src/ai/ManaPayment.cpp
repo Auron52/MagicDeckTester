@@ -11737,7 +11737,18 @@ static bool PayProviderHoldUp(GameState& state, const ManaCost& cost_in, const H
     const bool verify = HoldUndoVerifyOn();
     std::optional<RampScratch> full;   // MTG_PROVIDER_HOLD_UNDO_VERIFY: the copy the undo stands in for
     if (verify) { full.emplace(state); }
-    PayRefineSnap undo;
+    // The snapshot's buffers are reused per thread (CPU 2026-11-25; two allocations a payment otherwise). The pay-first
+    // path runs only at the outermost payment, so it is never live twice on one thread; a re-entry would take a local.
+    static thread_local PayRefineSnap t_undo;
+    static thread_local bool t_undo_busy = false;
+    std::optional<PayRefineSnap> undo_local;
+    PayRefineSnap& undo = t_undo_busy ? undo_local.emplace() : t_undo;
+    struct UndoRelease
+    {
+        bool* busy;
+        ~UndoRelease() { if (busy != nullptr) { *busy = false; } }
+    } undo_release{ t_undo_busy ? nullptr : &t_undo_busy };
+    t_undo_busy = true;
     undo.Take(state, available);
     const HoldZoneSizes zones(state);
     if (!TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco)) { return false; }
