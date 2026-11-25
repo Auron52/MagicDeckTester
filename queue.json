@@ -1,13 +1,3 @@
 {
- "entries": [
-  {
-   "branch": "phase-1-2-deck-analyzer",
-   "head_since": "2026-11-25T12:59:51Z",
-   "heartbeat": "2026-11-25T13:18:30Z",
-   "host": "a7c2d36c718e",
-   "id": "codex-1drop-creatureburn",
-   "joined": "2026-11-25T12:59:51Z",
-   "note": "Creature Burn 2HG smoke baseline correction; 1 Drop Burn value leaf follows"
-  }
- ]
+ "entries": []
 }
