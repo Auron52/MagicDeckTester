@@ -56,6 +56,12 @@ This document is the canonical description; those two are the measurement logs.
   *"If there is other headroom I would like us to consider whether that is headroom that we can take benefit of in
   other modes."* So any saving found outside the superseded rollouts (escalation path 2, committing-pass leaves that
   cannot change the decision) is sized for EVERY shape (heur, mode 3, value leaf), not only the sparse ladder.
+  *"I don't want to restrict us to just upgrading this mode."* *"i.e. I don't want to do a bunch of upgrades and then
+  find out that these could have been applied to everything else and we didn't do that. I'm happier to take any
+  upgrades that apply everywhere, just a slight advantage over the heuristic ladder in tough cases and a bigger
+  advantage in easier cases."* So PREFER general savings (they apply to every shape: heur, mode 3, leaf, sparse) over
+  sparse-only ones; every saving found is checked for whether it also applies to the other shapes before it is built
+  as sparse-only. The sparse ladder's bar vs heur stays: slight advantage on tough decks, bigger on easy ones.
 
 ## The keys
 
