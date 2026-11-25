@@ -308,3 +308,20 @@ walk-edge roll + window cut in its lookahead (arm key). Baseline = the bare ladd
    32 later) and on Mill +30 into +8; it is inert on the other six decks. So the gap costs mode 3 dozens of games where it
    bites. The shipped mode-3 decks (Boars, Morph, Spirits) were not in AB3.
 No flips (parent, 2026-11-20: flips and tiers deferred to a later session).
+
+### K1 (2026-11-25, rebased tree wip/p18k-claude, 8 bare decks x 200, seeds 18,000,000, `mtg_k1`, trace on)
+
+`build/scratch/p18g/K1/` (tools `summ.py`, `ana6.py`, `cen_k.py`, `dvs_k.py`). Quality 0/0 on every deck.
+Sparse (mode 4) vs heur, units: Sea 0.916, Hydras 1.009, Martyr 1.004, Maze's End 1.004, Merfolk Turns 1.000, Mill
+1.011, Shadowborn 1.009, Stuffy 1.000. Mode-4 waste: a cut root rollout costs ~0.5 % of units on EVERY deck (Maze's End
+gets 0.01 % of hits for it); walk misses 0.8-1.2 % on Mill / Shadowborn.
+
+**General headroom found: MTG_BP_DEV_SEQ's pass 2.** When the one-deviation ladder (pass 1) met a latent occurrence,
+a second whole ladder searches the full tree to pass 1's depth with root cut = pass 1's win - 1. `MTG_DEV_SEQ_STATS`
+on the heur arm (K1 seeds): pass 2 better in 1 of 803 runs; its units, as a share of the deck's decision units:
+Martyr 9.9 %, Hydras 9.8 %, Shadowborn 3.1 %, Maze's End 2.3 %, Mill 1.9 %. The existing lossless skip condition
+(`p2_skippable`, every latent occurrence past the cut) covers ~0 of it. H2 traces (56 decks, heur arm, older binary):
+pass 2's committing pass = Melira 20.7 %, Goblins 15.0 %, Hydras 10.1 %, Landfall 9.4 %, Vampires 6.4 %, Accomplished
+Alchemist 5.9 % (pass 2 better in 7 of 103 there), Martyr 5.5 %, Fungus 4.8 %. Pass 2 is INTERIOR work (0-3 % of its
+committing pass is rollout leaves) costing 0.34-1.9x pass 1's committing pass: the compound waves themselves under
+the cut. It runs inside every shape that runs FullSearchLine, so a saving here is general (USER: prefer those).
