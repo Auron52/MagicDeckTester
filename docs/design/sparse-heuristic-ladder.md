@@ -791,3 +791,17 @@ seeds; adopt only if every deck meets the bar (work down, paired win turns net <
   5.7200 (faster, 3 searched play-changed). ORIGIN'S OWN binary (f9e182ad4, worktree `.claude/worktrees/origin-f9e`)
   gives exactly 5.7200/edad33099d097e0b: upstream's Creature Burn leaf adoption left the 2HG key un-accepted. Accept it
   with our landing (say so in the commit). Then E.8 sparse stage on the heur-ladder decks, accept, ONE batched landing.
+
+## All-modes `_pab1`: cache widen + same-game bound (2026-11-25, afternoon)
+
+* `_prgw` (708841940): the rollout game cache let the FIRST answer under a key stand for the game; a bounded pass's narrow
+  no-win shadowed every later wider answer (leaf table and game line cache already widen). Widen on store. PW1 (22 decks,
+  200 g, base 23.0M; live and live_pab1 reproduce PV1 440/440 jobs): live_prgw 0.9995u, play-neutral (Shadowborn 1.005u);
+  live_pab1_prgw 0.9677u, Gods 1.037 -> 1.014, Beasts 1.009 -> 1.003, Martyr 1.009 -> 1.008.
+* `_pabt` (0e955a2b6): pass 1's bound only from an earlier-or-same-turn decision (mulligan trial games share game_seed).
+  PT1 (lane): +pabt Beasts 0.995u, Blood Sun 0.947u (12 earlier / 3 later), Gods 1.014, Martyr 1.008.
+* Traced PG1 (worst blocks): Martyr's excess = 3 decisions where a bounded pass 1 cost more (12 -> 208) and admitted a pass 3;
+  +pabk -> 0.999. Gods' top-level decisions are IDENTICAL in units; its excess (~150k on 3.7M) is in work outside the hybrid
+  decisions (side searches reading a cache the bounded passes left thinner); +pabk 1.040 -> 1.026 on those blocks.
+* RUNNING (lane, 2 threads): PT2 = live_pab1_prgw_pabt (18 decks) + live_pab1_prgw_pabt_pabk (22 decks), same seeds.
+  Output build/scratch/p18g/PT2/, DONE marker PT2.DONE; merge with PW1/PT1 for summ.py.
