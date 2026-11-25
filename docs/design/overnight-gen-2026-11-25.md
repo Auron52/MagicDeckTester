@@ -50,3 +50,18 @@ USER: *"Let's stop maze's end to finish Worldfire. The timing for Maze's End als
   Because every member is a 1-of, a hand's count in that bucket is always its number of DISTINCT Guildgate names,
   so Maze's End's ten-gate count stays exact. What it loses is the colour pair (which spells the hand can cast, and
   which Guildgate to bottom). This is a BUCKET RULING, which is the USER's. Not applied.
+
+## 2026-11-25 21:40 UTC: Maze's End bucket ruling (USER), regeneration queued
+
+USER: *"I wouldn't group all guildgates together, but I would group things that obviously produce just Green and
+just Blue, either, neither and both together. Then there are untapped lands and some special ones, but this should
+still cut down the numbers somewhat."*
+- `decks/Maze's End/Maze's End.buckets.json` (64ff0e83b on wip/maze-gen-claude): tapped G-only {Selesnya, Gruul, Golgari};
+  tapped U-only {Azorius, Dimir, Izzet}; tapped neither {Rakdos, Orzhov, Boros}; tapped both {Simic, Manor Gate x2,
+  Sea Gate x2}; tapped either {Cliffgate x2, Black Dragon Gate, Citadel Gate}; untapped {C}/{1}:any {Heap Gate, Planar
+  Nexus, Talon Gates of Madara}. Alone: Maze's End, Gond Gate, Baldur's Gate, Basilisk Gate, Thran Portal, Gateway Plaza,
+  The Black Gate. Expected K=21, 576,099 size-7 hands (was 7,358,894), so the floor is ~4.6 h at ~69 rollouts/s.
+- G/U only: Gates Ablaze (R) hits creatures only, so red is inert in a goldfish.
+- `expected_buckets` cleared from the profile (mull_gen d1 b1 kept) so mullgen re-records K under the ruling. The K=33
+  journal and gencache were moved (not deleted) to `logs/maze_journal_stop-20261125T212636Z/k33-originals/`.
+- `build/scratch/overnight/chain_maze2.sh` waits for WF_FINISH.DONE, then mullgen, then the value leaf (MAZE2.DONE).
