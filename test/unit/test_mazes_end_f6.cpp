@@ -269,3 +269,80 @@ TEST_CASE("Maze's End F6-2: without the line in scope the first {3} spends the s
 {
     CHECK_FALSE(S6ActsThenScrying(/*fed_float_arm=*/-1, nullptr, /*line=*/false));
 }
+
+// ---- MTG_SCALED_ROUTE_ACTS (ManaPayment.cpp ScaledLandRouteHold): the route's rest counts pending activations ------
+// 2HG s26701483 gi1483 T4 (USER 2026-11-25: "We should be using Baldur's Gate. Tapping it somewhat late makes sense,
+// but not tapping it for multiple mana at all does not"). The line: Maze's End #43 fetches Baldur's Gate, #43 is
+// replayed (Amulet of Vigor untaps it), Archdruid's Charm {G}{G}{G}, then #43 again ({3}, {T}). The first {3} took
+// Azorius, Rakdos and Planar Nexus. Charm's greedy payment (Golgari + Sea Gate + Gond Gate) leaves Baldur's Gate's
+// {C} alone for the second {3}; holding one of the three out pays Charm through the fed mode (X = 6 other Gates)
+// and its {G}{G}{G} surplus floats the {3}. The line hold carries the casts only, so the route needs the plan's
+// pending activation.
+namespace
+{
+bool G1483CharmThenAct(int arm, bool* baldur_tapped_after_charm = nullptr)
+{
+    LoadF6Cards();
+    static const MazesEndProvider kProv;
+    heurarm::Clear();
+    if (arm >= 0) { heurarm::t_arm[heurarm::SCALED_ROUTE_ACTS] = static_cast<std::int8_t>(arm); }
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.phase               = Phase::PreCombatMain;
+    s.m_provider          = &kProv;
+    Put(s, "Amulet of Vigor", 1);
+    Put(s, "Azorius Guildgate", 6, /*tapped=*/true);
+    Put(s, "Golgari Guildgate", 27);
+    Put(s, "Gond Gate", 28);
+    Put(s, "Manabond", 39);
+    Put(s, "Maze's End", 43);
+    Put(s, "Planar Nexus", 48, /*tapped=*/true);
+    Put(s, "Rakdos Guildgate", 49, /*tapped=*/true);
+    Put(s, "Sea Gate", 50);
+    for (Permanent& p : s.battlefield) { if (p.card.m_number == 50) { p.chosen_color = static_cast<std::int8_t>(Color::Green); } }
+    Put(s, "Baldur's Gate", 7);
+    REQUIRE(ScaledManaCreatureCount(s, &s.battlefield.back()) == 6);
+    const CardDefinition* charm = CardDatabase::Instance().Lookup("Archdruid's Charm");
+    REQUIRE(charm != nullptr);
+    Card cc = charm->card;
+    cc.m_number = 12;
+    ManaCost ggg; ggg.green = 3;
+    ManaCost three; three.generic = 3;
+    PlanTraits t;
+    t.act_mana_total = 3;          // the second activation, still pending while Charm is paid
+    t.act_src_nums[0] = 43;
+    t.act_src_count = 1;
+    PlanTraitsScope _pts(&t);
+    ActLinePassScope _pass;
+    bool ok = false;
+    {
+        LineUnpaidCostScope luc(ggg);
+        {
+            SpellSubtypePayScope pay(&cc);
+            REQUIRE(TapForCostDirect(s, ggg, /*for_creature=*/false));
+        }
+        if (baldur_tapped_after_charm != nullptr) { *baldur_tapped_after_charm = Tapped(s, 7); }
+        REQUIRE(TapSelf(s, 43));
+        ActLinePayScope pay(three);
+        ok = TapForCostDirect(s, three, false);
+        if (ok) { pay.Paid(); }
+    }
+    heurarm::Clear();
+    return ok;
+}
+}   // namespace
+
+TEST_CASE("Maze's End g1483: Charm pays through Baldur's Gate's fed mode so the second Maze's End {3} pays (MTG_SCALED_ROUTE_ACTS)")
+{
+    bool fed = false;
+    CHECK(G1483CharmThenAct(/*arm=*/-1, &fed));
+    CHECK(fed);
+}
+
+TEST_CASE("Maze's End g1483: with MTG_SCALED_ROUTE_ACTS off Charm is paid directly and the second {3} strands (the hole)")
+{
+    bool fed = true;
+    CHECK_FALSE(G1483CharmThenAct(/*arm=*/0, &fed));
+    CHECK_FALSE(fed);
+}

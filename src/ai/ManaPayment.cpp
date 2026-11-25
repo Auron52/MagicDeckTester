@@ -11879,6 +11879,29 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
 {
     if (!ScaledLandRouteOn() || state.dmg_events_armed) { return 0; }
     ManaCost later = RampLaterBill(cost_in);
+    // MTG_SCALED_ROUTE_ACTS (DEFAULT ON; =0 -> the casts-only rest). THE HOLE (Maze's End 2HG s26701483 gi1483 T4,
+    // USER 2026-11-25: "We should be using Baldur's Gate. Tapping it somewhat late makes sense, but not tapping it for
+    // multiple mana at all does not"): the line {Maze's End -> Baldur's Gate, replay Maze's End, Archdruid's Charm,
+    // Maze's End again}. Charm's {G}{G}{G} took Golgari + Sea Gate + Gond Gate, leaving Baldur's Gate with nothing to
+    // feed it, so the second activation's {3} had Baldur's {C} alone; Charm paid through the fed mode (two of those
+    // Gates into Baldur's Gate for six {G}) floats the {3}. The rest above is the line hold, which carries the CASTS
+    // only (unless a joint prepay loaded the activations, g_line_hold_has_acts), so the route saw nothing owed after
+    // Charm and never looked. The rest now also carries the plan's pending trailing activations -- the
+    // LineDemandAfterPayment / RestrictedIneligOwedLater reading: PlanTraits::act_mana_total net of the activations
+    // already paid this pass and the one being paid -- as GENERIC (a priced-low rest only makes the route fire less).
+    // And an activation's own payment is not taken out of the cast hold it was never in. Same route, same
+    // feasibility test: a payment is replaced only when the greedy's provably strands the declared line and a
+    // hold-out keeps it payable. Executor, rollout and walks alike; no plan traits in scope -> as before.
+    if (ScaledRouteActsOn() && !g_line_hold_has_acts)
+    {
+        if (const PlanTraits* pt = CurrentPlanTraits(); pt != nullptr && pt->act_mana_total > 0)
+        {
+            const bool paying_act = g_act_line_current.ManaValue() > 0;
+            if (paying_act) { later = g_line_unpaid_cost; }
+            later.generic += std::max(0, pt->act_mana_total - g_act_line_paid.ManaValue()
+                                         - g_act_line_current.ManaValue());
+        }
+    }
     later.generic = std::max(0, later.generic - g_line_reducer_credit);
     if (later.ManaValue() <= 0) { return 0; }
     if (cost_in.ManaValue() <= static_cast<int>(state.floating_mana.Total())) { return 0; }

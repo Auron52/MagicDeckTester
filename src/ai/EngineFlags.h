@@ -860,6 +860,18 @@ inline bool ScaledLandRouteOn()
     return heurarm::Flag(heurarm::SCALED_LAND_ROUTE, env_on);
 }
 
+// MTG_SCALED_ROUTE_ACTS (2026-11-25; DEFAULT ON; =0 -> the casts-only rest): MTG_SCALED_LAND_ROUTE's rest of the line
+// also carries the plan's PENDING trailing activations (PlanTraits::act_mana_total net of g_act_line_paid and the one
+// being paid), so a cast whose greedy payment leaves the scaled land unable to fund a later activation is re-made
+// through the fed mode. Maze's End 2HG s26701483 gi1483 T4 (USER 2026-11-25: "We should be using Baldur's Gate."):
+// Archdruid's Charm {G}{G}{G} off Golgari + Sea Gate + Gond Gate left Baldur's Gate unfed and the second Maze's End
+// {3} unpayable. Shared payer: executor, rollout and walks together; every budget.
+inline bool ScaledRouteActsOn()
+{
+    static const bool env_on = EnvOn("MTG_SCALED_ROUTE_ACTS", true);
+    return heurarm::Flag(heurarm::SCALED_ROUTE_ACTS, env_on);
+}
+
 // THE MERFOLK TURNS ENUM-GAP (2026-11-21, merfolk-gate doc section 5; DEFAULT ON, =0 -> as before). s30000762 T4:
 // {Seahunter + Rishadan Dockhand} pays only with Dockhand first (it grows Three Tree City to four Merfolk).
 // MTG_SCALED_GROWTH_BOUND credits a scaled land's same-turn growth where mana is priced (the enumeration's scalar bound,
