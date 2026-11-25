@@ -139,6 +139,10 @@ struct Arm
     // shared remaining budget. A research arm only -- play always runs 0.5 (MTG_ESCALATION_FRESH_FRAC).
     double      esc_fresh_frac    = -2.0;   // <= -1.5 unset => env => 0.5
     int         esc_fresh_floor   = -1;     // -1 unset => env (default ON) | 0 flat | 1 floor: the fresh allowance as a minimum
+    // STAGED ESCALATION BEAM share (manifest "esc_beam_stage_frac" / "esc_beam_stage_geo"; read only under
+    // MTG_ESC_BEAM_STAGED): plans beyond W are admitted while Used < f x Limit (geo: f^k for the k-th). CANDIDATE.
+    double      esc_beam_stage_frac = -1.0; // <=0 unset => env MTG_ESC_BEAM_STAGE_FRAC => 1.0
+    int         esc_beam_stage_geo  = -1;   // -1 unset => env MTG_ESC_BEAM_STAGE_GEO | 0 flat | 1 geometric
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // GREEDY-WALK CHARGE WEIGHT (MTG_SOLVE_CHARGE_W): visits per charged unit, >=1. NOT a value-leaf
     // setting -- it lives here because this struct is the per-job NUMERIC arm (heurarm::Arm is
