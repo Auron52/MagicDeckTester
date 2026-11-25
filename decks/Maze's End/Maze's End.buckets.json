@@ -1,0 +1,28 @@
+{
+  "merge": [
+    {
+      "cards": ["Selesnya Guildgate", "Gruul Guildgate", "Golgari Guildgate"],
+      "why": "USER ruling 2026-11-25: group lands by whether they make Green and/or Blue, the two colours the list spends in a goldfish (Exploration, Burgeoning, Sylvan Scrying, Manabond, Archdruid's Charm need G; Guild Summit needs U; Gates Ablaze only hits creatures). Tapped, makes G but not U. Each is a 1-of with its own name, and rollouts sample the actual member cards, so Maze's End's distinct-name count stays exact in play."
+    },
+    {
+      "cards": ["Azorius Guildgate", "Dimir Guildgate", "Izzet Guildgate"],
+      "why": "USER ruling 2026-11-25 (G/U grouping, see the first group). Tapped, makes U but not G."
+    },
+    {
+      "cards": ["Rakdos Guildgate", "Orzhov Guildgate", "Boros Guildgate"],
+      "why": "USER ruling 2026-11-25 (G/U grouping). Tapped, makes neither G nor U."
+    },
+    {
+      "cards": ["Simic Guildgate", "Manor Gate", "Sea Gate"],
+      "why": "USER ruling 2026-11-25 (G/U grouping). Tapped, makes BOTH G and U: Simic prints both; Manor Gate (G + a chosen non-green colour) and Sea Gate (U + a chosen non-blue colour) can choose the other one."
+    },
+    {
+      "cards": ["Cliffgate", "Black Dragon Gate", "Citadel Gate"],
+      "why": "USER ruling 2026-11-25 (G/U grouping). Tapped, makes EITHER G or U: a fixed non-G/U colour plus one colour chosen as it enters, so G or U but not both."
+    },
+    {
+      "cards": ["Heap Gate", "Planar Nexus", "Talon Gates of Madara"],
+      "why": "USER ruling 2026-11-25 ('Then there are untapped lands and some special ones'). Untapped, {T}: {C}, and {1},{T}: any colour. Talon Gates' {4} put-from-hand and phase-out, and Heap Gate's Treasure mode, are minor next to the shared mana shape. Left alone as special cases: Maze's End, Gond Gate, Baldur's Gate (scaled mana), Basilisk Gate (plain {C}), Thran Portal (fastland + chosen basic type), Gateway Plaza (pay {1} or sacrifice), The Black Gate (B, optional 3 life to untap)."
+    }
+  ]
+}

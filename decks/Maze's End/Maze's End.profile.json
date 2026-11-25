@@ -1,4 +1,5 @@
 {
+  "value_play": { "mull_gen_depth": 1, "mull_gen_budget_ms": 1 },
   "card_scores": {
     "Amulet of Vigor": [
       -0.07837837837837824,
