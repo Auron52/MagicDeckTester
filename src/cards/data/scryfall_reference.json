@@ -2284,6 +2284,15 @@
     "toughness": "15",
     "type_line": "Legendary Creature — Eldrazi"
   },
+  "Enchanted Evening": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{3}{W/U}{W/U}",
+    "oracle_text": "All permanents are enchantments in addition to their other types.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Enchantress's Presence": {
     "cmc": 3.0,
     "keywords": [],
@@ -5601,6 +5610,15 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Legendary Creature — Elemental"
+  },
+  "Opalescence": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}{W}",
+    "oracle_text": "Each other non-Aura enchantment is a creature in addition to its other types and has base power and base toughness each equal to its mana value.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Open the Armory": {
     "cmc": 2.0,
