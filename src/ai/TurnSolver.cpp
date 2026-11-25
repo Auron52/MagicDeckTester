@@ -117763,7 +117763,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, b2 = false, b3 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false, llw = false, lrf = false, pkt = false, plx = false, pzb = false, pms = false; double pzc = 0.01, pal = 0.1; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false, llw = false, lrf = false, pkt = false, plx = false, pzb = false, pms = false, tp1 = false; double pzc = 0.01, pal = 0.1; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
     // Mode 2 is the measured fast shape. Keep mode 1 as the original raw sampler for reproducible
     // research; arm-key suffixes below remain diagnostic overrides of either starting shape.
     inline Knob Knobs()
@@ -117813,6 +117813,7 @@ namespace p18
                 { out = std::atof(k.c_str() + p + std::strlen(tag)) / 10.0; }
             } };
         num("_pz", o.z); num("_pcv", o.cvf);
+        if (k.find("_ptp1") != std::string::npos) { o.tp1 = true; }   // the sparse ladder's pass-1 trigger (A/B)
         num("_pf", o.f);                                      // ROBUST-OR-EXACT margin F (0 = off)
         o.nocredit = k.find("_pfnc") != std::string::npos;   // the fallback ladder gates on the real remaining budget
         // _pfa<10F>: ASYMMETRIC band (thr, thr*F] -- a price that fits admits as is (a deeper commit measured harmless), only
@@ -127218,6 +127219,47 @@ struct DevSeqDeferredP2
     int  cut2 = 0, c1 = 0, depth = 0, known_miss = 0, win1 = 0;
 };
 static thread_local DevSeqDeferredP2* g_devseq_cd_defer = nullptr;   // set by FullSearchLineHybrid around its probe only
+// THE SPARSE LADDER ACROSS THE TWO PASSES (P18k; mode 4, see p18_walk in FullSearchLine). Pass 1 and pass 2 of one
+// two-pass search are two FullSearchLine calls, and each ran its own sparse-ladder lookahead from scratch: the walk's
+// line memo was a local of the call, so a pass 1 the walk decided handed pass 2 nothing, and pass 2 re-ran the root
+// rollout (under a cut it could not win by) and then the whole rollout ladder, cold -- where the heuristic ladder's
+// pass 2 rides on pass 1's carried memo (Hydras 18270000 T1: heur pass 2 = 1,273 units, mode 4's = 5,614; K1, mode
+// 4's pass 2 was 15.7 % of Martyr Lifegain's units against heur's 9.9 %). The orchestrator now owns, across both:
+//  * the walk's line memo, carried exactly as the ladder's is (it records and reads in the ladder carry's dvs mode, so
+//    FslEraseDirty, the tail skip, the node keep and the apply skip all act on it), and the walk's memo epoch, so
+//    pass 2's walk reads what pass 1's walk solved (the heuristic ladder's passes share one epoch the same way);
+//  * whether pass 1's walk committed. Then pass 2 walks too -- leafless passes 1..k* under its root cut, no root
+//    rollout, where k* = cut - T + 1 (ROOT-CUT CLAMP: a deeper pass asks the same question, its extra ply starting
+//    past the cut where neither a node nor a leaf can win by it -- the max-turns clamp's identity -- under fresh memo
+//    keys: Martyr Lifegain's pass-2 walk pass 5 cost 3-4.5k units for nothing). Pass 1's walk commit at pass c1 put
+//    its win W inside the pass-c1 window, so the cut W-1 lies inside pass k*'s window and every in-window tail a
+//    rollout pass would play out is rolled out by the walk too (p18::t_walk_edge): a pass-2 walk that completes pass
+//    k* with no win PROVES there is no win by W-1 in the full tree to depth c1 -- the rollout ladder's pass-c1 answer
+//    -- and pass 1's line stands. A win it finds is the minimum (every walked pass below refuted). A walk the budget
+//    cuts (cap, reach, truncation) ends pass 2 as a spent budget does: pass 1's line stands (K2 ran the cold rollout
+//    ladder after it and paid both). A re-pricing under a budget; at an unlimited one nothing is cut;
+//  * pass 1's root rollout. Pass 2's is the same rollout of the same state under a cut no looser, so when pass 1's
+//    completed one won only after pass 2's cut, pass 2's cannot win and is not run (exact at every budget).
+// Measured (K4, 8 bare decks x 200, seeds 18,000,000, vs heur): every game the same win turn; units Martyr Lifegain
+// 1.004 -> 0.966, Hydras 1.009 -> 0.990, the other six unchanged (no walk commit meets a pass 2 there).
+// MTG_P18_DVS_WALK=0 (or arm key `_pdw0`) turns all three off (A/B only).
+struct P18DvsWalk
+{
+    int pass = 0;                 // 1 = the two-pass search's pass 1 is running, 2 = its pass 2
+    FSLineCache cache;            // the walk's line memo, both passes
+    uint64_t epoch = 0;           // the walk's memo epoch (0 = none yet)
+    bool walk_won = false;        // pass 1: the walk committed
+    int  walk_k = 0, walk_win = 0;
+    double walk_q = 0.0;          // the q its reach pricing used
+    bool z_done = false;          // pass 1: a root rollout completed (not cut, not skipped) ...
+    int  z_win = 0, z_cut = 0;    // ... with this answer, under this cut
+};
+static thread_local P18DvsWalk* g_p18_dvs = nullptr;   // set by FullSearchLine's two-pass orchestrator around each pass
+static bool P18DvsWalkOn()
+{
+    static const bool v = EnvOn("MTG_P18_DVS_WALK", true);
+    return v && valuearm::t_deck_key.find("_pdw0") == std::string::npos;
+}
 
 TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int depth,
                                                   int max_turns, bool second_main,
@@ -127277,6 +127319,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         DevSeqDirtyKeys dirty_keys;
         DevSeqDirtyKeys* const dirty_hard_prev = g_devseq_dirty_hard_keys;
         DevSeqDirtyKeys dirty_hard_keys;   // DevSeqDeferredP2's provenance (see g_devseq_dirty_hard_keys)
+        P18DvsWalk p18_dw;                 // the sparse ladder across the two passes (see P18DvsWalk)
+        P18DvsWalk* const p18_dw_prev = g_p18_dvs;
+        const bool p18_dw_on = P18DvsWalkOn();
         g_devseq_latent_hit = false;
         g_fsl_root_cut      = cut_prev;
         const unsigned long long hard_n0 = g_devseq_hard_n;
@@ -127296,7 +127341,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             carry.dvs_mode      = (dvs_ts || DvsDirtyReadOn()) ? 1 : 0;
             g_devseq_dirty_keys = &dirty_keys;
             g_devseq_dirty_hard_keys = &dirty_hard_keys;
+            if (p18_dw_on) { p18_dw.pass = 1; p18_dw.cache.dvs_mode = carry.dvs_mode; g_p18_dvs = &p18_dw; }
             line1 = FullSearchLine(state, depth, max_turns, second_main, tt, budget, &c1);
+            g_p18_dvs = p18_dw_prev;
+            p18_dw.cache.dvs_mode = 0;
             carry.dvs_mode      = 0;
             g_devseq_dirty_meta = meta_prev;
             g_devseq_dirty      = dirty_prev;
@@ -127341,6 +127389,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             return line1;
         }
         FslEraseDirty(&carry, dirty, dirty_meta, cut2);
+        if (p18_dw_on && !p18_dw.cache.empty()) { FslEraseDirty(&p18_dw.cache, dirty, dirty_meta, cut2); }
         devseqstats::Carry(carry.size(), dirty.size());
         g_lazy_known_miss_depth = known_miss;
         g_fsl_root_cut = cut2;
@@ -127350,7 +127399,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         carry.dvs_mode = DvsTailSkipOn() ? 2 : 0;   // MTG_DEV_SEQ_TAIL_SKIP: read (see DvsTailGate)
         carry.dvs_dirty.clear();
         carry.dvs_dirty_hard.clear();
+        if (p18_dw_on)
+        { p18_dw.pass = 2; p18_dw.cache.dvs_mode = carry.dvs_mode; p18_dw.cache.dvs_dirty.clear(); p18_dw.cache.dvs_dirty_hard.clear();
+          g_p18_dvs = &p18_dw; }
         SearchLine line2 = FullSearchLine(state, c1 > 0 ? c1 : depth, max_turns, second_main, tt, budget, &c2);
+        g_p18_dvs = p18_dw_prev;
+        p18_dw.cache.dvs_mode = 0;
         carry.dvs_mode = 0;
         if (devseqstats::On())
         {
@@ -127387,6 +127441,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         return line1;
     }
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
+    // The two-pass orchestrator's sparse-ladder state (see P18DvsWalk) belongs to THIS call only: nothing it calls sees it.
+    P18DvsWalk* const p18_dvs = g_p18_dvs;
+    g_p18_dvs = nullptr;
     // A root cut (pass 2 above) belongs to THIS ladder's root only: a nested full-line search starts unbounded.
     const int root_cut = FslRootCut(max_turns);
     g_fsl_root_cut = 0;
@@ -128068,6 +128125,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     bool p18_we = true;   // the walk's in-window leaves rolled out (p18::t_walk_edge); arm key `_pwe0` = off (A/B only)
     long long p18_z_add = 0;            // the root rollout's units: they warmed pass 1's rollouts, so its gate cost carries them
     FSLineCache p18w_cache;             // keys fold the remaining depth: walk k+1 reuses walk k
+    // ...owned by the two-pass orchestrator when there is one, so pass 2's walk reads pass 1's (see P18DvsWalk).
+    FSLineCache* const p18w_use = p18_dvs != nullptr ? &p18_dvs->cache : &p18w_cache;
     // Per-depth leafless cost and leaf count, the largest seen this decision: a re-walk answered from p18w_cache costs
     // ~0 and reaches no leaf, which must not price the rollout pass it stands for at ~0.
     long long p18_wl[16] = {}, p18_wn[16] = {};
@@ -128106,8 +128165,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // depth the ladder never searches; a wrong price only moves cost (a miss is refunded), never the ladder's answer.
     // q = rollout units per leaf per simulated turn; a pass-k leaf's rollout runs from turn T+k and is cut at the
     // incumbent W (it can only matter by winning before W), so pass k is priced at l_k + n_k * q * max(0, W - T - k).
-    auto p18_walk = [&](int kfrom, int kto, long long u0, double cm2, double cm1, double q, int W) -> bool
+    // `complete` (optional): set when every pass kfrom..kto ran to completion (none cut, capped or refused) -- with no
+    // win, a refutation of every win by min(root_cut, T+kto-1); then, with `keep_complete`, nothing is refunded.
+    auto p18_walk = [&](int kfrom, int kto, long long u0, double cm2, double cm1, double q, int W,
+                        bool* complete = nullptr, bool keep_complete = false) -> bool
     {
+        bool ran_all = true;
         const double rem_ref = (budget == nullptr || budget->Unlimited()) ? 0.0
                              : static_cast<double>(budget->Remaining() + (budget->Used() - u0));
         double spent = 0.0;
@@ -128145,7 +128208,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     // whole remaining budget, 17 times in 100 games, with no win).
                     const double allow = p18_pal * static_cast<double>(budget->Limit());
                     const bool ext = (p18_pkt && k == kto) || (p18_plx && k < kto && lest <= cm1 && lest <= allow);
-                    if (!ext) { p16::Rec('W', k, 0, 0, 4, max_turns + 1, 0); break; }
+                    if (!ext) { p16::Rec('W', k, 0, 0, 4, max_turns + 1, 0); ran_all = false; break; }
                     beyond = static_cast<long long>(allow);
                 }
             }
@@ -128173,13 +128236,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                   pr = FSLineWin(state, k, max_turns, std::min(root_cut, state.turn_number + k - 1), second_main, &dtt, &dlc, budget); }
                 else
                 { pr = FSLineWin(state, k, max_turns, std::min(root_cut, state.turn_number + k - 1), second_main, tt,
-                                 &p18w_cache, budget); }
+                                 p18w_use, budget); }
                 ptrip = _pc.Tripped();
             }
             const bool hit = (cap_k > 0 && budget->Used() >= cap_k) || ptrip;
             if (cap_k > 0) { budget->SetOverrunLimit(ol_saved); }
             const int p18_ms = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - p18_t0).count());
-            if (hit || pr.truncated) { p16::Rec('W', k, (budget ? budget->Used() : 0) - w0, 0, 3, pr.win_turn, p18_ms); break; }
+            if (hit || pr.truncated) { p16::Rec('W', k, (budget ? budget->Used() : 0) - w0, 0, 3, pr.win_turn, p18_ms); ran_all = false; break; }
             const long long lk = (budget ? budget->Used() : 0) - w0,
                             nk = g_fs_leaf_evals + static_cast<long long>(g_fs_cut_prunes) - n0;
             if (k < 16 && lk > p18_wl[k]) { p18_wl[k] = lk; p18_wn[k] = nk; }
@@ -128212,9 +128275,28 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 won = true; break;
             }
         }
-        if (!won && p18_lrf && !unl) { p18_refund(u0); }
+        if (complete != nullptr) { *complete = ran_all && !won; }
+        if (!won && p18_lrf && !unl && !(keep_complete && ran_all)) { p18_refund(u0); }
         return won;
     };
+    // The lookahead's isolation (see the comments where the up-front lookahead opens them): its own memo epoch -- shared
+    // by both passes of a two-pass search (see P18DvsWalk) -- and no store into the game-level caches.
+    struct P18EpochIsolate
+    {
+        uint64_t saved; bool on;
+        explicit P18EpochIsolate(bool o, P18DvsWalk* dw) : saved(g_decision_epoch), on(o)
+        {
+            static thread_local uint64_t n = 0;
+            if (!on) { return; }
+            if (dw != nullptr && dw->epoch != 0) { g_decision_epoch = dw->epoch; return; }
+            g_decision_epoch = (1ULL << 63) | ++n;
+            if (dw != nullptr) { dw->epoch = g_decision_epoch; }
+        }
+        ~P18EpochIsolate() { if (on) { g_decision_epoch = saved; } }
+    };
+    struct P18NoStore { bool on; explicit P18NoStore(bool o) : on(o) { if (on) { ++p18::t_nostore; } }
+                        ~P18NoStore() { if (on) { --p18::t_nostore; } } };
+    bool p18_tp1 = false;               // _ptp1: the walk's trigger is the ladder's pass 1, not a root rollout (see below)
     double p18_credit = 0.0;            // ROBUST-OR-EXACT fallback: the pricing spend the heuristic ladder's gate gives back
     bool p18_rx = false;                // REFUSE-EXACT: the ladder below continues past p18_K on its own gate
     double p18_c2 = 0.0;                // REFUSE-EXACT: the priced cost of pass p18_K-1 (the heuristic gate's c_{k-1})
@@ -128272,21 +128354,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // leaves the ladder's own K (Hinata 13220014 T1: pass 1 9125 -> 246 units after the root rollout; Gods
             // 13210007 T1: a pass 3 the ladder refuses). Under their own epoch the lookahead's entries can never hit
             // after it, so a miss hands the ladder exactly the memo state it would have had.
-            struct EpochIsolate
-            {
-                uint64_t saved; bool on;
-                explicit EpochIsolate(bool o) : saved(g_decision_epoch), on(o)
-                { static thread_local uint64_t n = 0; if (on) { g_decision_epoch = (1ULL << 63) | ++n; } }
-                ~EpochIsolate() { if (on) { g_decision_epoch = saved; } }
-            } _p18_epoch(true);
+            P18EpochIsolate _p18_epoch(true, p18_dvs);
             // ...and no store into the game-level caches (the rollout game cache, the game line cache, the in-window
             // cache), whose hits are not charged as their recompute. The lookahead still READS them. NOT the workctr
             // mute: the plan / mana caches charge a hit as the recompute it stands for (priced ledger), so warming them
             // moves neither the ladder's units nor its gate, while a mute also stops the PRICED count (workctr::Inc),
             // hiding the lookahead from every priced bound -- Gods 14210035 T4: a muted leafless pass 4 ran 174 s to its
             // unit cap, with every content cache off.
-            struct NoStore { bool on; explicit NoStore(bool o) : on(o) { if (on) { ++p18::t_nostore; } }
-                             ~NoStore() { if (on) { --p18::t_nostore; } } } _p18_nostore(true);
+            P18NoStore _p18_nostore(true);
             p18_pu0 = workctr::t_priced;
             // One rollout of the root: if it already wins inside the window, walk leafless to the depth that win
             // needs before any rollout pass; else (or on a miss) the heuristic ladder from pass 1, trigger armed.
@@ -128315,7 +128390,16 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             }
             bool z_ptrip = false;
             const bool z_skip = kn.pzb && p18::t_zcuts >= 2;
-            if (!z_skip)
+            // Pass 2 of a two-pass search (see P18DvsWalk): no root rollout after a pass-1 walk commit (pass 2 walks),
+            // nor when pass 1's completed root rollout won only past this cut (this one cannot win).
+            const int  z_cutv  = std::min(root_cut, state.turn_number + depth - 1);
+            const bool dw2     = p18_dvs != nullptr && p18_dvs->pass == 2;
+            const bool p2_walk = dw2 && p18_dvs->walk_won;
+            // _ptp1: no root rollout at all -- the trigger is the ladder's own pass 1 (see the hook after it).
+            p18_tp1 = kn.tp1 && !p2_walk;
+            const bool z_none  = p2_walk || p18_tp1
+                              || (dw2 && p18_dvs->z_done && z_cutv <= p18_dvs->z_cut && p18_dvs->z_win > z_cutv);
+            if (!z_skip && !z_none)
             { // Its PRICED bound is a tenth of the decision budget, not its 1% unit cap: a rollout step costs ~5x an
               // interior unit (units-misprice), and at 1% priced the root rollout was cut on most Gods decisions.
               P18PricedCap _pc(!unl && budget != nullptr
@@ -128323,14 +128407,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
               FSLineCache zc; TranspositionTable ztt;
               // Cut at the window's edge: the trigger only asks whether a rollout wins inside the window, so the
               // rollout stops there (an extra-turn chain rolled out to its end cost Extra Turns 11x heur).
-              r0 = FSLineWin(state, 0, max_turns, std::min(root_cut, state.turn_number + depth - 1), second_main,
-                             &ztt, &zc, budget);
+              r0 = FSLineWin(state, 0, max_turns, z_cutv, second_main, &ztt, &zc, budget);
               z_ptrip = _pc.Tripped(); }
             const bool z_cut = (!unl && budget != nullptr && budget->Overrun()) || z_ptrip;
             if (!unl && budget != nullptr) { budget->SetOverrunLimit(z_ol); }
             if (z_cut) { r0.win_turn = max_turns + 1; }
-            if (!z_skip) { p18::t_zcuts = z_cut ? p18::t_zcuts + 1 : 0; }
-            p16::Rec('Z', 0, (budget ? budget->Used() : 0) - u0, 0, z_skip ? 6 : (z_cut ? 3 : 0), r0.win_turn, 0);
+            if (!z_skip && !z_none) { p18::t_zcuts = z_cut ? p18::t_zcuts + 1 : 0; }
+            if (p18_dvs != nullptr && p18_dvs->pass == 1 && !z_skip && !z_cut)
+            { p18_dvs->z_done = true; p18_dvs->z_win = r0.win_turn; p18_dvs->z_cut = z_cutv; }
+            if (!p18_tp1) { p16::Rec('Z', 0, (budget ? budget->Used() : 0) - u0, 0, z_none ? 7 : z_skip ? 6 : (z_cut ? 3 : 0), r0.win_turn, 0); }
             // r = the root rollout's units. Answered from the rollout table (0 units: an earlier decision rolled it
             // out), it prices nothing, so the walk stops at leafless pass 1 and the ladder's own costs gate the rest.
             const long long z = (budget ? budget->Used() : 0) - u0;
@@ -128338,10 +128423,30 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // A root rollout answered from cache (0 units: an earlier decision of this game rolled it out) prices
             // nothing and, on P15, led to 7 commits in 333 walks while its pass-1 walks cost Hinata / Mill / Landfall
             // Elementals 1.5-5%: no walk.
-            if (z > 0 && r0.win_turn <= state.turn_number + depth - 1)
-            { p18_done = p18_walk(1, std::max(1, r0.win_turn - state.turn_number + 1), u0, 0.0, 0.0,
-                                  static_cast<double>(z) / static_cast<double>(r0.win_turn - state.turn_number + 1),
-                                  r0.win_turn); }
+            if (p2_walk)
+            {
+                // Pass 2 after a pass-1 walk commit (see P18DvsWalk): walk leafless passes 1..depth (= pass 1's
+                // committed depth) under the root cut, on pass 1's carried walk memo. Completing pass `depth` with no
+                // win refutes every win by the root cut (the cut lies inside pass depth's window): pass 1's line
+                // stands and no rollout ladder runs.
+                // ROOT-CUT CLAMP: a pass deeper than cut - T + 1 asks the same question under the cut (its extra
+                // ply starts past the cut, where neither a node nor a leaf can win by it; the max-turns clamp's
+                // identity), so the walk stops there. A walk the budget cuts (cap, reach, truncation) ends pass 2
+                // as a spent budget does: pass 1's line stands (no cold rollout ladder after it).
+                const int kto = std::max(1, std::min(depth, root_cut - state.turn_number + 1));
+                bool comp = false;
+                const bool lrf_s = p18_lrf; p18_lrf = false;   // pass 2 ends here either way: nothing to refund for
+                p18_done = p18_walk(1, kto, u0, 0.0, 0.0, p18_dvs->walk_q, p18_dvs->walk_win, &comp, true);
+                p18_lrf = lrf_s;
+                if (!p18_done)
+                { line = SearchLine{ max_turns + 1, {} }; committed_depth = depth; p18_done = true;
+                  p16::Rec('W', kto, 0, 0, comp ? 8 : 9, max_turns + 1, 0); }
+            }
+            else if (!p18_tp1 && z > 0 && r0.win_turn <= state.turn_number + depth - 1)
+            { const double q = static_cast<double>(z) / static_cast<double>(r0.win_turn - state.turn_number + 1);
+              p18_done = p18_walk(1, std::max(1, r0.win_turn - state.turn_number + 1), u0, 0.0, 0.0, q, r0.win_turn);
+              if (p18_done && p18_dvs != nullptr && p18_dvs->pass == 1)
+              { p18_dvs->walk_won = true; p18_dvs->walk_k = committed_depth; p18_dvs->walk_win = line.win_turn; p18_dvs->walk_q = q; } }
             else if (p18_lrf && !unl && budget != nullptr) { p18_refund(u0); }
             // A miss hands the decision to the ordinary ladder from pass 1 -- or, under _pms (mode 5), to the priced
             // sampled gate below (p18_K stays 1).
@@ -129144,6 +129249,35 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // pass 2 the heuristic ladder refuses (Hinata 13220004 T1: c1 5034 -> 1965, then a 25k pass 2).
         if (pass_depth == 1 && p18_z_add > 0) { c_prev += p18_z_add; }
         pr_prev2 = pr_prev; pr_prev = workctr::t_priced - pr_before;
+        // _ptp1 (sparse ladder, arm key; A/B): THE TRIGGER IS PASS 1. The heuristic ladder runs its rollout pass 1 in
+        // every case, so its line costs the lookahead nothing (the root rollout it replaces cost ~0.5 % of units on
+        // every bare deck, K1). If that line wins inside the window at W > T, pass 1 refuted every win by T (a rollout
+        // pass sees every in-window win the leafless pass does), so leafless passes 2..W-T+1 are walked -- pass 2 gated
+        // on pass 1's real cost exactly as the ladder gates its own pass 2 -- and the first proven in-window win
+        // commits. A miss refunds the walk and the ladder continues at pass 2 on exactly its own budget and costs.
+        if (p18_tp1 && pass_depth == 1 && !p18_done && p18_K == 0 && depth >= 2 && !line.truncated
+            && line.win_turn > state.turn_number && line.win_turn <= state.turn_number + depth - 1 && line.win_turn <= root_cut)
+        {
+            p18_tp1 = false;
+            const int W = line.win_turn;
+            const long long nl = std::max(1LL, g_fs_leaf_evals - leaves_before);
+            const double q = (static_cast<double>(std::max(0LL, l_prev)) / static_cast<double>(nl))
+                           / static_cast<double>(std::max(1, W - state.turn_number));
+            bool won = false;
+            {
+                P18EpochIsolate _e(true, p18_dvs); P18NoStore _n(true);
+                p18_pu0 = workctr::t_priced;
+                const long long u0 = budget ? budget->Used() : 0;
+                won = p18_walk(2, W - state.turn_number + 1, u0, 0.0, static_cast<double>(c_prev), q, W);
+            }
+            if (won)
+            {
+                if (p18_dvs != nullptr && p18_dvs->pass == 1)
+                { p18_dvs->walk_won = true; p18_dvs->walk_k = committed_depth; p18_dvs->walk_win = line.win_turn; p18_dvs->walk_q = q; }
+                p18_done = true;
+                break;
+            }
+        }
 
         // Jump-ladder: with a measured growth ratio, extrapolate to the deepest affordable K and skip the
         // intermediate passes d(pass+1)..d(K-1) -- go straight to K. K is chosen by the SAME start-gate math
