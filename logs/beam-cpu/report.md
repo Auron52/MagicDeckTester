@@ -56,3 +56,15 @@ seeds 37.1M+. Needs this branch's binary (S arms). esk_pair.py pairs per-game/pe
 ## Open
 Opt CG into the no-main-2 kill-only identity (USER question, same as the Cyclone fleet default).
 Which arm, if any, replaces the beam is the USER's call after the A/B.
+
+## 5. A/B results (parent, 2026-11-25 03:41; build/scratch/beam-cpu/ab, 51,000 games, seeds 37.1M; d_vs_A negative = faster)
+| Row | N | NK | NR | NKR | S | SK |
+|---|---|---|---|---|---|---|
+| CG play d5b30 (A 552 ms/g) | -0.0040 (15/7) x1.62 | **-0.0095 (21/2) x1.38** | +0.0010 (13/15) x1.29 | +0.0005 (13/14) x1.19 | -0.0010 (5/3) x1.33 | -0.0020 (7/3) x1.24 |
+| CG 2HG (A 940 ms/g) | -0.0110 (16/6) x1.66 | **-0.0170 (17/1) x1.42** | -0.0080 x1.37 | -0.0100 x1.23 | -0.0120 (13/2) x1.33 | -0.0130 (14/2) x1.23 |
+| AL play d5b20 (135 ms/g) | -0.0005 x1.17 | same as N | - | - | -0.0010 x1.11 | same as S |
+| AL 2HG (194) | -0.0070 (7/0) x1.23 | same | - | - | -0.0040 x1.15 | same |
+| DS play d5b20 (129) | -0.0010 x1.26 | -0.0010 x1.21 | - | - | -0.0005 x1.16 | -0.0005 x1.14 |
+| DS 2HG (268) | -0.0030 x1.31 | -0.0030 x1.25 | - | - | -0.0030 x1.14 | -0.0020 x1.09 |
+
+AK (beam kept + kill-only, CG only, build/scratch/beam-cpu/abk): play +0.0010 (0/2) x0.98, 2HG -0.0010 (1/0) x0.97 -> neutral.
