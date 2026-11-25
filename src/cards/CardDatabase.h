@@ -5422,7 +5422,9 @@ struct CardParams
     // folded into both state keys and dominance). The LEAVES half returns it through
     // FireLeavesBattlefieldTriggers (ReturnExiledUntilLeaves) at the moment the source leaves, as a new
     // object (CR 400.7) under its OWNER. An exiled TOKEN ceases to exist (CR 111.8) and never returns.
-    // WHICH target = DecisionProvider::EtbExileNonlandTargetPick; human play board-clicks it (`target`).
+    // WHICH target is SEARCHED (TurnSolver's Oblivion Ring post-pass: one cast variant per legal target,
+    // pinned "OR<n>"); the unpinned base / put paths take DecisionProvider::EtbExileNonlandTargetPick; human
+    // play board-clicks it (`target`).
     bool                     etb_exile_nonland_until_leaves = false;
     // Sterling Grove: "Other enchantments you control have shroud." A static ability of the source,
     // read by every shroud predicate (CreatureHasShroud / LandHasShroud / PermanentHasShroud) through

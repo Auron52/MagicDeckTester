@@ -1344,7 +1344,7 @@ inline void ResolveEtbExileUpToOne(GameState& state, int controller, int source_
 inline void FireExiledOwnerIllusion(GameState& state, const Card& left);
 // Oblivion Ring (CardParams::etb_exile_nonland_until_leaves), defined beside Skyclave's resolver below.
 inline void ResolveEtbExileNonlandUntilLeaves(GameState& state, int controller, int source_number,
-                                              const std::string& src_name);
+                                              const std::string& src_name, const std::string& pin = std::string());
 inline void ReturnExiledUntilLeaves(GameState& state, const Card& left);
 // CHAMPION (CR 702.72; CardParams::champion_subtype -- Nova Chaser), defined beside
 // PermCountsAsSubtype below. The searched pick rides g_champion_pin: `entrant` = the champion's
@@ -15864,10 +15864,12 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
     }
     // Oblivion Ring: "exile another target nonland permanent" (until it leaves) -- every entry path, both
     // worlds. Erases a permanent: entered_index may be stale after it (nothing below reads it for this card).
+    // `chosen_tutor` = the cast's SEARCHED target pin ("OR<n>", TurnSolver's Oblivion Ring post-pass);
+    // empty (a put path, the unpinned base, a rollout leaf) = the provider's pick off the live board.
     if (p.etb_exile_nonland_until_leaves)
     {
         ResolveEtbExileNonlandUntilLeaves(state, controller, state.battlefield[entered_index].card.m_number,
-                                          def->card.m_name.str());
+                                          def->card.m_name.str(), chosen_tutor);
     }
     if (p.etb_tap_opp_creature)     { TapLargestOppCreature(state, controller); }
 
@@ -22545,6 +22547,22 @@ inline bool CardIsExileUntilLeaves(const Card& c)
 inline int ExileUntilLeavesSource(const Card& c) { return (kExileUntilLeavesBase - c.m_staged_expiry) >> 1; }
 inline int ExileUntilLeavesOwner(const Card& c)  { return (kExileUntilLeavesBase - c.m_staged_expiry) & 1; }
 
+// The SEARCHED target pin (Action::tutor_target / StackEntry::tutor_target): "OR<n>" = the permanent numbered
+// n. ONE encoder / parser for the enumerator (TurnSolver's Oblivion Ring post-pass), the resolver and the
+// plan signatures (#OR) -- the Archdruid's Charm AX<n> shape.
+inline std::string ExileUntilLeavesPin(int number) { return "OR" + std::to_string(number); }
+inline int ExileUntilLeavesPinTarget(const std::string& pin)
+{
+    if (pin.size() < 3 || pin[0] != 'O' || pin[1] != 'R') { return 0; }
+    int n = 0;
+    for (std::size_t i = 2; i < pin.size(); ++i)
+    {
+        if (pin[i] < '0' || pin[i] > '9') { return 0; }
+        n = n * 10 + (pin[i] - '0');
+    }
+    return n;
+}
+
 inline std::vector<int> EtbExileNonlandLegal(const GameState& state, int controller, int source_number)
 {
     std::vector<int> legal;
@@ -22560,7 +22578,7 @@ inline std::vector<int> EtbExileNonlandLegal(const GameState& state, int control
 }
 
 inline void ResolveEtbExileNonlandUntilLeaves(GameState& state, int controller, int source_number,
-                                              const std::string& src_name)
+                                              const std::string& src_name, const std::string& pin)
 {
     const std::vector<int> legal = EtbExileNonlandLegal(state, controller, source_number);
     if (legal.empty())
@@ -22569,7 +22587,19 @@ inline void ResolveEtbExileNonlandUntilLeaves(GameState& state, int controller, 
         { EmitPlayEvent(state.turn_number, "trigger", src_name + ": no legal target -- the trigger is removed"); }
         return;
     }
-    int k = ResolveProvider(state).EtbExileNonlandTargetPick(state, controller, legal);
+    // The searched pin first (a target the search branched on); a pin whose permanent is gone or no longer
+    // legal (it left, or gained shroud earlier in the plan) falls back to the unpinned pick -- that variant
+    // then only duplicates the base, which the post-apply dedup drops.
+    int k = -1;
+    if (const int pn = ExileUntilLeavesPinTarget(pin); pn > 0)
+    {
+        for (int j = 0; j < static_cast<int>(legal.size()); ++j)
+        {
+            if (state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(j)])].card.m_number == pn)
+            { k = j; break; }
+        }
+    }
+    if (k < 0) { k = ResolveProvider(state).EtbExileNonlandTargetPick(state, controller, legal); }
     if (k < 0 || k >= static_cast<int>(legal.size())) { k = 0; }
     if (g_play_loyalty_chooser && legal.size() > 1)
     {

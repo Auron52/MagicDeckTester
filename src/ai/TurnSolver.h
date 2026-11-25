@@ -3900,6 +3900,15 @@ public:
     // (liveness, then the plain payer -- a special action, no creature-ability scope -- then the shared
     // TurnFaceDownPermanentUp). No-op for a plan without one.
     static void ApplyFaceUpLeadActs(GameState& state, const std::vector<Action>& acts, GameLogger* log = nullptr);
+    // STERLING GROVE's LEAD activation (PermAbilityMode::SacTutorTop with chosen_x == 1 -- IsSacTutorTopLead):
+    // "{1}, sacrifice: tutor an enchantment to the top" BEFORE every cast, so a later enchantment cast's
+    // Enchantress's Presence draw takes the tutored card the same turn (the COMPLETENESS rule: that line is
+    // unreachable from the trailing pass). ONE body shared by ApplyPlanDirect and AIEngine::TakeTurn's
+    // pre-cast passes (liveness, the plain payer, the searched target pin, ApplyPermAbility). A lead that ran
+    // leaves no source, so the trailing pass's liveness check skips it; one it could not pay there runs in
+    // the trailing pass (never lost). No-op for a plan without one.
+    static bool IsSacTutorTopLead(const Action& a);
+    static void ApplySacTutorTopLeadActs(GameState& state, const std::vector<Action>& acts, GameLogger* log = nullptr);
     // ...and the plan's TRAIL turn-face-up sources (TurnFaceUpLate), for the cast-time largest-attacker pick's
     // look-ahead (PlanTrailFlips, SpellEffects.h). ONE builder for both worlds' PlanTrailFlipsScope; empty
     // (n == 0) for a plan without one and for every deck without a morph card.

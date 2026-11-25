@@ -4859,6 +4859,26 @@ public:
         return best;
     }
 
+    // Oblivion Ring's MANDATORY "exile another target nonland permanent" (until it leaves;
+    // CardParams::etb_exile_nonland_until_leaves) is a SEARCHED axis (NO-GREEDY): TurnSolver's Oblivion Ring
+    // post-pass emits one cast variant per target EtbExileNonlandTargets returns, each pinned "OR<n>".
+    // EtbExileNonlandTargets -- the targets the SEARCH is offered. `legal` = battlefield indices of every
+    // legal target at emission (EtbExileNonlandLegal). A provider may only RESTRICT or ORDER (an index
+    // outside `legal` is never emitted). Base: every legal target. Human play never consults it (the viewer
+    // board-clicks the full legal set at resolution).
+    virtual std::vector<int> EtbExileNonlandTargets(const GameState& s, int controller,
+                                                    const std::vector<int>& legal) const
+    { (void)s; (void)controller; return legal; }
+
+    // EtbExileNonlandTargetPick -- the target when NO searched pin rode the entry (a put path, the unpinned
+    // base cast -- which also covers a permanent that entered earlier in the same plan -- a rollout leaf
+    // beyond the horizon, or a pin whose permanent is gone). `legal` never empty; returns an index INTO
+    // `legal`. DEFAULT = the EtbDestroyTargetPick ladder (an opponent permanent first, else our least
+    // costly one). A beyond-horizon ORDER, never a pick inside the search window.
+    virtual int EtbExileNonlandTargetPick(const GameState& s, int controller,
+                                          const std::vector<int>& legal) const
+    { return EtbDestroyTargetPick(s, controller, legal); }
+
     // EtbDestroyTargetPick -- a MANDATORY "When this enters, destroy target <X>" trigger whose legal
     // set (BOTH sides, CR 603.3d: a trigger with a legal target must take one) can be only OUR OWN
     // permanents against the goldfish: Shriekmaw (nonartifact, nonblack creature) and Acidic Slime
@@ -4872,17 +4892,6 @@ public:
     // one: a creature/land before a noncreature nonland permanent, tapped before untapped, then the
     // lowest mana value, then the lowest m_number. PreventDamageProvider refines the own-side order
     // (never a lifegain engine / Manabarbs while anything else is legal).
-    // EtbExileNonlandTargetPick -- Oblivion Ring's MANDATORY "exile another target nonland permanent"
-    // (until it leaves; CardParams::etb_exile_nonland_until_leaves). `legal` = battlefield indices, both
-    // sides, never empty; returns an index INTO `legal`. A RESOLUTION pick (every entry path). DEFAULT =
-    // the EtbDestroyTargetPick ladder: an OPPONENT permanent when there is one (a passive opponent's inert
-    // spawn costs us nothing -- a dominance argument), else our own least costly one (creature before a
-    // noncreature, tapped before untapped, lowest mana value, lowest m_number). The own-side order is a
-    // ranking, not a proof: PROVISIONAL, USER-owned (ledger). Human play board-clicks the full legal set.
-    virtual int EtbExileNonlandTargetPick(const GameState& s, int controller,
-                                          const std::vector<int>& legal) const
-    { return EtbDestroyTargetPick(s, controller, legal); }
-
     virtual int EtbDestroyTargetPick(const GameState& s, int controller,
                                      const std::vector<int>& legal) const
     {

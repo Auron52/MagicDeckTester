@@ -205,7 +205,12 @@ TEST_CASE("Enchantress's Presence: an enchantment cast draws in BOTH worlds; its
     REQUIRE(cast != nullptr);
     EeCheckWorlds(s, *cast, [](const GameState& g) {
         CHECK(EeIndex(g, "Exploration", 0) >= 0);
-        CHECK(EeInHand(g, "Forest"));                         // the top card was drawn
+        // The top card (a Forest) was drawn. The rollout may then play it off Exploration's extra drop (its
+        // mid-turn hand-entry playout); the committed-plan executor keeps it in hand -- either is a draw.
+        int forests = 0;
+        for (const Permanent& q : g.battlefield) { if (q.card.m_name.str() == "Forest") { ++forests; } }
+        CHECK((EeInHand(g, "Forest") || forests == 4));
+        CHECK(g.players[0].library.size() == 8);
         CHECK(g.players[0].cards_drawn_this_turn == 1);
     });
 
@@ -269,6 +274,51 @@ TEST_CASE("Oblivion Ring CAST exiles the opponent's spawn in BOTH worlds, linked
         CHECK(EeIndex(h, "2/2 Creature", 1) >= 0);
         CHECK(h.exile.empty());
     });
+}
+
+TEST_CASE("Oblivion Ring target is a SEARCHED axis: one cast variant per legal target, each pinned, both worlds")
+{
+    GameState s = EeBoard(2, 2);
+    EeSpawn(s, 2, 700001);
+    EePut(s, "Exploration", 40);
+    s.players[0].hand.push_back(EeZone(kORing, 30));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    // The base (the live-board pick) plus one variant per legal target -- distinct plans (#OR keeps the
+    // dedup from folding them).
+    const TurnSolver::Plan* base = EeFindPlan(plans, Action::Kind::CastFromHand, kORing);
+    const TurnSolver::Plan* opp  = EeFindPlan(plans, Action::Kind::CastFromHand, kORing, ExileUntilLeavesPin(700001));
+    const TurnSolver::Plan* ours = EeFindPlan(plans, Action::Kind::CastFromHand, kORing, ExileUntilLeavesPin(40));
+    REQUIRE(base != nullptr);
+    REQUIRE(opp != nullptr);
+    REQUIRE(ours != nullptr);
+    CHECK(ExileUntilLeavesPinTarget(ExileUntilLeavesPin(40)) == 40);
+    CHECK(ExileUntilLeavesPinTarget("AX40") == 0);
+    // The pinned OWN target is what both worlds exile (not the provider's opponent-first pick).
+    EeCheckWorlds(s, *ours, [](const GameState& g) {
+        const int ri = EeIndex(g, kORing, 0);
+        REQUIRE(ri >= 0);
+        CHECK(EeIndex(g, "Exploration", 0) < 0);
+        CHECK(EeIndex(g, "2/2 Creature", 1) >= 0);
+        CHECK(g.battlefield[ri].linked_exile_number == 40);
+    });
+    EeCheckWorlds(s, *opp, [](const GameState& g) {
+        CHECK(EeIndex(g, "2/2 Creature", 1) < 0);
+        CHECK(EeIndex(g, "Exploration", 0) >= 0);
+    });
+    // A pin whose permanent is gone falls back to the live-board pick (the opponent's spawn).
+    GameState z = EeBoard(2, 2);
+    EeSpawn(z, 2, 700001);
+    EePut(z, kORing, 30);
+    ResolveEtbExileNonlandUntilLeaves(z, 0, 30, kORing, ExileUntilLeavesPin(999));
+    CHECK(EeIndex(z, "2/2 Creature", 1) < 0);
+
+    // ONE legal target -> no variant (the base takes it).
+    GameState t = EeBoard(2, 2);
+    EeSpawn(t, 2, 700001);
+    t.players[0].hand.push_back(EeZone(kORing, 30));
+    const std::vector<TurnSolver::Plan> plans1 = TurnSolver::EnumerateMainPlans(t, true);
+    CHECK(EeFindPlan(plans1, Action::Kind::CastFromHand, kORing) != nullptr);
+    CHECK(EeFindPlan(plans1, Action::Kind::CastFromHand, kORing, ExileUntilLeavesPin(700001)) == nullptr);
 }
 
 TEST_CASE("Oblivion Ring with no opponent target MUST exile one of ours; it returns under us; Grove shroud is honoured")
@@ -380,4 +430,51 @@ TEST_CASE("Sterling Grove upkeep window: an option per candidate, keyed on the s
     GameState t = EeBoard(0, 0);
     EePut(t, kGrove, 42);
     for (const auto& o : GameEngine::UpkeepTutorOptions(t)) { CHECK(o.first != 42); }
+}
+
+// COMPLETENESS (2026-11-25): "activate Sterling Grove (tutor an enchantment to the top), THEN cast an enchantment
+// so Enchantress's Presence draws it" is ONE plan of the same main phase -- the LEAD twin of the activation
+// (SacTutorTop, chosen_x == 1) runs in the pre-cast pass of BOTH worlds. EnumerateMainPlans is the root
+// enumeration every budget draws from (an unlimited budget explores all of it), so the line is findable at
+// --budget-ms 0. The trailing form of the same pair still draws the OLD top card (the order the lead exists for).
+TEST_CASE("Sterling Grove LEAD activation: tutor to top, then an Aura cast -- Presence draws the tutored card the same turn")
+{
+    GameState s = EeBoard(2, 0);                                // {1} for the Grove + {G} for Wild Growth
+    EePut(s, kGrove, 42);
+    EePut(s, kPresence, 50);
+    s.players[0].hand.push_back(EeZone("Wild Growth", 31));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    auto find_pair = [&](int lead) -> const TurnSolver::Plan*
+    {
+        for (const TurnSolver::Plan& p : plans)
+        {
+            if (p.actions.size() != 2) { continue; }
+            bool act = false, cast = false;
+            for (const Action& a : p.actions)
+            {
+                if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacTutorTop
+                    && a.tutor_target.str() == kORing && a.chosen_x == lead) { act = true; }
+                if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Wild Growth") { cast = true; }
+            }
+            if (act && cast) { return &p; }
+        }
+        return nullptr;
+    };
+    const TurnSolver::Plan* lead  = find_pair(1);
+    const TurnSolver::Plan* trail = find_pair(0);
+    REQUIRE(lead != nullptr);
+    REQUIRE(trail != nullptr);
+    CHECK(TurnSolver::IsSacTutorTopLead(lead->actions.front()) != TurnSolver::IsSacTutorTopLead(lead->actions.back()));
+    EeCheckWorlds(s, *lead, [](const GameState& g) {
+        CHECK(EeIndex(g, kGrove, 0) < 0);
+        CHECK(EeIndex(g, "Wild Growth", 0) >= 0);
+        CHECK(EeInHand(g, kORing));                             // the Presence draw took the tutored card
+        CHECK_FALSE(EeInHand(g, "Forest"));
+    });
+    EeCheckWorlds(s, *trail, [](const GameState& g) {
+        CHECK(EeIndex(g, kGrove, 0) < 0);
+        CHECK(EeInHand(g, "Forest"));                           // cast first: the old top card
+        REQUIRE_FALSE(g.players[0].library.empty());
+        CHECK(g.players[0].library.front().m_name.str() == kORing);
+    });
 }

@@ -104,8 +104,8 @@ lock has removed unless floated). The implementer must model the targeting legal
 |---|---|---|---|---|---|
 | Sunpetal Grove | 1 | `produces` G/W, `checkland_subtypes` Forest/Plains | shared `LandWouldEnterTapped` | none | -- |
 | Enchantress's Presence | 2 | `draw_on_cast_types` ["Enchantment"] | `FireOnCastTriggers` (both cast paths) draws via `TrickDraw`; site-10 put-in-hand fan reads the same predicate (`CastTypeDrawWatcherMatches`) | none (mandatory draw) | -- |
-| Oblivion Ring | 2/3 | `etb_exile_nonland_until_leaves` | shared enter cascade (`ResolveEtbExileNonlandUntilLeaves`, every entry path); LTB in `FireLeavesBattlefieldTriggers` (`ReturnExiledUntilLeaves`); link = `kExileUntilLeavesBase` marker + `linked_exile_number` (already folded) | A: `target` (board click, full legal set) | **PROVISIONAL Q1** below |
-| Sterling Grove | 3 | `grants_other_enchantments_shroud`, `sac_tutor_top_cost` {1}, `sac_tutor_top_types` [Enchantment]; derived `CardDefinition::activated_tutor`; deck stamp `deck_has_enchantment_shroud` | shroud: `EnchantmentShroudFromGrant` inside `LandHasShroud` / `CreatureHasShroud` / new `PermanentHasShroud` (so Aura host selection, equip/aura creature targeting and O-Ring all honour it); hook for EE = `PermanentIsEnchantmentNow`. Activation: new `PermAbilityMode::SacTutorTop` (CollectActions emission one variant per `RankedTutorCandidates` name; pin = `SacNamedPin.target` in BOTH trailing passes; `ApplyPermAbility` -> `ResolveSacTutorTop`; site-9 key + `CardHasPostEntryActivation`); upkeep window: `GameEngine::UpkeepTutorOptions` battlefield half + `AIEngine::CastUpkeepTutor` battlefield dispatch (shared by both worlds) + the BoundaryFan `tutor_` liveness + the human-play upkeep prompt | A: `main_phase` plan variants (tutor target); upkeep = the tutor chooser prompt | **PROVISIONAL Q2** below |
+| Oblivion Ring | 2/3 | `etb_exile_nonland_until_leaves` | shared enter cascade (`ResolveEtbExileNonlandUntilLeaves`, every entry path); LTB in `FireLeavesBattlefieldTriggers` (`ReturnExiledUntilLeaves`); link = `kExileUntilLeavesBase` marker + `linked_exile_number` (already folded) | A: `target` (board click, full legal set) | -- (target SEARCHED, D1 below) |
+| Sterling Grove | 3 | `grants_other_enchantments_shroud`, `sac_tutor_top_cost` {1}, `sac_tutor_top_types` [Enchantment]; derived `CardDefinition::activated_tutor`; deck stamp `deck_has_enchantment_shroud` | shroud: `EnchantmentShroudFromGrant` inside `LandHasShroud` / `CreatureHasShroud` / new `PermanentHasShroud` (so Aura host selection, equip/aura creature targeting and O-Ring all honour it); hook for EE = `PermanentIsEnchantmentNow`. Activation: new `PermAbilityMode::SacTutorTop` (CollectActions emission one variant per `RankedTutorCandidates` name; pin = `SacNamedPin.target` in BOTH trailing passes; `ApplyPermAbility` -> `ResolveSacTutorTop`; site-9 key + `CardHasPostEntryActivation`); upkeep window: `GameEngine::UpkeepTutorOptions` battlefield half + `AIEngine::CastUpkeepTutor` battlefield dispatch (shared by both worlds) + the BoundaryFan `tutor_` liveness + the human-play upkeep prompt | A: `main_phase` plan variants (tutor target); upkeep = the tutor chooser prompt | -- (lead activation, D2 below) |
 
 Provider: `EnchantedEveningProvider` (empty `DeckProvider` derivation, `Certificate()` = NotAssessed), routed FIRST on
 `grants_other_enchantments_shroud || draw_on_cast_types` (lock-cluster params to be OR-ed in by its implementer).
@@ -116,19 +116,30 @@ Vigor) should consult `PermanentHasShroud`; (c) any leave path it adds (Wave's e
 creature dying) must reach `FireLeavesBattlefieldTriggers` so O-Ring's linked card returns; (d) under Opalescence a
 Grove is a creature: `SacrificeSourceAsCost` already routes it through the creature death chokepoint.
 
-## Open USER questions
+## Done items (formerly provisional Q1 / Q2 -- settled by standing CLAUDE.md rules, not USER questions)
 
-* **Q1 (PROVISIONAL, Oblivion Ring own-target pick).** The ETB is mandatory; with no opponent nonland permanent (2 of 10
-  game indices schedule no spawn) it must exile one of OURS. Which one is a resolution pick
-  (`DecisionProvider::EtbExileNonlandTargetPick`, default = the Acidic Slime ladder: creature first, tapped first,
-  lowest MV), not a searched axis; whether to cast O-Ring at all IS searched. Default taken: the ladder. Sign-off, or
-  ask for a searched target axis.
-* **Q2 (PROVISIONAL, Sterling Grove timing).** Modelled timings: a main-phase activation (searched, one variant per
-  candidate) and the upkeep window before the draw (searched). An activation at the opponent's end step is folded
-  into the main-phase one; the only difference against the goldfish is that a Grove animated by Opalescence and
-  activated in main 1 does not attack that turn. Also not offered: activating it in main 1 BEFORE the plan's casts
-  (the trailing-activation pass runs after casts), so "tutor to top, then cast an Aura so Presence draws it" needs
-  the next turn or a breakpoint continuation. Sign-off, or ask for a lead-position activation.
+* **D1 (was Q1) -- Oblivion Ring's target is a SEARCHED axis** (settled by the NO-GREEDY rule: a provider may only
+  restrict / order, never pick one of several without branching). TurnSolver's Oblivion Ring post-pass (beside
+  Archdruid's Charm's) emits, in the decision space, one cast variant per legal target at emission
+  (`EtbExileNonlandLegal`: both sides, shroud / hexproof honoured), pinned on `tutor_target` "OR<n>"
+  (`ExileUntilLeavesPin`; `#OR` in BOTH plan signatures keeps the dedup lossless). The provider may only
+  restrict / order them (`DecisionProvider::EtbExileNonlandTargets`, default every legal target). The unpinned base
+  keeps the live-board pick (`EtbExileNonlandTargetPick`, the old ladder) -- the route to a permanent that enters
+  earlier in the same plan, every put path, and the rollout leaves beyond the horizon; one legal target = no
+  variant. A pin whose permanent is gone falls back to the base pick. Human play board-clicks the full legal set at
+  resolution. Unit test: "Oblivion Ring target is a SEARCHED axis".
+* **D2 (was Q2) -- Sterling Grove's same-turn "tutor to top, then cast an enchantment so Presence draws it"** (settled
+  by the COMPLETENESS rule: it was unfindable at any budget, because the trailing pass runs after every cast). Each
+  main-phase SacTutorTop variant now has a LEAD twin (`chosen_x == 1`, `TurnSolver::IsSacTutorTopLead`) in the
+  decision space, applied before every cast by ONE body in both worlds (`TurnSolver::ApplySacTutorTopLeadActs`,
+  called beside the morph lead in ApplyPlanDirect's and AIEngine::TakeTurn's pre-cast passes). Both twins sit in
+  the source's one activation family (a plan holds at most one); chosen_x and the tutor target (`#F`, now tagged
+  for SacTutorTop -- before this every candidate folded onto the first) keep them apart in every signature. Unit
+  test: "Sterling Grove LEAD activation" (the plan is in the root enumeration, so it is findable at
+  `--budget-ms 0`; both worlds draw the tutored card). **Note for the lock-cluster implementer:** the
+  opponent-end-step activation (tutor at their end step, draw it in our draw step) is NOT built -- the upkeep window
+  (before the draw) is today's nearest timing, but it spends THIS turn's mana where the end-step activation spends
+  last turn's untapped mana; build it on the end-step window Force of Vigor's pitch needs.
 
 ## Approved deferrals
 

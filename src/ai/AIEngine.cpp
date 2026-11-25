@@ -8891,7 +8891,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     LinePayAuditGuard _line_pay_audit(state, plan.actions, m_in_rollout, &plan.breakpoint_actions);
     // MORPH -- the plan's LEAD turn-face-up actions, before every cast (lockstep twin of ApplyPlanDirect's).
     if (!(plan.human_sequence && plan.human_action_order && plan.searched_order && HumanPlayActive()))
-    { TurnSolver::ApplyFaceUpLeadActs(state, plan.actions, m_logger); }
+    {
+        TurnSolver::ApplyFaceUpLeadActs(state, plan.actions, m_logger);
+        // Sterling Grove's LEAD activations (SacTutorTop, chosen_x == 1) -- twin of ApplyPlanDirect's.
+        TurnSolver::ApplySacTutorTopLeadActs(state, plan.actions, m_logger);
+    }
     if (plan.land_search_act_slot == 0 && !exec_ls_act_done)
     {
         TurnSolver::ApplyLandSearchActs(state, plan.actions, m_logger);

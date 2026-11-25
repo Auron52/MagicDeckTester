@@ -15385,6 +15385,29 @@ void TurnSolver::ApplyFaceUpLeadActs(GameState& state, const std::vector<Action>
     }
 }
 
+bool TurnSolver::IsSacTutorTopLead(const Action& a)
+{
+    return a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacTutorTop
+        && a.chosen_x == 1;
+}
+
+void TurnSolver::ApplySacTutorTopLeadActs(GameState& state, const std::vector<Action>& acts, GameLogger* log)
+{
+    if (!state.deck_has_enchantment_shroud) { return; }   // the Sterling Grove deck stamp (one bool test)
+    const int me = state.active_player_index;
+    for (const Action& a : acts)
+    {
+        if (!IsSacTutorTopLead(a)) { continue; }
+        const SacNamedPinScope _sac_named_pin(0, &a.tutor_target.str());
+        if (!PermAbilitySourceLive(state, me, a.sac_source_id, a.ability_mode)) { continue; }
+        if (!TapForCostDirect(state, a.cost, /*for_creature=*/false)) { continue; }
+        if (g_line_hold_has_acts) { SubManaCost(g_line_unpaid_cost, a.cost); }   // joint pay's act hold (ManaPayment.h)
+        ApplyPermAbility(state, me, a.sac_source_id, a.ability_mode);
+        if (log != nullptr)
+        { log->LogAbility(a.sac_source_id, a.card_name.str(), PermAbilityLabelFor(a.ability_mode, a.def), false); }
+    }
+}
+
 void TurnSolver::FaceUpInlineTrailDue(const GameState& state, const std::vector<Action>& acts, std::vector<Action>& due)
 {
     due.clear();
@@ -52905,6 +52928,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { if (std::find(uniq.begin(), uniq.end(), t) == uniq.end()) { uniq.push_back(t); } }
                     if (HumanPlayActive()) { uniq.push_back(kTutorDeclineTarget); }
                     if (uniq.size() == 1 && uniq.front() == kTutorDeclineTarget) { uniq.clear(); }
+                    // ...and, in the DECISION space, a LEAD twin of each (chosen_x = 1: the pre-cast pass,
+                    // TurnSolver::ApplySacTutorTopLeadActs) -- "tutor to top, THEN cast an enchantment so
+                    // Enchantress's Presence draws it" in the same turn (COMPLETENESS: the trailing pass runs
+                    // after every cast, so that line was unfindable at any budget). Both are members of the
+                    // source's ONE activation family (ActivationFamilyKey): a plan holds at most one, and
+                    // chosen_x keeps them apart in every signature. Human play orders its own steps (no
+                    // twin); rollout leaves keep the trailing form (the beyond-horizon playout).
+                    const bool lead_space = (g_search_candidate_enum || g_condemn_root_turn < 0)
+                                         && !HumanPlayActive();
                     for (const std::string& name : uniq)
                     {
                         Action a;
@@ -52917,6 +52949,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.tutor_target   = name;
                         a.cost           = cost;
                         a.is_noncreature = true;
+                        if (lead_space && name != kTutorDeclineTarget)
+                        {
+                            Action lead = a;
+                            lead.chosen_x = 1;
+                            actions.push_back(std::move(a));
+                            actions.push_back(std::move(lead));
+                            continue;
+                        }
                         actions.push_back(std::move(a));
                     }
                 }
@@ -57594,6 +57634,56 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (q.card.m_number == 0 || !ModalExileArtEnchLegal(q)) { continue; }
                 Action v = actions[i];               // copy BEFORE push_back (reallocation)
                 v.tutor_target = ModalExileArtEnchPin(q.card.m_number);
+                actions.push_back(std::move(v));
+            }
+        }
+    }
+
+    // OBLIVION RING post-pass (Enchanted Evening, 2026-11-25): "When this enchantment enters, exile another
+    // target nonland permanent" is MANDATORY and targets EITHER side, so WHICH permanent is a real decision
+    // (an opponent's body, or -- when it has none -- one of OURS). NO-GREEDY: in the DECISION space each
+    // legal target at emission is a cast variant pinned on tutor_target "OR<n>" (#OR in both plan
+    // signatures keeps the dedup lossless); the provider may only restrict/order
+    // (DecisionProvider::EtbExileNonlandTargets). The base keeps an EMPTY pin = the provider's pick off the
+    // LIVE board at resolution -- the only route to a permanent that enters earlier in the same plan -- so
+    // a single legal target needs no variant (the base takes it), and a pinned variant whose permanent is
+    // gone duplicates the base (dropped by the post-apply dedup). A REMAND variant never resolves: no
+    // variants. Same decision-space gate and human-play rule as the Witness post-pass: rollout leaves keep
+    // the base (the beyond-horizon pick); human play board-clicks the full legal set at resolution.
+    // Gated on the param.
+    {
+        const bool or_decision_space = (g_search_candidate_enum || g_condemn_root_turn < 0)
+                                    && !HumanPlayActive();
+        const std::size_t or_n = actions.size();
+        bool or_built = false;
+        std::vector<int> or_nums;
+        for (std::size_t i = 0; or_decision_space && i < or_n; ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand || actions[i].def == nullptr
+                || !actions[i].def->params.etb_exile_nonland_until_leaves
+                || !actions[i].tutor_target.str().empty()) { continue; }
+            if (!actions[i].remand_by.empty() && actions[i].remand_chain_by.empty()
+                && !actions[i].def->params.cant_be_countered) { continue; }
+            if (!or_built)
+            {
+                const int me = state.active_player_index;
+                const std::vector<int> legal = EtbExileNonlandLegal(state, me, /*source_number=*/0);
+                if (legal.size() >= 2)
+                {
+                    for (int ti : ResolveProvider(state).EtbExileNonlandTargets(state, me, legal))
+                    {
+                        if (std::find(legal.begin(), legal.end(), ti) == legal.end()) { continue; }   // restrict only
+                        const int num = state.battlefield[static_cast<std::size_t>(ti)].card.m_number;
+                        if (num > 0 && std::find(or_nums.begin(), or_nums.end(), num) == or_nums.end())
+                        { or_nums.push_back(num); }
+                    }
+                }
+                or_built = true;
+            }
+            for (int num : or_nums)
+            {
+                Action v = actions[i];               // copy BEFORE push_back (reallocation)
+                v.tutor_target = ExileUntilLeavesPin(num);
                 actions.push_back(std::move(v));
             }
         }
@@ -83725,6 +83815,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
         }
         TurnSolver::ApplyFaceUpLeadActs(state, plan.actions);
+        // Sterling Grove's LEAD activations (SacTutorTop, chosen_x == 1), at the same point. Executor twin:
+        // AIEngine::TakeTurn's pre-cast pass. No-op for a plan without one.
+        TurnSolver::ApplySacTutorTopLeadActs(state, plan.actions);
         for (std::size_t i = 0; i < lead_live.size(); ++i)
         {
             const Action& a = plan.actions[i];
@@ -87520,6 +87613,10 @@ static bool DiesTuckTagLive(const std::vector<Action>& acts, const Action& act)
 // ledger). Shared by both signature builders.
 static bool TapTutorPutTargetTagged(const Action& act)
 {
+    // Sterling Grove (SacTutorTop): WHICH enchantment goes on top is the activation's searched axis -- one
+    // Action per candidate, so without the tag every candidate folded onto the first (the Maze's End lesson).
+    if (act.kind == Action::Kind::ActivatePermAbility && act.ability_mode == Action::AbilityMode::SacTutorTop)
+    { return true; }
     if (act.kind != Action::Kind::ActivatePermAbility || act.ability_mode != Action::AbilityMode::TapTutorPut)
     { return false; }
     const CardDefinition* d = act.def ? act.def : CardDatabase::Instance().LookupInterned(act.card_name);
@@ -87631,6 +87728,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.etb_return_gy_to_hand) { w.Put("#G"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_destroy_nonbasic_land_optional) { w.Put("#WO"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_return_equipment_from_gy) { w.Put("#FE"); w.Put(act.tutor_target); }
+                if (d && d->params.etb_exile_nonland_until_leaves) { w.Put("#OR"); w.Put(act.tutor_target); }   // Oblivion Ring target
                 // (|| sacfod_credit: a fodder-credited plan's land-Aura host never folds into another host --
                 // see TurnSolver::Plan::sacfod_credit; lockstep with plan_signature_legacy.)
                 if (d && d->params.is_land_aura && act.enchant_target > 0 && (host_sig || p.sacfod_credit)) { w.Put("#H"); w.Int(act.enchant_target); }
@@ -93424,6 +93522,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         // (one cast variant per distinct graveyard Equipment name + the unpinned
                         // resolution pick) -- the #G precedent. Gated on the param.
                         if (cd && cd->params.etb_return_equipment_from_gy) { k += "#FE"; k += act.tutor_target.str(); }
+                        // Oblivion Ring: WHICH permanent the mandatory ETB exiles (one cast variant per legal
+                        // target + the unpinned live-board pick) -- the #AX precedent. Gated on the param.
+                        if (cd && cd->params.etb_exile_nonland_until_leaves) { k += "#OR"; k += act.tutor_target.str(); }
                         // LAND-AURA HOST (MTG_EDF_AURA_HOST_SIG, default ON; 2026-09-15): WHICH land
                         // carries a Wild Growth / Trace of Abundance is a real decision, not a
                         // sub-decision the host heuristic can be trusted with -- a karoo in the same
