@@ -11,6 +11,9 @@ class AIEngine;
 // this to the trial's id right before a bottom trial's playout; PlayOutFrom takes it (resetting it
 // to 0, so a rollout NESTED in the trial is not traced) and prints the trial's per-turn work units.
 inline thread_local long long t_bottom_trial_trace = 0;
+// MTG_FREE_TURN_EE_FAIR_LOG (measurement only): true while RunGame plays the REAL game (after the mulligan), so the
+// [ee-fair] log can tell it from a bottom trial's playout of the same seed. Read by that log line alone.
+inline thread_local bool t_ee_fair_real_game = false;
 
 class GameEngine
 {

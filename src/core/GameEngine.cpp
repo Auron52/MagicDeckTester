@@ -134,7 +134,9 @@ int GameEngine::RunGame(GameState& state, int max_turns)
         m_logger->LogOpeningHand(nums, names);
     }
 
+    t_ee_fair_real_game = true;    // MTG_FREE_TURN_EE_FAIR_LOG only (the real game, not a bottom trial)
     int win_turn = PlayOut(state, max_turns);
+    t_ee_fair_real_game = false;
     // A voided game has no result to report or to learn from, so OnGameEnd is skipped too -- it
     // drives the fidelity oracle, which would otherwise be taught from a truncated game.
     if (gamework::Abandoned()) { return kAbandoned; }
@@ -417,8 +419,11 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
             {
                 std::string card;
                 const int veto = eefair::Veto(state, &card);
-                std::fprintf(stderr, "[ee-fair] seed=%llu round=%d raw=%d board_lock=%d veto=%d card=%s credited=%d "
-                             "virt=%d spent=%d\n", static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                std::fprintf(stderr, "[ee-fair] job=%s gi=%d real=%d fair=%d seed=%llu round=%d raw=%d board_lock=%d "
+                             "veto=%d card=%s credited=%d virt=%d spent=%d\n",
+                             escstats::t_job != nullptr ? escstats::t_job : "-", escstats::t_gi,
+                             t_ee_fair_real_game ? 1 : 0, FreeTurnEeFairOn() ? 1 : 0,
+                             static_cast<unsigned long long>(state.game_seed), state.turn_number,
                              state.RawRound(), board ? 1 : 0, veto, card.empty() ? "-" : card.c_str(),
                              state.pending_free_turn ? 1 : 0,
                              static_cast<int>(std::popcount(state.opp_virtual_board[0]) + std::popcount(state.opp_virtual_board[1])),
