@@ -715,3 +715,43 @@ D20 (k20, HO3's seeds): `_pabk` (consistent aspiration: pass k >= 2 bounded only
 
 **`_pce` (k21, commit b59c18710): no price when pass 1's win is at the window edge (W >= T + depth - 1).** HO4 (FRESH
 seeds 21M x 600 x 8; heur, m4, m4_pce in one batch; `build_k21.sh`) running.
+
+#### HO4 + D22 + verdict (2026-11-25)
+
+HO4 (FRESH seeds 21M x 600 x 8, mtg_k21, heur in the SAME batch): m4 (= the default) 0.966c 0.976u, 3 earlier / 0 later
+(all Maze); m4_pce 0.971c 0.979u, 3 / 0. Worst deck Stuffy (m4 1.003c 0.997u). D22 (k22, HO4's seeds): `_pck` (price every
+bounded pass) 0.968c, Stuffy 0.993u but Martyr 0.997u, and MORE deeper commits elsewhere (pricing c1 while c2 is unpriced
+shrinks c2/c1: Shadowborn 29 -> 64, Mill 6 -> 23); `_pcke` similar. Stuffy's deeper drift (`MTG_P17_LEDGER`, `RS/`): passes
+answered at the ROOT by the game line cache (2 nodes, memo/glc win) from a previous decision searched at the same cut --
+the ratio then reads ~1 and admits a pass heur's (cut-mismatched, re-searched) ratio refuses; it also runs the other way
+(heur's pass 2 cache-cheap -> a 85x ratio refuses a pass ours admits). Exact depth parity is not reachable by pricing.
+Side note: `_pab1`'s previous-decision bound keys on the game seed, which mulligan trial games share (sound: a failed bound
+is searched again, `A1`; not changed).
+
+**VERDICT -- the default (k19, `_ptc` + `_pab` `_pab1` `_pabc`) meets the bar on the two held-out samples pooled (HO3 +
+HO4, 1200 games / deck, heur in each batch):**
+
+| deck | units | CPU | earlier / later |
+|---|---|---|---|
+| Hydras | 0.973 | 0.976 | 0 / 0 |
+| Martyr Lifegain | 0.986 | 0.982 | 0 / 0 |
+| Maze's End | 0.984 | 0.967 | 3 / 1 |
+| Merfolk Turns | 0.984 | 0.977 | 0 / 0 |
+| Mill | 0.981 | 0.982 | 0 / 0 |
+| Sea Creatures | 0.892 | 0.890 | 0 / 0 |
+| Shadowborn Apostle | 0.917 | 0.905 | 1 / 1 |
+| Stuffy Doll | 0.988 | 0.993 | 1 / 0 |
+| pooled | 0.975 | 0.962 | 5 / 2 |
+
+Every later game recovers at d8 b0 with heur's digest (Maze 227, Shadowborn 454). `_pce`, `_pck`, `_pcke`, `_pabk`, `_xpc`
+stay inert A/B knobs (none better on held-out data). No shipped deck runs mode 4, so the default changes no shipped play.
+
+#### Checkpoint 2026-11-25 ~11:00 UTC (Claude) -- LANDING
+Branch `wip/p18l-claude` = wip/p18k-claude (55 commits) rebased cleanly onto origin/phase-1-2-deck-analyzer f9e182ad4
+(LINE_KEEP_CRIT on, Creature Burn leaf). NOT yet rebuilt on the rebased tree. Next, in order:
+1. `./build.sh` (heavy lock) + unit tests on the rebased tree; smoke should be byte-identical (no deck on mode 4).
+2. Run phase E.8 (`bash scripts/valueleaf.sh sparse decks/<D> ...`, `scripts/sparse_ladder_stage.py`) on the decks that are
+   past their value-leaf run and ship a heuristic-ladder shape; it installs adopted sparse sidecars uncommitted.
+3. Accept those decks' smoke + regression GT (`regression.sh <mode> --accept`, check_gt_logs), then ONE batched landing via
+   `scripts/push_queue.py join` / `wait` / `land` (Release only under the lease, MTG_PGO=0).
+4. Open USER question (pending results): `_pab1` for every mode, heur included.
