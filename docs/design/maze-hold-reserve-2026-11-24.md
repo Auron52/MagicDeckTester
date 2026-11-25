@@ -220,7 +220,7 @@ Slower games, each re-run at d8 b0 (both arms) and at play settings with `MTG_LI
   1126, 1598, 1942.
 - play gi 4785 (seed 31104785) does not: d8 b0 off 5 / on 6. The arms diverge at T2, with one green source (Black
   Dragon Gate): OFF casts Exploration, then two Manabonds on T3; ON casts Manabond. The divergence is the same at play
-  and at d8 b0. MTG_NC_SEARCH=1 d8 b0: running at this commit (see the next commit).
+  and at d8 b0. MTG_NC_SEARCH=1 d8 b0: off 6 / on 6, identical games (same digest). Without clairvoyance OFF also wins T6, so its T5 was clairvoyant luck. This is a clairvoyant loss, not a hold-up defect.
 - The line-keep interaction: hold-up ON skips the line-keep rung for any payment with a hold-up target
   (`!phu_pay_first`), so the A/B measures both effects together. None of the 17 traces to it. With the rung's
   `MTG_LINE_KEEP_CRIT=0` in both arms, every one keeps the same off/on gap.
