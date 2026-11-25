@@ -298,9 +298,12 @@ TEST_CASE("Parallax Wave activation: one searched plan per target class; a token
     const std::vector<int> targets = L4WaveTargets(plans, 60);
     CHECK(targets.size() == 2);
     CHECK(std::find(targets.begin(), targets.end(), 700003) != targets.end());
-    bool idle = false;   // "do nothing more" stays offered
-    for (const TurnSolver::Plan& p : plans) { if (p.actions.empty()) { idle = true; } }
-    CHECK(idle);
+    // "Do nothing more" stays offered: the enumeration holds only the activations (the drop is spent, no hand), and
+    // every search host appends the pass when the list has none (IdlePassMissing -> AppendIdlePassAxes); element 0
+    // of that pass is apply-empty.
+    const std::vector<TurnSolver::Plan> pass = TurnSolver::IdlePassWithAxes(s);
+    REQUIRE_FALSE(pass.empty());
+    CHECK(pass.front().actions.empty());
     const std::optional<TurnSolver::Plan> hit = L4WavePlan(plans, 60, 700003);
     REQUIRE(hit.has_value());
     L4Worlds w;
@@ -422,16 +425,19 @@ TEST_CASE("Wave + Opalescence end-step sweep (USER ruling 7) with 0, 1 and 4 Gro
     for (int groves : { 0, 1, 4 })
     {
         CAPTURE(groves);
-        const GameState s = L4SweepBoard(groves, 6);
+        const GameState s = L4SweepBoard(groves, groves == 4 ? 3 : 6);
         L4Worlds w;
         w.EndTurn(s);
         w.Check([groves](const GameState& g) {
             REQUIRE(L4Find(g, 60) != nullptr);
             if (groves == 4)
             {
-                CHECK(L4Count(g, 1) == 6);                    // impossible loop: nothing is exiled
-                CHECK(L4Find(g, 60)->fade_counters == 4);     // counters untouched (5, then our upkeep)
+                // Impossible loop: the finite tail spends one counter per opponent creature (the orchestrator's
+                // ruling-7 default) -- 5 - 3 = 2, then our upkeep took one; the Wave never left.
+                CHECK(L4Count(g, 1) == 0);
+                CHECK(L4Find(g, 60)->fade_counters == 1);
                 CHECK_FALSE(L4Find(g, 60)->entered_this_turn);
+                CHECK(g.exile.empty());                       // tokens cease to exist
             }
             else
             {
@@ -447,6 +453,55 @@ TEST_CASE("Wave + Opalescence end-step sweep (USER ruling 7) with 0, 1 and 4 Gro
         // Both worlds reach the same board.
         CHECK(L4Count(w.roll, 0) == L4Count(w.exec, 0));
         CHECK(L4Count(w.roll, 1) == L4Count(w.exec, 1));
+    }
+}
+
+TEST_CASE("Wave sweep, no loop possible (2 Groves, or too few counters): linked exiles until the counters run out")
+{
+    // ORCHESTRATOR DEFAULT (pending the USER): ruling 7 literally -- every targetable opponent creature, one counter
+    // each, LINKED (the Wave stays on the battlefield, CR 607.2a); the rest stay when the counters run out.
+    GameState s = L4SweepBoard(2, 0);
+    L4Put(s, kPres, 100041, 1);   // two opponent CARD creatures first in battlefield order, then four tokens
+    L4Put(s, kExpl, 100042, 1);
+    for (int k = 0; k < 4; ++k) { L4Spawn(s, 3, 700001 + k); }
+    RefreshTypeStatics(s);
+    REQUIRE(L4Count(s, 1) == 6);
+    {
+        GameState t = s;
+        PerformWaveOpalSweep(t);
+        REQUIRE(L4Find(t, 60) != nullptr);
+        CHECK(L4Find(t, 60)->fade_counters == 0);          // all five spent
+        CHECK(L4Count(t, 1) == 1);                          // the sixth stays
+        CHECK(L4Find(t, 700004) != nullptr);
+        const Card* c = L4InExile(t, 100041);
+        REQUIRE(c != nullptr);
+        CHECK(CardIsExileUntilLeaves(*c));                  // linked to the Wave
+        CHECK(ExileUntilLeavesSource(*c) == 60);
+        CHECK(L4Find(t, 60)->linked_exile_number != 0);
+        CHECK(L4Find(t, 70) != nullptr);                    // the Groves never left
+        CHECK(L4Find(t, 71) != nullptr);
+        CHECK_FALSE(L4Find(t, 60)->entered_this_turn);
+    }
+    // Both worlds through our upkeep: the Wave at zero cannot lose a counter and is sacrificed (CR 702.32a); its
+    // linked cards return to the opponent, the exiled tokens do not.
+    L4Worlds w;
+    w.EndTurn(s);
+    w.Check([](const GameState& g) {
+        CHECK(L4Find(g, 60) == nullptr);
+        CHECK(L4Find(g, 100041) != nullptr);
+        CHECK(L4Find(g, 100042) != nullptr);
+        CHECK(L4Find(g, 700004) != nullptr);
+        CHECK(L4Count(g, 1) == 3);
+        CHECK(L4InExile(g, 100041) == nullptr);
+    });
+    {
+        GameState t = L4SweepBoard(1, 2);   // one Grove but one counter: the loop needs two -> one linked exile
+        L4Find(t, 60)->fade_counters = 1;
+        PerformWaveOpalSweep(t);
+        REQUIRE(L4Find(t, 60) != nullptr);
+        CHECK(L4Find(t, 60)->fade_counters == 0);
+        CHECK(L4Count(t, 1) == 1);
+        CHECK(L4Find(t, 70) != nullptr);
     }
 }
 

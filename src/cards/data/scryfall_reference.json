@@ -5725,6 +5725,17 @@
     "toughness": null,
     "type_line": "Artifact — Equipment"
   },
+  "Parallax Wave": {
+    "cmc": 4.0,
+    "keywords": [
+      "Fading"
+    ],
+    "mana_cost": "{2}{W}{W}",
+    "oracle_text": "Fading 5 (This enchantment enters with five fade counters on it. At the beginning of your upkeep, remove a fade counter from it. If you can't, sacrifice it.)\nRemove a fade counter from this enchantment: Exile target creature.\nWhen this enchantment leaves the battlefield, each player returns to the battlefield all cards they own exiled with it.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Parallel Lives": {
     "cmc": 4.0,
     "keywords": [],

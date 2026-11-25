@@ -23417,8 +23417,9 @@ inline void ResolveFadeExileCreature(GameState& state, int controller, int sourc
 //   (3) the Wave exiles ITSELF with its last needed counter: its leave trigger returns the enablers and the Wave, which
 //       re-enters with five fade counters (the enter cascade), and the next cycle runs while a target remains.
 // With one Grove the Grove goes first and comes back; with two or more each Grove shrouds the others and the Wave, so
-// no enabler is targetable and the loop is IMPOSSIBLE: the sweep does nothing (the explicit activations on our own
-// turn remain the searched route to spend the counters). The loop also needs the Wave to be a creature (Opalescence).
+// no enabler is targetable and the loop is IMPOSSIBLE: the sweep then spends the counters the Waves have, one LINKED
+// exile per targetable opponent creature, until targets or counters run out (the finite tail below; an orchestrator
+// default pending the USER). The loop also needs the Wave to be a creature (Opalescence).
 // NO TARGET: a Wave below its fading count, with nothing linked and nothing attached, is TOPPED UP by one cycle of (1)
 // and (3) alone. That cycle returns exactly what it exiled (the Groves and the Wave, at the opponent's end step, so
 // each can attack on our next turn) and only raises the counters -- a weakly dominant top-up, and it is what keeps a
@@ -23480,6 +23481,11 @@ inline void PerformWaveOpalSweep(GameState& state)
         if (d && d->params.static_animate_other_nonaura_enchantments_mv) { opal = true; break; }
     }
     if (!opal) { return; }
+    // The opponent's turn may have put a permanent the type statics have not retyped yet (a card returned by a fading
+    // sacrifice's leave trigger, a spawn): which opponent permanents are creatures must be current before targeting,
+    // and a 0/0 the retype makes dies first (SBA, CR 704.5f) -- it is never worth a counter.
+    RefreshTypeStatics(state);
+    TypeStaticsSbaCheckpoint(state);
     int exiled = 0, cycles = 0;
     std::string wave_name;
     for (int guard = 0; guard < 64; ++guard)
@@ -23539,7 +23545,36 @@ inline void PerformWaveOpalSweep(GameState& state)
         ++cycles;
         if (opp.empty()) { continue; }   // a top-up: the next pass finds this Wave at its count (another may need one)
     }
-    if (cycles == 0) { return; }
+    // NO LOOP POSSIBLE, TARGETS LEFT (2+ Sterling Groves shroud every enabler and the Wave; or too few counters for the
+    // enablers + the self-exile): ruling 7 still applies LITERALLY -- the Waves spend the counters they have, one per
+    // targetable opponent creature, until the targets or the counters run out (ORCHESTRATOR DEFAULT 2026-11-26,
+    // pending the USER: the free-turn lock check right after this end step needs the opponent to have no creatures,
+    // and our-turn activations cannot reach a creature that appeared on the opponent's turn). Each of these
+    // activations resolves while its Wave is still on the battlefield, so the exile is LINKED (CR 607.2a): the cards
+    // return when that Wave leaves (tokens cease to exist). A Wave spent to zero is sacrificed at our next upkeep
+    // (CR 702.32a), returning them then -- that is the rules' consequence of the default, not a modelling choice.
+    int finite = 0;
+    for (int guard = 0; guard < 256; ++guard)
+    {
+        int target = 0;
+        for (const Permanent& q : state.battlefield)
+        { if (q.controller_index != me && FadeExileTargetLegal(state, q, me)) { target = q.card.m_number; break; } }
+        if (target == 0) { break; }
+        int wave_num = 0;
+        for (Permanent& w : state.battlefield)
+        {
+            if (w.controller_index != me || w.def_absent || w.fade_counters < 1) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(w.card);
+            if (!d || !d->params.fade_exile_target_creature) { continue; }
+            wave_num = w.card.m_number;
+            wave_name = w.card.m_name.str();
+            --w.fade_counters;   // the COST
+            break;
+        }
+        if (wave_num == 0) { break; }   // counters exhausted: the remaining creatures stay
+        if (FadeExilePermanent(state, me, wave_num, wave_name, target, /*linked=*/true)) { ++finite; }
+    }
+    if (cycles == 0 && finite == 0) { return; }
     if (g_play_event_sink && !g_tap_speculating)
     {
         int counters = 0;
@@ -23551,7 +23586,10 @@ inline void PerformWaveOpalSweep(GameState& state)
         EmitPlayEvent(state.turn_number, "ability",
                       "\xF0\x9F\x8C\x8C " + wave_name + " + Opalescence (opponent's end step): exiles "
                       + std::to_string(exiled) + " opponent creature" + (exiled == 1 ? "" : "s")
-                      + "; the Wave returns with " + std::to_string(counters) + " fade counters");
+                      + (finite > 0 ? " for good and " + std::to_string(finite)
+                                      + " until the Wave leaves (no self-exile loop possible)" : std::string())
+                      + "; " + (cycles > 0 ? "the Wave returns with " : "the Wave keeps ")
+                      + std::to_string(counters) + " fade counters");
     }
     RefreshTypeStatics(state);
     TypeStaticsSbaCheckpoint(state);
