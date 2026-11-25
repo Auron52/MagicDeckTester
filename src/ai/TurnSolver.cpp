@@ -127572,6 +127572,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     long long c_prev = 0, c_prev2 = 0;       // work units of passes k-1, k-2
     long long p18_ab_boot = 0;               // _pabb: a bounded pass 1's game-cache hits, priced at their stored cost
     bool      p18_ab_p1 = false;             // _pabk: this decision's pass 1 ran bounded and its bound held
+    bool      p18_pck = false;               // _pck is on (set at the pass loop's _pab block; the gate runs before it)
     bool      have_prev = false, have_prev2 = false;
     long long l_prev = -1, l_prev2 = -1;     // rollout-leaf units of passes k-1, k-2 (sampled gate _pqg only)
     long long pr_prev = 0, pr_prev2 = 0;     // PRICED work (workctr::t_priced, ns) of passes k-1, k-2: the priced gate
@@ -129152,7 +129153,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                             : kDefaultGrowth;
             if (p18_qg && p18_K > 0 && have_prev2 && l_prev2 == 0 && ratio > kDefaultGrowth) { ratio = kDefaultGrowth; }
             double estimate = static_cast<double>(c_prev) * ratio;
-            if (p18_ab_boot > 0 && !s_pck && !(have_prev2 && c_prev2 > 0)) { estimate = static_cast<double>(c_prev + p18_ab_boot) * ratio; }
+            if (p18_ab_boot > 0 && !p18_pck && !(have_prev2 && c_prev2 > 0)) { estimate = static_cast<double>(c_prev + p18_ab_boot) * ratio; }
             const double remaining = static_cast<double>(budget->Remaining()) + p18_credit;
             bool fits = g_reserve_value_pass ? (estimate + estimate <= gate_alpha * remaining)
                                              : (estimate <= gate_alpha * remaining);
@@ -129314,6 +129315,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         const int pass_cut = (p16K > 0 && pass_depth == p16K && p16::t_oracle_W > 0)
                            ? std::min(root_cut, p16::t_oracle_W) : (p18_ab > 0 ? std::min(p18_cut, p18_ab) : p18_cut);
         const long long p18_hs0 = rgc::t_hit_sum, p18_ps0 = rgc::t_pab_sum;
+        p18_pck = s_pck;
         const bool p18_pc_on = s_pabc && (pass_depth == 1 || s_pck) && p18_ab > 0 && pass_cut < root_cut;
         if (p18_pc_on) { rgc::t_pab_cut = pass_cut; rgc::t_pab_ucut = root_cut; }
         SearchLine attempt = FSLineWin(state, pass_depth, max_turns, pass_cut, second_main, tt, &line_cache, budget);
