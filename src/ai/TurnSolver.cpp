@@ -129302,7 +129302,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // pass 1 that pays for them moves heur's gate -- E12 Merfolk T2: c1 15 -> 292 units, then a 39k pass 3).
         // _pabx: a failed bounded attempt is spent but kept out of the pass cost the start gate reads.
         static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false, s_pabb = false, s_pabc = false, s_pabk = false, s_pce = false, s_pck = false, s_pcke = false, s_pabv = false;
-        static thread_local unsigned long long s_pab_seed = 0; static thread_local int s_pab_win = 0, s_pab_gate = -1, s_pab_turn = 0; static thread_local bool s_pabt = false;
+        static thread_local unsigned long long s_pab_seed = 0; static thread_local int s_pab_win = 0, s_pab_gate = -1, s_pab_turn = 0; static thread_local bool s_pabt = false, s_pabp = false, s_pab_proven = false;
         if (s_pab_key != valuearm::t_deck_key || s_pab_gate != valuearm::t_deck_sampled_gate)
         {
             s_pab_key = valuearm::t_deck_key; s_pab_gate = valuearm::t_deck_sampled_gate; s_pab = s_pab_key.find("_pab") != std::string::npos;
@@ -129337,12 +129337,18 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // real game's T1 could be bounded by a trial game's late commit (Beasts 23050104: c1 889 -> 1545, which admitted
             // a 50.9k pass 3). A trial ends turns after T1, so a stored turn later than this decision's is never this game.
             s_pabt = s_pab_key.find("_pabt") != std::string::npos;
+            // _pabp (A/B, 2026-11-25): bound only at a PROVEN win -- one inside the window of the pass that found it
+            // (win <= T + d - 1). A win past the window rests on a leaf's estimate and a deeper pass can refute it: every
+            // failed bound in Gods PC1 was one (T3 d2 claimed T6, truth T7; T2 claimed T4, truth T5), and proving "no win
+            // by W" there cost up to 9x heur's pass. A proven win cannot get worse with depth, so its bound always holds.
+            s_pabp = s_pab_key.find("_pabp") != std::string::npos;
         }
         const bool p18_ab_top = s_pab && p16K == 0 && p16::t_hyb_nest == 1 && g_fsline_nest == 0 && g_rollout_nest == 0
                              && (!vl_active || (s_pabv && vl_constant));
-        const int p18_ab_w = (pass_depth >= 2 && prev_committed == pass_depth - 1 && (!s_pabk || p18_ab_p1)) ? prev_line.win_turn
+        const int p18_ab_w = (pass_depth >= 2 && prev_committed == pass_depth - 1 && (!s_pabk || p18_ab_p1)
+                              && (!s_pabp || prev_line.win_turn <= state.turn_number + prev_committed - 1)) ? prev_line.win_turn
                            : (pass_depth == 1 && s_pab1 && s_pab_seed == static_cast<unsigned long long>(state.game_seed)
-                              && (!s_pabt || s_pab_turn <= state.turn_number)) ? s_pab_win : 0;
+                              && (!s_pabt || s_pab_turn <= state.turn_number) && (!s_pabp || s_pab_proven)) ? s_pab_win : 0;
         const int p18_ab = (p18_ab_top && p18_ab_w >= state.turn_number && p18_ab_w <= max_turns) ? p18_ab_w : 0;
         const int pass_cut = (p16K > 0 && pass_depth == p16K && p16::t_oracle_W > 0)
                            ? std::min(root_cut, p16::t_oracle_W) : (p18_ab > 0 ? std::min(p18_cut, p18_ab) : p18_cut);
@@ -129422,7 +129428,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         line = attempt;
         committed_depth = pass_depth;
         prev_line = line; prev_committed = committed_depth;   // this pass completed
-        if (p18_ab_top) { s_pab_seed = static_cast<unsigned long long>(state.game_seed); s_pab_win = line.win_turn; s_pab_turn = state.turn_number; }
+        if (p18_ab_top)
+        {
+            s_pab_seed = static_cast<unsigned long long>(state.game_seed); s_pab_win = line.win_turn; s_pab_turn = state.turn_number;
+            s_pab_proven = line.win_turn <= state.turn_number + committed_depth - 1;
+        }
         // _pabb: a bounded pass 1 answered from the game cache is no predictor of pass 2 (its leaves are, pass 2's are
         // not): HO2 Mill 19410160 T2 c1 110 units (heur's unbounded 4825) -> a 62k pass 2; 19410210 131 -> 153k. The
         // bootstrap estimate reads pass 1 with its hits priced at their stored cost (rgc::E::cost).
