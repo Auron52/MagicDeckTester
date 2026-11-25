@@ -129152,7 +129152,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                             : kDefaultGrowth;
             if (p18_qg && p18_K > 0 && have_prev2 && l_prev2 == 0 && ratio > kDefaultGrowth) { ratio = kDefaultGrowth; }
             double estimate = static_cast<double>(c_prev) * ratio;
-            if (p18_ab_boot > 0 && !(have_prev2 && c_prev2 > 0)) { estimate = static_cast<double>(c_prev + p18_ab_boot) * ratio; }
+            if (p18_ab_boot > 0 && !s_pck && !(have_prev2 && c_prev2 > 0)) { estimate = static_cast<double>(c_prev + p18_ab_boot) * ratio; }
             const double remaining = static_cast<double>(budget->Remaining()) + p18_credit;
             bool fits = g_reserve_value_pass ? (estimate + estimate <= gate_alpha * remaining)
                                              : (estimate <= gate_alpha * remaining);
@@ -129279,7 +129279,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // left no-win entries at that bound, which a pass 1 at the same bound reads; an unbounded pass 1 cannot, and a
         // pass 1 that pays for them moves heur's gate -- E12 Merfolk T2: c1 15 -> 292 units, then a 39k pass 3).
         // _pabx: a failed bounded attempt is spent but kept out of the pass cost the start gate reads.
-        static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false, s_pabb = false, s_pabc = false, s_pabk = false, s_pce = false;
+        static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false, s_pabb = false, s_pabc = false, s_pabk = false, s_pce = false, s_pck = false, s_pcke = false;
         static thread_local unsigned long long s_pab_seed = 0; static thread_local int s_pab_win = 0, s_pab_gate = -1;
         if (s_pab_key != valuearm::t_deck_key || s_pab_gate != valuearm::t_deck_sampled_gate)
         {
@@ -129299,6 +129299,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // a deeper pass improves a pass-1 win 0 % / 0.6 % / 5.1 % / 16.2 % of the time at W - T = 1 / 2 / 3 / 4, and every
             // priced refusal heur's deeper pass improved on (4 of 104, incl. both later games) was at the edge.
             s_pce = s_pab_key.find("_pce") != std::string::npos;
+            // _pck (A/B): every bounded pass k (not only pass 1) has its bound-only game-cache hits priced INTO its gate
+            // cost c_k (pass 1's price too, instead of the bootstrap-only adjustment), so c_(k+1)'s estimate and the
+            // c_k / c_(k-1) ratio read like-for-like. HO4 Stuffy: bounded passes 1-3 answered from the cache (3-9 units
+            // each, heur's pass 3 428-20k) -> ratio ~1 admitted a pass 4 heur never ran (+3 % of units). _pcke: no price
+            // for a pass whose win sits at/after the window edge (the _pce rule on every pass).
+            s_pcke = s_pab_key.find("_pcke") != std::string::npos; s_pck = s_pcke || s_pab_key.find("_pck") != std::string::npos;
         }
         const bool p18_ab_top = s_pab && p16K == 0 && p16::t_hyb_nest == 1 && g_fsline_nest == 0 && g_rollout_nest == 0
                              && !vl_active && !vl_constant;
@@ -129308,7 +129314,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         const int pass_cut = (p16K > 0 && pass_depth == p16K && p16::t_oracle_W > 0)
                            ? std::min(root_cut, p16::t_oracle_W) : (p18_ab > 0 ? std::min(p18_cut, p18_ab) : p18_cut);
         const long long p18_hs0 = rgc::t_hit_sum, p18_ps0 = rgc::t_pab_sum;
-        const bool p18_pc_on = s_pabc && pass_depth == 1 && p18_ab > 0 && pass_cut < root_cut;
+        const bool p18_pc_on = s_pabc && (pass_depth == 1 || s_pck) && p18_ab > 0 && pass_cut < root_cut;
         if (p18_pc_on) { rgc::t_pab_cut = pass_cut; rgc::t_pab_ucut = root_cut; }
         SearchLine attempt = FSLineWin(state, pass_depth, max_turns, pass_cut, second_main, tt, &line_cache, budget);
         if (p18_pc_on) { rgc::t_pab_cut = rgc::t_pab_ucut = 0; }
@@ -129429,6 +129435,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 
         c_prev2 = c_prev;   have_prev2 = have_prev;
         c_prev  = cost;     have_prev  = true;
+        if (s_pck && p18_pc_on && !p18_asp_fail
+            && !((s_pcke || pass_depth == 1) && s_pce && line.win_turn >= state.turn_number + depth - 1))
+        {
+            const long long pk = rgc::t_pab_sum - p18_ps0;
+            if (pk > 0) { c_prev += pk; if (pass_depth >= 2) { p16::Rec('B', pass_depth, 0, pk, 0, line.win_turn, 0); } }
+        }
         l_prev2 = l_prev;   l_prev = p16::t_leaf_units - p16_leaf0;
         if (p18_rx && pass_depth == p18_K && p18_c2 > 0.0) { c_prev2 = static_cast<long long>(p18_c2); have_prev2 = true; l_prev2 = p18_lfK1; }
         if (p18_rx && pass_depth == p18_K) { c_prev += static_cast<long long>(p18_cK_add); }   // _prx2: the samples that warmed it
