@@ -32,6 +32,17 @@ This document is the canonical description; those two are the measurement logs.
   performance better, that is sufficient."* So each (2) prune is A/B'd alone ((1) vs (1) + prune, held out):
   net <= 0 turns AND units/CPU measurably lower.
 
+- 2026-11-25 (clarifies "I don't want the heuristic ladder for any deck"): *"I don't want the heuristic ladder for
+  any deck beyond the value-leaf run."* *"I mean that decks start on the heuristic ladder and upgrade to something
+  else after the value-leaf. The idea is that all should upgrade with this option being the alternative option for
+  those that seem to currently prefer the heuristic ladder over other alternatives."* *"I want this new mode to be
+  capable of beating the heuristic ladder clearly."* *"Even if only by a few percent in some cases. It seems like we
+  still have problems where we do more work, though, which makes little sense to me."*
+  So: a new deck runs the heur ladder until its value-leaf run; after it EVERY deck ships a non-heur shape (leaf,
+  mode 3, ...), and the sparse ladder is the shape for the decks whose best alternative today is heur. The sparse
+  ladder must therefore beat heur CLEARLY (a few percent at least) on those decks, and must never do MORE work than
+  heur -- an arm that costs more units than heur on any deck is a defect to root-cause, not an outcome.
+
 ## The keys
 
 | sidecar `value_play` | engine | status |
