@@ -113541,7 +113541,9 @@ static std::atomic<long long> g_round_stop_breaks{0}, g_round_stop_skipped{0};
 // before that point reads a rollout). A candidate that does not kill skips SimulateEndAndStartNextTurn
 // and its rollout. If none kills, the full solve's pick is a non-killer whose turn, replayed by the
 // rollout, kills nobody -- the same apply / combat / searched m2 its own evaluation ran -- and so is the
-// kill-only solve's: either way the rollout returns max_turns + 1 at the next loop head. Same answer,
+// kill-only solve's: either way the rollout returns max_turns + 1 at the next loop head. ("Kills" includes a game
+// that ends AT THE BOUNDARY, credited to this turn -- Maze's End's off-main win; see KillOnlyBoundaryEndsGame, which
+// keeps such a candidate scored.) Same answer,
 // same leaf-table entry. Gated to where that replay parity is exact: the deck searches its second
 // main (the candidate evaluation and the rollout then run the same m2 solve: both go through
 // SearchedSecondMainMemoized at depth 1 -- the rollout's Dig-only m2 would have no twin), no m2
@@ -115321,6 +115323,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     }
     if (ko_vcopy)
     {
+        const std::string ko_board = FsSimBoardText(*ko_vcopy);   // named in a MISMATCH line (the entry board)
         t_ko_suppress = true;
         const unsigned long long ts = g_fs_trunc_events, ds = g_condemn_drops, bs = budgetbind::t_binds;
         const int ref = SimulateToEndImpl(*ko_vcopy, depth, max_turns, budget, cutoff_turn, second_main, tt);
@@ -115332,9 +115335,9 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             const long long n = g_ko_mismatch.fetch_add(1, std::memory_order_relaxed);
             if (n < 10)
             {
-                std::fprintf(stderr, "[leaf-kill-only] MISMATCH t%d depth=%d cutoff=%d kill_only=%d full=%d budget=%s\n",
+                std::fprintf(stderr, "[leaf-kill-only] MISMATCH t%d depth=%d cutoff=%d kill_only=%d full=%d budget=%s %s\n",
                              state_turn_at_entry, depth, cutoff_turn, result, ref,
-                             (budget == nullptr || budget->Unlimited()) ? "none" : "finite");
+                             (budget == nullptr || budget->Unlimited()) ? "none" : "finite", ko_board.c_str());
             }
         }
     }
@@ -132178,6 +132181,46 @@ static BoundaryChoice BoundaryChooseCrossingLandsByRollout(GameState& copy, int 
     return best;
 }
 
+// MTG_LEAF_KILL_ONLY (see LeafKillOnlyOn) -- THE BOUNDARY'S THIS-TURN WIN. The identity's premise is that a candidate
+// which has not killed by the end of its turn (main 1, combat, the searched main 2) hands the rollout to the next
+// round, past the cutoff. SimulateEndAndStartNextTurn breaks that in one place: when the game ends at the boundary it
+// returns BEFORE the turn counter advances, so the rollout credits the win to THIS turn -- the cutoff turn. Of the
+// three ways it does (a lethal end-step ping sweep, a deck-out, an effect win), two are already seen inside the turn by
+// construction: a deck-out is flagged the moment the library empties (OpponentDeck.h, TakeFromTop; the one residue is
+// a Howling Mine draw from a library their own draw just emptied -- Extra Turns, which holds the only Mine, never
+// arms), and the ping sweep's lethal reach is tapped right after combat (PingDorkFinish; on a deck with no second main
+// nothing runs between the two). The third is not: Maze's End's OFF-MAIN WIN
+// (TryOffMainAltWinActivation), activated after Manabond's end-step land dump or a Burgeoning put in the opponent's
+// turn -- a board no main phase ever saw (MTG_LEAF_KILL_ONLY_VERIFY, 2026-11-25: every one of 6 mismatches in 1,581
+// Maze's End rollouts under MTG_LEAF_KILL_ONLY_NOM2=1; 0 on the 30 other armed decks). Deck-gated on the only
+// sources of that board (deck_has_crossing_land_put: Manabond / Burgeoning / Garth); false for every other deck, so
+// Cyclone (the one deck that ships MTG_LEAF_KILL_ONLY_NOM2) is untouched. The mismatches were a missed win, not a
+// parity break: with every candidate skipped the solve returns candidates.front(), and the rollout's replay of that
+// plan reached the end step without the mana (or the line) the off-main activation needed. No lever: it is a
+// soundness fix to a claimed-exact identity (unit test: test_leaf_kill_only.cpp, "Maze's End's end-step win").
+// EXACT: it crosses the boundary over the same fan the site's own chooser walks (BoundaryChooseByRollout, or the
+// crossing-land digit alone at the group-wave host: cl_only), and reports whether any branch ends the game on this
+// turn. Such a branch is the chooser's pick (no branch can win earlier), so a candidate for which this returns true is
+// scored exactly as the full solve scores it; one for which it returns false still cannot win this round.
+static bool KillOnlyBoundaryEndsGame(const GameState& after_turn, bool cl_only)
+{
+    if (!after_turn.deck_has_crossing_land_put) { return false; }
+    const int t = after_turn.turn_number;
+    BoundaryFan fan(after_turn, /*with_echo=*/!cl_only, false, false, false, false, false, false, cl_only);
+    if (cl_only ? !fan.CrossingLandLive() : !fan.Copies())
+    {
+        GameState ce = after_turn;
+        return SimulateEndAndStartNextTurn(ce) && OpponentHasLost(ce) && ce.turn_number == t;
+    }
+    while (fan.Next())
+    {
+        GameState ce = after_turn;
+        fan.Stamp(ce);
+        if (fan.Cross(ce) && OpponentHasLost(ce) && ce.turn_number == t) { return true; }
+    }
+    return false;
+}
+
 static thread_local const GameState* g_current_search_root_state = nullptr;
 
 const GameState* TurnSolver::CurrentSearchRootState()
@@ -134385,7 +134428,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // play happens here.
             // Kill-only (see LeafKillOnlyOn): this candidate did not kill this turn, and nothing after
             // this turn can change the enclosing rollout's answer.
-            if (ko && KillOnlySkippable(copy))
+            if (ko && KillOnlySkippable(copy) && !KillOnlyBoundaryEndsGame(copy, /*cl_only=*/false))
             {
                 ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
                 ++candidates_done;
@@ -134701,7 +134744,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
                                                g_bp_wave_probe.la_rolled.fetch_add(1); }
                     }
-                    if (ko && KillOnlySkippable(copy))   // kill-only: the variant did not kill this turn (see LeafKillOnlyOn)
+                    if (ko && KillOnlySkippable(copy) && !KillOnlyBoundaryEndsGame(copy, /*cl_only=*/false))   // kill-only: the variant did not kill this turn (see LeafKillOnlyOn)
                     {
                         ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
                         continue;
@@ -134783,7 +134826,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (OpponentHasLost(copy)) { won_out = true; return true; }
                 if (LandTwinDup(bp_seen_states, bp_twins, copy)) { return true; }
             }
-            if (ko && KillOnlySkippable(copy))   // kill-only: the tranche plan did not kill this turn (see LeafKillOnlyOn)
+            if (ko && KillOnlySkippable(copy) && !KillOnlyBoundaryEndsGame(copy, /*cl_only=*/true))   // kill-only: the tranche plan did not kill this turn (see LeafKillOnlyOn)
             {
                 ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
                 return true;
