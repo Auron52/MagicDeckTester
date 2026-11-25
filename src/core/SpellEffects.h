@@ -56867,6 +56867,25 @@ inline int MazeOffMainBank(GameState& s, const char* window)
 // different-named Gates never fold -- then "none" LAST (rank 0 = the first land, the playout default). The put is
 // OURS on the opponent's turn: EnterLand under our control (enters-tapped, Gond Gate, Amulet of Vigor, Gateway
 // Plaza, Guild Summit's draw all read us), with no Amulet float (no main phase of ours).
+// THE IDLE-TRIGGER FOLD (MTG_BURGEONING_IDLE_FOLD, DEFAULT ON; =0 -> every order enumerated). An identity fold of the
+// crossing fan's Burgeoning ordinals, no heuristic. The n triggers of one land play resolve one after another, and a
+// trigger that neither responds nor puts (IDLE) leaves the state exactly as it found it. So "idle at t, put P at t+1"
+// reaches the same state as "put P at t, idle at t+1" -- P is on trigger t's menu (the same state, so the same menu
+// and the same response ordinal), and trigger t+1 can then be idle provided no FORCED response becomes possible once
+// P is down (MazeOffMainRespond with OffMainMazeRedeployForced has no decline). After an idle trigger, a put P is
+// therefore dropped from the next trigger's menu when either no response can be forced (lever off, or the provider
+// keeps the decline) or none can arise: no untapped Maze's End-shaped source of ours could ask now
+// (MazeOffMainMayAsk -- an untapped one with a Gate to fetch) and P is not itself one (a land put from hand cannot
+// untap a tapped permanent or add a Gate to the library). The kept twin is enumerated FIRST (rank(P) < rank(none) at
+// trigger t; the odometer walks ranks lexicographically and a dropped option re-indexes the rest monotonically), so
+// every distinct end state keeps its first occurrence and the fan's first-strict-improvement pick is unchanged. With
+// k triggers and m lands in hand the odometer walked every placement of the idles among the puts (k=4, m=3: 73 put
+// sequences -> 16 per land play). Human play is never folded (the person answers each trigger).
+inline bool BurgeoningIdleFoldOn()
+{
+    static const bool s_on = EnvOn("MTG_BURGEONING_IDLE_FOLD", true);   // DEFAULT ON (exact identity fold); =0 disables
+    return s_on;
+}
 inline void ResolveBurgeoningTriggers(GameState& state)
 {
     if (!state.deck_has_crossing_land_put) { return; }
@@ -56874,6 +56893,7 @@ inline void ResolveBurgeoningTriggers(GameState& state)
     const int n = CountControlledWithParam(state, me, [](const CardParams& p)
                                            { return p.opponent_land_play_put_land_from_hand; });
     int puts_made = 0;
+    bool prev_idle = false;   // the idle-trigger fold: the previous trigger of this land play changed nothing
     for (int t = 0; t < n; ++t)
     {
         // P6: an untapped Maze's End is activated in response to this trigger (MazeOffMainRespond), and the put is
@@ -56901,8 +56921,26 @@ inline void ResolveBurgeoningTriggers(GameState& state)
             human_cards.push_back(c);
             for (int pin : CrossingLandEntryPins(state, me, *d)) { opts.push_back(Opt{ c.m_number, d, pin }); }
         }
+        // The idle-trigger fold (above): after an idle trigger, drop the puts whose "put first, then idle" twin exists.
+        bool idle_folded = false;
+        if (prev_idle && responded < 0 && !opts.empty() && !(g_play_dig_chooser && !g_tap_speculating)
+            && BurgeoningIdleFoldOn())
+        {
+            const bool forced_follow = MazeOffMainRespondLever()
+                && ResolveProvider(state).OffMainMazeRedeployForced(state, me);
+            if (!forced_follow || !MazeOffMainMayAsk(state, me))
+            {
+                const std::size_t before = opts.size();
+                opts.erase(std::remove_if(opts.begin(), opts.end(), [forced_follow](const Opt& o)
+                                          { return !forced_follow || !IsMazeOffMainSourceDef(o.def); }),
+                           opts.end());
+                idle_folded = opts.size() != before;
+            }
+        }
         if (opts.empty())   // no land in hand: nothing to put (a later trigger finds none either, unless P6 responds)
         {
+            prev_idle = responded < 0;
+            if (idle_folded) { continue; }   // every put folded: this trigger is idle too
             if (MazeOffMainRespondLever() && state.deck_has_crossing_land_put) { continue; }
             return;
         }
@@ -56924,7 +56962,8 @@ inline void ResolveBurgeoningTriggers(GameState& state)
                 def = CardDatabase::Instance().LookupCached(human_cards[static_cast<std::size_t>(r)]);
             }
         }
-        if (def == nullptr) { continue; }   // "you may": put nothing
+        if (def == nullptr) { prev_idle = responded < 0; continue; }   // "you may": put nothing
+        prev_idle = false;
         Player& p = state.players[me];
         auto it = std::find_if(p.hand.begin(), p.hand.end(), [number](const Card& c) { return c.m_number == number; });
         if (it == p.hand.end()) { continue; }
