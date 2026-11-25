@@ -129302,7 +129302,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // pass 1 that pays for them moves heur's gate -- E12 Merfolk T2: c1 15 -> 292 units, then a 39k pass 3).
         // _pabx: a failed bounded attempt is spent but kept out of the pass cost the start gate reads.
         static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false, s_pabb = false, s_pabc = false, s_pabk = false, s_pce = false, s_pck = false, s_pcke = false, s_pabv = false;
-        static thread_local unsigned long long s_pab_seed = 0; static thread_local int s_pab_win = 0, s_pab_gate = -1, s_pab_turn = 0; static thread_local bool s_pabt = false;
+        static thread_local unsigned long long s_pab_seed = 0; static thread_local int s_pab_win = 0, s_pab_gate = -1, s_pab_turn = 0; static thread_local bool s_pabt = false, s_pabw = false;
         if (s_pab_key != valuearm::t_deck_key || s_pab_gate != valuearm::t_deck_sampled_gate)
         {
             s_pab_key = valuearm::t_deck_key; s_pab_gate = valuearm::t_deck_sampled_gate; s_pab = s_pab_key.find("_pab") != std::string::npos;
@@ -129337,6 +129337,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // real game's T1 could be bounded by a trial game's late commit (Beasts 23050104: c1 889 -> 1545, which admitted
             // a 50.9k pass 3). A trial ends turns after T1, so a stored turn later than this decision's is never this game.
             s_pabt = s_pab_key.find("_pabt") != std::string::npos;
+            // _pabw (A/B, 2026-11-25): a bounded attempt at pass k >= 2 may spend at most pass k-1's real cost. Past it
+            // the attempt counts as failed and the pass is searched from the root cut exactly as without aspiration, so a
+            // failed bound costs at most c_(k-1) extra (Gods PC1: a failing bound's refutation ran 9x heur's whole pass).
+            // A re-price only: the unbounded re-search always follows, so nothing becomes unfindable.
+            s_pabw = s_pab_key.find("_pabw") != std::string::npos;
         }
         const bool p18_ab_top = s_pab && p16K == 0 && p16::t_hyb_nest == 1 && g_fsline_nest == 0 && g_rollout_nest == 0
                              && (!vl_active || (s_pabv && vl_constant));
@@ -129350,10 +129355,25 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         p18_pck = s_pck;
         const bool p18_pc_on = s_pabc && (pass_depth == 1 || s_pck) && p18_ab > 0 && pass_cut < root_cut;
         if (p18_pc_on) { rgc::t_pab_cut = pass_cut; rgc::t_pab_ucut = root_cut; }
+        const bool p18_capw = s_pabw && p18_ab > 0 && pass_cut < root_cut && p16K == 0 && pass_depth >= 2 && budget != nullptr && c_prev > 0;
+        const long long p18_ol_saved = budget != nullptr ? budget->OverrunLimit() : 0;
+        if (p18_capw)
+        {
+            const long long cap = SearchBudget::SatAdd(budget->Used(), c_prev);
+            budget->SetOverrunLimit(p18_ol_saved > 0 ? std::min(p18_ol_saved, cap) : cap);
+        }
         SearchLine attempt = FSLineWin(state, pass_depth, max_turns, pass_cut, second_main, tt, &line_cache, budget);
+        bool p18_capped = false;
+        if (p18_capw)
+        {
+            p18_capped = budget->OverrunQuiet();
+            budget->SetOverrunLimit(p18_ol_saved);
+            p18_capped = p18_capped && !budget->OverrunQuiet();   // the attempt's own cap, not the pass's guard
+        }
         if (p18_pc_on) { rgc::t_pab_cut = rgc::t_pab_ucut = 0; }
         bool p18_asp_fail = false;
-        if (pass_cut < root_cut && p16K == 0 && !(budget != nullptr && budget->Overrun()) && attempt.win_turn > pass_cut)
+        if (pass_cut < root_cut && p16K == 0
+            && (p18_capped || (!(budget != nullptr && budget->Overrun()) && attempt.win_turn > pass_cut)))
         {
             // The bound was too tight (no line wins by it): search the pass again from the ladder's own root cut.
             p18_asp_fail = true;
