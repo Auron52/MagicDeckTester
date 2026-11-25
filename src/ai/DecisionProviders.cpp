@@ -39151,8 +39151,9 @@ bool WorldfireProvider::TutorNeedsCandidate(const GameState&, int, const CardPar
 // Opalescence, Parallax Wave (identified by their params). Kept, in this order:
 //   1. each lock piece not in hand and not on our battlefield, if one is in the library -- Enchanted Evening, then
 //      Opalescence, then Parallax Wave. EE first: it is in BOTH lock routes (EE + Opalescence; Calming Verse + EE) and
-//      the scarcest (3 copies vs 4 Opalescence); Opalescence next (the EE + Opalescence land lock, and the Wave loop's
-//      animator); the Wave last (one copy, a full lock only beside Opalescence). Order only (budget priority).
+//      the costliest (5, so the earliest to need a turn of setup); Opalescence next (the EE + Opalescence land lock, and
+//      the Wave loop's animator); the Wave last (a full lock only beside Opalescence). (4 copies of each in the list.)
+//      Order only (budget priority).
 //   2. ONE mana Aura, only while mana is needed (ManaNeeded): total < 4 or white < 2 -> needed; exactly 4 with >= 2
 //      white -> needed only when no lock piece is fetchable ("mana is the only thing missing"); >= 5 with >= 2 white ->
 //      not needed. Wild Growth by default; Utopia Sprawl when short of white (it names white as it enters) with a
