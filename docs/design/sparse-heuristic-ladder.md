@@ -755,3 +755,12 @@ Branch `wip/p18l-claude` = wip/p18k-claude (55 commits) rebased cleanly onto ori
 3. Accept those decks' smoke + regression GT (`regression.sh <mode> --accept`, check_gt_logs), then ONE batched landing via
    `scripts/push_queue.py join` / `wait` / `land` (Release only under the lease, MTG_PGO=0).
 4. Open USER question (pending results): `_pab1` for every mode, heur included.
+
+#### ALL-MODES `_pab1` SCREEN (USER 2026-11-25: *"let's give it a try if the change is positive ... we will need measurements"*)
+
+Rebased tree built (3 tries: 9p ENOMEM on headers), unit 4175/4175. `_pabv` marker (a3806f78a) extends aspiration to
+leafless (constant-leaf) passes; a learned leaf stays excluded. Chain `build/scratch/p18g/chain_l1.sh`: smoke (MTG_PGO=0;
+`smoke_l1.DONE`), then PV1 = every deck except Cyclone at its OWN shipped shape and settings, 200 games, seed base 23.0M,
+arms `live` / `live_pab1` (= _pab + _pab1) / `live_pab1_pabv` (`mkfleet_pv.py`, binary `mtg_l1`). Read with `ident.py`
+(untouched decks: digest+units identical) and `summ.py`. Next: decks that move get a large held-out round on fresh
+seeds; adopt only if every deck meets the bar (work down, paired win turns net <= 0, every later game recovers at d8 b0).
