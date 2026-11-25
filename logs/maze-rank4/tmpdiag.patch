@@ -1,0 +1,49 @@
+diff --git a/src/ai/DecisionProviders.cpp b/src/ai/DecisionProviders.cpp
+index a1954fa96..95a0f0e5a 100644
+--- a/src/ai/DecisionProviders.cpp
++++ b/src/ai/DecisionProviders.cpp
+@@ -71464,9 +71464,13 @@ MazeHoldings MazeHoldingsOf(const GameState& s, int ctrl)
+ // NOW), then the FEWEST copies left in the library (a singleton: a multi-copy name will be drawn), then usable on
+ // entry (enters untapped / an Amulet or Gond untaps it), then the better mana source (higher ManaSourceRank),
+ // then the base order. Empty when there is none.
++static thread_local int t_maze_rank_site_tmp = 0;   // TMPDIAG
++static thread_local std::string t_nn_tmp;   // TMPDIAG
++struct MazeRankSiteTmp { int sv; explicit MazeRankSiteTmp(int v) : sv(t_maze_rank_site_tmp) { t_maze_rank_site_tmp = v; } ~MazeRankSiteTmp() { t_maze_rank_site_tmp = sv; } };   // TMPDIAG
+ std::string MazePickNewNameGate(const GameState& s, int ctrl, const std::vector<std::string>& names,
+                                 const DecisionProvider& prov, const std::string& skip = std::string())
+ {
++    const MazeRankSiteTmp _tmpsite(1);   // TMPDIAG
+     const Player& pl = s.players[static_cast<std::size_t>(ctrl)];
+     std::string best;
+     std::tuple<int, int, int, int> best_key{};
+@@ -71482,7 +71486,14 @@ std::string MazePickNewNameGate(const GameState& s, int ctrl, const std::vector<
+         const int usable = LandUsableOnEntry(s, *d, /*allow_pay_life=*/true, ctrl) ? 0 : 1;
+         const std::tuple<int, int, int, int> key{ in_hand, lib, usable, -prov.ManaSourceRank(s, *d) };
+         if (best.empty() || key < best_key) { best = nm; best_key = key; }
++        if (EnvOn("MTG_TMP_NN_TRACE")) { t_nn_tmp += nm + ":" + std::to_string(in_hand) + "," + std::to_string(lib) + "," + std::to_string(usable) + "," + std::to_string(-std::get<3>(key)) + " "; }   // TMPDIAG
+     }
++    if (EnvOn("MTG_TMP_NN_TRACE"))   // TMPDIAG
++    {
++        static std::set<std::string> seen; const std::string line = "T" + std::to_string(s.turn_number) + " pick=" + best + " | " + t_nn_tmp;
++        if (seen.insert(line).second) { std::fprintf(stderr, "[nnpick] %s\n", line.c_str()); }
++    }
++    t_nn_tmp.clear();   // TMPDIAG
+     return best;
+ }
+ 
+@@ -71871,6 +71882,7 @@ static bool MazeGateNonManaTapLive(const GameState& s, int controller, const Car
+ 
+ void MazesEndProvider::EtbTapSubtypeOrder(const GameState& s, int controller, std::vector<int>& idx) const
+ {
++    const MazeRankSiteTmp _tmpsite(2);   // TMPDIAG
+     auto key = [&](int i) -> std::pair<int, int> {
+         const CardDefinition* d = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(i)].card);
+         if (d == nullptr) { return { 0, 0 }; }
+@@ -72460,6 +72472,7 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
+         || !def.params.mana_colors_of_controlled_subtype.empty() || IsScaledManaLand(def) || ManaProducedPerTap(def) != 1
+         || !heurarm::Flag(heurarm::MAZE_RANK_SPENDABLE, s_spend) || !heurarm::Flag(heurarm::RANK_OBJECT_COLORS, s_rank_obj))
+     { return r; }
++    { static const int s_tmp_mask = EnvInt("MTG_TMP_SPEND_SITES", 7); if ((s_tmp_mask & (1 << t_maze_rank_site_tmp)) == 0) { return r; } }   // TMPDIAG
+     const int active = s.active_player_index;
+     const Permanent* const robj = g_rank_object;
+     const bool obj = robj != nullptr && def.params.etb_choose_color && robj->chosen_color >= 0
