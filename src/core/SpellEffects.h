@@ -1376,13 +1376,82 @@ inline TypeStaticsPresent TypeStaticsOnBattlefield(const GameState& state)
 // return trigger finds no land (OpponentLandEnters). An enchantment land (Urza's Saga) dies under Opalescence alone.
 // ASSUMPTION, disclosed: no static toughness bonus (an anthem) holds the land above 0 -- none in this deck or its
 // opponent pool; a deck that adds one must revisit this predicate (it is a prediction of the SBA's verdict).
+// The verdict for a given set of statics (the pre-float below asks it with and without the entrant).
+inline bool LandDiesUnderTypeStatics(const TypeStaticsPresent& ts, const CardDefinition& land)
+{
+    if (land.params.is_aura) { return false; }
+    if (ts.opals <= 0 || !(ts.ee || land.card.IsEnchantment())) { return false; }
+    return land.card.m_mana_cost.ManaValue() <= 0;
+}
 inline bool LandDiesToTypeStatics(const GameState& state, const CardDefinition& land)
 {
     if (!state.deck_has_type_statics) { return false; }
-    if (land.params.is_aura) { return false; }
-    const TypeStaticsPresent ts = TypeStaticsOnBattlefield(state);
-    if (ts.opals <= 0 || !(ts.ee || land.card.IsEnchantment())) { return false; }
-    return land.card.m_mana_cost.ManaValue() <= 0;
+    return LandDiesUnderTypeStatics(TypeStaticsOnBattlefield(state), land);
+}
+// THE PRE-FLOAT AT THE LOCK (Enchanted Evening lock cluster step 2, 2026-11-26; design §4.2): a SOUND DOMINANCE
+// FOLD, not a choice. When an entrant (the second of Enchanted Evening / Opalescence, or anything else that makes the
+// land-death static newly apply) is about to turn our lands into 0/0 creatures, each untapped land we control that
+// dies to it is tapped for mana FIRST: we hold priority while the spell that puts it there is on the stack and may
+// activate mana abilities then (CR 605.3a / 117.1d); the mana stays in the pool to the end of the step or phase
+// (CR 106.4 / 500.4 -- both worlds empty it at every boundary, CrossManaBoundary) and empties with no mana burn.
+// Every such land dies untapped otherwise at the next SBA checkpoint (TypeStaticsSbaCheckpoint) and has no other
+// use left: it can never untap, attack, block or pay anything again. So the float only ADDS mana to this phase and
+// changes nothing else -- the Saproling Burst doomed-body pre-float argument (MTG_FADE_PREFLOAT_DOOMED). Utopia
+// Sprawl / Wild Growth's extra mana rides each tap (the payer's own Aura credit).
+// COLOUR (no greedy pick): a single-face land floats its face. A multi-colour land floats `wild`, which is EXACT only
+// under GameState::deck_float_wild_exact (every coloured pip of the list is a colour it makes); without the stamp it
+// is left to die untapped, as before step 2 (the searched colour-split axis the design names is not built: no deck
+// needs it yet). A fetchland has no mana ability and is NOT cracked (thinning is not dominated; it stays the searched
+// action it already is). A land that already dies without the entrant (a land drop under the lock) is never
+// floated: it dies before anyone receives priority.
+// WHERE: the top of the universal enter cascade (FireEtbWatchers), BEFORE RefreshTypeStatics retypes the lands --
+// one shared site for the executor, the rollout and every put path, so the two worlds stay in lockstep -- and the
+// tap itself goes through the payer's pre-tap route (ApplyEnginePreTap, installed by ManaPayment.cpp), which only
+// taps (no source here is a sacrifice route; those are refused). A land a whole-turn prepay (BatchPrepayMainCasts)
+// or the cast's own payment already tapped is skipped: its mana is already in the float or spent, never counted
+// twice. Gated on the per-game stamp deck_has_type_statics and on the entrant carrying a type static: every other
+// deck pays one bool test.
+inline void (*g_lock_prefloat_hook)(GameState& state, int controller, int num) = nullptr;
+inline void PrefloatLandsAtTypeStaticsLock(GameState& state, int entered_index)
+{
+    if (!state.deck_has_type_statics || g_lock_prefloat_hook == nullptr) { return; }
+    if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    const Permanent& e = state.battlefield[static_cast<std::size_t>(entered_index)];
+    if (e.def_absent) { return; }
+    const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
+    if (ed == nullptr) { return; }
+    const bool e_ee = ed->params.static_all_permanents_enchantments;
+    const bool e_op = ed->params.static_animate_other_nonaura_enchantments_mv;
+    if (!e_ee && !e_op) { return; }
+    const int controller = e.controller_index;
+    if (controller != state.active_player_index) { return; }
+    // The statics now and without the entrant (TypeStaticsPresent counts Opalescences only, so count EEs here).
+    TypeStaticsPresent now;
+    int ees = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.static_all_permanents_enchantments) { ++ees; }
+        if (d->params.static_animate_other_nonaura_enchantments_mv) { ++now.opals; }
+    }
+    now.ee = ees > 0;
+    TypeStaticsPresent before = now;
+    if (e_ee) { before.ee = ees > 1; }
+    if (e_op) { --before.opals; }
+    std::vector<int> doomed;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        if (i == entered_index) { continue; }
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != controller || p.tapped || p.def_absent || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (LandDiesUnderTypeStatics(now, *d) && !LandDiesUnderTypeStatics(before, *d))
+        { doomed.push_back(p.card.m_number); }
+    }
+    for (int num : doomed) { g_lock_prefloat_hook(state, controller, num); }
 }
 inline void FireUnearthedLeaves(GameState& state, const std::vector<Permanent>& left);
 inline void ReturnOrphanedLinkedExiles(GameState& state);
@@ -13438,6 +13507,8 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     // later permanent lifting devotion to 5 flips an older Heliod on WITHOUT it "entering" (only
     // the actual entrant is passed to the creature-enter watchers). Param-gated early-out.
     RefreshDevotionCreatures(state);
+    // The lock pre-float (step 2): our doomed lands tap into the float BEFORE the refresh makes them 0/0 creatures.
+    PrefloatLandsAtTypeStaticsLock(state, entered_index);
     RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     // ASCEND (Ocelot Pride): a permanent just ENTERED, which is the only way the count can rise, so

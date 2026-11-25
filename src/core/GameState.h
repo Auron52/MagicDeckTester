@@ -2215,6 +2215,14 @@ struct GameState
     // a board that holds one, so other decks' unstamped states are unchanged too). A DECK CONSTANT, never folded.
     // In the pad byte before scripted_attack_choose_mode: sizeof(GameState) unchanged.
     bool                     deck_has_type_statics        = true;
+    // THE LOCK PRE-FLOAT'S DUAL-LAND COLOUR (lock cluster step 2, 2026-11-26; PrefloatLandsAtTypeStaticsLock in
+    // SpellEffects.h). True when floating a multi-colour land of this deck as `wild` is EXACT: for every land in the
+    // list that makes two or more colours, every coloured pip of every card of the list (main + sideboard) is a
+    // colour that land makes (a hybrid pip: either half). Then `wild` pays nothing the land could not have paid.
+    // DEFAULT FALSE, the safe direction: an unstamped state (a unit test, a scenario) floats single-colour lands only
+    // and leaves a dual to die untapped, as before step 2. A DECK CONSTANT, never folded. In the same pad as the bit
+    // above (sizeof(GameState) unchanged).
+    bool                     deck_float_wild_exact        = false;
     // THE SEARCHED ELDER GARGAROTH MODE (Plan::attack_choose_mode_choice): PACKED 2 bits per attack-trigger
     // ordinal (ordinal 0 lowest; a field of 0 = that ordinal unpinned, m + 1 = mode m: 0 token / 1 life /
     // 2 draw); -1 = nothing pinned (every trigger takes DecisionProvider::AttackChooseOneModes' front).

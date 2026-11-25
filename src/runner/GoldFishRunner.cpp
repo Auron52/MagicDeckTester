@@ -2080,6 +2080,54 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no type static (Enchanted Evening / Opalescence) can be on
         // the battlefield, so RefreshTypeStatics and TypeStaticsSbaCheckpoint are dead code for that deck.
         state.deck_has_type_statics      = garth || type_statics;
+        // The lock pre-float's dual colour (GameState::deck_float_wild_exact; design §4.2): floating a multi-colour
+        // land as `wild` is exact when every coloured pip of the list is a colour every such land makes (a hybrid
+        // pip: either half). Phyrexian / twobrid pips are baked into the flat colours, so they count as required
+        // (the conservative direction: a false stamp only leaves a dual unfloated).
+        {
+            std::vector<unsigned> dual_masks;   // bit = Color index (W U B R G)
+            auto scan_lands = [&](const std::vector<Card>& zone)
+            {
+                for (const Card& c : zone)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                    if (d == nullptr || !d->card.IsLand()) { continue; }
+                    unsigned m = 0;
+                    for (Color col : d->params.produces)
+                    { if (col != Color::Colorless) { m |= 1u << static_cast<int>(col); } }
+                    if ((m & (m - 1)) != 0) { dual_masks.push_back(m); }   // two or more colours
+                }
+            };
+            scan_lands(deck.mainboard);
+            scan_lands(deck.sideboard);
+            bool exact = true;
+            auto scan_pips = [&](const std::vector<Card>& zone)
+            {
+                for (const Card& c : zone)
+                {
+                    if (!exact) { return; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                    if (d == nullptr) { continue; }
+                    const ManaCost& mc = d->card.m_mana_cost;
+                    int flat[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
+                    for (unsigned m : dual_masks)
+                    {
+                        int left[5] = { flat[0], flat[1], flat[2], flat[3], flat[4] };
+                        for (int h = 0; h < mc.hybrid_count && h < 6; ++h)
+                        {
+                            const int a = (mc.hybrid_pair[h] >> 4) & 0xF, b = mc.hybrid_pair[h] & 0xF;
+                            if (a < 5) { --left[a]; }
+                            const bool ok = (a < 5 && (m >> a & 1u)) || (b < 5 && (m >> b & 1u));
+                            if (!ok) { exact = false; }
+                        }
+                        for (int k = 0; k < 5; ++k) { if (left[k] > 0 && !(m >> k & 1u)) { exact = false; } }
+                    }
+                }
+            };
+            scan_pips(deck.mainboard);
+            scan_pips(deck.sideboard);
+            state.deck_float_wild_exact = exact;
+        }
         state.deck_has_dragon_ping       = garth || dragon_ping;
         state.deck_has_sac_mana_outlet   = garth || sac_mana_outlet;
         state.deck_has_mana_grant        = garth || mana_grant;

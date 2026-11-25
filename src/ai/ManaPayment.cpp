@@ -15263,6 +15263,65 @@ struct FadePrefloatInstaller
 } s_fade_prefloat_installer;
 }
 
+// The Enchanted Evening + Opalescence lock pre-float (SpellEffects.h g_lock_prefloat_hook /
+// PrefloatLandsAtTypeStaticsLock; design §4.2): a land the completing entrant is about to kill taps for mana through
+// the payer's own pre-tap route (HumanPreTapOfferFor is the one legality function; a refusal taps nothing). Only a
+// PLAIN or CONVERSION route's free face: a sacrifice route would erase a permanent while the enter cascade's caller
+// holds battlefield indices, and a fed face spends float (a choice). ONE free face floats it. Several (a dual) float
+// as `wild` -- tapped as its first face, then that one unit turned to wild -- only under deck_float_wild_exact and
+// for a one-mana tap (produces_amount 1), where wild pays exactly what the land could; otherwise the land dies
+// untapped, as before step 2 (no colour is ever picked).
+namespace {
+struct LockPrefloatInstaller
+{
+    static void Float(GameState& state, int controller, int num)
+    {
+        if (controller != state.active_player_index) { return; }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number != num || p.controller_index != controller) { continue; }
+            if (p.tapped) { return; }
+            const HumanPreTapOffer offer = HumanPreTapOfferFor(state, p);
+            using Route = HumanPreTapOffer::Route;
+            if (offer.sacrifice || (offer.route != Route::Plain && offer.route != Route::Conversion)) { return; }
+            const std::string& faces = offer.free_faces;
+            if (faces.empty()) { return; }
+            const bool wild = faces.size() > 1;
+            if (wild)
+            {
+                if (!state.deck_float_wild_exact) { return; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d == nullptr || d->params.produces_amount != 1) { return; }
+            }
+            const std::size_t pos = std::string(kPreTapColorLetters).find(faces[0]);
+            if (pos == std::string::npos || pos >= 6) { return; }
+            TurnSolver::PreTap t;
+            t.name  = p.card.m_name.str();
+            t.num   = num;
+            t.color = static_cast<int>(pos);
+            const ManaPool before = state.floating_mana;
+            if (!ApplyEnginePreTap(state, t).empty()) { return; }
+            if (wild && pos < 5)
+            {
+                const Color c = static_cast<Color>(pos);
+                const int have_c = c == Color::White ? state.floating_mana.white - before.white
+                                 : c == Color::Blue  ? state.floating_mana.blue  - before.blue
+                                 : c == Color::Black ? state.floating_mana.black - before.black
+                                 : c == Color::Red   ? state.floating_mana.red   - before.red
+                                                     : state.floating_mana.green - before.green;
+                if (have_c >= 1)
+                {
+                    state.floating_mana.Add(c, -1);
+                    state.floating_mana.wild += 1;
+                }
+            }
+            return;
+        }
+    }
+    LockPrefloatInstaller() { g_lock_prefloat_hook = &Float; }
+} s_lock_prefloat_installer;
+}
+
 bool ApplyKruphixBankTap(GameState& state, int source_id, char face)
 {
     bool kruphix = false;
