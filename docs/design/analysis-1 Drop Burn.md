@@ -1999,3 +1999,11 @@ OPEN FOR THE USER (non-blocking):
   smoke searched slower 0 / faster 4, d0 slower 1 / faster 84; regression searched slower 0 / faster 12, d0 slower 1
   (midrangeburn_regression_d0_s2002 gi345 5->6, greedy runner) / faster 84. 17 keys moved, all faster or equal.
   check_gt_logs 1345 consistent. The overnight GT for these four decks is left to the periodic overnight run.
+
+### 2026-11-25 value-leaf adoption
+
+- The exhaustive keep-and-bottom profile was already shipped. The value-leaf run trained 9,083 rows and completed all 52 matrix cells at 400 games each without abandoned games.
+- In 8,000 paired one-on-one games, the selected emulated ladder used 0.861 times the baseline work units and changed the mean win turn by +0.00062. It uses model warm-ups and a heuristic rollout for the committing pass; its frozen emulation vector is [61.34, 294.51, 10.53].
+- The play-setting screen kept depth 5 and budget 20. A budget of 30 improved the mean by 0.00062 turn per game but cost 12.8% more work units. The screen found no cheaper passing setting. No escalation skip allowance was needed.
+- A separate 1,000-game paired 2HG test found the selected leaf +0.011 turns and 1.08 times the work units; the other available shapes also failed the 2HG adoption bar. The sidecar therefore sets `one_head_only`. With that switch, 1,000 paired 2HG games were byte-identical to the leafless deck, including work units.
+- Release build and 4,174 unit tests passed. Scoped smoke and regression passed after accepting the one-on-one digest changes; 2HG smoke and regression remained identical to the old baseline. The strict viewer replay had zero play, enumeration, mulligan, or contract drift. The periodic overnight tier will pick up the change in its next pooled run.
