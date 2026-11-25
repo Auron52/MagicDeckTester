@@ -50,8 +50,13 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
     // names the searched choice; empty -> PerformFetch falls back to its own top heuristic pick.
     // A named target can crack a fetch beside an autonomous hold; the human HOLD choice leaves it
     // on the battlefield for a later activation.
-    if ((FetchResolvesOnPlay(state, def) && opts.fetch_target != kFetchHoldTarget)
-        || FetchCrackOnPlayPinned(state, def, opts.fetch_target))
+    // ENCHANTED EVENING + OPALESCENCE (LandDiesToTypeStatics): the fetchland is a 0/0 creature as it enters and
+    // the toughness SBA kills it before we receive priority (CR 117.5 / 704.3), so it can never be cracked. It is
+    // played as a permanent and PlayLandFromHand's SBA checkpoint (LegendRuleSbaCheckpoint ->
+    // TypeStaticsSbaCheckpoint) puts it into the graveyard. A no-op without deck_has_type_statics.
+    if (!LandDiesToTypeStatics(state, def)
+        && ((FetchResolvesOnPlay(state, def) && opts.fetch_target != kFetchHoldTarget)
+            || FetchCrackOnPlayPinned(state, def, opts.fetch_target)))
     {
         Card fetchland = card;
         leave_zone();

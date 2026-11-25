@@ -435,6 +435,7 @@ void GameEngine::UntapStep(GameState& state)
     DrainPendingLookTop(state);         // safety net (lockstep w/ SimulateEndAndStartNextTurn): a watcher-only entry's Risen Reef trigger
     DrainPendingSagaEnters(state);      // safety net (lockstep w/ SimulateEndAndStartNextTurn): Saga enters take their counter by turn start
     SweepOrphanedAuras(state);          // CR 704.5m SBA checkpoint (lockstep w/ SimulateEndAndStartNextTurn)
+    TypeStaticsSbaCheckpoint(state);    // Enchanted Evening / Opalescence SBA safety net (lockstep w/ SimulateEndAndStartNextTurn)
     state.casts_remaining_this_turn = -1; // Irencrag "one more spell" budget clears each turn (see GameState); no-op for non-restrictor decks
     state.hand_size_at_combat   = -1;   // post-combat productivity markers are per turn (see GameState);
     state.battlefield_at_combat = -1;   // -1 = no combat yet this turn = "assume productive"
@@ -592,6 +593,10 @@ void GameEngine::UntapStep(GameState& state)
     // (assume each is tapped for mana). Same point + order as the rollout (TurnSolver SimulateToEnd)
     // so the executor and the search stay in lockstep. On-play copies are handled in TryPlaySpecificLand.
     SpawnForbiddenOrchardTokensTurnStart(state);
+    // ENCHANTED EVENING + OPALESCENCE: a spawn body (and an Orchard Spirit) is a definition-less token of mana value
+    // 0 -- under both statics a 0/0 enchantment creature, dead to the toughness SBA as it appears (these sites push
+    // directly, no enter cascade). Lockstep twin: the rollout's spawn site. A no-op without deck_has_type_statics.
+    TypeStaticsSbaCheckpoint(state);
 }
 
 void GameEngine::UpkeepStep(GameState& state)

@@ -1959,6 +1959,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // today, so it plays correctly; a future stamp that does must follow transform_back_name.
         bool transform = false, tap_steal = false;
         bool land_ability_loss = false;   // Blood Sun (GameState::deck_has_land_ability_loss)
+        bool type_statics = false;        // Enchanted Evening / Opalescence (GameState::deck_has_type_statics)
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1973,6 +1974,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 { turn_gods = true; }
                 if (d->params.ascend)                         { ascend = true; }
                 if (d->params.creature_requires_devotion > 0) { devotion = true; }
+                if (d->params.static_all_permanents_enchantments
+                    || d->params.static_animate_other_nonaura_enchantments_mv) { type_statics = true; }
                 if (d->params.dragon_ping_on_enter)           { dragon_ping = true; }
                 if (IsSacManaOutlet(d->params))               { sac_mana_outlet = true; }
                 if (!d->params.granted_tap_mana_subtypes.empty()) { mana_grant = true; }
@@ -2074,6 +2077,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_ascend            = garth || ascend;
         state.deck_has_storied           = garth || storied;
         state.deck_has_devotion_creature = garth || devotion;
+        // Same reasoning, no lever: a clear bit proves no type static (Enchanted Evening / Opalescence) can be on
+        // the battlefield, so RefreshTypeStatics and TypeStaticsSbaCheckpoint are dead code for that deck.
+        state.deck_has_type_statics      = garth || type_statics;
         state.deck_has_dragon_ping       = garth || dragon_ping;
         state.deck_has_sac_mana_outlet   = garth || sac_mana_outlet;
         state.deck_has_mana_grant        = garth || mana_grant;

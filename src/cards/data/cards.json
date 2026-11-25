@@ -19592,6 +19592,34 @@
      "Enchantment"
     ]
    }
+  },
+  {
+   "name": "Enchanted Evening",
+   "mana_cost": "{3}{W/U}{W/U}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "All permanents are enchantments in addition to their other types. [LAYER-4 TYPE STATIC (static_all_permanents_enchantments; RefreshTypeStatics, SpellEffects.h): every battlefield permanent of BOTH sides -- lands, tokens, the opponent's spawn bodies -- gets Enchantment on its own Card copy (the Heliod precedent), at every battlefield-membership chokepoint and SBA checkpoint, in both worlds, behind the deck stamp deck_has_type_statics. Applied BEFORE Opalescence (CR 613.8 dependency: it changes what Opalescence applies to). Alone it changes only what reads 'enchantment' (Scryfall 2008-05-01): Sterling Grove's shroud then covers every other permanent we control, lands included (an Aura spell can no longer target our land); Calming Verse and Force of Vigor reach every opposing permanent (lock-cluster steps 3 / 5). It does not touch SPELLS, so Enchantress's Presence still counts only enchantment spells. With Opalescence out every land on both sides is a 0/0 creature and dies to the toughness SBA (CR 704.5f), our own mana included; a land played later dies as it enters (a fetchland cannot be cracked), and every MV-0 token dies as it appears. Hybrid {W/U}{W/U}: this list pays both pips with W. Mana value 5, so a 5/5 under Opalescence.]",
+   "template": "custom",
+   "parameters": {
+    "static_all_permanents_enchantments": true
+   }
+  },
+  {
+   "name": "Opalescence",
+   "mana_cost": "{2}{W}{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Each other non-Aura enchantment is a creature in addition to its other types and has base power and base toughness each equal to its mana value. [LAYER-4 + 7b TYPE STATIC (static_animate_other_nonaura_enchantments_mv; RefreshTypeStatics, SpellEffects.h): every OTHER non-Aura enchantment on the battlefield (either side) gets Creature and base P/T = its copy's mana value (X = 0; tokens and lands 0) on its own Card copy; counters and until-EOT pumps still apply on top. Never itself; two Opalescences animate each other (Scryfall 2004-10-04). Auras (Utopia Sprawl, Wild Growth) are never animated. Summoning sickness is CONTROL duration (CR 302.6; Scryfall 2008-08-01): an enchantment controlled since the turn began may attack the turn Opalescence arrives, one that entered this turn may not. Here: Enchantress's Presence 3/3, Sterling Grove 2/2, Exploration 1/1, Oblivion Ring 3/3, Parallax Wave 4/4, Enchanted Evening 5/5, another Opalescence 4/4. A creature it makes 0/0 (an MV-0 enchantment, or every land under Enchanted Evening) dies at the shared SBA checkpoint (TypeStaticsSbaCheckpoint: after every resolution, the land drop, the end step, the opponent's land drop and spawns, both turn starts), through OnCreatureDies, so its leave triggers fire (an Oblivion Ring that dies returns its card); an Aura on a land that died goes to the graveyard (CR 704.5m). Without Enchanted Evening the passive opponent has no enchantment, so only our side changes.]",
+   "template": "custom",
+   "parameters": {
+    "static_animate_other_nonaura_enchantments_mv": true
+   }
   }
 ]
 }

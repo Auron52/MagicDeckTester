@@ -10944,6 +10944,9 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             // keep the printed Enchantment Creature a 5/5 attacker at devotion 1 (turn-start fixtures
             // were already refreshed by the untap resync). Param-gated inside: no other staged card moves.
             RefreshDevotionCreatures(state);
+            // ...and the Enchanted Evening / Opalescence type statics, for the same reason (a staged board passes
+            // no chokepoint). Retypes only; the first SBA checkpoint of the run kills any 0/0 it makes.
+            RefreshTypeStatics(state);
         }
         for (const auto& hc : j.value("hand", json::array()))
         { state.players[0].hand.push_back(make_card(hc.get<std::string>())); }

@@ -5434,6 +5434,19 @@ struct CardParams
     // target one of our enchantment permanents (relevant once Enchanted Evening makes every permanent
     // an enchantment -- e.g. a land can no longer take Utopia Sprawl / Wild Growth).
     bool                     grants_other_enchantments_shroud = false;
+    // TYPE STATICS (Enchanted Evening lock cluster, step 1; RefreshTypeStatics in SpellEffects.h). Both are static
+    // abilities of a permanent, applied to every battlefield permanent's own Card copy (the Heliod precedent) by one
+    // shared refresh at the battlefield-membership chokepoints and the SBA checkpoints, behind the per-game deck stamp
+    // GameState::deck_has_type_statics (stamped from either param), so every other deck pays one bool test.
+    //   Enchanted Evening: "All permanents are enchantments in addition to their other types." Layer 4, both sides,
+    //     lands and tokens included. Applied FIRST (CR 613.8: Opalescence depends on it).
+    //   Opalescence: "Each other non-Aura enchantment is a creature in addition to its other types and has base power
+    //     and base toughness each equal to its mana value." Layer 4 (Creature) then 7b (base P/T = the copy's MV,
+    //     X = 0, tokens and lands 0). Never itself; two Opalescences animate each other (Scryfall 2004-10-04). With
+    //     Enchanted Evening every land is a 0/0 creature and dies to the toughness SBA (CR 704.5f), which runs at the
+    //     shared SBA checkpoint (TypeStaticsSbaCheckpoint) in both worlds.
+    bool                     static_all_permanents_enchantments = false;
+    bool                     static_animate_other_nonaura_enchantments_mv = false;
     // Sterling Grove: "{1}, Sacrifice this enchantment: Search your library for an enchantment card,
     // reveal it, then shuffle and put that card on top." The mana half of an activated tutor-to-top
     // whose other cost is SACRIFICING THE SOURCE (no {T}: legal the turn it enters). The search spec is

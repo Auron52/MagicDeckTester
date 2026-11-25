@@ -367,6 +367,7 @@ add_executable(mtg-test
     test/unit/test_spirits_millicent.cpp
     test/unit/test_spirits_skyclave_orchid.cpp
     test/unit/test_enchanted_evening_simple.cpp
+    test/unit/test_enchanted_evening_lock1.cpp
     test/unit/test_spirits_usher.cpp
     test/unit/test_spirits_fetch_rule.cpp
     test/unit/test_spirits_discard.cpp

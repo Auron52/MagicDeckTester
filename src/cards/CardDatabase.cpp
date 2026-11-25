@@ -2203,6 +2203,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
                                                std::vector<std::string>{});
     p.etb_exile_nonland_until_leaves   = params.value("etb_exile_nonland_until_leaves", false);
     p.grants_other_enchantments_shroud = params.value("grants_other_enchantments_shroud", false);
+    p.static_all_permanents_enchantments = params.value("static_all_permanents_enchantments", false);
+    p.static_animate_other_nonaura_enchantments_mv
+        = params.value("static_animate_other_nonaura_enchantments_mv", false);
     if (params.contains("sac_tutor_top_cost"))
         p.sac_tutor_top_cost = ManaCostFromString(params["sac_tutor_top_cost"].get<std::string>());
     p.sac_tutor_top_types       = params.value("sac_tutor_top_types", std::vector<std::string>{});

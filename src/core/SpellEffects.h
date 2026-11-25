@@ -1328,6 +1328,62 @@ inline void DestroyTokensCreatedBy(GameState& state, int source_number);
 inline bool UnearthExileInstead(GameState& state, std::size_t idx, const char* event);
 inline bool UnearthExileDeferred(GameState& state, std::size_t idx, const char* event,
                                  std::vector<Permanent>& left);
+
+// ==== TYPE STATICS: Enchanted Evening + Opalescence (lock cluster step 1, 2026-11-26) ==========================
+// docs/design/enchanted-evening-lock-design.md §4.1. Two layered statics applied to every battlefield permanent's
+// OWN Card copy (the Heliod / RefreshDevotionCreatures precedent), so the ~750 copy readers (IsCreature,
+// IsEnchantment, EffectivePower / Toughness, CanAttack, both SBA passes, the shroud predicates through
+// PermanentIsEnchantmentNow) see them at once:
+//   * Enchanted Evening (static_all_permanents_enchantments), LAYER 4: every permanent is also an enchantment.
+//   * Opalescence (static_animate_other_nonaura_enchantments_mv), LAYER 4 then 7b: every OTHER non-Aura enchantment
+//     is also a creature with base P/T = its mana value. It DEPENDS on Enchanted Evening (CR 613.8: EE changes what
+//     it applies to), so EE applies first whatever the timestamps. Two Opalescences animate each other.
+// THE REFRESH (RefreshTypeStatics) only retypes: it is called at the battlefield-membership chokepoints beside
+// RefreshDevotionCreatures, some of which (the enter cascade's top) run while callers hold battlefield slot
+// indices, so it never erases. THE DEATHS (a land, a token or an MV-0 permanent made a 0/0 creature; CR 704.5f;
+// and the Auras that fell off them, CR 704.5m) happen at the SHARED SBA CHECKPOINT (TypeStaticsSbaCheckpoint),
+// which runs at points that hold no battlefield index, in BOTH worlds at the same instants: inside
+// LegendRuleSbaCheckpoint (after every stack resolution -- GameEngine::ResolveStack / the rollout's apply_one exit;
+// the land drop, LandPlay.cpp; the end step), after the opponent's land drop (ResolvePassiveOpponentLandTurn,
+// shared), after the opponent's scheduled spawns (both untap sites) and at both turn starts. Everything is behind
+// the per-game stamp GameState::deck_has_type_statics: every other deck pays one bool test.
+inline bool RefreshTypeStatics(GameState& state);
+inline void TypeStaticsSbaCheckpoint(GameState& state);
+// Which type statics are on the battlefield right now (either controller: both statics read "all" / "each other").
+struct TypeStaticsPresent
+{
+    bool ee    = false;   // an Enchanted Evening
+    int  opals = 0;       // the number of Opalescences
+};
+inline TypeStaticsPresent TypeStaticsOnBattlefield(const GameState& state)
+{
+    TypeStaticsPresent out;
+    if (!state.deck_has_type_statics) { return out; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.static_all_permanents_enchantments) { out.ee = true; }
+        if (d->params.static_animate_other_nonaura_enchantments_mv) { ++out.opals; }
+    }
+    return out;
+}
+// Would a LAND with this definition die the moment it enters (Enchanted Evening + Opalescence: it is a non-Aura
+// enchantment, so a 0/0 creature -- a land's mana value is 0 -- and the toughness SBA kills it before any player
+// receives priority, CR 117.5 / 704.3)? Then no activated ability of it can ever be activated: a FETCHLAND cannot be
+// cracked (both our land drop, LandPlay.cpp's PlayLandCore, and the opponent's, PlayLeftmostLandFrom) and a Karoo's
+// return trigger finds no land (OpponentLandEnters). An enchantment land (Urza's Saga) dies under Opalescence alone.
+// ASSUMPTION, disclosed: no static toughness bonus (an anthem) holds the land above 0 -- none in this deck or its
+// opponent pool; a deck that adds one must revisit this predicate (it is a prediction of the SBA's verdict).
+inline bool LandDiesToTypeStatics(const GameState& state, const CardDefinition& land)
+{
+    if (!state.deck_has_type_statics) { return false; }
+    if (land.params.is_aura) { return false; }
+    const TypeStaticsPresent ts = TypeStaticsOnBattlefield(state);
+    if (ts.opals <= 0 || !(ts.ee || land.card.IsEnchantment())) { return false; }
+    return land.card.m_mana_cost.ManaValue() <= 0;
+}
 inline void FireUnearthedLeaves(GameState& state, const std::vector<Permanent>& left);
 inline void ReturnOrphanedLinkedExiles(GameState& state);
 inline void NormalizeLeftDayboundFace(GameState& state, int controller, const Card& left, const CardDefinition& d);
@@ -3477,7 +3533,10 @@ inline void OpponentLandEnters(GameState& state, const Card& entering, const Car
 
     // KAROO (etb_bounce_land): "return a land you control to its owner's hand" -- that head's land, to
     // that head's hand (its right end).
-    if (face.params.etb_bounce_land && !suppressed)
+    // ENCHANTED EVENING + OPALESCENCE: the trigger finds NO land -- the Karoo itself and every land the head held
+    // are 0/0 creatures that the toughness SBA removes before the trigger resolves (a trigger survives its source,
+    // but its "return a land you control" has nothing left to return).
+    if (face.params.etb_bounce_land && !suppressed && !LandDiesToTypeStatics(state, face))
     {
         int pick = -1, karoo = -1;
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -3613,7 +3672,11 @@ inline LandPlayResult PlayLeftmostLandFrom(GameState& state, std::vector<Card>& 
         ? std::max(1, fp.land_search_activation_life_cost)
         : fp.land_search_activation_life_cost;
     // BLOOD SUN (G4): a fetchland has lost its fetch -- it simply stays.
-    if ((!typed_fetch && !basic_fetch) || opp.life <= life_cost || LandNonManaAbilitiesSuppressed(state))
+    // ENCHANTED EVENING + OPALESCENCE: the fetchland is a 0/0 creature as it enters and dies to the toughness SBA
+    // before the opponent receives priority (CR 117.5 / 704.3), so its fetch can never be activated: it enters (and
+    // ResolvePassiveOpponentLandTurn's type-statics checkpoint puts it into the graveyard).
+    if ((!typed_fetch && !basic_fetch) || opp.life <= life_cost || LandNonManaAbilitiesSuppressed(state)
+        || LandDiesToTypeStatics(state, *face))
     {
         OpponentLandEnters(state, card, *face, false, head, hand, graveyard, result.notes, result.life_gains);
         return result;
@@ -3757,6 +3820,12 @@ inline void ResolvePassiveOpponentLandTurn(GameState& state)
             { OpponentGainsLife(state, 0, g.second, g.first); }
         }
     }
+    // ENCHANTED EVENING + OPALESCENCE: the land(s) just played are 0/0 enchantment creatures and die to the
+    // toughness SBA (CR 704.5f) before the opponent receives priority; an Aura on one goes with it (CR 704.5m).
+    // OpponentLandEnters pushes onto the battlefield directly (no enter cascade), so the refresh + sweep run HERE,
+    // after both heads' drops, where no battlefield index is held. Shared by both worlds (lockstep); a no-op
+    // without deck_has_type_statics.
+    TypeStaticsSbaCheckpoint(state);
     if (!searched) { return; }
     // Archive Trap: "if an opponent searched their library this turn" -- either head; the trap's
     // mill targets players[1], the targeted head.
@@ -6588,10 +6657,13 @@ inline bool CreatureHasAura(const Permanent& creature, const GameState& state)
 // (CR 303.4a), so a land already carrying a shroud-granting aura can take no further auras. It is
 // deliberately NOT filtered on controller: shroud is symmetric, and an opponent's aura on our land
 // would shroud it just the same.
-// Is this permanent an ENCHANTMENT right now? Today its printed card types (a Permanent's Card is a
-// copy of the definition's). The ONE reader the Sterling Grove grant uses, so a type-changing static
-// (Enchanted Evening: "All permanents are enchantments in addition to their other types") extends it
-// here and every shroud predicate follows.
+// Is this permanent an ENCHANTMENT right now? The ONE reader the Sterling Grove grant uses, so every shroud
+// predicate follows it. It reads the permanent's own Card COPY, which is where the type-changing statics write:
+// Enchanted Evening ("All permanents are enchantments in addition to their other types") adds Enchantment to every
+// battlefield copy in RefreshTypeStatics (layer 4), so under Enchanted Evening the Grove's grant covers every other
+// permanent we control -- lands included (an Aura spell can then no longer target our land, CR 702.18a). Kept as a
+// copy read, not a board walk for an Enchanted Evening: the refresh runs at every battlefield-membership chokepoint
+// and SBA checkpoint, so the copy is current wherever a target is chosen.
 inline bool PermanentIsEnchantmentNow(const Permanent& p, const GameState& state)
 {
     (void)state;
@@ -13366,6 +13438,7 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     // later permanent lifting devotion to 5 flips an older Heliod on WITHOUT it "entering" (only
     // the actual entrant is passed to the creature-enter watchers). Param-gated early-out.
     RefreshDevotionCreatures(state);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     // ASCEND (Ocelot Pride): a permanent just ENTERED, which is the only way the count can rise, so
     // this is where the city's-blessing state trigger is checked (CR 702.131b). Above the watchers
@@ -14272,6 +14345,86 @@ inline void RefreshDevotionCreatures(GameState& state)
         if (is_creature) { p.card.AddType(CardType::Creature); }
         else             { p.card.RemoveType(CardType::Creature); }
     }
+}
+
+// Undo what the last type-statics refresh added to this card (Card::m_ts_mask): exactly the bits it records, never a
+// type the card had of its own. Safe on any card in any zone; a no-op on a clean card.
+inline void RestoreTypeStatics(Card& c)
+{
+    const std::uint8_t m = c.m_ts_mask;
+    if (m == 0) { return; }
+    if (m & Card::kTsAddedEnchantment) { c.RemoveType(CardType::Enchantment); }
+    if (m & Card::kTsAddedCreature)    { c.RemoveType(CardType::Creature); }
+    if (m & Card::kTsSetPt)
+    {
+        c.m_power     = (m & Card::kTsHadPower) ? std::optional<int>(c.m_ts_saved_power) : std::nullopt;
+        c.m_toughness = (m & Card::kTsHadTough) ? std::optional<int>(c.m_ts_saved_tough) : std::nullopt;
+    }
+    c.m_ts_mask = 0;
+    c.m_ts_saved_power = 0;
+    c.m_ts_saved_tough = 0;
+}
+
+// Enchanted Evening + Opalescence, re-derived from the board (see the block comment at the forward declaration).
+// RESTORE then RE-APPLY, so the result is a pure function of the board and idempotent: every permanent's card first
+// drops what the previous refresh added (its own m_ts_mask bits -- a card that re-entered from exile carrying stale
+// bits is undone the same way), then layer 4 (EE) and layers 4 + 7b (each Opalescence) apply in dependency order.
+// "Each OTHER": a lone Opalescence never animates itself; with two, each animates the other (Scryfall 2004-10-04).
+// Non-Aura: Utopia Sprawl / Wild Growth stay plain Auras. The base P/T OVERWRITES a creature's printed P/T (layer
+// 7b); counters (7d) and until-EOT pumps (7c) still apply on top through EffectivePower / Toughness. Mana value =
+// the COPY's mana cost (X = 0 on the battlefield, CR 202.3e; tokens and lands 0). Summoning sickness needs nothing
+// new: it tracks CONTROL duration (entered_this_turn / gained_control_this_turn, CR 302.6; Scryfall 2008-08-01), so
+// an enchantment controlled since the turn began may attack the turn Opalescence arrives.
+// Returns true when any type static is on the battlefield OR some card carried bits from the last refresh (the
+// caller's cue that a 0-toughness death or an orphaned Aura is possible); false for every board without either.
+// Never erases (see the forward declaration). KNOWN LIMIT, disclosed: another refresh that rewrites a copy's base
+// P/T between two of these (Saproling Burst's fade tokens, a characteristic-defining P/T) is overwritten while an
+// Opalescence applies and restored to the value saved before it -- no such card is in this deck or its pool.
+inline bool RefreshTypeStatics(GameState& state)
+{
+    if (!state.deck_has_type_statics) { return false; }
+    bool dirty = false;
+    for (const Permanent& p : state.battlefield) { if (p.card.m_ts_mask != 0) { dirty = true; break; } }
+    const TypeStaticsPresent ts = TypeStaticsOnBattlefield(state);
+    if (!ts.ee && ts.opals == 0 && !dirty) { return false; }
+    for (Permanent& p : state.battlefield) { RestoreTypeStatics(p.card); }
+    // Layer 4, Enchanted Evening: every permanent, both sides.
+    if (ts.ee)
+    {
+        for (Permanent& p : state.battlefield)
+        {
+            if (p.card.IsEnchantment()) { continue; }
+            p.card.AddType(CardType::Enchantment);
+            p.card.m_ts_mask |= Card::kTsAddedEnchantment;
+        }
+    }
+    // Layers 4 + 7b, Opalescence.
+    if (ts.opals > 0)
+    {
+        for (Permanent& p : state.battlefield)
+        {
+            Card& c = p.card;
+            if (!c.IsEnchantment()) { continue; }
+            const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->params.is_aura) { continue; }
+            const bool self = d != nullptr && d->params.static_animate_other_nonaura_enchantments_mv;
+            if (ts.opals - (self ? 1 : 0) <= 0) { continue; }
+            if (!c.IsCreature())
+            {
+                c.AddType(CardType::Creature);
+                c.m_ts_mask |= Card::kTsAddedCreature;
+            }
+            if (c.m_power.has_value())     { c.m_ts_mask |= Card::kTsHadPower; }
+            if (c.m_toughness.has_value()) { c.m_ts_mask |= Card::kTsHadTough; }
+            c.m_ts_saved_power = static_cast<std::int8_t>(std::clamp(c.m_power.value_or(0), -128, 127));
+            c.m_ts_saved_tough = static_cast<std::int8_t>(std::clamp(c.m_toughness.value_or(0), -128, 127));
+            c.m_ts_mask |= Card::kTsSetPt;
+            const int mv = c.m_mana_cost.ManaValue();
+            c.m_power     = mv;
+            c.m_toughness = mv;
+        }
+    }
+    return true;
 }
 
 // A permanent just entered under `controller` at battlefield slot `entered_index`: fire ITS OWN
@@ -17382,6 +17535,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
     // you control dies" lifegain (Daxos) fires. Both ABOVE the `reactions.empty()` early-out
     // below, which only knows subtype-keyed watchers.
     RefreshDevotionCreatures(state);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     FireCreatureDiesWatchers(state, dead_controller, dwatch);
 
@@ -18032,6 +18186,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
                 ResolveAthreosExile(state, leaving);
             }
             RefreshDevotionCreatures(state);   // Ajani's {W}{W} left devotion
+            RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
             RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
             if (g_play_event_sink && !g_tap_speculating)
             {
@@ -18544,6 +18699,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         state.players[q.owner_index].graveyard.push_back(RevealedCard(dead_card));
         state.battlefield.erase(state.battlefield.begin() + i);
         RefreshDevotionCreatures(state);   // a dead walker's pips leave devotion (Ajani {2}{W}{W})
+        RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
         RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
         break;
     }
@@ -20925,7 +21081,8 @@ inline bool CardIsLord(const Card& c)
     const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
     return d != nullptr && IsLordPermanent(*d);
 }
-inline int SweepZeroToughnessSba(GameState& state)
+// `why` names the cause in the viewer's play event only (no digest reads it).
+inline int SweepZeroToughnessSba(GameState& state, const char* why = "a lord left")
 {
     struct Dead { Card card; int controller; bool was_token; int minus; int total; int owner; };
     std::vector<Dead> died;
@@ -20948,7 +21105,7 @@ inline int SweepZeroToughnessSba(GameState& state)
     if (!died.empty() && g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "death", "\xE2\x98\xA0 " + std::to_string(died.size())
-                      + " creature(s) die at 0 toughness (a lord left)");
+                      + " creature(s) die at 0 toughness (" + why + ")");
     }
     FireUnearthedLeaves(state, unearth_left);
     for (const Dead& d : died)
@@ -21025,6 +21182,7 @@ inline void UnearthedLeftBattlefield(GameState& state, const Permanent& leaving)
     { state.permanent_left_under_control_this_turn = true; }
     FireLeavesBattlefieldTriggers(state, leaving.controller_index, leaving.card);
     RefreshDevotionCreatures(state);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);
     ResolveAthreosExile(state, leaving);
 }
@@ -21070,6 +21228,7 @@ inline void PermanentsLeftBattlefieldTogether(GameState& state, const std::vecto
         if (mark != marked.end()) { marked.erase(mark); }
     }
     RefreshDevotionCreatures(state);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);
 }
 
@@ -21472,6 +21631,7 @@ inline void PerformEndStepDelayedReturns(GameState& state)
             FireLeavesBattlefieldTriggers(state, d.second, returned);
             EnterHand(state, owner, returned, HandEntryReason::Bounce);
             RefreshDevotionCreatures(state);
+            RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
             RefreshReconfigureCreatures(state);
             break;
         }
@@ -22235,6 +22395,7 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
             if (destroy) { FireGraveyardEntryTriggers(state, dead_owner, dead); }
             FireLeavesBattlefieldTriggers(state, dead_ctrl, dead);
             RefreshDevotionCreatures(state);
+            RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
             RefreshReconfigureCreatures(state);
         }
     }
@@ -32727,6 +32888,7 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     { state.battlefield.erase(state.battlefield.begin() + *it); }
     SweepOrphanedAuras(state);
     RefreshDevotionCreatures(state);   // a doomed white permanent lowers devotion (Heliod x2)
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     // One SBA batch: every graveyard-shuffle trigger it fires resolves after ALL the deaths (inert elsewhere).
     GyShuffleBatch _gyb(state);
@@ -32766,8 +32928,29 @@ inline bool HasDuplicateLegend(const GameState& state, int controller)
 // the end of the end step (GameEngine::EndStep / SimulateEndAndStartNextTurn). The keep is LegendKeepPick's: the
 // turn's searched pin (Plan::legend_keep_turn) for the active player. Every player is checked (SBAs are global);
 // a no-op without a duplicate.
+// THE TYPE-STATICS SBA (Enchanted Evening + Opalescence; see the block comment at RefreshTypeStatics' forward
+// declaration). Refresh the statics, then -- only when a static is out or a card still carried bits from one -- run
+// CR 704.5f (SweepZeroToughnessSba: every 0-toughness creature dies at once, owner's graveyard, OnCreatureDies, so
+// each death reaches FireLeavesBattlefieldTriggers: an Oblivion Ring that dies returns its card) until nothing more
+// dies (a death re-runs the refresh inside OnCreatureDies, so an Opalescence dying re-derives the rest), then
+// CR 704.5m (SweepOrphanedAuras: Utopia Sprawl / Wild Growth on a land that died). Runs ONLY at points that hold no
+// battlefield index, in both worlds at the same instants (the list is at the forward declaration). The executor's
+// own GameEngine::CheckStateBasedActions, which precedes it after a resolution, kills the same 0/0s the same way
+// (owner's graveyard, OnCreatureDies in battlefield order), so the sweep then finds none but the Aura sweep still
+// runs -- the rollout, which has no SBA pass, reaches the identical board. One bool test for every other deck.
+inline void TypeStaticsSbaCheckpoint(GameState& state)
+{
+    if (!state.deck_has_type_statics) { return; }
+    if (!RefreshTypeStatics(state)) { return; }
+    while (SweepZeroToughnessSba(state, "a 0/0 under Opalescence") > 0) {}
+    SweepOrphanedAuras(state);
+}
+
 inline void LegendRuleSbaCheckpoint(GameState& state)
 {
+    // The type statics' toughness / orphaned-Aura SBA first (CR 704.3: all SBAs are one check; the legend rule then
+    // sees the board after the 0/0s are gone). A no-op without deck_has_type_statics.
+    TypeStaticsSbaCheckpoint(state);
     for (int c = 0; c < static_cast<int>(state.players.size()); ++c)
     { if (HasDuplicateLegend(state, c)) { EnforceLegendRule(state, c); } }
 }
@@ -61175,6 +61358,7 @@ inline bool ReturnPermanentToOwnersHand(GameState& state, int bf_index, const st
     }
     FireLeavesBattlefieldTriggers(state, p.controller_index, p.card);
     RefreshDevotionCreatures(state);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);
     return true;
 }
@@ -61960,6 +62144,7 @@ inline void ResolveCreatureRemovalAt(GameState& state, int bi, const CardDefinit
     state.battlefield.erase(state.battlefield.begin() + bi);
     if (def.params.damage > 0 || unearth_exile) { ResolveAthreosExile(state, leaving); }
     RefreshDevotionCreatures(state);   // an own white permanent leaving lowers devotion (Heliod)
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     for (Permanent& e : state.battlefield)
     {
         if (e.equipped_to      == dead_num) { e.equipped_to      = 0; }

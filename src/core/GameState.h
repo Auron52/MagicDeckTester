@@ -2208,6 +2208,13 @@ struct GameState
     // shroud predicate, so a clear bit PROVES it finds nothing. DEFAULT TRUE (an unstamped state -- a unit test --
     // still sees the grant). A DECK CONSTANT, never folded (+8 bytes: see the Dominance.h size note).
     bool                     deck_has_enchantment_shroud  = true;
+    // ENCHANTED EVENING / OPALESCENCE (lock cluster step 1, 2026-11-26): the deck holds a TYPE STATIC
+    // (CardParams::static_all_permanents_enchantments / static_animate_other_nonaura_enchantments_mv), gating
+    // RefreshTypeStatics' board walk and TypeStaticsSbaCheckpoint, so a clear bit PROVES neither finds anything.
+    // DEFAULT TRUE (an unstamped state -- a unit test, a scenario -- still sees the statics; the walk only changes
+    // a board that holds one, so other decks' unstamped states are unchanged too). A DECK CONSTANT, never folded.
+    // In the pad byte before scripted_attack_choose_mode: sizeof(GameState) unchanged.
+    bool                     deck_has_type_statics        = true;
     // THE SEARCHED ELDER GARGAROTH MODE (Plan::attack_choose_mode_choice): PACKED 2 bits per attack-trigger
     // ordinal (ordinal 0 lowest; a field of 0 = that ordinal unpinned, m + 1 = mode m: 0 token / 1 life /
     // 2 draw); -1 = nothing pinned (every trigger takes DecisionProvider::AttackChooseOneModes' front).

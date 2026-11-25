@@ -85822,6 +85822,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     DrainPendingLookTop(state);                    // safety net (lockstep w/ UntapStep): a watcher-only entry's Risen Reef trigger
     DrainPendingSagaEnters(state);                 // safety net: an off-cascade Saga enter takes its counter by turn start
     SweepOrphanedAuras(state);                     // CR 704.5m SBA checkpoint (lockstep w/ GameEngine::UntapStep)
+    TypeStaticsSbaCheckpoint(state);               // Enchanted Evening / Opalescence SBA safety net (lockstep w/ GameEngine::UntapStep)
     state.casts_remaining_this_turn = -1;          // Irencrag "one more spell" budget clears each turn (see GameState)
     state.hand_size_at_combat   = -1;              // post-combat productivity markers are per turn (see
     state.battlefield_at_combat = -1;              // GameState); lockstep with GameEngine's turn start
@@ -85977,6 +85978,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // (assume each is tapped for mana). Mirrors GameEngine (executor) at the same turn-start point
     // -> lockstep. Gated by s_fd_opp_spawns so MTG_LEGACY_SEARCH stays byte-identical to the old model.
     if (s_fd_opp_spawns) { SpawnForbiddenOrchardTokensTurnStart(state); }
+    // ENCHANTED EVENING + OPALESCENCE: an MV-0 spawn body dies as it appears (lockstep twin: GameEngine::UntapStep's
+    // spawn site). A no-op without deck_has_type_statics.
+    TypeStaticsSbaCheckpoint(state);
 
     // Suspend (Lotus Bloom): cast off suspend any card whose last time counter is removed at THIS
     // upkeep (arrive_turn <= turn). Runs after untap so the arrived artifact is untapped and available

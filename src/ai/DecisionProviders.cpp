@@ -30935,8 +30935,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool worldfire = false;
     // ENCHANTED EVENING (onboarding 2026-11-25): OR of params no other card carries -- Sterling Grove's
     // enchantment shroud grant, Enchantress's Presence's cast-TYPE draw (draw_on_cast_types; Sram's
-    // subtype form is a different param). The lock cluster's params join this OR when they land, so a
-    // list that cuts one card still routes. EXCLUDED, with reasons: Oblivion Ring (a white staple),
+    // subtype form is a different param), and the lock cluster's params as they land (Enchanted Evening's
+    // static_all_permanents_enchantments, Opalescence's static_animate_other_nonaura_enchantments_mv; carried by
+    // no other card), so a list that cuts one card still routes. EXCLUDED, with reasons: Oblivion Ring (a white staple),
     // Utopia Sprawl / Wild Growth (AccomplishedAlchemist / Auras), the fetchlands, Idyllic Tutor
     // (Anti-Lifegain), Exploration (Maze's End). Returns FIRST: the fetchlands set `anti` alone.
     bool enchanted_evening = false;
@@ -30987,7 +30988,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || !p.damage_all_creatures_x_per_subtype.empty()) { mazes_end = true; }
         if (p.exile_all_permanents_hands_graveyards || p.each_player_life_becomes >= 0
             || (def->card.IsCreature() && p.suspend_time_counters > 0)) { worldfire = true; }
-        if (p.grants_other_enchantments_shroud || !p.draw_on_cast_types.empty()) { enchanted_evening = true; }
+        if (p.grants_other_enchantments_shroud || !p.draw_on_cast_types.empty()
+            || p.static_all_permanents_enchantments || p.static_animate_other_nonaura_enchantments_mv)
+        { enchanted_evening = true; }
         if (p.spell_exile_opponent_until_mv > 0 || p.landfall_mill_opponent > 0
             || p.landfall_mill_target_player || p.cycling_mill_opponent > 0
             || p.spell_mill_opponent > 0)

@@ -1778,6 +1778,8 @@ INERT_PARAMS = {
     "draw_on_cast_subtypes": "Sram's on-cast draw is MANDATORY -- there is no 'may' at all (unlike Puresteel and Kor), so nothing is auto-resolved and there is no choice to surface",
     "draw_on_cast_types": "Enchantress's Presence's on-cast draw (the Sram shape keyed on the cast card's TYPE) is MANDATORY -- no 'may', no target, nothing to surface",
     "grants_other_enchantments_shroud": "Sterling Grove's static shroud grant -- no choice; it only REMOVES our own enchantments from every targeting site's legal set",
+    "static_all_permanents_enchantments": "Enchanted Evening's layer-4 static (every permanent is also an enchantment) -- no target, mode or 'may'; it only changes what the enchantment readers see",
+    "static_animate_other_nonaura_enchantments_mv": "Opalescence's layer-4/7b static (other non-Aura enchantments are MV/MV creatures) -- no choice; the new attackers surface through the existing attackers decision",
     "sac_tutor_top_types": "Sterling Grove's search spec (the activation's tutor types) -- the choice is the sac_tutor_top_cost main_phase variant",
     "equip_scale_power_per_equipment": "Golem-Skin Gauntlets' dynamic +1/+0 per Equipment attached to the host. A static characteristic-modifying value with no target, mode, division or 'may'; the only decision on the card is WHICH host, which is the existing equip plan-line axis",
     "equip_scale_tough_per_equipment": "toughness twin of equip_scale_power_per_equipment; same reasoning -- a static value, no choice",
