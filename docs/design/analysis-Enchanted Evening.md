@@ -31,6 +31,13 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
   lock, Presence draws Exploration, which is now cast off the floated {G}; same win turn); units per game within
   +0.4% of step 1 (wall times inflated by a concurrent smoke run). Notes: "Lock-cluster step 2" section. NEXT: step 3
   (Calming Verse, §4.3).
+* **LOCK STEPS 3+5 (Calming Verse §4.3; Force of Vigor HARD CAST §4.5) DONE (2026-11-25):** code 471a97cab + 21a2cb821
+  + 38c56beb8 + 89c1f70f0, Scryfall snapshot 3cd4e4c8f. Units 4206/4206 (10 new, `test/unit/test_enchanted_evening_lock35.cpp`).
+  Smoke (Release, `MTG_PGO=0`): 247 passed / 0 failed / 0 new, play-changed=0 (searched and d0), scenarios 677/677 (on the final code; also on the WIP code before the folds). Coverage: Calming Verse + Force of Vigor `full` (FoV's pitch clause is NOT
+  modelled -> partial, step 7); missing = Parallax Wave only. Sanity (24 games, seed 7000, d3 b10): 23/24, avg 6.7083
+  vs the step-2 baseline's 6.625 (4 games moved a turn: gi=3 faster, gi=5/12/13 slower), units +8.7%; the slower
+  games do not recover at d3 b0 (gi=12, gi=13: T6 -> T7) -- NOT root-caused, handed to step 8. Held-out playout A/B
+  neutral. Notes: "Lock-cluster steps 3+5" section. NEXT: step 4 (Parallax Wave, §4.4).
 
 ## USER rulings (verbatim, 2026-11-25)
 
@@ -97,6 +104,13 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
    after which the reach test is recomputed. A searched action, offered only while a virtual threat exists.
    USER: *"That sounds good."* (approved, 2026-11-25)
 
+14. On the step-2 pre-float (lands about to die to EE + Opalescence are tapped for mana before the lock completes)
+   in human play: *"Automatic tap is good, but manual tap using the manual tap interface should be allowed."*
+   (2026-11-26) -- the viewer keeps the automatic float as the default, AND the human may instead tap lands
+   through the viewer's existing manual-tap interface before the lock completes; those lands are then
+   already tapped, so the automatic float skips them, and the mana they made stays in the pool for the phase.
+   Owed in step 9 (viewer wiring): verify both routes in the viewer and in a reference replay.
+
 Reading: the lock is credited through the EXISTING free-turn rule (`MTG_FREE_TURNS`, default ON,
 `src/core/FreeTurns.h`, `docs/design/opponent-lockdown-free-turns.md`): a locked opponent turn does not advance the
 round. The deck's lock cards must join `GoldFishRunner::DeckMayLockOpponent`. Under EE + Opalescence the attackers are
@@ -136,12 +150,16 @@ lock has removed unless floated). The implementer must model the targeting legal
 | Oblivion Ring | 2/3 | `etb_exile_nonland_until_leaves` | shared enter cascade (`ResolveEtbExileNonlandUntilLeaves`, every entry path); LTB in `FireLeavesBattlefieldTriggers` (`ReturnExiledUntilLeaves`); link = `kExileUntilLeavesBase` marker + `linked_exile_number` (already folded) | A: `target` (board click, full legal set) | -- (target SEARCHED, D1 below) |
 | Sterling Grove | 3 | `grants_other_enchantments_shroud`, `sac_tutor_top_cost` {1}, `sac_tutor_top_types` [Enchantment]; derived `CardDefinition::activated_tutor`; deck stamp `deck_has_enchantment_shroud` | shroud: `EnchantmentShroudFromGrant` inside `LandHasShroud` / `CreatureHasShroud` / new `PermanentHasShroud` (so Aura host selection, equip/aura creature targeting and O-Ring all honour it); hook for EE = `PermanentIsEnchantmentNow`. Activation: new `PermAbilityMode::SacTutorTop` (CollectActions emission one variant per `RankedTutorCandidates` name; pin = `SacNamedPin.target` in BOTH trailing passes; `ApplyPermAbility` -> `ResolveSacTutorTop`; site-9 key + `CardHasPostEntryActivation`); upkeep window: `GameEngine::UpkeepTutorOptions` battlefield half + `AIEngine::CastUpkeepTutor` battlefield dispatch (shared by both worlds) + the BoundaryFan `tutor_` liveness + the human-play upkeep prompt | A: `main_phase` plan variants (tutor target); upkeep = the tutor chooser prompt | -- (lead activation, D2 below) |
 | Enchanted Evening | 3 (lock step 1) | `static_all_permanents_enchantments`; deck stamp `deck_has_type_statics` | `RefreshTypeStatics` (layer 4, every battlefield copy, both sides) at every `RefreshDevotionCreatures` chokepoint (enter-cascade top, `OnCreatureDies`, the leave helpers, bounce, Replenish, scenario loader); deaths at `TypeStaticsSbaCheckpoint` (inside `LegendRuleSbaCheckpoint`: post-resolution both worlds, land drop, end step; + `ResolvePassiveOpponentLandTurn`, both spawn sites, both turn starts) | none (static) | -- |
+| Calming Verse | 3 (lock step 3) | `destroy_opp_enchantments_then_own_if_untapped_land` (its OWN param, never `destroy_all_enchantments`) | shared `ResolveCalmingVerse` (SpellEffects.h) at both worlds' sorcery resolution (`EffectHandler` beside Worldfire / `apply_one`); destroys through `DestroyRemoveTogether` + `DestroyFireTogether` (one simultaneous event, triggers after both clauses, every leave reaches the chokepoints); KEEP floats via `g_lock_prefloat_hook`; searched axis KEEP "VK" / SWEEP-SELF "VS" in the CollectActions post-pass, `#DV` in both plan signatures | A: `main_phase` plan variants ("tap all lands first" / "leave lands") | -- (EE provider withdraws a no-op KEEP, notes below) |
+| Force of Vigor | 2 (lock step 5: HARD CAST only; clause 1 pitch PARTIAL -> step 7) | `destroy_up_to_artifacts_enchantments` 2 | shared `ResolveDestroyUpToArtEnch` (re-checks each target, CR 608.2b), same destroy halves; target SET searched: `DestroyUpToArtEnchOptions` (identity classes, every 0..2 multiset), pinned "FV<n>[,<m>]", `#DV` | A: `main_phase` plan variants (step 9 may move it to the `target` multi-target row) | pitch (step 7); coverage says `full` (pattern checker) but the pitch clause is NOT modelled |
 | Opalescence | 3 (lock step 1) | `static_animate_other_nonaura_enchantments_mv` | same refresh (layer 4 + 7b: other non-Aura enchantments = MV/MV creatures; two animate each other); 0/0s die at the checkpoint through `OnCreatureDies` (LTB fires: O-Ring returns its card); orphaned Auras (Sprawl / Wild Growth) swept; fetch on play suppressed both sides (`LandDiesToTypeStatics` in `PlayLandCore` and `PlayLeftmostLandFrom`), opponent Karoo finds no land | A: existing `attackers` | -- |
 
 Provider: `EnchantedEveningProvider` (empty `DeckProvider` derivation, `Certificate()` = NotAssessed), routed FIRST on
 `grants_other_enchantments_shroud || draw_on_cast_types || static_all_permanents_enchantments ||
-static_animate_other_nonaura_enchantments_mv` (Calming Verse / Parallax Wave / Force of Vigor params to be OR-ed in by
-their implementers).
+static_animate_other_nonaura_enchantments_mv || destroy_opp_enchantments_then_own_if_untapped_land ||
+destroy_up_to_artifacts_enchantments` (Parallax Wave's param to be OR-ed in by its implementer). Since lock steps 3+5 the
+provider is no longer empty: it carries the two no-op cast folds (`CalmingVerseVariants`,
+`DestroyUpToArtEnchTargetOptions`; "Lock-cluster steps 3+5" below).
 
 ## Lock-cluster step 1 (type statics) -- notes for the later steps
 
@@ -211,6 +229,84 @@ Grove is a creature: `SacrificeSourceAsCost` already routes it through the creat
   type statics, so call the hook directly with Verse's own land list.
 * **Not covered (no such card in the list):** a non-land mana source that dies to the lock (an MV-0 mana rock or token:
   Treasure, a 0-cost mana creature) is not floated; extend the doomed scan if a deck adds one.
+
+## Lock-cluster steps 3+5 (Calming Verse; Force of Vigor hard cast) -- notes for the later steps
+
+* **Code.** WIP 471a97cab (resolvers, post-pass, hooks, viewer labels, cards.json, 9 unit cases), 21a2cb821 (FoV pin
+  parser rejected nothing on a trailing comma -- a real bug the unit test caught; the WIP build had never compiled
+  the new test file because its CMake registration landed after the build's configure), 38c56beb8 (no-op cast folds,
+  below; its playout half was A/B'd behind a temporary `MTG_PLAYOUT_NOOP_CAST_DROP` lever, deleted in the final
+  commit with the behaviour kept ON). Scryfall snapshot 3cd4e4c8f. Units 4206/4206.
+* **Design decisions taken by the implementer (none is a USER-owned default):**
+  1. Verse KEEP is offered whenever we control ANY untapped land at emission -- NOT withheld for an untapped fetchland
+     (a departure from design §4.3). Completeness: emission is at the phase root, so "crack the fetch, then Verse
+     KEEP" would be unfindable if KEEP were withheld. Resolution is literal: KEEP floats what it can; an untapped
+     fetch makes clause 2 fire.
+  2. In the decision space and in human play there is NO unpinned Verse / FoV cast (the base is converted to a pin);
+     the provider picks (`CalmingVerseKeepDefault`, `DestroyUpToArtEnchPick`) run only beyond the horizon / d0. A
+     provider that empties the FoV menu WITHDRAWS the cast (never leaves the unpinned base in the window).
+  3. FoV targets come off the EMISSION board; a permanent entering earlier in the same main is targetable from the
+     next main's root (each main is its own search root) -- not unfindable.
+  4. FoV branching: identity classes (`CastTriggerTargetFoldKey`), every 0/1/2-target multiset; under EE with ~10-14
+     legal classes that is ~50-100 variants per castable FoV. No lossy prune was added (a prune of own targets is a
+     USER-owned narrowing; a budget-staged wave is the sanctioned shape if one is wanted).
+  5. Human play: both axes are `main_phase` plan variants (Charm shape); step 9 may switch FoV to the `target`
+     multi-target row (`EnumerateTargetSets`).
+  6. Destroyed tokens never reach the graveyard (an opponent spawn body counts as a token).
+  7. Known gaps, noted not fixed (unreachable here): Acidic Slime / Foundation Breaker / Charm destroy paths do not
+     fire a NONCREATURE's LTB (an O-Ring they destroy would not return its card); umbra / totem armor is not modelled
+     on any destroy path.
+* **Rules review (mtg-rules skill):** Verse -- no target (hexproof/shroud no defence), clause 2 checked after clause 1
+  is applied (Scryfall 2004-10-04), "untapped land" read at that moment, lands are enchantments under EE (ours go to
+  clause 2, theirs to clause 1), one simultaneous destroy with triggers after the whole resolution (CR 603.3),
+  indestructible stays, unearth exiled, cards to their OWNER's graveyard, orphaned Auras swept (CR 704.5m), KEEP's
+  mana abilities with the Verse on the stack (CR 605.3a), the float empties at the phase end (CR 500.4). FoV -- 0..2
+  DISTINCT targets (CR 115.3), artifact-or-enchantment on the copy, shroud binds our own targeting (Sterling Grove;
+  CR 702.18a), opponent hexproof, per-target re-check on resolution (CR 608.2b; an all-illegal resolution does
+  nothing, which matches the fizzle's effect). No violation found.
+* **The no-op cast folds (38c56beb8; SOUND dominance, default ON, no flag).** The first sanity batch put Verses that
+  destroyed nothing on the board (gi=12 T3 / gi=13 T3, before any EE) and target-less Forces. Premise, true of this
+  list: nothing rewards casting an instant/sorcery as such (Presence draws on ENCHANTMENT spells), so a cast that
+  changes no permanent is dominated by not casting it (always offered). The EE provider withdraws Verse KEEP when no
+  enchantment we don't control exists (KEEP is then a no-op, or -- a land it cannot float -- equals SWEEP-SELF, which
+  stays), and the FoV empty set (no legal target -> FoV not offered). Unit case "EnchantedEvening provider folds". A
+  list that adds a cast-count payoff must drop both. A SWEEP-SELF paid with every land (clause 2 then finds no
+  untapped land, so it is a no-op too) is NOT folded: emission cannot see the payment.
+* **The playout no-op drop (same commit; ON, no lever):** beyond the horizon an unpinned FoV whose pick is the empty
+  set, and a Verse whose KEEP the provider withdrew, are not cast. A playout-policy change, so it was measured on a
+  HELD-OUT block (200 games, seed 9000, d3 b10, search folds ON in both arms): drop ON 6.92 vs OFF 6.93 (paired
+  -0.01 +- 0.03 turns; 17 faster / 16 slower; 14 unwon in each). Neutral, so it stays as wasted-work removal and the
+  temporary lever was deleted. It is generic code (any provider) but reachable only by these two params.
+* **Sanity (24 games, seed 7000, d3 b10, no profile; step-2 baseline rebuilt at 31a923ce7 and re-run with every game
+  reporting units, `MTG_SLOW_GAME_MS=1`):** baseline 23/24, avg 6.625, 13.08M units. Before the folds: 23/24, avg
+  6.6667, 15.31M units (+17.0%); 16 games moved, faster gi=3 (7->6) and gi=22 (7->6), slower gi=12 (6->8) and gi=13
+  (6->7). After the folds: 23/24, avg 6.7083, 14.22M units (+8.7%); faster gi=3 (7->6), slower gi=5 (7->8), gi=12
+  (6->7), gi=13 (6->7). The unwon game is gi=20 in every arm. Work: the big cost is not the FoV fan itself -- a game
+  that holds a Verse/FoV all game and never casts it (gi=16) went 8.7K -> 96K units, and games that never HOLD one
+  at a turn end (gi=6 +113%, gi=14 +0.9..8%) moved too: the search's deeper plies and the playout now draw and cast
+  live copies of 8 cards that used to be dead. Per-game units: `build/scratch/ee/cmp35.py` (pre-fold) /
+  `cmp35f.py` (post-fold).
+* **Slower games at d3 b0 (unlimited), step-2 base vs new:** gi=12 base T6 (139K units), pre-fold T6 (246K), post-fold
+  T7 (377K), post-fold with the playout drop OFF T7 (362K); gi=13 base T6 (155K), pre-fold T7 (4.84M), post-fold T7 (3.12M), post-fold drop OFF T7 (3.15M). gi=13's divergence:
+  the base line sacrifices Sterling Grove at the T2->T3 boundary to put Enchantress's Presence on top and casts it
+  T3; the new line keeps the Grove, draws a Forest and casts a no-op Verse T3 (post-fold still a Verse on T4), then
+  runs the same sequence a turn late. NOT ROOT-CAUSED (handed on, below). gi=12's b0 T6 -> T7 is the search-window
+  folds' doing (it stays T7 with the playout drop off). Those folds are sound at the board level, so they can move a
+  d3 result only where the d3 leaf scores the dominated no-op cast ABOVE not casting it: a leaf / horizon defect to
+  find (step 8), not a reason to unfold. The regression bar is d8 b0, which these
+  games were not run at (cost); EE has no play setting yet.
+* **For step 4 (Parallax Wave):** reuse `DestroyRemoveTogether` / `DestroyFireTogether`'s two-half shape for the exile
+  (EXILE, not destroy: no indestructible check, no graveyard, a linked exile list instead), and OR its param into
+  the routing signature and `revpkg::CardCanEndOwnEnchantment`.
+* **For step 6 (fairness check):** clear the virtual board inside `ResolveCalmingVerse` after clause 1 (design §3.4.3,
+  comment placeholder there), and add both params to `DeckMayLockOpponent` / `DeckLockNeedsLandStrip` (design
+  §3.2/§3.3).
+* **For step 7 (FoV pitch):** reuse `ResolveDestroyUpToArtEnch` + `DestroyUpToArtEnchOptions` in the end-step window,
+  pinned on the BoundaryFan digit; nothing here assumes our turn except Verse's KEEP hook (active player, fine for a
+  sorcery). The EE provider's empty-set fold applies to the pitch too (a pitched FoV with no target only costs a card).
+* **For step 8 (folds):** FoV own-target dominance (e.g. our tapped land vs untapped) and Verse KEEP / SWEEP
+  coincidence when every land pays the Verse; and root-cause gi=13 (seed 7013, game-index 13, d3 b0): why "no Grove
+  tutor + no-op Verse" outscores "tutor Presence + Presence" at the T2->T3 boundary.
 
 ## Done items (formerly provisional Q1 / Q2 -- settled by standing CLAUDE.md rules, not USER questions)
 
