@@ -3,6 +3,21 @@
 Worktree `.claude/worktrees/enchanted-evening`, branch `ee-analysis` (from 05e2e0030). Nothing pushed yet.
 Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantress / lock).
 
+## CHECKPOINT (orchestrator, 2026-11-26 ~01:20 UTC) -- read this first after a compaction
+
+* Done: Stage 1 coverage; lock-cluster DESIGN 84a576461 (`docs/design/enchanted-evening-lock-design.md`, with the
+  orchestrator's Grove correction below); four simple cards WIP f986f6e19 (Release build OK; handoff
+  `logs/ee/simple-cards-handoff.md`).
+* RUNNING: a fresh "finish simple cards" agent (Opus) working the handoff's items: searched O-Ring target, same-turn
+  lead-position Grove activation + budget-0 test, units, `audit_card_fields.py --update` re-run (the first ended rc=1,
+  232 rate-limited; snapshot uncommitted), offline diff, smoke (expect play-changed=0), coverage. It reports with
+  commit hashes + smoke numbers. Its own handoff (if any) = `logs/ee/simple-cards-handoff2.md`.
+* NEXT (after it reports, same files so strictly after): launch the LOCK-CLUSTER implementer (Opus) from the design
+  doc's §8 order, with USER rulings 1-13 below and the Grove correction in its brief; split into narrow agents
+  (type refresh + Opalescence SBA + pre-float first) under the 250K handoff rule. Then: Stage 3 coverage loop, Stage 4
+  profile, provider audit, suite addition (all three tiers, 3x Hinata gate), Stage 5 verification incl. 5d sweep.
+* No USER question is open (rulings 8-13 answered the design's two questions).
+
 ## USER rulings (verbatim, 2026-11-25)
 
 1. *"Note that the deck locks down the opponent so, like Worldfire, we will need to take that properly into account. In
@@ -83,7 +98,7 @@ Exploration, Windswept Heath, Plains, Idyllic Tutor, Wooded Foothills. Fetch-hol
 
 | group | cards | owner | status |
 |---|---|---|---|
-| simple | Sunpetal Grove, Oblivion Ring, Enchantress's Presence, Sterling Grove | implementer agent A | in progress |
+| simple | Sunpetal Grove, Oblivion Ring, Enchantress's Presence, Sterling Grove | implementer agent A | DONE (f986f6e19, b5b8dd3cb): coverage `full` x4; units 4178/4178; smoke (Release) 247 PASS, play-changed=0; Scryfall snapshot 61e5bc848 (offline diff rc=0) |
 | lock cluster | Enchanted Evening, Opalescence, Calming Verse, Parallax Wave, Force of Vigor | design agent B -> `docs/design/enchanted-evening-lock-design.md`, then an implementer | design in progress |
 
 ## Lock-cluster design (84a576461, `docs/design/enchanted-evening-lock-design.md`)
