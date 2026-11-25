@@ -624,3 +624,10 @@ the mirror (Martyr +1.5 %, 23 decisions): heur's pass 1 was the cache-cheap one 
 c2/c1 refused pass 3 and ours admits it (E12's mechanism; same win). The HO seeds are now the DEV set; the final
 per-deck choice is confirmed on fresh seeds (HO3, 20M).
 
+**D16 (dev seeds, mtg_k16): `_pabb` REJECTED.** Pricing EVERY game-cache hit of a bounded pass 1 at its stored cost makes
+the bootstrap refuse pass 2 almost everywhere: units 0.69-0.99 but **41 games later** (Maze 12, Shadowborn 12, Stuffy 6).
+heur on k16 = heur on k11 byte for byte (digests and units). CPU per unit (same-run): heur 0.043 in HO1 and D16; the
+`_pab1` arms 0.044 in HO2 -- not yet measured beside heur in one batch (owed in HO3).
+**D17 (running): `_pabc`** -- price only the no-win hits the BOUND made usable: taken before pass 1 has an incumbent (the
+leaf's cutoff is still the bound) with a stored bound below the root cut, which an unbounded pass 1 cannot read.
+
