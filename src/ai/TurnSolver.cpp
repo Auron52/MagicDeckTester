@@ -129280,7 +129280,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // left no-win entries at that bound, which a pass 1 at the same bound reads; an unbounded pass 1 cannot, and a
         // pass 1 that pays for them moves heur's gate -- E12 Merfolk T2: c1 15 -> 292 units, then a 39k pass 3).
         // _pabx: a failed bounded attempt is spent but kept out of the pass cost the start gate reads.
-        static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false, s_pabb = false, s_pabc = false, s_pabk = false, s_pce = false, s_pck = false, s_pcke = false;
+        static thread_local std::string s_pab_key; static thread_local bool s_pab = false, s_pab1 = false, s_pabx = false, s_pabb = false, s_pabc = false, s_pabk = false, s_pce = false, s_pck = false, s_pcke = false, s_pabv = false;
         static thread_local unsigned long long s_pab_seed = 0; static thread_local int s_pab_win = 0, s_pab_gate = -1;
         if (s_pab_key != valuearm::t_deck_key || s_pab_gate != valuearm::t_deck_sampled_gate)
         {
@@ -129306,9 +129306,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // each, heur's pass 3 428-20k) -> ratio ~1 admitted a pass 4 heur never ran (+3 % of units). _pcke: no price
             // for a pass whose win sits at/after the window edge (the _pce rule on every pass).
             s_pcke = s_pab_key.find("_pcke") != std::string::npos; s_pck = s_pcke || s_pab_key.find("_pck") != std::string::npos;
+            // _pabv (A/B, all-modes aspiration screen 2026-11-25): aspiration also on LEAFLESS passes (a constant leaf, the
+            // no-leaf probe of the single / emulated / escalation shapes). A constant leaf never claims a win, so a pass
+            // bounded at W returns a win by W iff one exists and a failed bound is searched again from the root cut: as
+            // sound as on rollouts. A learned (rating) leaf stays excluded.
+            s_pabv = s_pab_key.find("_pabv") != std::string::npos;
         }
         const bool p18_ab_top = s_pab && p16K == 0 && p16::t_hyb_nest == 1 && g_fsline_nest == 0 && g_rollout_nest == 0
-                             && !vl_active && !vl_constant;
+                             && (!vl_active || (s_pabv && vl_constant));
         const int p18_ab_w = (pass_depth >= 2 && prev_committed == pass_depth - 1 && (!s_pabk || p18_ab_p1)) ? prev_line.win_turn
                            : (pass_depth == 1 && s_pab1 && s_pab_seed == static_cast<unsigned long long>(state.game_seed)) ? s_pab_win : 0;
         const int p18_ab = (p18_ab_top && p18_ab_w >= state.turn_number && p18_ab_w <= max_turns) ? p18_ab_w : 0;
