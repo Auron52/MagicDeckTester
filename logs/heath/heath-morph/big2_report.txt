@@ -1,0 +1,4 @@
+row                         n   chg   dig  fast  slow lost gain   net    avgA    avgB  cpu A/B ms  units A/B
+morph2hg_play            8000    69  1007    24    42    3    0   +18  4.6347  4.6361  840/800  16183/16402
+morph2hg_dec             8000    63   932    30    31    1    1    +1  4.6332  4.6332  803/814  16688/16784
+modernrwburn2hg_dec      4000    44   723    20    24    0    0    +4  4.8397  4.8407  1200/1192  30632/30696

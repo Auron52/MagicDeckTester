@@ -1,0 +1,133 @@
+morph_play 1664 5 4 faster
+morph_play 8319 6 8
+morph_play 9348 6 5 faster
+morph_play 6872 6 5 faster
+morph_play 1149 5 4 faster
+morph_play 2857 5 4 faster
+morph_play 7273 4 5
+morph_play 3742 4 5
+morph_play 4461 4 5
+morph_play 9781 5 4 faster
+morph_play 9795 5 8
+morph_play 3664 6 5 faster
+modernrwburn_play 2606 3 4
+modernrwburn_play 4693 3 4
+modernrwburn_play 6380 6 5 faster
+modernrwburn_play 4472 3 4
+modernrwburn_play 7409 3 4
+modernrwburn_play 828 5 4 faster
+modernrwburn_play 7517 3 4
+modernrwburn_play 1880 4 5
+modernrwburn_play 6749 3 4
+modernrwburn_play 3182 4 3 faster
+modernrwburn_play 2113 4 3 faster
+modernrwburn_play 4989 3 4
+modernrwburn_play 6040 4 3 faster
+modernrwburn_play 3006 6 5 faster
+modernrwburn_play 3043 3 4
+modernrwburn_play 7845 4 5
+modernrwburn_play 3401 3 4
+morph_dec 8344 -1 7 gained
+morph_dec 8527 5 4 faster
+morph_dec 2942 8 6 faster
+morph_dec 7920 6 5 faster
+morph_dec 8852 4 5
+morph_dec 2853 5 4 faster
+morph_dec 8068 6 5 faster
+morph_dec 7729 5 4 faster
+morph_dec 3839 5 4 faster
+modernrwburn_dec 8673 3 4
+modernrwburn_dec 6359 4 5
+modernrwburn_dec 3815 5 6
+modernrwburn_dec 4557 3 4
+modernrwburn_dec 9432 6 5 faster
+modernrwburn_dec 9453 4 3 faster
+modernrwburn_dec 4942 6 5 faster
+modernrwburn_dec 7418 4 3 faster
+modernrwburn_dec 799 4 3 faster
+modernrwburn_dec 3168 4 5
+modernrwburn_dec 8320 6 5 faster
+modernrwburn_dec 7986 3 4
+modernrwburn_dec 7096 5 4 faster
+modernrwburn_dec 8492 3 4
+modernrwburn_dec 9931 4 5
+modernrwburn_dec 9965 5 4 faster
+modernrwburn_dec 3751 3 4
+modernrwburn_dec 2307 4 3 faster
+modernrwburn_dec 2326 4 5
+modernrwburn_dec 9266 7 6 faster
+modernrwburn_dec 3307 3 4
+modernrwburn_dec 9749 5 4 faster
+modernrwburn_dec 9768 4 5
+modernrwburn_dec 9787 5 4 faster
+modernrwburn_dec 9105 3 4
+modernrwburn_dec 5120 4 5
+modernrwburn_dec 6908 5 4 faster
+modernrwburn_dec 6909 4 3 faster
+modernrwburn_dec 6998 4 3 faster
+modernrwburn_dec 5844 6 5 faster
+modernrwburn_dec 2105 4 3 faster
+modernrwburn_dec 8595 3 4
+modernrwburn_dec 3208 6 5 faster
+modernrwburn_dec 3261 4 5
+modernrwburn_dec 7382 4 3 faster
+modernrwburn_dec 8933 4 3 faster
+morph2hg_play 2050 5 6
+morph2hg_play 2813 5 6
+morph2hg_play 2829 4 5
+morph2hg_play 3222 5 6
+morph2hg_play 1281 4 5
+morph2hg_play 3738 5 6
+morph2hg_play 1564 7 8
+morph2hg_play 868 6 5 faster
+morph2hg_play 225 5 6
+morph2hg_play 247 7 6 faster
+morph2hg_play 2338 5 4 faster
+morph2hg_play 2368 6 5 faster
+morph2hg_play 3931 5 4 faster
+morph2hg_play 3953 5 4 faster
+morph2hg_play 2907 5 4 faster
+morph2hg_play 3653 6 5 faster
+morph2hg_play 1062 4 7
+morph2hg_play 3157 4 5
+morph2hg_play 121 4 5
+morph2hg_play 125 4 5
+morph2hg_play 2134 5 6
+morph2hg_play 3071 4 5
+morph2hg_play 3078 5 6
+morph2hg_play 2519 5 6
+morph2hg_play 2563 4 5
+morph2hg_play 927 5 6
+morph2hg_play 667 5 4 faster
+morph2hg_play 28 7 6 faster
+morph2hg_play 80 5 7
+morph2hg_play 509 5 6
+morph2hg_play 530 6 7
+morph2hg_play 586 5 4 faster
+morph2hg_play 589 4 5
+morph2hg_play 591 4 5
+morph2hg_play 1918 6 7
+morph2hg_play 2414 5 7
+morph2hg_play 3344 4 6
+modernrwburn2hg_play 2530 4 5
+modernrwburn2hg_play 2570 5 4 faster
+modernrwburn2hg_play 2917 5 4 faster
+modernrwburn2hg_play 3607 4 5
+modernrwburn2hg_play 2785 4 3 faster
+modernrwburn2hg_play 3063 5 4 faster
+modernrwburn2hg_play 2402 4 5
+modernrwburn2hg_play 2453 3 4
+modernrwburn2hg_play 1983 5 6
+modernrwburn2hg_play 3331 4 5
+modernrwburn2hg_play 2291 5 6
+modernrwburn2hg_play 759 5 4 faster
+modernrwburn2hg_play 2671 5 4 faster
+modernrwburn2hg_play 3454 5 6
+modernrwburn2hg_play 435 3 4
+modernrwburn2hg_play 646 7 8
+modernrwburn2hg_play 507 5 4 faster
+modernrwburn2hg_play 583 4 5
+modernrwburn2hg_play 3896 7 6 faster
+modernrwburn2hg_play 1864 5 6
+modernrwburn2hg_play 2111 5 4 faster
+modernrwburn2hg_play 2117 8 -1 lost

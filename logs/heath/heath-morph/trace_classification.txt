@@ -1,0 +1,77 @@
+m_gi29       cp 5/7 nc 7/7 d8 5/5 -> C
+m_gi857      cp 4/5 nc 6/6 d8 4/4 -> C
+m_gi1021     cp 4/5 nc 4/4 d8 4/4 -> R
+m_gi1520     cp 5/6 nc 5/7 d8 5/5 -> V
+md_gi354     cp 4/5 nc 4/4 d8 4/4 -> R
+md_gi1021    cp 4/5 nc 4/4 d8 4/4 -> R
+b_gi1627     cp 3/4 nc 4/4 d8 3/3 -> C
+b_gi1419     cp 3/4 nc 3/4 d8 3/3 -> V
+b_gi1421     cp 3/4 nc 3/3 d8 3/3 -> R
+bd_gi1619    cp 6/7 nc 7/7 d8 6/6 -> C
+bd_gi1627    cp 3/4 nc 4/4 d8 3/3 -> C
+bd_gi1421    cp 3/4 nc 3/3 d8 3/3 -> R
+M_gi8319     cp 6/8 nc 6/6 d8 6/6 -> R
+M_gi7273     cp 4/5 nc 4/4 d8 4/4 -> R
+M_gi3742     cp 4/5 nc 5/5 d8 4/4 -> C
+M_gi4461     cp 4/5 nc 4/4 d8 4/4 -> R
+M_gi9795     cp 5/8 nc 8/8 d8 5/5 -> C
+B_gi2606     cp 3/4 nc 4/4 d8 3/3 -> C
+B_gi4693     cp 3/4 nc 4/4 d8 3/3 -> C
+B_gi4472     cp 3/4 nc 4/4 d8 3/3 -> C
+B_gi7409     cp 3/4 nc 4/4 d8 3/3 -> C
+B_gi7517     cp 3/4 nc 4/4 d8 3/3 -> C
+B_gi1880     cp 4/5 nc 5/5 d8 4/4 -> C
+B_gi6749     cp 3/4 nc 4/4 d8 3/3 -> C
+B_gi4989     cp 3/4 nc 4/4 d8 3/3 -> C
+B_gi3043     cp 3/4 nc 3/4 d8 3/3 -> V
+B_gi7845     cp 4/5 nc 5/5 d8 4/4 -> C
+B_gi3401     cp 3/4 nc 4/4 d8 3/3 -> C
+Md_gi8852    cp 4/5 nc 4/4 d8 4/4 -> R
+h_gi2050     cp 5/6 nc 5/6 d8 5/5 -> V
+h_gi2813     cp 5/6 nc 7/7 d8 5/5 -> C
+h_gi2829     cp 4/5 nc 5/5 d8 4/4 -> C
+h_gi3222     cp 5/6 nc 6/6 d8 5/5 -> C
+h_gi1281     cp 4/5 nc 4/4 d8 4/4 -> R
+h_gi3738     cp 5/6 nc 6/6 d8 5/5 -> C
+h_gi1564     cp 7/8 nc 99/7 d8 7/7 -> R
+h_gi225      cp 5/6 nc 7/7 d8 5/5 -> C
+h_gi1062     cp 4/7 nc 8/7 d8 4/4 -> C
+h_gi3157     cp 4/5 nc 5/5 d8 4/4 -> C
+h_gi121      cp 4/5 nc 4/4 d8 4/4 -> R
+h_gi125      cp 4/5 nc 5/5 d8 4/4 -> C
+h_gi2134     cp 5/6 nc 5/5 d8 5/5 -> R
+h_gi3071     cp 4/5 nc 4/4 d8 4/4 -> R
+h_gi3078     cp 5/6 nc 6/6 d8 5/5 -> C
+h_gi2519     cp 5/6 nc 6/5 d8 5/5 -> R
+h_gi2563     cp 4/5 nc 4/4 d8 4/4 -> R
+h_gi927      cp 5/6 nc 7/7 d8 5/5 -> C
+h_gi80       cp 5/7 nc 6/6 d8 5/5 -> C
+h_gi509      cp 5/6 nc 6/5 d8 5/5 -> R
+h_gi530      cp 6/7 nc 6/6 d8 6/6 -> R
+h_gi589      cp 4/5 nc 4/4 d8 4/4 -> R
+h_gi591      cp 4/5 nc 5/5 d8 4/4 -> C
+h_gi1918     cp 6/7 nc 8/8 d8 5/5 -> C
+h_gi2414     cp 5/7 nc 99/99 d8 5/5 -> C
+h_gi3344     cp 4/6 nc 6/6 d8 4/4 -> C
+bh_gi2530    cp 4/5 nc 5/6 d8 4/4 -> V
+bh_gi3607    cp 4/5 nc 5/5 d8 4/4 -> C
+bh_gi2402    cp 4/5 nc 5/5 d8 4/4 -> C
+bh_gi2453    cp 3/4 nc 3/5 d8 3/3 -> V
+bh_gi1983    cp 5/6 nc 6/5 d8 5/5 -> R
+bh_gi3331    cp 4/5 nc 5/5 d8 4/4 -> C
+bh_gi2291    cp 5/6 nc 7/7 d8 5/5 -> C
+bh_gi3454    cp 5/6 nc 7/7 d8 5/5 -> C
+bh_gi435     cp 3/4 nc 3/3 d8 3/3 -> R
+bh_gi646     cp 7/8 nc 8/8 d8 7/7 -> C
+bh_gi583     cp 4/5 nc 5/5 d8 4/4 -> C
+bh_gi1864    cp 5/6 nc 6/6 d8 5/5 -> C
+bh_gi2117    cp 8/99 nc 99/99 d8 99/99 -> C
+m {'nc_net': 2, 'nc_lost': 0, 'nc_gain': 0, 'slow': 4, 'C': 2, 'd8_rec': 4, 'd8_n': 4, 'R': 1, 'V': 1}
+md {'nc_net': 0, 'nc_lost': 0, 'nc_gain': 0, 'slow': 2, 'R': 2, 'd8_rec': 2, 'd8_n': 2}
+b {'nc_net': 1, 'nc_lost': 0, 'nc_gain': 0, 'slow': 3, 'C': 1, 'd8_rec': 3, 'd8_n': 3, 'V': 1, 'R': 1}
+bd {'nc_net': 0, 'nc_lost': 0, 'nc_gain': 0, 'slow': 3, 'C': 2, 'd8_rec': 3, 'd8_n': 3, 'R': 1}
+M {'nc_net': 0, 'nc_lost': 0, 'nc_gain': 1, 'fast': 7, 'slow': 5, 'R': 3, 'd8_rec': 5, 'd8_n': 5, 'C': 2}
+B {'nc_net': -1, 'nc_lost': 0, 'nc_gain': 0, 'slow': 11, 'C': 10, 'd8_rec': 11, 'd8_n': 11, 'fast': 6, 'V': 1}
+Md {'nc_net': 0, 'nc_lost': 0, 'nc_gain': 0, 'fast': 8, 'slow': 1, 'R': 1, 'd8_rec': 1, 'd8_n': 1}
+h {'nc_net': -1, 'nc_lost': 0, 'nc_gain': 1, 'slow': 26, 'V': 1, 'd8_rec': 26, 'd8_n': 26, 'C': 15, 'R': 10, 'fast': 11}
+bh {'nc_net': 3, 'nc_lost': 0, 'nc_gain': 0, 'slow': 13, 'V': 2, 'd8_rec': 12, 'd8_n': 13, 'fast': 9, 'C': 9, 'R': 2}

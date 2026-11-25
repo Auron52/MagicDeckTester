@@ -1,0 +1,176 @@
+morph2hg_play 2017 5 6
+morph2hg_play 2098 4 5
+morph2hg_play 3283 4 5
+morph2hg_play 7750 5 6
+morph2hg_play 1200 4 5
+morph2hg_play 1381 5 6
+morph2hg_play 3789 4 5
+morph2hg_play 1511 5 4 faster
+morph2hg_play 1554 6 7
+morph2hg_play 1566 4 5
+morph2hg_play 6175 8 5 faster
+morph2hg_play 245 4 5
+morph2hg_play 290 4 5
+morph2hg_play 5654 7 6 faster
+morph2hg_play 3400 4 5
+morph2hg_play 3417 4 5
+morph2hg_play 3471 5 4 faster
+morph2hg_play 7946 6 5 faster
+morph2hg_play 7953 5 7
+morph2hg_play 7979 4 5
+morph2hg_play 3942 4 5
+morph2hg_play 4967 5 6
+morph2hg_play 5062 5 4 faster
+morph2hg_play 4006 7 8
+morph2hg_play 4032 6 7
+morph2hg_play 3650 5 6
+morph2hg_play 3690 4 5
+morph2hg_play 1015 5 4 faster
+morph2hg_play 4867 6 7
+morph2hg_play 6292 6 5 faster
+morph2hg_play 7265 7 6 faster
+morph2hg_play 6018 6 7
+morph2hg_play 6042 5 6
+morph2hg_play 4705 4 5
+morph2hg_play 3513 6 5 faster
+morph2hg_play 3516 6 5 faster
+morph2hg_play 178 5 8
+morph2hg_play 4392 6 7
+morph2hg_play 2735 7 5 faster
+morph2hg_play 2618 6 -1 lost
+morph2hg_play 4612 8 -1 lost
+morph2hg_play 2106 4 5
+morph2hg_play 4228 5 4 faster
+morph2hg_play 401 6 5 faster
+morph2hg_play 383 7 6 faster
+morph2hg_play 6401 6 5 faster
+morph2hg_play 6451 4 5
+morph2hg_play 7178 5 6
+morph2hg_play 7188 6 5 faster
+morph2hg_play 994 5 6
+morph2hg_play 686 5 6
+morph2hg_play 69 5 4 faster
+morph2hg_play 2224 7 8
+morph2hg_play 6856 5 4 faster
+morph2hg_play 6881 6 7
+morph2hg_play 1906 6 5 faster
+morph2hg_play 1921 5 4 faster
+morph2hg_play 5227 6 5 faster
+morph2hg_play 1464 7 8
+morph2hg_play 5518 4 5
+morph2hg_play 5955 5 6
+morph2hg_play 5705 5 6
+morph2hg_play 5708 6 5 faster
+morph2hg_play 5725 7 -1 lost
+morph2hg_play 5803 4 5
+morph2hg_play 3365 4 5
+morph2hg_play 3369 5 6
+morph2hg_play 3398 4 5
+morph2hg_play 6605 5 4 faster
+morph2hg_dec 6 5 6
+morph2hg_dec 66 6 7
+morph2hg_dec 6143 4 5
+morph2hg_dec 6148 6 5 faster
+morph2hg_dec 3316 4 5
+morph2hg_dec 6595 4 5
+morph2hg_dec 1495 5 4 faster
+morph2hg_dec 6749 4 5
+morph2hg_dec 2318 6 -1 lost
+morph2hg_dec 2388 5 6
+morph2hg_dec 2533 4 6
+morph2hg_dec 2579 5 6
+morph2hg_dec 2592 7 8
+morph2hg_dec 906 5 4 faster
+morph2hg_dec 933 5 4 faster
+morph2hg_dec 4950 6 8
+morph2hg_dec 7427 5 4 faster
+morph2hg_dec 604 6 5 faster
+morph2hg_dec 7349 4 5
+morph2hg_dec 5730 4 5
+morph2hg_dec 1686 5 4 faster
+morph2hg_dec 6078 5 6
+morph2hg_dec 4746 5 6
+morph2hg_dec 2962 5 6
+morph2hg_dec 1013 5 4 faster
+morph2hg_dec 1066 6 5 faster
+morph2hg_dec 1882 6 7
+morph2hg_dec 7505 -1 5 gained
+morph2hg_dec 7541 5 6
+morph2hg_dec 5223 6 5 faster
+morph2hg_dec 5253 4 5
+morph2hg_dec 1705 6 5 faster
+morph2hg_dec 709 6 5 faster
+morph2hg_dec 1306 6 5 faster
+morph2hg_dec 4515 5 4 faster
+morph2hg_dec 4537 6 5 faster
+morph2hg_dec 4572 5 6
+morph2hg_dec 3018 6 7
+morph2hg_dec 3080 4 5
+morph2hg_dec 3715 7 6 faster
+morph2hg_dec 3736 5 6
+morph2hg_dec 212 5 4 faster
+morph2hg_dec 6307 7 5 faster
+morph2hg_dec 2156 6 5 faster
+morph2hg_dec 5929 5 6
+morph2hg_dec 5967 5 4 faster
+morph2hg_dec 5107 5 4 faster
+morph2hg_dec 5140 5 6
+morph2hg_dec 2020 5 6
+morph2hg_dec 5021 5 6
+morph2hg_dec 5074 6 5 faster
+morph2hg_dec 7909 5 4 faster
+morph2hg_dec 383 6 7
+morph2hg_dec 1973 4 5
+morph2hg_dec 3155 5 4 faster
+morph2hg_dec 4228 5 6
+morph2hg_dec 6408 5 4 faster
+morph2hg_dec 4646 7 6 faster
+morph2hg_dec 7735 4 5
+morph2hg_dec 3689 5 4 faster
+morph2hg_dec 2221 6 5 faster
+morph2hg_dec 1138 6 5 faster
+morph2hg_dec 1192 7 5 faster
+modernrwburn2hg_dec 2909 6 7
+modernrwburn2hg_dec 2438 6 5 faster
+modernrwburn2hg_dec 713 5 4 faster
+modernrwburn2hg_dec 793 4 5
+modernrwburn2hg_dec 3856 6 5 faster
+modernrwburn2hg_dec 3886 6 5 faster
+modernrwburn2hg_dec 3463 4 5
+modernrwburn2hg_dec 3773 5 6
+modernrwburn2hg_dec 1767 4 5
+modernrwburn2hg_dec 1794 6 5 faster
+modernrwburn2hg_dec 2108 5 6
+modernrwburn2hg_dec 2168 5 6
+modernrwburn2hg_dec 2187 4 5
+modernrwburn2hg_dec 3372 6 5 faster
+modernrwburn2hg_dec 3296 6 5 faster
+modernrwburn2hg_dec 2738 7 6 faster
+modernrwburn2hg_dec 2765 5 6
+modernrwburn2hg_dec 2795 6 5 faster
+modernrwburn2hg_dec 159 5 4 faster
+modernrwburn2hg_dec 171 5 4 faster
+modernrwburn2hg_dec 1205 4 5
+modernrwburn2hg_dec 1252 5 6
+modernrwburn2hg_dec 1259 5 4 faster
+modernrwburn2hg_dec 3054 5 4 faster
+modernrwburn2hg_dec 3088 4 5
+modernrwburn2hg_dec 391 4 5
+modernrwburn2hg_dec 3582 4 5
+modernrwburn2hg_dec 1825 4 5
+modernrwburn2hg_dec 1855 4 5
+modernrwburn2hg_dec 1316 6 5 faster
+modernrwburn2hg_dec 1672 4 5
+modernrwburn2hg_dec 228 7 8
+modernrwburn2hg_dec 237 5 4 faster
+modernrwburn2hg_dec 246 4 5
+modernrwburn2hg_dec 3989 4 5
+modernrwburn2hg_dec 2328 6 5 faster
+modernrwburn2hg_dec 2380 4 5
+modernrwburn2hg_dec 41 6 5 faster
+modernrwburn2hg_dec 3153 6 5 faster
+modernrwburn2hg_dec 1074 6 5 faster
+modernrwburn2hg_dec 465 6 5 faster
+modernrwburn2hg_dec 2214 4 5
+modernrwburn2hg_dec 591 4 5
+modernrwburn2hg_dec 3613 5 6
