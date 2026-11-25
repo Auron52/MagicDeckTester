@@ -161,6 +161,73 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
    measurement, games where the Presence draw from a second Grove was lost because the first could not be sacrificed
    (e.g. no {1} for the activation).
 
+16. **Ruling 15 follow-up 3 / ruling 16 (2026-11-25), answering "should the tutor order also apply to Idyllic Tutor?"**
+
+   > Yes, the ordering should go that way. However, we should go beyond that and prune certain entries that are not going
+   > to be the choice. At most there should only be 5 choices for search (Parallax Wave, Enchanted Evening, Opalescence,
+   > Enchantresses' Presence and one of Wild Growth or Utopia Sprawl (depending on our mana needs) and usually much less
+   > than that, since we don't need duplicates of any of the pieces (including Enchantresses' Presence I would say) and we
+   > don't need the mana option if we are doing fine on that front.
+
+   Orchestrator reading (for the ruling-15 agent):
+   - Applies to BOTH Sterling Grove's sacrifice tutor and Idyllic Tutor. Provider prune (USER-requested), plus ordering
+     combo pieces first.
+   - Never offered: Sterling Grove, Exploration, Oblivion Ring (any other enchantment in the list).
+   - Duplicates pruned: a piece we already control or hold in hand (EE, Opalescence, Parallax Wave, Enchantress's
+     Presence) is not offered.
+   - Mana option: at most ONE of Wild Growth / Utopia Sprawl, chosen by mana need (Utopia Sprawl needs a Forest to
+     enchant), and none at all when mana is "doing fine". The agent defines that test (e.g. our mana can cast every
+     missing lock piece) and reports its definition and the measured effect to the USER.
+   - If everything is pruned the tutor still resolves (find nothing / don't activate); "do nothing more" stays an option.
+
+   **Ruling 16 follow-up (2026-11-25): which mana enchantment**
+
+   > Utopia Sprawl should only be fetched over Wild Growth if we need the extra white or perhaps if we have 2 forests. If
+   > we have enough white and are lacking in forests Wild Growth is a better option.
+
+   Orchestrator reading: the single mana option is Wild Growth by default. Offer Utopia Sprawl instead only when (a) we
+   are short of white (Sprawl names white as it enters) or (b) we control 2+ Forests (Sprawl needs a Forest; with one
+   Forest, Sprawl would compete with a Wild Growth for the same land's value). With enough white and few Forests, offer Wild
+   Growth. If neither card is left in the library, offer whichever is there.
+
+   **Ruling 16 follow-up 2 (2026-11-25): when mana is "doing fine"**
+
+   > Mana is doing fine I would assume would be 2 white and 4 or 5 mana. I'm not sure whether the breakpoint should be 4
+   > or 5 as it kind of depends on the situation. As-in, if we are early in the game we have a good chance to draw mana
+   > over a couple of turns but, if hitting 5 mana is the holdup, it would be much more important.
+
+   Orchestrator default (surfaced to the USER, not settled): "fine" = we can produce >= 2 white AND >= 5 total mana ->
+   the mana option is pruned. At exactly 4 total mana (with 2 white) the mana option is NOT pruned but ordered LAST, so the
+   search decides between "4 is enough for now" and "5 is the holdup" (Enchanted Evening is {3}{W}{W}). Below 4, or below 2
+   white, it is offered (ordered after the missing combo pieces). Count mana the way the engine counts available mana
+   (lands + Wild Growth/Utopia Sprawl already in play). Report how often the 4-mana band is hit and what the search picks there.
+
+   **Ruling 16 follow-up 3 (2026-11-25): the 4 vs 5 breakpoint**
+
+   > Essentially the 5 mana breakpoint is not as urgent as 4 because we can cast the other two enchantments while we are
+   > waiting. That said, if mana is the only thing missing and we have the opportunity to get it early, that probably
+   > makes sense to do.
+
+   Orchestrator reading (SUPERSEDES the "ordered last at 4" default in follow-up 2):
+   - < 4 total mana or < 2 white: the mana option is offered (after the missing combo pieces in the order).
+   - exactly 4 total mana with >= 2 white: the mana option is offered ONLY when mana is the only thing missing, i.e. every
+     combo piece (Enchanted Evening, Opalescence, Parallax Wave) is already in hand or on the battlefield. Otherwise it is
+     pruned and the tutor fetches a piece (Opalescence / Wave are castable at 4 while we wait for the 5th mana).
+   - >= 5 total mana with >= 2 white: pruned.
+
+   **Ruling 16 follow-up 4 (2026-11-25): Enchantress's Presence is not a lock piece**
+
+   > Right, I wasn't counting Enchantress's Presence as a lock piece or something missing here. It's purpose is pretty much
+   > to draw us out of tougher situations. If we have the chance to get a lock piece and are missing nothing else, that is
+   > an obvious choice over more draw.
+
+   Orchestrator reading:
+   - "Lock pieces" = Enchanted Evening, Opalescence, Parallax Wave. Presence never counts as missing.
+   - When a lock piece is fetchable (missing from hand + battlefield, present in library) and mana is fine (per follow-up 3,
+     so no mana fetch is offered), Presence is PRUNED: the tutor offers lock pieces only.
+   - Presence stays on offer (ordered after lock pieces and the mana option) when no lock piece is fetchable, or when mana
+     is also missing. Never a second copy.
+
 Reading: the lock is credited through the EXISTING free-turn rule (`MTG_FREE_TURNS`, default ON,
 `src/core/FreeTurns.h`, `docs/design/opponent-lockdown-free-turns.md`): a locked opponent turn does not advance the
 round. The deck's lock cards must join `GoldFishRunner::DeckMayLockOpponent`. Under EE + Opalescence the attackers are
