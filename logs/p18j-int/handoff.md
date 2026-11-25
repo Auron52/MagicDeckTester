@@ -66,4 +66,10 @@ branch is NEVER pushed from here. Scratch: `/workspaces/MagicDeckTester/build/sc
   *"The heuristic ladder is worth having up front, but most of the reason I want it is calibration, because I
   consider it a problem if we cannot beat it."* So heur stays as the pre-value-leaf shape AND the yardstick every
   post-leaf shape is measured against; a deck where nothing beats it is an open defect.
+  *"I mean for certain it is silly to do more work than the rollout. We should find a solution that is slightly better
+  than even in the worst examples. As much as I would prefer to see significant benefit for this design over the
+  heuristic ladder I may need to set expectations at that level just because on some decks the ladder is a smaller
+  portion of the cost."* So the BAR: on every deck whose best alternative is heur, the sparse ladder is never more
+  work and at least slightly better than even in the worst case (quality even); significant gains where the ladder's
+  superseded rollouts are a large share (Sea, Hydras), small but positive where they are not (Mill, Maze's End).
 ## Measurements: see docs/design/sparse-heuristic-ladder.md (AB1 tables).
