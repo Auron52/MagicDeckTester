@@ -33,3 +33,20 @@ keep-table adoption, accept smoke/regression GT, and land through the push queue
   floor R=2 = 14.7M floor rollouts at ~65/s. So **the floor alone is ~60 h**, before refinement. The journal is
   resumable. K=33 comes from 22 distinct gate names, which Maze's End's win condition really distinguishes.
 - Stage 3 (Maze's End value leaf) will not be reached tonight.
+
+## 2026-11-25 21:26 UTC: Maze's End stopped (USER), Worldfire finish running
+
+USER: *"Let's stop maze's end to finish Worldfire. The timing for Maze's End also sounds unreasonable."*
+- The Maze's End mullgen was stopped at 21:26 (rc 143): 4.2%+ of the floor. Before the stop, the journal (19.9 MB) and its
+  backups, gencache and profile were copied to `.claude/worktrees/maze-gen/logs/maze_journal_stop-20261125T2126*/`.
+  The journal is also still in place beside the deck. A resume at the same recipe (fast, d1 b1, K=33) picks it up.
+- Stage 4 `valueleaf.sh finish decks/Worldfire` started 21:26:53 on 15,618 rows (`wf_finish.log`, harness task b5wobur0o).
+
+### Why Maze's End costs what it does
+- **K=33: equivalence discovery merged NOTHING.** Every distinct name is its own bucket, including the ten 1-of
+  Guildgates, which differ only in colour pair. 7,358,894 size-7 hands (Worldfire K=21 is about two orders smaller).
+- **Rollouts are expensive:** ~18k units each at d1 b1 (0.40x the d5 b20 play cost), so ~69 rollouts/s on 32 threads.
+- A merge of the ten Guildgates into one bucket (x10) gives K=24 and **1,032,329** size-7 hands (7.1x fewer).
+  Because every member is a 1-of, a hand's count in that bucket is always its number of DISTINCT Guildgate names,
+  so Maze's End's ten-gate count stays exact. What it loses is the colour pair (which spells the hand can cast, and
+  which Guildgate to bottom). This is a BUCKET RULING, which is the USER's. Not applied.
