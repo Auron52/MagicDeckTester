@@ -22583,6 +22583,304 @@ inline void DestroyFireTogether(GameState& state, int controller, const std::vec
     SweepOrphanedAuras(state);   // an Aura on a destroyed host (CR 704.5m)
 }
 
+// ---- THE ENCHANTED EVENING FAIRNESS CHECK: the VIRTUAL BOARD (lock cluster step 6, 2026-11-26) ---------------------
+// design docs/design/enchanted-evening-lock-design.md §3.4; USER rulings (ledger "USER rulings", verbatim):
+//   5/6  the gap: "could they actually have cast a permanent with the lands they had in the gap" -- measured from the
+//        game's start or the last Calming Verse wipe (ruling 11: a Verse with Enchanted Evening out is a new wipe point).
+//   8    only removal we ACTUALLY cast clears a virtual permanent (a held Force of Vigor / Oblivion Ring earns nothing);
+//        a follow-up opponent land is never assumed removed.
+//   9/10 a HEXPROOF creature breaks the Wave + Opalescence lock only with trample and reachable power >= 5, counting the
+//        Auras it could carry (castable within the same land budget); anything less is chump-blocked forever.
+//   11   Calming Verse does not target: under Enchanted Evening it destroys the hexproof creature AND its Auras.
+//   13   Force of Vigor may be cast against those virtual Auras (a SEARCHED cast, real cost) while such a threat exists.
+//   17   the Wave + Opalescence sweep does nothing when its self-exile loop is impossible, so it then clears nothing.
+// A CHECK in the style of the Sire / annihilator checks: the opponent never casts; its real hand and board never change
+// here. The masks live in GameState (opp_virtual_board / opp_virtual_spent, one per head) and are written ONLY for a
+// deck stamped deck_has_ee_lock while the free-turn rule is armed and MTG_FREE_TURN_EE_FAIR is on, so they stay zero
+// for every other deck (every key and every reader below is then a no-op).
+namespace eefair
+{
+inline int Band(int head) { return head == 2 ? opponentdeck::kNumberBase2 : opponentdeck::kNumberBase; }
+inline bool Armed(const GameState& s)
+{
+    return s.deck_has_ee_lock && s.deck_has_free_turn && s.opponent_plays_lands && FreeTurnsOn() && FreeTurnEeFairOn();
+}
+inline bool Any(const GameState& s) { return (s.opp_virtual_board[0] | s.opp_virtual_board[1]) != 0; }
+// The dealt list's card behind bit `bit` of `head` (Deal numbers each head's library band + list index, in spec order).
+// nullptr when unknown. A pool list is at most 60 cards (< 64 bits; checked by the unit test over the whole pool).
+inline const CardDefinition* DefOfBit(const GameState& s, int head, int bit)
+{
+    const std::size_t slot = head == 2 ? s.opponent2_slot : s.opponent_slot;
+    if (slot >= opponentdeck::Pool().size()) { return nullptr; }
+    int i = 0;
+    for (const std::pair<const char*, int>& e : opponentdeck::Pool()[slot].cards)
+    {
+        if (bit < i + e.second) { return CardDatabase::Instance().Lookup(std::string(e.first)); }
+        i += e.second;
+    }
+    return nullptr;
+}
+// The two type statics as they stand (either controller; in this list both are ours).
+struct Statics { bool ee = false; bool opal = false; };
+inline Statics StaticsOf(const GameState& s)
+{
+    Statics st;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.static_all_permanents_enchantments) { st.ee = true; }
+        if (d->params.static_animate_other_nonaura_enchantments_mv) { st.opal = true; }
+    }
+    return st;
+}
+inline bool IsAura(const CardDefinition* d) { return d->params.is_aura; }
+// Would this virtual permanent be an ENCHANTMENT on the battlefield now (Enchanted Evening: every permanent)?
+inline bool EnchantmentNow(const CardDefinition* d, const Statics& st) { return st.ee || d->card.IsEnchantment(); }
+// Would it be a creature that SURVIVES now? Under Opalescence a non-Aura enchantment is an MV/MV creature (layer 7b),
+// and an MV-0 one dies as a 0/0 (CR 704.5f); otherwise a creature card is a creature (its printed body).
+inline bool Gone(const CardDefinition* d, const Statics& st)
+{
+    return st.opal && !IsAura(d) && EnchantmentNow(d, st) && d->card.m_mana_cost.ManaValue() < 1;
+}
+inline bool CreatureNow(const CardDefinition* d, const Statics& st)
+{
+    if (st.opal && !IsAura(d) && EnchantmentNow(d, st)) { return d->card.m_mana_cost.ManaValue() >= 1; }
+    return d->card.IsCreature();
+}
+// The Wave targets: a hexproof card is never its target (CR 702.11b). Granted hexproof / shroud (Alpha Authority,
+// Lightning Greaves) is not modelled on a VIRTUAL creature (disclosed, lock step 6 notes); under Enchanted Evening +
+// Opalescence an Equipment is itself a creature and cannot be attached (CR 301.5c).
+inline bool Hexproof(const CardDefinition* d) { return d->card.HasKeyword(Keyword::Hexproof); }
+inline std::uint64_t Live(const GameState& s, int head) { return s.opp_virtual_board[static_cast<std::size_t>(head - 1)]; }
+inline void Clear(GameState& s, int head, std::uint64_t bits)
+{
+    const std::size_t h = static_cast<std::size_t>(head - 1);
+    bits &= s.opp_virtual_board[h];
+    s.opp_virtual_board[h] &= ~bits;
+    s.opp_virtual_spent[h] |= bits;
+}
+inline int Heads(const GameState& s) { return opponentdeck::HasSecondHead(s) ? 2 : 1; }
+
+// RECORDING (ruling 6's test, turn by turn): both opponent_turn lambdas, right after its land drop (its main phase),
+// before its end-step window; and the executor's on-the-draw turn 0. Per head: the lands it controls NOW (its drop
+// included; under Enchanted Evening + Opalescence the drop has already died, so nothing is recorded), one real mana
+// budget per turn: walk its hand LEFT to RIGHT (its land policy's convention), first the non-Aura nonland permanent
+// cards, then the creature Auras (each needs a host: a creature of that head, real or virtual), each castable with the
+// REMAINING budget (opponentdeck::CastableWith: MV with X = 0, each coloured pip covered by a land producing it) --
+// recorded, budget -= MV. Never a land, a land Aura (never a creature, never on a creature), a placeholder or hurdle
+// card (outside the 64-bit band), an unknown card, a card already recorded or already removed.
+inline bool HostExists(const GameState& s, int head, const Statics& st)
+{
+    for (const Permanent& p : s.battlefield)
+    { if (opponentdeck::HeadControls(p, head) && (p.card.IsCreature() || p.is_animated)) { return true; } }
+    std::uint64_t m = Live(s, head);
+    while (m != 0)
+    {
+        const int bit = std::countr_zero(m);
+        m &= m - 1;
+        const CardDefinition* d = DefOfBit(s, head, bit);
+        if (d != nullptr && CreatureNow(d, st)) { return true; }
+    }
+    return false;
+}
+inline void NoteVirtualDeployments(GameState& s)
+{
+    if (!Armed(s)) { return; }
+    const Statics st = StaticsOf(s);
+    for (int head = 1; head <= Heads(s); ++head)
+    {
+        const opponentdeck::HeadMana m = opponentdeck::HeadManaOf(s, head);
+        if (m.lands <= 0) { continue; }
+        int left = m.lands;
+        const std::vector<Card>& hand = head == 2 ? s.opponent2_hand : s.players[1].hand;
+        const std::size_t h = static_cast<std::size_t>(head - 1);
+        for (int pass = 0; pass < 2 && left > 0; ++pass)
+        {
+            for (const Card& c : hand)
+            {
+                const int bit = c.m_number - Band(head);
+                if (bit < 0 || bit >= 64) { continue; }
+                const std::uint64_t b = 1ull << bit;
+                if (((s.opp_virtual_board[h] | s.opp_virtual_spent[h]) & b) != 0) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d == nullptr || d->card.IsLand() || !d->card.IsPermanentCard() || d->params.is_land_aura) { continue; }
+                if ((pass == 1) != IsAura(d)) { continue; }
+                if (pass == 1 && !HostExists(s, head, st)) { continue; }
+                opponentdeck::HeadMana mm = m;
+                mm.lands = left;
+                if (!opponentdeck::CastableWith(d, mm)) { continue; }
+                s.opp_virtual_board[h] |= b;
+                left -= d->card.m_mana_cost.ManaValue();
+            }
+        }
+    }
+}
+
+// REACH (rulings 9 / 10): can the virtual creature `bit` of `head` attack for >= 5 with trample, wearing every creature
+// Aura that head has virtually deployed (the generous reading: all of them on this one creature)? Base power: MV under
+// Opalescence when it is an enchantment now (layer 7b), else its printed power; Auras add their flat bonus and their
+// scaling term (layer 7c) -- "enchantments" you control, "other_enchantments" on the battlefield (both sides: under
+// Enchanted Evening every permanent), "artifacts_enchantments" you control -- counting real permanents and the
+// surviving virtual ones; an Aura base-set (Almost Perfect) raises the base when larger. Trample: its own keyword or an
+// aura_grants_trample Aura.
+inline int ReachPower(const GameState& s, int head, int bit, const Statics& st, bool& trample)
+{
+    const CardDefinition* c = DefOfBit(s, head, bit);
+    trample = false;
+    if (c == nullptr) { return 0; }
+    int base = (st.opal && !IsAura(c) && EnchantmentNow(c, st)) ? c->card.m_mana_cost.ManaValue()
+                                                                  : std::max(0, c->card.m_power.value_or(0));
+    trample = c->card.HasKeyword(Keyword::Trample);
+    auto count = [&](int only_head, bool artifacts) {   // only_head 0 = every opposing head AND our side
+        int n = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (only_head != 0 && !opponentdeck::HeadControls(p, only_head)) { continue; }
+            if (PermanentIsEnchantmentNow(p, s) || (artifacts && p.card.HasType(CardType::Artifact))) { ++n; }
+        }
+        for (int h = 1; h <= Heads(s); ++h)
+        {
+            if (only_head != 0 && h != only_head) { continue; }
+            std::uint64_t m = Live(s, h);
+            while (m != 0)
+            {
+                const int b = std::countr_zero(m);
+                m &= m - 1;
+                const CardDefinition* d = DefOfBit(s, h, b);
+                if (d == nullptr || Gone(d, st)) { continue; }
+                if (EnchantmentNow(d, st) || (artifacts && d->card.HasType(CardType::Artifact))) { ++n; }
+            }
+        }
+        return n;
+    };
+    int bonus = 0;
+    std::uint64_t m = Live(s, head);
+    while (m != 0)
+    {
+        const int b = std::countr_zero(m);
+        m &= m - 1;
+        if (b == bit) { continue; }
+        const CardDefinition* a = DefOfBit(s, head, b);
+        if (a == nullptr || !IsAura(a) || a->params.is_land_aura) { continue; }
+        bonus += a->params.aura_power_bonus;
+        if (a->params.aura_set_base_power > base) { base = a->params.aura_set_base_power; }
+        const std::string& k = a->params.aura_scale_kind;
+        if (!k.empty() && a->params.aura_scale_power != 0)
+        {
+            const int units = k == "enchantments" ? count(head, false)
+                            : k == "other_enchantments" ? count(0, false) - 1
+                            : k == "artifacts_enchantments" ? count(head, true) : 0;
+            bonus += a->params.aura_scale_power * std::max(0, units);
+        }
+        if (a->params.aura_grants_trample) { trample = true; }
+    }
+    return base + bonus;
+}
+inline bool HexproofThreat(const GameState& s, int head, int bit, const Statics& st)
+{
+    bool trample = false;
+    const int power = ReachPower(s, head, bit, st, trample);
+    return trample && power >= 5;
+}
+// Is there a hexproof virtual creature that is a threat (ruling 13's FoV window opens only then)?
+inline bool ThreatOnHead(const GameState& s, int head, const Statics& st)
+{
+    std::uint64_t m = Live(s, head);
+    while (m != 0)
+    {
+        const int b = std::countr_zero(m);
+        m &= m - 1;
+        const CardDefinition* d = DefOfBit(s, head, b);
+        if (d != nullptr && CreatureNow(d, st) && Hexproof(d) && HexproofThreat(s, head, b, st)) { return true; }
+    }
+    return false;
+}
+// Ruling 13: the virtual Aura targets a Force of Vigor may take while a hexproof threat exists. One CLASS per (head,
+// name) -- copies of one Aura are interchangeable -- each class its member numbers (opponent card numbers).
+inline std::vector<std::vector<int>> FovVirtualAuraClasses(const GameState& s)
+{
+    std::vector<std::vector<int>> classes;
+    if (!Any(s)) { return classes; }
+    const Statics st = StaticsOf(s);
+    for (int head = 1; head <= Heads(s); ++head)
+    {
+        if (!ThreatOnHead(s, head, st)) { continue; }
+        std::vector<const CardDefinition*> names;
+        const std::size_t first = classes.size();
+        std::uint64_t m = Live(s, head);
+        while (m != 0)
+        {
+            const int b = std::countr_zero(m);
+            m &= m - 1;
+            const CardDefinition* d = DefOfBit(s, head, b);
+            if (d == nullptr || !IsAura(d) || d->params.is_land_aura) { continue; }
+            bool placed = false;
+            for (std::size_t k = 0; k < names.size(); ++k)
+            { if (names[k] == d) { classes[first + k].push_back(Band(head) + b); placed = true; break; } }
+            if (!placed) { names.push_back(d); classes.push_back({ Band(head) + b }); }
+        }
+    }
+    return classes;
+}
+// Force of Vigor's resolution (ruling 13): a chosen number that is not on the battlefield but is a live virtual Aura /
+// artifact / enchantment of a head is a legal virtual target (an Aura has no hexproof). True when it was one.
+inline bool IsVirtualFovTarget(const GameState& s, int number, int& head, int& bit)
+{
+    head = opponentdeck::HeadOfNumber(number);
+    bit = number - Band(head);
+    if (bit < 0 || bit >= 64 || (Live(s, head) & (1ull << bit)) == 0) { return false; }
+    const CardDefinition* d = DefOfBit(s, head, bit);
+    const Statics st = StaticsOf(s);
+    return d != nullptr && (EnchantmentNow(d, st) || d->card.HasType(CardType::Artifact)) && !Gone(d, st)
+        && !(CreatureNow(d, st) && Hexproof(d));
+}
+// Calming Verse (on resolution, after clause 1): every virtual permanent that is an enchantment now -- ALL of them
+// under Enchanted Evening, the hexproof creature and its Auras included (it does not target, ruling 11) -- unless
+// indestructible. Returns how many it cleared.
+inline int VerseClears(GameState& s)
+{
+    if (!Any(s)) { return 0; }
+    const Statics st = StaticsOf(s);
+    int n = 0;
+    for (int head = 1; head <= Heads(s); ++head)
+    {
+        std::uint64_t m = Live(s, head), hit = 0;
+        while (m != 0)
+        {
+            const int b = std::countr_zero(m);
+            m &= m - 1;
+            const CardDefinition* d = DefOfBit(s, head, b);
+            if (d == nullptr || !EnchantmentNow(d, st) || d->card.HasKeyword(Keyword::Indestructible)) { continue; }
+            hit |= 1ull << b;
+            ++n;
+        }
+        Clear(s, head, hit);
+    }
+    return n;
+}
+// The sweep's virtual targets: the head's virtual creatures it can target (not hexproof). (head, bit) pairs.
+inline std::vector<std::pair<int, int>> SweepTargets(const GameState& s)
+{
+    std::vector<std::pair<int, int>> out;
+    if (!Any(s)) { return out; }
+    const Statics st = StaticsOf(s);
+    for (int head = 1; head <= Heads(s); ++head)
+    {
+        std::uint64_t m = Live(s, head);
+        while (m != 0)
+        {
+            const int b = std::countr_zero(m);
+            m &= m - 1;
+            const CardDefinition* d = DefOfBit(s, head, b);
+            if (d != nullptr && CreatureNow(d, st) && !Hexproof(d)) { out.emplace_back(head, b); }
+        }
+    }
+    return out;
+}
+} // namespace eefair
+
 // ---- CALMING VERSE (lock cluster step 3; design §4.3) --------------------------------------------------------
 // "Destroy all enchantments you don't control. Then if you control an untapped land, destroy all enchantments you
 // control." No target (hexproof and shroud are no defence, USER ruling 11). Clause 1: every permanent we do not
@@ -22604,7 +22902,8 @@ inline void DestroyFireTogether(GameState& state, int controller, const std::vec
 // legal and almost never right, so the engine still offers it). An UNPINNED cast (a rollout leaf beyond the
 // horizon, the d0 runner) takes DecisionProvider::CalmingVerseKeepDefault. Destroys go through the simultaneous
 // destroy halves above, so every leave reaches the chokepoints (an Oblivion Ring returns its card).
-// Step 6 (the fairness check) clears the virtual board here, after clause 1 (design §3.4.3); not built yet.
+// Step 6 (the fairness check): clause 1 also destroys the VIRTUAL opponent permanents that are enchantments now (all of
+// them under Enchanted Evening; eefair::VerseClears), right after the real ones -- the new wipe point of USER rulings 6 / 11.
 inline bool CalmingVersePinKeep(const std::string& pin, bool& keep)
 {
     if (pin == "VK") { keep = true;  return true; }
@@ -22633,6 +22932,7 @@ inline void ResolveCalmingVerse(GameState& state, int controller, const CardDefi
         if (p.controller_index != controller && p.card.IsEnchantment()) { theirs.push_back(p.card.m_number); }
     }
     const int n1 = DestroyRemoveTogether(state, theirs, src, gone, unearth_left);
+    const int v1 = controller == 0 ? eefair::VerseClears(state) : 0;   // the fairness check's virtual board (step 6)
     bool untapped_land = false;
     for (const Permanent& p : state.battlefield)
     {
@@ -22653,6 +22953,7 @@ inline void ResolveCalmingVerse(GameState& state, int controller, const CardDefi
         EmitPlayEvent(state.turn_number, "removal",
                       "\xF0\x9F\x92\x80 " + src + (keep ? " (lands tapped first)" : " (lands left untapped)")
                       + ": destroys " + std::to_string(n1) + " opposing enchantment(s)"
+                      + (v1 > 0 ? " (and " + std::to_string(v1) + " the opponent could have cast: fairness check)" : "")
                       + (untapped_land ? ", then " + std::to_string(n2) + " of yours (you control an untapped land)"
                                        : "; you control no untapped land, so yours survive"));
     }
@@ -22772,17 +23073,27 @@ inline void ResolveDestroyUpToArtEnch(GameState& state, int controller, const Ca
         for (int bi : opts[static_cast<std::size_t>(k)])
         { chosen.push_back(state.battlefield[static_cast<std::size_t>(bi)].card.m_number); }
     }
-    // CR 608.2b: re-check each target on resolution; an illegal one is unaffected.
+    // CR 608.2b: re-check each target on resolution; an illegal one is unaffected. A number that is not on the
+    // battlefield may be a VIRTUAL Aura of the fairness check (USER ruling 13, lock step 6; eefair::IsVirtualFovTarget):
+    // destroying it clears its bit for good.
     std::vector<int> live;
+    std::vector<std::pair<int, int>> vlive;   // (head, bit)
     for (int num : chosen)
     {
-        if (static_cast<int>(live.size()) >= n_max) { break; }
+        if (static_cast<int>(live.size() + vlive.size()) >= n_max) { break; }
         if (std::find(live.begin(), live.end(), num) != live.end()) { continue; }
+        bool on_board = false;
         for (const Permanent& q : state.battlefield)
         {
-            if (q.card.m_number == num && DestroyUpToArtEnchTargetLegal(state, controller, q))
-            { live.push_back(num); break; }
+            if (q.card.m_number != num) { continue; }
+            on_board = true;
+            if (DestroyUpToArtEnchTargetLegal(state, controller, q)) { live.push_back(num); }
+            break;
         }
+        int vh = 0, vb = 0;
+        if (!on_board && eefair::IsVirtualFovTarget(state, num, vh, vb)
+            && std::find(vlive.begin(), vlive.end(), std::make_pair(vh, vb)) == vlive.end())
+        { vlive.emplace_back(vh, vb); }
     }
     if (g_play_event_sink && !g_tap_speculating)
     {
@@ -22797,10 +23108,17 @@ inline void ResolveDestroyUpToArtEnch(GameState& state, int controller, const Ca
                 break;
             }
         }
+        for (const std::pair<int, int>& v : vlive)
+        {
+            const CardDefinition* d = eefair::DefOfBit(state, v.first, v.second);
+            if (!names.empty()) { names += ", "; }
+            names += "the " + (d ? d->card.m_name.str() : std::string("card")) + " the opponent could have cast";
+        }
         EmitPlayEvent(state.turn_number, "removal",
-                      "\xF0\x9F\x92\x80 " + src + (live.empty() ? std::string(": destroys nothing")
-                                                               : ": destroys " + names));
+                      "\xF0\x9F\x92\x80 " + src + (names.empty() ? std::string(": destroys nothing")
+                                                                : ": destroys " + names));
     }
+    for (const std::pair<int, int>& v : vlive) { eefair::Clear(state, v.first, 1ull << v.second); }
     if (live.empty()) { return; }
     std::vector<DestroyedTogether> gone;
     std::vector<Permanent> unearth_left;
@@ -23429,7 +23747,9 @@ inline void ResolveFadeExileCreature(GameState& state, int controller, int sourc
 // Wave beside an Opalescence from fading away (design §4.4: "so fading never kills a Wave that sits beside an
 // Opalescence"). A Wave with something linked is left alone when there is no target (its return is the player's own
 // earlier choice). Ends with RefreshTypeStatics + TypeStaticsSbaCheckpoint (this point holds no battlefield index).
-// Lock step 6 hook: the fairness check's VIRTUAL opponent creatures (design §3.4.4) are cleared here too; not built.
+// Lock step 6: the fairness check's VIRTUAL opponent creatures (design §3.4.4; eefair::SweepTargets -- a creature now
+// under the statics, never a hexproof one) are targets exactly as real ones: each costs a counter in the cycle and its
+// bit is cleared for good. With no loop possible (ruling 17) nothing runs, so nothing virtual is cleared either.
 inline bool WaveSelfTargetEnablers(const GameState& state, int controller, int wave_index, std::vector<int>& enablers)
 {
     enablers.clear();
@@ -23489,13 +23809,15 @@ inline void PerformWaveOpalSweep(GameState& state)
     // and a 0/0 the retype makes dies first (SBA, CR 704.5f) -- it is never worth a counter.
     RefreshTypeStatics(state);
     TypeStaticsSbaCheckpoint(state);
-    int exiled = 0, cycles = 0;
+    int exiled = 0, exiled_virtual = 0, cycles = 0;
     std::string wave_name;
     for (int guard = 0; guard < 64; ++guard)
     {
         std::vector<int> opp;   // card numbers of the targetable opponent creatures
         for (const Permanent& q : state.battlefield)
         { if (q.controller_index != me && FadeExileTargetLegal(state, q, me)) { opp.push_back(q.card.m_number); } }
+        const std::vector<std::pair<int, int>> vopp = eefair::SweepTargets(state);   // virtual ones (step 6)
+        const bool none = opp.empty() && vopp.empty();
         int wi = -1;
         std::vector<int> enablers;
         for (int i = 0; i < static_cast<int>(state.battlefield.size()) && wi < 0; ++i)
@@ -23504,7 +23826,7 @@ inline void PerformWaveOpalSweep(GameState& state)
             if (w.controller_index != me || w.def_absent) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(w.card);
             if (!d || !d->params.fade_exile_target_creature) { continue; }
-            if (opp.empty())
+            if (none)
             {
                 // The top-up: below the fading count, nothing linked, nothing attached to it.
                 if (w.fade_counters >= d->params.fading_counters || w.linked_exile_number != 0) { continue; }
@@ -23516,7 +23838,7 @@ inline void PerformWaveOpalSweep(GameState& state)
             std::vector<int> en;
             if (!WaveSelfTargetEnablers(state, me, i, en)) { continue; }
             if (w.fade_counters < static_cast<int>(en.size()) + 1) { continue; }
-            if (opp.empty())
+            if (none)
             {
                 bool clean = true;   // a top-up enabler must come back as it left: nothing linked, nothing attached
                 for (const Permanent& g : state.battlefield)
@@ -23544,9 +23866,14 @@ inline void PerformWaveOpalSweep(GameState& state)
         for (int g : enablers) { if (pay()) { FadeExilePermanent(state, me, wave_num, wave_name, g, /*linked=*/true); } }
         for (int j = 0; j < static_cast<int>(opp.size()) && j < room; ++j)
         { if (pay() && FadeExilePermanent(state, me, wave_num, wave_name, opp[static_cast<std::size_t>(j)], /*linked=*/false)) { ++exiled; } }
+        for (int j = static_cast<int>(opp.size()); j < static_cast<int>(opp.size() + vopp.size()) && j < room; ++j)
+        {
+            const std::pair<int, int>& v = vopp[static_cast<std::size_t>(j) - opp.size()];
+            if (pay()) { eefair::Clear(state, v.first, 1ull << v.second); ++exiled; ++exiled_virtual; }
+        }
         if (pay()) { FadeExilePermanent(state, me, wave_num, wave_name, wave_num, /*linked=*/true); }
         ++cycles;
-        if (opp.empty()) { continue; }   // a top-up: the next pass finds this Wave at its count (another may need one)
+        if (none) { continue; }   // a top-up: the next pass finds this Wave at its count (another may need one)
     }
     if (cycles == 0) { return; }   // no loop possible (or nothing to do): USER ruling 17 -- keep the counters
     if (g_play_event_sink && !g_tap_speculating)
@@ -23560,11 +23887,79 @@ inline void PerformWaveOpalSweep(GameState& state)
         EmitPlayEvent(state.turn_number, "ability",
                       "\xF0\x9F\x8C\x8C " + wave_name + " + Opalescence (opponent's end step): exiles "
                       + std::to_string(exiled) + " opponent creature" + (exiled == 1 ? "" : "s")
+                      + (exiled_virtual > 0 ? " (" + std::to_string(exiled_virtual) + " of them it could have cast: fairness check)" : "")
                       + "; the Wave returns with " + std::to_string(counters) + " fade counters");
     }
     RefreshTypeStatics(state);
     TypeStaticsSbaCheckpoint(state);
 }
+
+// ---- The fairness check's VETO (lock step 6; design §3.4.4, USER rulings 9-13, 17), read by freeturn::LockHolds -------
+namespace eefair
+{
+enum Clause : int { kNone = 0, kVirtualCreature = 1, kHexproofThreat = 2, kHexproofNoLoop = 3 };
+inline const char* ClauseName(int c)
+{
+    switch (c)
+    {
+    case kVirtualCreature: return "a creature it could have cast";
+    case kHexproofThreat:  return "a hexproof creature it could have cast reaches 5 power with trample";
+    case kHexproofNoLoop:  return "a hexproof creature it could have cast, and no Wave + Opalescence loop";
+    default:               return "";
+    }
+}
+// The Wave + Opalescence self-exile loop is possible right now (the sweep's own test: the deck rule, an Opalescence of
+// ours, and a Wave of ours whose shroud enablers are targetable with a counter left for itself). It is what CONTAINS a
+// hexproof creature that cannot reach 5 power with trample (ruling 9: chump-blocked forever, the blockers exiled and
+// replaced); with no loop (ruling 17) it contains nothing.
+inline bool WaveLoopAble(const GameState& s)
+{
+    if (!s.deck_has_wave_opal_sweep) { return false; }
+    const int me = s.active_player_index;
+    if (!StaticsOf(s).opal) { return false; }
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& w = s.battlefield[static_cast<std::size_t>(i)];
+        if (w.controller_index != me || w.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(w.card);
+        if (!d || !d->params.fade_exile_target_creature) { continue; }
+        std::vector<int> en;
+        if (WaveSelfTargetEnablers(s, me, i, en) && w.fade_counters >= static_cast<int>(en.size()) + 1) { return true; }
+    }
+    return false;
+}
+// The first clause that vetoes the lock (kNone = the virtual board lets it hold). `card` names the virtual card.
+// A virtual creature of any head vetoes (it would be an opposing creature, condition 2), EXCEPT a hexproof one while
+// the loop is possible that cannot reach power >= 5 with trample (rulings 9 / 10 / 11a).
+inline int Veto(const GameState& s, std::string* card = nullptr)
+{
+    if (!Any(s)) { return kNone; }
+    const Statics st = StaticsOf(s);
+    int loop = -1;
+    for (int head = 1; head <= Heads(s); ++head)
+    {
+        std::uint64_t m = Live(s, head);
+        while (m != 0)
+        {
+            const int b = std::countr_zero(m);
+            m &= m - 1;
+            const CardDefinition* d = DefOfBit(s, head, b);
+            if (d == nullptr || !CreatureNow(d, st)) { continue; }
+            int c = kVirtualCreature;
+            if (Hexproof(d))
+            {
+                if (loop < 0) { loop = WaveLoopAble(s) ? 1 : 0; }
+                if (loop == 0) { c = kHexproofNoLoop; }
+                else if (HexproofThreat(s, head, b, st)) { c = kHexproofThreat; }
+                else { continue; }   // contained
+            }
+            if (card != nullptr) { *card = d->card.m_name.str(); }
+            return c;
+        }
+    }
+    return kNone;
+}
+} // namespace eefair
 
 // ---- White Orchid Phantom (Spirits, 2026-11-13) --------------------------------------------------
 // "When this creature enters, destroy up to one target nonbasic land. Its controller may search their

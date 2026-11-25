@@ -714,10 +714,34 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
 //        saga_ch3_gain_control_opp_permanent (Kiora Bests the Sea God ch. III), cast_trigger_destroy_target_permanents
 //        (Ulamog's cast trigger). The lock test itself is unchanged: a turn the opponent ends with a land is never free.
 //        (White Orchid Phantom stays OUT for its own reason above: the opponent's land count never falls.)
+//   IN   the ENCHANTED EVENING COMBINATION (lock cluster step 6, DeckHasEeLock; USER rulings 1 / 5): Enchanted Evening
+//        (static_all_permanents_enchantments) together with Opalescence (static_animate_other_nonaura_enchantments_mv:
+//        every land a 0/0 that dies, the opponent's drops included), Calming Verse
+//        (destroy_opp_enchantments_then_own_if_untapped_land: every opposing permanent) or Force of Vigor
+//        (destroy_up_to_artifacts_enchantments: its lands). None of the four touches a land alone, so neither half
+//        joins by itself. The fairness check (MTG_FREE_TURN_EE_FAIR, eefair:: in SpellEffects.h) is its veto.
 // MAIN, plus the SIDEBOARD only when a main-deck wish can fetch from it (DeckWishesFromSideboard): an unreachable
-// sideboard card never resolves (Vampires holds Worldfire in a wishless sideboard). A deck this misses still
-// receives the credit in play (the lock check is general, USER 2026-11-21); only the search's turn-edge prunes stay
-// armed for it, and the batch reports any free turn such a deck receives with trait=0, as a hole in this list.
+// sideboard card never resolves (Vampires holds Worldfire in a wishless sideboard). A deck this misses gets NO free
+// turn (RuleArmed requires the trait; core/FreeTurns.h is authoritative), so the list must be complete.
+bool GoldFishRunner::DeckHasEeLock(const Decklist& deck)
+{
+    bool ee = false, partner = false;
+    auto scan = [&](const std::vector<Card>& zone) {
+        for (const Card& c : zone)
+        {
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+            if (def == nullptr) { continue; }
+            const CardParams& p = def->params;
+            if (p.static_all_permanents_enchantments) { ee = true; }
+            if (p.static_animate_other_nonaura_enchantments_mv || p.destroy_opp_enchantments_then_own_if_untapped_land
+                || p.destroy_up_to_artifacts_enchantments > 0)
+            { partner = true; }
+        }
+    };
+    scan(deck.mainboard);
+    if (DeckWishesFromSideboard(deck)) { scan(deck.sideboard); }
+    return ee && partner;
+}
 bool GoldFishRunner::DeckMayLockOpponent(const Decklist& deck)
 {
     // MTG_FREE_TURN_SIRE (DEFAULT ON; =0 takes Sire of Insanity out of the trait). USER 2026-11-22: "Sire of
@@ -741,7 +765,7 @@ bool GoldFishRunner::DeckMayLockOpponent(const Decklist& deck)
         }
         return false;
     };
-    return locks(deck.mainboard) || (DeckWishesFromSideboard(deck) && locks(deck.sideboard));
+    return locks(deck.mainboard) || (DeckWishesFromSideboard(deck) && locks(deck.sideboard)) || DeckHasEeLock(deck);
 }
 
 // THE REACHABLE-LOCK CERTIFICATE'S PRECONDITION (freeturn::FreeTurnMayFollow, MTG_FREE_TURN_REACH; fourth pass). The
@@ -751,9 +775,13 @@ bool GoldFishRunner::DeckMayLockOpponent(const Decklist& deck)
 //   in the trait or not -- it discards at every end step), annihilator (a mass lock card; never certified), and every
 //   DeckTouchesOpponentZones card (mill, forced draw, the opponent-target loot that discards from its hand). Main deck,
 //   plus the sideboard a main-deck wish can fetch. MTG_FREE_TURN_REACH_AUDIT checks both halves in play.
+// The ENCHANTED EVENING combination never qualifies (design §3.3): its lock does not remove battlefield lands the land
+// drop refills -- under Enchanted Evening + Opalescence the drop itself dies on entry (a static), and a Force of Vigor
+// at the opponent's end step (lock step 7) destroys the land just played -- so the certificate's premise fails and it
+// would certify turns that then lock.
 bool GoldFishRunner::DeckLockNeedsLandStrip(const Decklist& deck)
 {
-    if (DeckTouchesOpponentZones(deck)) { return false; }
+    if (DeckTouchesOpponentZones(deck) || DeckHasEeLock(deck)) { return false; }
     auto touches = [](const std::vector<Card>& zone) {
         for (const Card& c : zone)
         {
@@ -1505,6 +1533,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // exactly as for an extra-turn deck. FALSE for every deck while the flag is off (byte-identical).
     state.deck_has_free_turn = FreeTurnsOn() && DeckMayLockOpponent(deck);
     state.deck_free_turn_hand_intact = state.deck_has_free_turn && DeckLockNeedsLandStrip(deck);
+    state.deck_has_ee_lock = state.deck_has_free_turn && DeckHasEeLock(deck);   // the fairness check's gate (step 6)
     state.deck_has_prophets = [&deck]{
         for (const Card& c : deck.mainboard)
         {

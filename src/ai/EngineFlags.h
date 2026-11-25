@@ -65,6 +65,14 @@ inline bool FreeTurnAnnihilatorFairOn()
     if (freeturn::t_force_ann_fair >= 0) { return freeturn::t_force_ann_fair != 0; }
     return heurarm::Flag(heurarm::FREE_TURN_ANNIHILATOR_FAIR, on);   // per-job arm (one pooled A/B batch)
 }
+// MTG_FREE_TURN_EE_FAIR (DEFAULT ON, USER-requested; inert unless the free-turn rule is armed for an Enchanted Evening
+// lock deck, GameState::deck_has_ee_lock): the fairness check's VIRTUAL BOARD (USER rulings 5, 6, 8-13; eefair:: in
+// core/SpellEffects.h). =0 -> nothing is recorded, so the lock is judged on the real board alone (the A/B arm).
+inline bool FreeTurnEeFairOn()
+{
+    static const bool on = EnvOn("MTG_FREE_TURN_EE_FAIR", true);   // DEFAULT ON; =0 disables the virtual board
+    return heurarm::Flag(heurarm::FREE_TURN_EE_FAIR, on);   // per-job arm (one pooled A/B batch)
+}
 // MTG_OPP_BOUNCE_OPENING (DEFAULT ON since the fourth pass, USER ruling below; a play change for EVERY game against a
 // Karoo / Lake of the Dead list; =0 restores the unchanged opening hand).
 // USER 2026-11-22: "we shouldn't be playing a bounceland first if we don't have an existing land unless forced by what

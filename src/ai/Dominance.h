@@ -692,7 +692,10 @@ static_assert(sizeof(Player) == 216,
 // only in its stamped turn. It is folded into the mid-turn sim key and dead at the clean boundary.
 // +8 bytes (2026-11-25, Enchanted Evening / Sterling Grove): the DECK CONSTANT deck_has_enchantment_shroud (stamped
 // once in the runner's deck-trait pass -- nothing to fold). No padding hole was left beside the Gargaroth bools.
-static_assert(sizeof(GameState) == 1744,   // combined upstream free turns and Beasts fields + Sterling Grove's stamp
+// +32 bytes (2026-11-26, Enchanted Evening lock step 6): the fairness check's virtual board opp_virtual_board[2] /
+// opp_virtual_spent[2] (FUTURE-DETERMINING: folded in Build() nonzero-gated beside annihilator_lock_veto) and the DECK
+// CONSTANT deck_has_ee_lock (in the type-statics pad -- nothing to fold).
+static_assert(sizeof(GameState) == 1776,   // + the EE fairness check's virtual board (lock step 6)
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -961,6 +964,14 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     if (s.free_turns_taken != 0 || s.in_free_turn)
     { fold(0xF8EE000ull + static_cast<std::uint64_t>(s.free_turns_taken) * 2ull + (s.in_free_turn ? 1u : 0u)); }
     if (s.annihilator_lock_veto) { fold(0xA1F8EE1ull); }   // MTG_FREE_TURN_ANNIHILATOR_FAIR: value-gated
+    // MTG_FREE_TURN_EE_FAIR (EE lock step 6): the virtual board decides later lock credit. Exact, nonzero-gated
+    // (zero for every deck but an Enchanted Evening lock deck).
+    if ((s.opp_virtual_board[0] | s.opp_virtual_board[1] | s.opp_virtual_spent[0] | s.opp_virtual_spent[1]) != 0)
+    {
+        fold(0xEEFA1Bull);
+        fold(s.opp_virtual_board[0]); fold(s.opp_virtual_board[1]);
+        fold(s.opp_virtual_spent[0]); fold(s.opp_virtual_spent[1]);
+    }
     fold(static_cast<std::uint64_t>(s.active_player_index));
     fold(static_cast<std::uint64_t>(s.priority_player_index));
     fold(static_cast<std::uint64_t>(s.phase));

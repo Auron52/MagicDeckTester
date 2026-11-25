@@ -57850,6 +57850,34 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 const auto fit = std::find(fv_pins.begin(), fv_pins.end(), front_pin);
                 if (fit != fv_pins.end() && fit != fv_pins.begin()) { std::rotate(fv_pins.begin(), fit, fit + 1); }
+                // USER ruling 13 (lock step 6): while a hexproof creature the opponent could have cast threatens the
+                // lock (eefair::ThreatOnHead), Force of Vigor may target the VIRTUAL Auras it could carry. Appended
+                // AFTER the board options (searched, never automatic): each class (one per Aura name and head), two
+                // of one class, every pair of classes, and every admitted real single with each class. Empty for
+                // every other deck (no virtual board).
+                {
+                    const std::vector<std::vector<int>> vcls = eefair::FovVirtualAuraClasses(state);
+                    const int vmax = pp.destroy_up_to_artifacts_enchantments;
+                    std::vector<int> real_singles;
+                    for (const auto& o : offered)
+                    {
+                        if (o.size() != 1) { continue; }
+                        const std::string pin = pin_of(o);
+                        if (std::find(legal_pins.begin(), legal_pins.end(), pin) == legal_pins.end()) { continue; }
+                        real_singles.push_back(state.battlefield[static_cast<std::size_t>(o.front())].card.m_number);
+                    }
+                    auto add = [&](const std::vector<int>& nums) {
+                        const std::string pin = DestroyUpToArtEnchPin(nums);
+                        if (std::find(fv_pins.begin(), fv_pins.end(), pin) == fv_pins.end()) { fv_pins.push_back(pin); }
+                    };
+                    for (std::size_t x = 0; x < vcls.size() && vmax >= 1; ++x) { add({ vcls[x][0] }); }
+                    for (std::size_t x = 0; x < vcls.size() && vmax >= 2; ++x)
+                    {
+                        if (vcls[x].size() >= 2) { add({ vcls[x][0], vcls[x][1] }); }
+                        for (std::size_t y = x + 1; y < vcls.size(); ++y) { add({ vcls[x][0], vcls[y][0] }); }
+                        for (int r : real_singles) { add({ r, vcls[x][0] }); }
+                    }
+                }
                 fv_built = true;
             }
             // A provider that withheld EVERY option withdrew the cast (not casting covers it). The unpinned base
@@ -85937,6 +85965,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         opponentdeck::EndOfTurnDraw(state);
         if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
         if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
+        eefair::NoteVirtualDeployments(state);   // EE fairness check, lock step 6 (executor twin: RunTurnFrom)
         TryOffMainAltWinActivation(state);   // ...after a Burgeoning put (F1 defect 4; executor twin)
         PerformWaveOpalSweep(state);   // Parallax Wave + Opalescence, USER ruling 7 (executor twin: RunTurnFrom)
         freeturn::NoteSireBeforeDiscard(state);   // MTG_FREE_TURN_SIRE_FAIR (executor twin: RunTurnFrom)
@@ -112891,6 +112920,14 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     { Fold(k, 0xF8EE000ull + static_cast<uint64_t>(state.free_turns_taken) * 2ull + (state.in_free_turn ? 1u : 0u)); }
     // MTG_FREE_TURN_ANNIHILATOR_FAIR: the veto decides the next lock check. Value-gated (false unless the lever is on).
     if (state.annihilator_lock_veto) { Fold(k, 0xA1F8EE1ull); }
+    // MTG_FREE_TURN_EE_FAIR (EE lock step 6): the virtual board decides later lock credit. Nonzero-gated.
+    if ((state.opp_virtual_board[0] | state.opp_virtual_board[1] | state.opp_virtual_spent[0]
+         | state.opp_virtual_spent[1]) != 0)
+    {
+        Fold(k, 0xEEFA1Bull);
+        Fold(k, state.opp_virtual_board[0]); Fold(k, state.opp_virtual_board[1]);
+        Fold(k, state.opp_virtual_spent[0]); Fold(k, state.opp_virtual_spent[1]);
+    }
     Fold(k, static_cast<uint64_t>(state.vial_target_mv));
     Fold(k, static_cast<uint64_t>(state.stack.size()));
     // Floating mana: future-determining (a mid-turn re-solve state with {R}{R} floated solves

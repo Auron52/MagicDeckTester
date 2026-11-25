@@ -48611,6 +48611,14 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     // Free turns (MTG_FREE_TURNS): value-gated so every game with the flag off keeps its exact vector.
     if (s.free_turns_taken != 0 || s.in_free_turn) { v.push_back(1000 + s.free_turns_taken); v.push_back(s.in_free_turn); }
     if (s.annihilator_lock_veto) { v.push_back(0xA1F8EE1); }   // MTG_FREE_TURN_ANNIHILATOR_FAIR, value-gated
+    if ((s.opp_virtual_board[0] | s.opp_virtual_board[1] | s.opp_virtual_spent[0] | s.opp_virtual_spent[1]) != 0)
+    {
+        // MTG_FREE_TURN_EE_FAIR (EE lock step 6): the virtual board, nonzero-gated; split into 32-bit halves.
+        v.push_back(0xEEFA1B);
+        for (std::uint64_t m : { s.opp_virtual_board[0], s.opp_virtual_board[1], s.opp_virtual_spent[0],
+                                 s.opp_virtual_spent[1] })
+        { v.push_back(static_cast<long long>(m & 0xFFFFFFFFull)); v.push_back(static_cast<long long>(m >> 32)); }
+    }
     v.push_back(s.opponent_lost_life_this_turn); v.push_back(s.opponent_library_dealt); v.push_back(s.opponent_decked);
     v.push_back(s.inf_life_turn); v.push_back(s.inf_life_possible); v.push_back(s.top_stacked_turn);
     v.push_back(s.top_stacked_card_number);

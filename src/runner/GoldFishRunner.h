@@ -173,6 +173,9 @@ public:
     // The reachable-lock certificate's precondition (freeturn::FreeTurnMayFollow, MTG_FREE_TURN_REACH): no card of the
     // deck can touch the opponent's hand or library, so its only route to a free turn is stripping every land.
     static bool DeckLockNeedsLandStrip(const Decklist& deck);
+    // ENCHANTED EVENING lock (lock cluster step 6): an Enchanted Evening AND an Opalescence / Calming Verse / Force of
+    // Vigor in the list (main, plus a wishable sideboard) -- a COMBINATION trait (design §3.2).
+    static bool DeckHasEeLock(const Decklist& deck);
     static bool DeckUsesDiverseOpponentPool(const Decklist& deck);
     // Card-dependency-map closure (docs/design/card-dependency-map.md): which dependency
     // classes the main-phase classifier pulls to Main1 for this deck. Stamped onto

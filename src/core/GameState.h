@@ -690,6 +690,19 @@ struct GameState
     // NoteOpponentTurnEnd). LIVE at search nodes (our combat -> the opponent's turn end), so it IS folded, value-gated
     // (BuildSimKey, dominance::Build, the route signature). Never set unless the lever and the rule are armed.
     bool                     annihilator_lock_veto        = false;
+    // ENCHANTED EVENING LOCK (lock cluster step 6, 2026-11-26; design docs/design/enchanted-evening-lock-design.md
+    // §3.2-§3.4, USER rulings 5, 6, 8-13, 17). deck_has_ee_lock -- DECK CONSTANT (StampDeckTraits): the list holds an
+    // Enchanted Evening AND an Opalescence / Calming Verse / Force of Vigor (GoldFishRunner::DeckHasEeLock). Never
+    // folded. The VIRTUAL BOARD of the fairness check (MTG_FREE_TURN_EE_FAIR, eefair:: in SpellEffects.h): bit i of
+    // opp_virtual_board[head - 1] = that head's card numbered band + i (Deal's numbering, opponentdeck::kNumberBase /
+    // kNumberBase2) is VIRTUALLY on the battlefield -- a nonland permanent a real opponent could have cast with its
+    // lands since the game began or the last Calming Verse wipe (USER ruling 6). opp_virtual_spent: cards that were
+    // virtually deployed and then removed by an effect we actually cast (a Verse, the Wave sweep, a Force of Vigor),
+    // so the opponent cannot deploy the same card twice. FUTURE-DETERMINING (they decide later lock credit): folded
+    // NONZERO-gated in BuildSimKey, dominance::Build and the route signature. All zero for every other deck.
+    // (deck_has_ee_lock sits in the type-statics pad below, beside deck_has_wave_opal_sweep.)
+    std::array<std::uint64_t, 2> opp_virtual_board{};
+    std::array<std::uint64_t, 2> opp_virtual_spent{};
     // Extra turns are taken in reverse creation order (CR 500.7). Zero names our player;
     // one names the passive opponent. Keep the old own-turn count for the existing search
     // gates and for scenario states that install pending_extra_turns directly.
@@ -2229,6 +2242,8 @@ struct GameState
     // attached (GameSetup). DEFAULT FALSE: an unstamped state (a unit test, a scenario) never sweeps. A DECK CONSTANT,
     // never folded. In the same pad as the two bits above (sizeof(GameState) unchanged; Dominance.h's assert).
     bool                     deck_has_wave_opal_sweep     = false;
+    // ENCHANTED EVENING LOCK (lock step 6): see opp_virtual_board above. A DECK CONSTANT, never folded. Same pad.
+    bool                     deck_has_ee_lock             = false;
     // THE SEARCHED ELDER GARGAROTH MODE (Plan::attack_choose_mode_choice): PACKED 2 bits per attack-trigger
     // ordinal (ordinal 0 lowest; a field of 0 = that ordinal unpinned, m + 1 = mode m: 0 token / 1 life /
     // 2 draw); -1 = nothing pinned (every trigger takes DecisionProvider::AttackChooseOneModes' front).

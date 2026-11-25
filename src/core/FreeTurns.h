@@ -167,9 +167,9 @@ inline void NoteSireBeforeDiscard(GameState& state)
     state.sire_lock_veto = SireDeployablePermanent(state);
 }
 
-// The whole rule. Only the real-opponent model qualifies (a dealt list that plays lands); a legacy replay's
-// three-placeholder board never locks.
-inline bool LockHolds(const GameState& state)
+// The whole rule BEFORE the Enchanted Evening fairness check's virtual board (LockHolds below adds it). Only the
+// real-opponent model qualifies (a dealt list that plays lands); a legacy replay's three-placeholder board never locks.
+inline bool LockHoldsOnBoard(const GameState& state)
 {
     if (!state.opponent_plays_lands || state.opponent_decked || OpponentHasLost(state)) { return false; }
     if (state.sire_lock_veto) { return false; }   // MTG_FREE_TURN_SIRE_FAIR: it could have deployed a nonland permanent
@@ -179,13 +179,32 @@ inline bool LockHolds(const GameState& state)
     if (opponentdeck::HasSecondHead(state) && !HeadLocked(state, 2)) { return false; }
     return NoOpposingCreature(state);
 }
+// ...and the ENCHANTED EVENING FAIRNESS CHECK (MTG_FREE_TURN_EE_FAIR, lock cluster step 6; USER rulings 5, 6, 8-13, 17):
+// a permanent the opponent could have cast with its lands since the game began or the last Calming Verse wipe, still
+// on the VIRTUAL board, vetoes the lock when it would be an opposing creature now -- unless it is a hexproof creature
+// that the Wave + Opalescence loop contains (no trample-and-5-power reach). eefair::Veto (SpellEffects.h). The masks
+// are zero for every other deck, so this is the board rule alone there.
+inline bool LockHolds(const GameState& state)
+{
+    return LockHoldsOnBoard(state) && eefair::Veto(state) == eefair::kNone;
+}
 
 // Called by both worlds right after the opponent's REGULAR turn (the one before our next regular turn; not one
-// before our extra turn, which the opponent does not get). Raises pending_free_turn when the lock holds.
+// before our extra turn, which the opponent does not get). Raises pending_free_turn when the lock holds. A lock the
+// board allowed and the virtual board vetoed is a play event (real play only): "the lock formed but was not credited".
 inline void NoteOpponentTurnEnd(GameState& state)
 {
     if (!RuleArmed(state)) { return; }
-    state.pending_free_turn = LockHolds(state);
+    const bool on_board = LockHoldsOnBoard(state);
+    std::string card;
+    const int veto = on_board ? eefair::Veto(state, &card) : eefair::kNone;
+    state.pending_free_turn = on_board && veto == eefair::kNone;
+    if (veto != eefair::kNone && g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "free_turn_veto",
+                      "No free turn: the opponent is locked on the board, but the fairness check vetoes it ("
+                      + std::string(eefair::ClauseName(veto)) + ": " + card + "; clause " + std::to_string(veto) + ")");
+    }
     state.sire_lock_veto = false;
     state.annihilator_lock_veto = false;
 }

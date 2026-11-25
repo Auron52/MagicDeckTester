@@ -3236,6 +3236,7 @@
    "oracle_text": "Enchant creature\nEnchanted creature gets +2/+0 and has trample.\nWhen this Aura is put into a graveyard from the battlefield, return it to its owner's hand. [Trample inert; the graveyard-return is inert vs the passive opponent (no removal/combat destroys our auras, so Rancor never leaves the battlefield).]",
    "template": "custom",
    "parameters": {
+    "aura_grants_trample": true,
     "aura_power_bonus": 2,
     "aura_tough_bonus": 0,
     "is_aura": true
@@ -3279,6 +3280,7 @@
    "oracle_text": "Enchant creature\nEnchanted creature gets +2/+2 and has trample.\nWhenever enchanted creature deals damage, you gain that much life. [Lifelink modelled (\"deals damage -> gain that much life\"); trample inert.]",
    "template": "custom",
    "parameters": {
+    "aura_grants_trample": true,
     "aura_power_bonus": 2,
     "aura_tough_bonus": 2,
     "aura_grants_lifelink": true,
@@ -3424,6 +3426,7 @@
    "oracle_text": "Enchant creature\nEnchanted creature gets +2/+0 and has trample.\nWhen this Aura is put into a graveyard from the battlefield, draw a card. [Trample inert; the dies-draw trigger is inert (the aura never leaves the battlefield vs the passive opponent).]",
    "template": "custom",
    "parameters": {
+    "aura_grants_trample": true,
     "aura_power_bonus": 2,
     "aura_tough_bonus": 0,
     "is_aura": true
@@ -12353,6 +12356,7 @@
    "oracle_text": "Enchant creature\nEnchanted creature gets +10/+10 and has trample and annihilator 2. (Whenever it attacks, defending player sacrifices two permanents of their choice.) [Flat +10/+10 modelled (aura_power_bonus/aura_tough_bonus; toughness stored, inert vs the passive opponent). Colorless: protection-from-a-colour (Mother of Runes) never makes it fall off. Trample inert (the goldfish opponent never blocks). Annihilator 2 inert (user-approved 2026-10-05): the defending player sacrifices, and the goldfish opponent controls no permanents (no OpponentSpawn for this deck) -- user-approved 2026-10-05. Kindred/Eldrazi typed faithfully; no card in the pool reads Kindred or Eldrazi.]",
    "template": "custom",
    "parameters": {
+    "aura_grants_trample": true,
     "is_aura": true,
     "aura_power_bonus": 10,
     "aura_tough_bonus": 10
@@ -12430,6 +12434,7 @@
    "oracle_text": "Enchant creature\nEnchanted creature gets +8/+8 and has trample. [+8/+8 modelled (toughness stored, inert vs the passive opponent like every aura_tough_bonus). Trample inert: the goldfish opponent never blocks, so trample cannot change damage dealt.]",
    "template": "custom",
    "parameters": {
+    "aura_grants_trample": true,
     "aura_power_bonus": 8,
     "aura_tough_bonus": 8,
     "is_aura": true
@@ -12469,6 +12474,7 @@
    "oracle_text": "Enchant creature\nEnchanted creature gets +7/+7 and has trample. [+7/+7 modelled (aura_power_bonus/aura_tough_bonus; +T stored, inert vs the passive opponent). Trample inert: the goldfish opponent never blocks, so trample never changes damage dealt (same disclosure as Rancor/Armadillo Cloak). No cast-dependent clause: the bonus applies identically when Bruna, Light of Alabaster puts it onto the battlefield attached to her.]",
    "template": "custom",
    "parameters": {
+    "aura_grants_trample": true,
     "aura_power_bonus": 7,
     "aura_tough_bonus": 7,
     "is_aura": true
@@ -12554,6 +12560,7 @@
    "oracle_text": "Enchant creature\nEnchanted creature gets +2/+2 and has trample and lifelink. (Damage dealt by the creature also causes its controller to gain that much life.) [+2/+2 modelled (aura_power_bonus/aura_tough_bonus via AuraBonusFor; toughness stored, inert vs the passive opponent). Lifelink modelled (aura_grants_lifelink -> CreatureHasLifelink; our life total is not read by any card in this deck, so it is faithful but outcome-inert). Trample inert: the goldfish opponent never blocks, so all combat damage reaches the player regardless (precedent Rancor / Armadillo Cloak / Audacity).]",
    "template": "custom",
    "parameters": {
+    "aura_grants_trample": true,
     "aura_power_bonus": 2,
     "aura_tough_bonus": 2,
     "aura_grants_lifelink": true,
@@ -19657,7 +19664,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Fading 5 (This enchantment enters with five fade counters on it. At the beginning of your upkeep, remove a fade counter from it. If you can't, sacrifice it.)\nRemove a fade counter from this enchantment: Exile target creature.\nWhen this enchantment leaves the battlefield, each player returns to the battlefield all cards they own exiled with it. [FADING 5: fading_counters 5 (put as it enters on EVERY route -- a cast and the universal enter cascade, so a Wave returned by its own leave trigger re-enters with five; Doubling Season doubles it), the shared upkeep PerformUpkeepFading (remove one, or sacrifice it when it has none; its leave trigger fires). ACTIVATION fade_exile_target_creature (PermAbilityMode::FadeExileCreature; ResolveFadeExileCreature, SpellEffects.h): no {T}, no mana, the counter is the COST; legal the turn it lands and repeatable. TARGET = any creature on either side (under Opalescence the Wave itself and our other non-Aura enchantments), never one with shroud (Sterling Grove's grant on our other enchantments, PermanentHasShroud) or an opponent's hexproof one; a SEARCHED axis (one activation per identity class of legal target; human play: every legal target). A token exiled ceases to exist; a card is LINKED to this object (CR 607.2a) with the exile-until-leaves marker, and on ANY leave route (fading's sacrifice, a destroy, its own exile) every linked card returns under its owner as a new object through the enter cascade (FireLeavesBattlefieldTriggers -> ReturnExiledUntilLeaves). SELF-EXILE under Opalescence: the Wave is exiled with itself, so its leave trigger returns it with five fade counters; activations that resolve after the old object left exile for good (CR 607.2a / 400.7). With one Sterling Grove the Grove must be exiled first (it shrouds the Wave; it returns too); with two or more Groves each shrouds the others and the Wave, so the loop is impossible. DECK DEFAULT (USER ruling 7; PerformWaveOpalSweep, EnchantedEveningProvider, deck_has_wave_opal_sweep): at the OPPONENT'S end step, with a Wave and an Opalescence on our side and the loop legal, every targetable opponent creature (under Enchanted Evening every opponent permanent) is exiled for good through the loop and the Wave returns with five; with no opponent creature and nothing linked, a Wave below five is topped up the same way. Hexproof opponent creatures are skipped. The fairness check's virtual board (lock step 6) and the viewer's decline entry (step 9) are not built yet.]",
+   "oracle_text": "Fading 5 (This enchantment enters with five fade counters on it. At the beginning of your upkeep, remove a fade counter from it. If you can't, sacrifice it.)\nRemove a fade counter from this enchantment: Exile target creature.\nWhen this enchantment leaves the battlefield, each player returns to the battlefield all cards they own exiled with it. [FADING 5: fading_counters 5 (put as it enters on EVERY route -- a cast and the universal enter cascade, so a Wave returned by its own leave trigger re-enters with five; Doubling Season doubles it), the shared upkeep PerformUpkeepFading (remove one, or sacrifice it when it has none; its leave trigger fires). ACTIVATION fade_exile_target_creature (PermAbilityMode::FadeExileCreature; ResolveFadeExileCreature, SpellEffects.h): no {T}, no mana, the counter is the COST; legal the turn it lands and repeatable. TARGET = any creature on either side (under Opalescence the Wave itself and our other non-Aura enchantments), never one with shroud (Sterling Grove's grant on our other enchantments, PermanentHasShroud) or an opponent's hexproof one; a SEARCHED axis (one activation per identity class of legal target; human play: every legal target). A token exiled ceases to exist; a card is LINKED to this object (CR 607.2a) with the exile-until-leaves marker, and on ANY leave route (fading's sacrifice, a destroy, its own exile) every linked card returns under its owner as a new object through the enter cascade (FireLeavesBattlefieldTriggers -> ReturnExiledUntilLeaves). SELF-EXILE under Opalescence: the Wave is exiled with itself, so its leave trigger returns it with five fade counters; activations that resolve after the old object left exile for good (CR 607.2a / 400.7). With one Sterling Grove the Grove must be exiled first (it shrouds the Wave; it returns too); with two or more Groves each shrouds the others and the Wave, so the loop is impossible. DECK DEFAULT (USER ruling 7; PerformWaveOpalSweep, EnchantedEveningProvider, deck_has_wave_opal_sweep): at the OPPONENT'S end step, with a Wave and an Opalescence on our side and the loop legal, every targetable opponent creature (under Enchanted Evening every opponent permanent) is exiled for good through the loop and the Wave returns with five; with no opponent creature and nothing linked, a Wave below five is topped up the same way. Hexproof opponent creatures are skipped. The free-turn fairness check's VIRTUAL opponent creatures (lock step 6) are swept the same way (each costs a counter; a hexproof one is skipped, and contained while the loop is possible unless it reaches 5 power with trample, USER rulings 9-11); with no loop possible nothing virtual is cleared (ruling 17). The viewer's decline entry (step 9) is not built yet.]",
    "template": "custom",
    "parameters": {
     "fading_counters": 5,

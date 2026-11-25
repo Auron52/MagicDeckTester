@@ -263,6 +263,7 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         if (state.turn_number == 0 && state.opponent_plays_lands && !state.on_the_play)
         {
             ResolvePassiveOpponentLandTurn(state);
+            eefair::NoteVirtualDeployments(state);   // its turn-0 deployments (lock step 6; executor only: no search here)
             state.opponent_searched_library_this_turn = false;
         }
         reach_hand_at_start = freeturn::ReachAuditHandAtTurnStart(state);   // after the opponent's turn-0 drop
@@ -364,6 +365,9 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         opponentdeck::EndOfTurnDraw(state);
         if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
         if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
+        // The Enchanted Evening fairness check's virtual deployments of this turn (its main phase, after its land drop;
+        // lock step 6, MTG_FREE_TURN_EE_FAIR; a no-op unless the deck is stamped deck_has_ee_lock). Rollout twin.
+        eefair::NoteVirtualDeployments(state);
         // ...and Maze's End's off-main WIN after a Burgeoning put on their turn (F1 defect 4; rollout twin).
         TryOffMainAltWinActivation(state);
         // Parallax Wave + Opalescence at the OPPONENT's end step (USER ruling 7, the deck default; lock cluster step 4):
@@ -402,6 +406,25 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         opponent_turn();
         freeturn::NoteOpponentTurnEnd(state);
         freeturn::ReachAuditAfter(state, reach_audit);
+        // MTG_FREE_TURN_EE_FAIR_LOG=1 (MEASUREMENT ONLY; no behaviour): one stderr line per REAL opponent turn of an
+        // Enchanted Evening lock deck whose board lock held or whose virtual board is non-empty -- the credit, the
+        // fairness check's veto clause and the card behind it (lock step 6's per-game report).
+        static const bool s_ee_fair_log = EnvOn("MTG_FREE_TURN_EE_FAIR_LOG");
+        if (s_ee_fair_log && state.deck_has_ee_lock && freeturn::RuleArmed(state))
+        {
+            const bool board = freeturn::LockHoldsOnBoard(state);
+            if (board || eefair::Any(state))
+            {
+                std::string card;
+                const int veto = eefair::Veto(state, &card);
+                std::fprintf(stderr, "[ee-fair] seed=%llu round=%d raw=%d board_lock=%d veto=%d card=%s credited=%d "
+                             "virt=%d spent=%d\n", static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                             state.RawRound(), board ? 1 : 0, veto, card.empty() ? "-" : card.c_str(),
+                             state.pending_free_turn ? 1 : 0,
+                             static_cast<int>(std::popcount(state.opp_virtual_board[0]) + std::popcount(state.opp_virtual_board[1])),
+                             static_cast<int>(std::popcount(state.opp_virtual_spent[0]) + std::popcount(state.opp_virtual_spent[1])));
+            }
+        }
     }
     // Heap Gate's last-chance Treasure (Maze's End P5, MTG_MAZE_HEAP_STRICT; a no-op unless the lever is on): the
     // last point before our untap step, after every off-main activation. Rollout twin, same position.

@@ -3126,6 +3126,12 @@ struct CardParams
     // Coronet). Read only by CreatureHasFirstStrike, i.e. by the damage-step split -- see
     // grants_first_strike above for when that is observable.
     bool aura_grants_first_strike = false;
+    // Trample grant (Rancor, Audacity, Armadillo Cloak, Mythic Proportions, Prodigious Growth, Eldrazi Conscription;
+    // Enchanted Evening lock step 6, 2026-11-26). Combat trample stays INERT vs the passive opponent (it never blocks);
+    // the ONE reader is the free-turn fairness check's hexproof-threat test (USER rulings 9 / 10: a hexproof creature
+    // the opponent could have cast breaks the Wave + Opalescence lock only if it reaches power >= 5 WITH trample,
+    // counting the Auras it could carry -- eefair::HexproofThreat, SpellEffects.h). Play-inert for every deck.
+    bool aura_grants_trample = false;
     // Dynamic P/T scaling: the aura's grant grows with a board count. aura_scale_kind selects WHICH count
     // multiplies aura_scale_power/tough:
     //   "enchantments"            +N per enchantment you control, INCLUDING this aura (Ethereal Armor: 1/1)
