@@ -176,6 +176,42 @@ TEST_CASE("Maze's End I3: the search finds THREE land drops in one main phase (t
     CHECK(PlayOut(c) > 5);
 }
 
+// THE IDLE-TRIGGER FOLD (core/SpellEffects.h, MTG_BURGEONING_IDLE_FOLD, default ON). Two Burgeonings, hand {Simic
+// Guildgate, Forest}: after an idle first trigger the second trigger offers no put (its twin "put first, then idle" is
+// walked earlier), so the idle crossing consumes ONE ordinal and puts nothing; a put on the first trigger still leaves
+// the second its full menu.
+TEST_CASE("Maze's End I3: Burgeoning idle-trigger fold -- an idle trigger is never followed by a put")
+{
+    LoadI3Cards();
+    GameState s = Base();
+    Put(s, "Burgeoning", 700);
+    Put(s, "Burgeoning", 701);
+    s.players[0].hand.push_back(C("Simic Guildgate", 710));
+    s.players[0].hand.push_back(C("Forest", 711));
+    {
+        GameState t = s;
+        t.scripted_crossing_lands = 2;   // trigger 1: rank 2 = none of {Simic, Forest, none}
+        CrossingLandProbe pr;
+        t_crossing_land_probe = &pr;
+        ResolveBurgeoningTriggers(t);
+        t_crossing_land_probe = nullptr;
+        CHECK(pr.n == 1);                       // trigger 2's puts are folded: no ordinal
+        CHECK(t.players[0].hand.size() == 2);   // nothing put
+    }
+    {
+        GameState t = s;
+        t.scripted_crossing_lands = 1;   // trigger 1: Forest; trigger 2: rank 0 of {Simic, none}
+        CrossingLandProbe pr;
+        t_crossing_land_probe = &pr;
+        ResolveBurgeoningTriggers(t);
+        t_crossing_land_probe = nullptr;
+        CHECK(pr.n == 2);
+        CHECK(pr.size[1] == 2);
+        CHECK(Find(t, 711) != nullptr);
+        CHECK(Find(t, 710) != nullptr);
+    }
+}
+
 TEST_CASE("Maze's End I3: Burgeoning puts our land on the opponent's land play, judged for US")
 {
     LoadI3Cards();
