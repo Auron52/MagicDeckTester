@@ -3132,6 +3132,10 @@ struct CardParams
     // the opponent could have cast breaks the Wave + Opalescence lock only if it reaches power >= 5 WITH trample,
     // counting the Auras it could carry -- eefair::HexproofThreat, SpellEffects.h). Play-inert for every deck.
     bool aura_grants_trample = false;
+    // Umbra armor (Spider / Hyena / Lion / Crab / Indrik Umbra; CR 702.89a). The ONE reader is the same fairness
+    // check: a Calming Verse destroys the umbra instead of the virtual creature it enchants (eefair::VerseClears).
+    // Real permanents do not model umbra armor (the passive opponent never casts an Aura). Play-inert for every deck.
+    bool aura_umbra_armor = false;
     // Dynamic P/T scaling: the aura's grant grows with a board count. aura_scale_kind selects WHICH count
     // multiplies aura_scale_power/tough:
     //   "enchantments"            +N per enchantment you control, INCLUDING this aura (Ethereal Armor: 1/1)

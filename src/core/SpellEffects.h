@@ -22856,6 +22856,29 @@ inline int VerseClears(GameState& s)
             hit |= 1ull << b;
             ++n;
         }
+        // Umbra armor (CR 702.89a): the creature an umbra enchants is not destroyed -- the umbra is destroyed instead
+        // (it dies anyway in the same "destroy all"). Every virtual Aura of a head is assumed on its one creature (the
+        // generous reading, as in ReachPower), so with a live umbra ONE virtual creature survives the Verse bare: the
+        // hexproof one when there is one (the umbra deck's plan), else the first. Its Auras are cleared.
+        bool umbra = false;
+        for (std::uint64_t u = hit; u != 0; u &= u - 1)
+        {
+            const CardDefinition* d = DefOfBit(s, head, std::countr_zero(u));
+            if (d != nullptr && IsAura(d) && d->params.aura_umbra_armor) { umbra = true; break; }
+        }
+        if (umbra)
+        {
+            int keep = -1;
+            for (std::uint64_t u = hit; u != 0; u &= u - 1)
+            {
+                const int b = std::countr_zero(u);
+                const CardDefinition* d = DefOfBit(s, head, b);
+                if (d == nullptr || !CreatureNow(d, st)) { continue; }
+                if (keep < 0) { keep = b; }
+                if (Hexproof(d)) { keep = b; break; }
+            }
+            if (keep >= 0) { hit &= ~(1ull << keep); --n; }
+        }
         Clear(s, head, hit);
     }
     return n;

@@ -128,6 +128,8 @@ GameState L6Fresh()
     s.deck_has_type_statics = true;
     s.opp_virtual_board = {};
     s.opp_virtual_spent = {};
+    // The EE list holds Sterling Grove, so StampDeckTraits sets this; the all-Forest setup deck stamped it false.
+    s.deck_has_enchantment_shroud = true;
     return s;
 }
 std::uint64_t B(int slot, const std::string& name, int nth = 0) { return 1ull << L6Bit(slot, name, nth); }
@@ -365,6 +367,16 @@ TEST_CASE("EE fairness: hexproof (rulings 9-11) -- contained under an able Wave 
     s.opp_virtual_board[0] = bogle | B(slot, "Rancor") | B(slot, "Daybreak Coronet");
     ResolveCalmingVerse(s, 0, L6Def(kVerse), "VS");
     CHECK(s.opp_virtual_board[0] == 0);
+    // ...except under umbra armor (CR 702.89a): the umbra is destroyed instead, so the hexproof creature survives the
+    // Verse bare (its Auras all die); a bare 1/1 Bogle is then contained again under the able loop.
+    const std::uint64_t gs = B(slot, "Gladecover Scout");
+    s.opp_virtual_board[0] = gs | bogle | B(slot, "Spider Umbra") | B(slot, "Rancor");
+    s.opp_virtual_spent[0] = 0;
+    ResolveCalmingVerse(s, 0, L6Def(kVerse), "VS");
+    const std::uint64_t left = s.opp_virtual_board[0];
+    CHECK((left == gs || left == bogle));   // exactly ONE creature survives (all Auras are assumed on it)
+    CHECK(s.opp_virtual_spent[0] == ((gs | bogle | B(slot, "Spider Umbra") | B(slot, "Rancor")) & ~left));
+    CHECK(eefair::Veto(s) == eefair::kNone);
 }
 
 TEST_CASE("EE fairness: the Wave + Opalescence sweep exiles targetable virtual creatures, not hexproof ones; ruling 17 none")

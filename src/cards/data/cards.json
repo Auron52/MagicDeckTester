@@ -3305,6 +3305,7 @@
    "parameters": {
     "aura_power_bonus": 1,
     "aura_tough_bonus": 1,
+    "aura_umbra_armor": true,
     "is_aura": true,
     "aura_grants_first_strike": true
    }
@@ -3347,6 +3348,7 @@
    "parameters": {
     "aura_power_bonus": 1,
     "aura_tough_bonus": 1,
+    "aura_umbra_armor": true,
     "is_aura": true
    }
   },
@@ -3493,6 +3495,7 @@
     "aura_power_bonus": 3,
     "aura_tough_bonus": 3,
     "aura_enchant_requires": "modified",
+    "aura_umbra_armor": true,
     "is_aura": true
    }
   },
@@ -11437,6 +11440,7 @@
    "oracle_text": "Enchant creature\n{2}{U}: Untap enchanted creature.\nUmbra armor (If enchanted creature would be destroyed, instead remove all damage from it and destroy this Aura.) [Enchant creature: is_aura, host = the searched enchant_target axis. untap_enchanted_cost {2}{U} (shape 1): no {T}, so REPEATABLE -- the target is fixed (the enchanted creature) and K is searched. On an Accomplished Alchemist with X >= 4 life gained this turn each activation nets X-3 mana (X of one colour pays {2}{U} with blue). Shared model (AccomplishedAlchemist chunk C2a): Action::Kind::ActivateUntap, one oracle (CollectCreatureUntapAbilities) and ONE resolver (ApplyActivatedUntap, SpellEffects.h) called by both the rollout's trailing pass and the executor, so the worlds are lockstep. chosen_x = the searched activation COUNT K (DecisionProvider::UntapActivationCounts; generic 1..min(3, affordable), the hook a loop provider sizes); `cost` is ONE activation and the resolver pays activation by activation through the unified TapForCostDirect, stopping at the first it cannot pay. An untap aimed at an UNTAPPED creature is a no-op unless it is a live mana creature, which the resolver taps for mana into the float first (no mana burn, and it is untapped again at the end, so tapping first is never worse); a no-op is never paid for, and the enumerator drops targets that nothing this main can tap (lossless). Opponent creatures are legal targets but never offered autonomously (they never attack or block in the goldfish -- untapping one gains nothing). Site-9 key kActUntapper: a cast untapper re-plans the rest of the main with its ability. [PROVISIONAL deferral: Umbra armor inert -- nothing in the goldfish destroys our creatures.] [PROVISIONAL deferral: the ability is instant-speed but is offered only in our main phase -- an end-step activation against the passive opponent can only land a kill strictly later than the same line in our main.]]",
    "template": "custom",
    "parameters": {
+    "aura_umbra_armor": true,
     "is_aura": true,
     "untap_enchanted_cost": "{2}{U}"
    }
@@ -12398,6 +12402,7 @@
    "parameters": {
     "aura_power_bonus": 4,
     "aura_tough_bonus": 4,
+    "aura_umbra_armor": true,
     "is_aura": true,
     "aura_grants_first_strike": true
    }

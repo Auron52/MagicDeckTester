@@ -2170,6 +2170,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.aura_grants_lifelink      = params.value("aura_grants_lifelink", false);
     p.aura_grants_first_strike  = params.value("aura_grants_first_strike", false);   // CR 510.4 split
     p.aura_grants_trample       = params.value("aura_grants_trample", false);   // fairness check only (EE step 6)
+    p.aura_umbra_armor          = params.value("aura_umbra_armor", false);      // fairness check only (EE step 6)
     p.aura_scale_kind           = params.value("aura_scale_kind", std::string());
     p.aura_scale_power          = params.value("aura_scale_power", 0);
     p.aura_scale_tough          = params.value("aura_scale_tough", 0);
