@@ -119026,6 +119026,19 @@ static inline bool DeadTailFanSkip(const GameState& state, int cutoff)
     static const bool s_on = EnvOn("MTG_DEAD_TAIL_FAN_SKIP", true);   // DEFAULT ON (exact: a dead node's fan is unadoptable); =0 disables
     return s_on && state.turn_number > cutoff;
 }
+// THE DEAD-CROSSING PRICE (workctr::kDeadCross, MTG_DEAD_CROSS_PRICE; see core/WorkCounters.h). A boundary-fan crossing
+// whose child FSLineWin is refused at its entry (turn > max_turns or turn > cut, the same two tests, in that order) or
+// whose crossing fails did a simulated end step, opponent turn and upkeep that no child search bills. Count it, so the
+// priced decision ceiling sees it. Reads nothing but the turn: no budget read, no unit.
+static inline void BillDeadCrossing(const GameState& crossed, int cut, int max_turns)
+{
+    if (workctr::DeadCrossPriceOn() && (crossed.turn_number > max_turns || crossed.turn_number > cut))
+    { workctr::Inc(workctr::kDeadCross); }
+}
+static inline void BillFailedCrossing()
+{
+    if (workctr::DeadCrossPriceOn()) { workctr::Inc(workctr::kDeadCross); }
+}
 
 struct EotStateSet
 {
@@ -121897,8 +121910,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         GameState* sxp = &s3;
                         if (fan.Copies()) { s3_fan = s3; fan.Stamp(*s3_fan); sxp = &*s3_fan; }
                         GameState& sx = *sxp;
-                        if (!fan.Cross(sx)) { continue; }
+                        if (!fan.Cross(sx)) { BillFailedCrossing(); continue; }
                         ExpireStagedCards(sx);
+                        BillDeadCrossing(sx, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget), max_turns);
                         TurnSolver::SearchLine sub =
                             FSLineWin(sx, DepthAcrossTurn(sx, depth), max_turns, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget),
                                       second_main, tt, lc, budget);
@@ -122006,6 +122020,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 GameState& sx = *sxp;
                 if (!fan.Cross(sx))
                 {
+                    BillFailedCrossing();
                     if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT sim failed\n", m2t_sum(q).c_str()); }
                     continue;
                 }
@@ -122032,6 +122047,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         continue;
                     }
                 }
+                BillDeadCrossing(sx, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget), max_turns);
                 TurnSolver::SearchLine sub =
                     FSLineWin(sx, DepthAcrossTurn(sx, depth), max_turns, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget), second_main, tt, lc, budget);
                 m2_lt_ok = m2_lt_ok && !sub.truncated;
@@ -122170,8 +122186,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         GameState* sxp = &s;
                         if (fan.Copies()) { s_fan = s; fan.Stamp(*s_fan); sxp = &*s_fan; }
                         GameState& sx = *sxp;
-                        if (!fan.Cross(sx)) { continue; }
+                        if (!fan.Cross(sx)) { BillFailedCrossing(); continue; }
                         ExpireStagedCards(sx);
+                        BillDeadCrossing(sx, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget), max_turns);
                         TurnSolver::SearchLine sub =
                             FSLineWin(sx, DepthAcrossTurn(sx, depth), max_turns, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget),
                                       second_main, tt, lc, budget);
@@ -122396,7 +122413,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             {
                 GameState s = state;
                 fan.Stamp(s);
-                if (!fan.Cross(s)) { continue; }
+                if (!fan.Cross(s)) { BillFailedCrossing(); continue; }
                 ExpireStagedCards(s);
                 const int cut = have ? FsChildCut(s, cutoff, best_tail.win_turn, max_turns, budget) : cutoff;
                 if (eot_seen != nullptr && !eot_seen->Visit(BuildDedupKey(s), s, cut, DepthAcrossTurn(s, depth), max_turns)) { continue; }
@@ -122406,6 +122423,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     dprobe = domin::Check(*dom_arch, s);
                     if (dprobe.prune) { continue; }
                 }
+                BillDeadCrossing(s, cut, max_turns);
                 TurnSolver::SearchLine line = FSLineWin(s, DepthAcrossTurn(s, depth), max_turns, cut, second_main, tt, lc, budget);
                 if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, line.win_turn); }
                 if (!have || line.win_turn < best_tail.win_turn)
@@ -144864,6 +144882,7 @@ static long long MtgTurnCensusFlag(int f)   // nodekind's non-exclusive plan fla
     X(w_pay,              workctr::t_n[workctr::kPay])                                            \
     X(w_simkey,           workctr::t_n[workctr::kSimKey])                                         \
     X(w_plan_emit,        workctr::t_n[workctr::kPlanEmit])                                       \
+    X(w_dead_x,           workctr::t_n[workctr::kDeadCross])                                      \
     /* Blood Sun perf diagnosis: Diabolic Revelation package emission (see revwave::g_diag_*). */ \
     X(rv_enum,            MTG_TURN_CENSUS_CV(revwave::g_diag_enum))                               \
     X(rv_emit,            MTG_TURN_CENSUS_CV(revwave::g_diag_emit))                               \

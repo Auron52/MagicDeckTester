@@ -12,6 +12,7 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "core/WorkCounters.h"
 #include "mtg_test_seam.h"
 
 #include <algorithm>
@@ -468,4 +469,56 @@ TEST_CASE("Maze's End F7-3: a prefix-resumed apply records the main-level segmen
     // Not vacuous: the board reaches captures, and at least one resumes after a recorded earlier segment.
     CHECK(captures > 0);
     CHECK(later_segment > 0);
+}
+
+// THE DEAD-CROSSING PRICE (core/WorkCounters.h kDeadCross, MTG_DEAD_CROSS_PRICE, default ON; Maze's End 2HG s31301380
+// gi1380). A boundary-fan crossing whose child FSLineWin is refused at entry was billed nothing beyond its payments,
+// so the priced decision ceiling saw a seventh of a crossing-land fan's real cost. Board: Manabond with a Gate in hand
+// at T5's second main, so the crossing fans the yes/no digit (two crossings). With max_turns = 5 every crossing lands
+// on T6 > max_turns, which FSLineWin refuses at entry: each one is billed, at the turn-step price.
+TEST_CASE("Maze's End 2HG perf: a refused fan crossing is billed as dead_x work")
+{
+    LoadI3Cards();
+    GameState s = Base();
+    s.phase = Phase::PostCombatMain;
+    Put(s, "Manabond", 700);
+    s.players[0].hand.push_back(C("Simic Guildgate", 710));
+    for (int k = 0; k < 6; ++k) { s.players[0].library.push_back(C("Forest", 900 + k)); }
+    REQUIRE(TurnSolver::CrossingLandBoundaryPinsForTest(s).size() == 2);   // the default provider keeps both answers
+    const long long n0 = workctr::t_n[workctr::kDeadCross];
+    const long long p0 = workctr::t_priced;
+    const TurnSolver::SearchLine line = TurnSolver::FullSearchLine(s, /*depth=*/1, /*max_turns=*/5, /*second_main=*/true);
+    const long long dead = workctr::t_n[workctr::kDeadCross] - n0;
+    CHECK(line.win_turn > 5);                 // nothing wins on T5: the price moves no answer
+    CHECK(dead >= 2);                         // both crossings of the fan, at least once
+    CHECK(workctr::t_priced - p0 >= dead * workctr::kPriceNs[workctr::kDeadCross]);
+}
+
+// The decorate-sort in MazesEndProvider::EtbTapSubtypeOrder (Heap Gate's "tap an untapped Gate" cost, Guild Summit's
+// tap set) computes each key once instead of twice per comparison. Same order as the comparator sort: the tiers (pure
+// mana Gates first, the scaled Baldur's Gate after them), and equal keys keep their input order (stable).
+TEST_CASE("Maze's End 2HG perf: EtbTapSubtypeOrder keeps the tiered, stable order")
+{
+    LoadI3Cards();
+    GameState s = Base();
+    Put(s, "Azorius Guildgate", 800);   // 0
+    Put(s, "Baldur's Gate", 801);       // 1: scaled-mana land, tier 1
+    Put(s, "Azorius Guildgate", 802);   // 2: the same key as 0
+    Put(s, "Boros Guildgate", 803);     // 3
+    static const MazesEndProvider kMazeProv;
+    s.m_provider = &kMazeProv;
+    std::vector<int> idx = { 0, 1, 2, 3 };
+    kMazeProv.EtbTapSubtypeOrder(s, 0, idx);
+    REQUIRE(idx.size() == 4);
+    CHECK(idx.back() == 1);   // Baldur's Gate last (its tier)
+    auto pos = [&](int v) { return std::find(idx.begin(), idx.end(), v) - idx.begin(); };
+    CHECK(pos(0) < pos(2));   // equal keys: input order
+    std::vector<int> rev = { 2, 3, 1, 0 };
+    kMazeProv.EtbTapSubtypeOrder(s, 0, rev);
+    auto rpos = [&](int v) { return std::find(rev.begin(), rev.end(), v) - rev.begin(); };
+    CHECK(rev.back() == 1);
+    CHECK(rpos(2) < rpos(0));   // stable the other way round too
+    std::vector<int> sorted = idx;
+    std::sort(sorted.begin(), sorted.end());
+    CHECK(sorted == std::vector<int>{ 0, 1, 2, 3 });   // a permutation
 }
