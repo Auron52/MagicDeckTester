@@ -128334,6 +128334,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     };
     struct P18NoStore { bool on; explicit P18NoStore(bool o) : on(o) { if (on) { ++p18::t_nostore; } }
                         ~P18NoStore() { if (on) { --p18::t_nostore; } } };
+    // _pgk (see the ladder): the guarded priced skip's switch, margin, share floor and pass-1 rollout price
+    bool p18_gk_on = false; double p18_gk_m = 1.0, p18_gk_s = 0.5, p18_gk_q = -1.0;
+    if (valuearm::t_deck_sampled_gate == 4 && p16::t_hyb_nest == 1 && g_fsline_nest == 0 && g_rollout_nest == 0 && !vl_active)
+    {
+        const std::string& gk = valuearm::t_deck_key;
+        p18_gk_on = gk.find("_pgk") != std::string::npos;
+        { const std::size_t q = gk.find("_pgm"); if (q != std::string::npos) { p18_gk_m = std::atof(gk.c_str() + q + 4) / 100.0; } }
+        { const std::size_t q = gk.find("_pgs"); if (q != std::string::npos) { p18_gk_s = std::atof(gk.c_str() + q + 4) / 100.0; } }
+    }
     bool p18_t1g = false;               // _pt1g: this decision's pass-1 hook is the guarded turn-1 trigger
     bool p18_tpc = false;               // _ptc: the pass-1 hook was armed by a cached root-rollout trigger
     bool p18_tp1 = false;               // _ptp1: the walk's trigger is the ladder's pass 1, not a root rollout (see below)
@@ -129162,6 +129171,48 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (!fits) { break; }
         }
 
+        // _pgk (A/B, sparse ladder; research): GUARDED PRICED SKIP. After a REAL rollout pass 1 that spent >= pts of its
+        // cost on rollouts (its per-leaf rollout price q is then measured, cache hits included), pass k (2 <= k < depth)
+        // is first run LEAFLESS; priced as l_k + n_k * q * turns, if the ladder's own gate would still admit pass k+1 (by a
+        // margin m) the pass is superseded and its rollouts are skipped -- the gate carries the price. A leafless in-window
+        // win commits (a proof). Lossy where the price errs (a deeper commit than the ladder's); quality is A/B'd.
+        if (p18_gk_on && pass_depth >= 2 && pass_depth < depth && have_prev && p18_gk_q >= 0.0 && p16K == 0 && p18_K == 0
+            && budget != nullptr && !budget->Unlimited() && c_prev > 0 && line.win_turn <= max_turns)
+        {
+            const double g_ratio = (have_prev2 && c_prev2 > 0) ? static_cast<double>(c_prev) / static_cast<double>(c_prev2) : kDefaultGrowth;
+            const double g_rem = static_cast<double>(budget->Remaining()) + p18_credit;
+            const double g_ek = static_cast<double>(c_prev) * g_ratio;
+            const double g_ek1 = g_ek * g_ratio;
+            if (g_ek1 * p18_gk_m <= gate_alpha * std::max(0.0, g_rem - g_ek))
+            {
+                const long long g_u0 = budget->Used();
+                const long long g_n0 = g_fs_leaf_evals + static_cast<long long>(g_fs_cut_prunes);
+                const long long g_pr0 = workctr::t_priced;
+                SearchLine gpr;
+                { ForceConstantLeafGuard _oc(true); ConstantLeafPassGuard _op(true);
+                  gpr = FSLineWin(state, pass_depth, max_turns, root_cut, second_main, tt, &p16_leafless_cache, budget); }
+                const long long g_lk = budget->Used() - g_u0;
+                const long long g_nk = g_fs_leaf_evals + static_cast<long long>(g_fs_cut_prunes) - g_n0;
+                if (!gpr.truncated && gpr.win_turn <= state.turn_number + pass_depth - 1)
+                {
+                    p16::Rec('G', pass_depth, g_lk, 0, 0, gpr.win_turn, 0);
+                    line = gpr; committed_depth = pass_depth; prev_line = line; prev_committed = pass_depth; break;
+                }
+                const double g_ck = static_cast<double>(g_lk)
+                                  + static_cast<double>(g_nk) * p18_gk_q * static_cast<double>(std::max(0, line.win_turn - state.turn_number - pass_depth + 1));
+                const double g_e1 = g_ck * g_ck / static_cast<double>(c_prev);
+                if (!gpr.truncated && !budget->Overrun() && g_e1 * p18_gk_m <= gate_alpha * std::max(0.0, static_cast<double>(budget->Remaining()) + p18_credit - g_ck))
+                {
+                    p16::Rec('G', pass_depth, g_lk, static_cast<long long>(g_ck), 0, max_turns + 1, 0);
+                    c_prev2 = c_prev; have_prev2 = true; c_prev = std::max(1LL, static_cast<long long>(g_ck));
+                    l_prev2 = l_prev; l_prev = static_cast<long long>(g_ck) - g_lk;
+                    pr_prev2 = pr_prev; pr_prev = workctr::t_priced - g_pr0;
+                    continue;
+                }
+                p16::Rec('G', pass_depth, g_lk, static_cast<long long>(g_ck), 4, max_turns + 1, 0);
+            }
+        }
+
         // SAMPLED GATE: the committing pass starts at the best win its sampled rollouts reached (a real line reaches it).
         const int p18_cut = (p18_K > 0 && p18_wb > 0) ? std::min(root_cut, p18_wb) : root_cut;
         long long used_before = budget ? budget->Used() : 0;
@@ -129309,6 +129360,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // reads pass 1 at the cost it would have had: without this a warmed pass 1 looks cheap and the gate admits a
         // pass 2 the heuristic ladder refuses (Hinata 13220004 T1: c1 5034 -> 1965, then a 25k pass 2).
         if (pass_depth == 1 && p18_z_add > 0) { c_prev += p18_z_add; }
+        if (pass_depth == 1 && p18_gk_on)   // _pgk: pass 1's per-leaf, per-turn rollout price (or off when rollouts were a small share)
+        {
+            const long long g_nl = std::max(1LL, g_fs_leaf_evals - leaves_before);
+            p18_gk_q = (cost > 0 && line.win_turn <= max_turns && static_cast<double>(std::max(0LL, l_prev)) >= p18_gk_s * static_cast<double>(cost))
+                     ? (static_cast<double>(l_prev) / static_cast<double>(g_nl)) / static_cast<double>(std::max(1, line.win_turn - state.turn_number))
+                     : -1.0;
+        }
         pr_prev2 = pr_prev; pr_prev = workctr::t_priced - pr_before;
         // _ptp1 (sparse ladder, arm key; A/B): THE TRIGGER IS PASS 1. The heuristic ladder runs its rollout pass 1 in
         // every case, so its line costs the lookahead nothing (the root rollout it replaces cost ~0.5 % of units on
