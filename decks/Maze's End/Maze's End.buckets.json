@@ -21,8 +21,12 @@
       "why": "USER ruling 2026-11-25 (G/U grouping). Tapped, makes EITHER G or U: a fixed non-G/U colour plus one colour chosen as it enters, so G or U but not both."
     },
     {
+      "cards": ["Heap Gate", "Planar Nexus", "Talon Gates of Madara"],
+      "why": "USER ruling 2026-11-25 (revised): merged to bring the deck to 20 buckets ('Given that still makes 22 groups, it is possible we should consider your extra grouping as well to make it 20'). All three are untapped, {T}: {C}, and {1},{T}: any colour. The USER's caveat: 'those have actual differences. These are the ability to be dropped from hand and ability to produce treasures, but you are correct these might not change how a user views the starting hand very much.' Rollouts still play the actual member cards."
+    },
+    {
       "cards": ["Basilisk Gate", "The Black Gate"],
-      "why": "USER ruling 2026-11-25: 'merged Basilisk Gate and The Black Gate as lands that do nothing in this deck except come in untapped and produce colourless' (The Black Gate's {B} is a colour the list never spends, and both abilities need a creature). Kept SEPARATE by the same ruling: Heap Gate, Planar Nexus and Talon Gates of Madara ('those have actual differences ... the ability to be dropped from hand and ability to produce treasures'), and Maze's End, Gond Gate, Baldur's Gate, Thran Portal and Gateway Plaza. 14 land buckets in all."
+      "why": "USER ruling 2026-11-25: 'merged Basilisk Gate and The Black Gate as lands that do nothing in this deck except come in untapped and produce colourless' (The Black Gate's {B} is a colour the list never spends, and both abilities need a creature). Kept separate: Maze's End, Gond Gate, Baldur's Gate, Thran Portal and Gateway Plaza. 12 land buckets in all."
     }
   ]
 }
