@@ -1,0 +1,2 @@
+[scaled-land-route] trials=16062485 stranded=2156553 fired=400832 ms=340953
+[scaled-land-route] acts-only: trials=6144834 ample=4609933 fired=79358

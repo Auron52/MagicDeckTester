@@ -1,0 +1,6 @@
+d8_play_g2549_off: played=1 avg=6.0000 digest=c83504a10b53a986 ms=37374 units=1174109 cpu=30520
+d8_play_g2549_on: played=1 avg=6.0000 digest=c83504a10b53a986 ms=37922 units=1196588 cpu=30650
+d8_play_g3226_off: played=1 avg=5.0000 digest=541d8d1d151de4ab ms=14280 units=275021 cpu=11817
+d8_play_g3226_on: played=1 avg=5.0000 digest=f72714f0f1d5f0d0 ms=26769 units=348103 cpu=21067
+d8_2hg_g546_off: played=1 avg=7.0000 digest=deb85b99efb46fbe ms=3622166 units=54779785 cpu=2914463
+d8_2hg_g546_on: played=1 avg=7.0000 digest=deb85b99efb46fbe ms=3759849 units=55002095 cpu=3026752

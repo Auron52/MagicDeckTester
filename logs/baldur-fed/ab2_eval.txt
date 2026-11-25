@@ -1,0 +1,8 @@
+goblins: pairs=2000 identical=2000 slower=0 faster=0 net=+0 turnsum off=7481 on=7481 (d=+0) cpu on/off=1.0052 (910s / 915s)
+maze_2hg: pairs=2000 identical=1983 slower=1 faster=1 net=+0 turnsum off=10522 on=10522 (d=+0) cpu on/off=1.0129 (11867s / 12021s)
+  slower: g546(7->8)
+  faster: g1517(6->5)
+maze_play: pairs=5000 identical=4963 slower=2 faster=3 net=-1 turnsum off=27615 on=27614 (d=-1) cpu on/off=1.0173 (23181s / 23581s)
+  slower: g2549(6->7) g3226(5->6)
+  faster: g1189(6->5) g2928(6->5) g3446(6->5)
+merfolkturns: pairs=2000 identical=2000 slower=0 faster=0 net=+0 turnsum off=10881 on=10881 (d=+0) cpu on/off=1.0017 (2589s / 2593s)
