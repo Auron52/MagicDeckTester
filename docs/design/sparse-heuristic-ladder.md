@@ -490,3 +490,64 @@ value-leaf run's sparse stage -- on for Hydras / Martyr / Sea (HO1 0.974 / 0.967
 which T2+ 1.7 % / 2.0 %) needs the committing depth K chosen without foresight at T2+, where mode 2's priced gate does not
 act (its exact bootstrap covers K <= 3). Next candidates: a guarded priced-K at T2+ after pass 1 (pass k leafless when the
 priced gate admits k+1 by a margin, pass-1 q from real rollouts, the `_ptc` share rule), A/B'd for quality.
+
+#### E11: `_pgk`, the guarded priced skip at T2+ (K1's seeds, 200 x 8; units / heur; REJECTED)
+
+`_pgk`: after a real pass 1 that spent >= half its cost on rollouts, pass k (2 <= k < depth) first runs leafless; an
+in-window win commits, else it is priced `l_k + n_k * q * turns` (q = pass 1's rollout units per leaf per turn) and, if heur's
+start gate would still admit pass k+1 on that price, pass k's rollouts are skipped. Control `m4_ptc` on the same binary
+reproduced E6 160/160 jobs (digest-identical): the arm is inert when off.
+
+| deck | m4_ptc | m4_ptc_pgk | m4_ptc_pnt1 | m4_ptc_pnt1_pgk |
+|---|---|---|---|---|
+| Hydras | 0.989 | 0.990 | 1.000 | 1.000 |
+| Martyr Lifegain | 0.964 | 0.975 | 0.998 | 1.011 |
+| Maze's End | 1.004 | 1.015 | 1.000 | 1.011 |
+| Merfolk Turns | 1.003 | 0.991 | 1.003 | 0.991 |
+| Mill | 1.008 | **1.031** | 0.997 | **1.020** |
+| Sea Creatures | 0.915 | 0.898 | 1.000 | 0.969 |
+| Shadowborn Apostle | 1.005 | 1.018 | 0.995 | 1.006 |
+| Stuffy Doll | 0.999 | 0.995 | 1.000 | 0.995 |
+
+Quality 0/0 everywhere, but the cost goes the wrong way on the target decks. Paired with heur (`gpair.py`): the loss is in
+the decisions with a skip, which commit DEEPER than heur (Mill 8 of 11, +2.7 % of the deck's units; shallower ~never),
+because the price is low. The price is not calibratable (`gerr.py`, heur's real pass-k units / the price on the skipped
+pass): median 0.43 (Stuffy) .. 1.71 (Mill) .. 5.9 (Maze's End), tails 100-9000x. A rollout's cost per leaf in pass 1 says
+little about pass k's leaves (rollout-cache hits vary leaf to leaf). Fall-throughs (leafless pass run, then the rollout pass
+anyway) are only 0.2-2 % of units. Not pursued further.
+
+#### E12 setup: `_pab`, aspiration from the pass below (any mode, plain heur included)
+
+K2 heur (`wprev.py`): the committing pass K's win equals pass K-1's in most T2+ decisions (Mill 288 eq / 16 better / 21
+worse; Shadowborn 274 / 15 / 29). `_pab` starts pass k >= 2 at the completed rollout pass k-1's win turn (inclusive); a pass
+that finds nothing by it is searched again from the root cut (the existing aspiration-fail path). Sound at every budget
+(same best win turn; tie order may differ). Arms: `heur` (control), `hx_pab` (plain heur + `_pab`; no sidecar, the arm
+name reaches the deck key), `m4_ptc_pab`, `m4_ptc_pnt1_pab`.
+
+#### E12 result: `_pab` (K1's seeds, 200 x 8; units / heur; quality 0/0 on every arm; heur control = K2 160/160)
+
+| deck | hx_pab | m4_ptc | m4_ptc_pab | m4_ptc_pnt1 | m4_ptc_pnt1_pab |
+|---|---|---|---|---|---|
+| Hydras | 0.999 | 0.989 | 0.994 | 1.000 | 1.004 |
+| Martyr Lifegain | 1.008 | 0.964 | 0.971 | 0.998 | 1.005 |
+| Maze's End | 0.993 | 1.004 | 0.996 | 1.000 | 0.992 |
+| Merfolk Turns | 1.017 | 1.003 | 1.020 | 1.003 | 1.020 |
+| Mill | 0.996 | 1.008 | 1.007 | 0.997 | 0.995 |
+| Sea Creatures | 1.008 | 0.915 | 0.927 | 1.000 | 1.013 |
+| Shadowborn Apostle | **0.973** | 1.005 | 0.996 | 0.995 | **0.983** |
+| Stuffy Doll | 0.979 | 0.999 | 0.978 | 1.000 | 0.979 |
+
+No aspiration failure was recorded (`apair.py`). The saving sits in same-depth decisions (Shadowborn T1 -0.79 % / T2+
+-2.69 %, Stuffy -0.96 / -1.15 %, Mill T2+ -0.47 %). The cost is DEEPER commits through heur's gate (Merfolk 2 decisions
++1.76 %, Martyr 10 +0.83 %, Shadowborn 12 +0.93 %). In each (`adeep.py`) heur's pass 1 was answered from the rollout
+game cache (3-50 units, leaf 0), so its c2/c1 ratio refused pass 3; under `_pab` the earlier decisions' bounded rollouts
+were cut at W (stored as no-win at that bound, not as wins), pass 1 paid 100-1000 units, and the gate admitted pass 3
+(Merfolk 18390157 T2: 39k on an 18k limit). Heur's K there is a by-product of what the previous decision cached.
+
+#### E13 (RUNNING at this checkpoint): `_pab1` (pass 1 bounded at the previous top-level decision's committed win in the
+same game, so it reads those no-win entries) and `_pabx` (a failed bounded attempt is spent but kept out of the gate's
+pass cost). Arms hx_pab_pabx, hx_pab1, hx_pab1_pabx, m4_ptc_pab1_pabx, m4_ptc_pnt1_pab1_pabx; binary mtg_k14, chain
+`build/scratch/p18g/build_k14.sh`, output `build/scratch/p18g/E13/` (DONE marker). Analyse: `merge.sh ME13 E12:'heur|hx_pab'
+E13:'<arms>' E6:'m4_ptc|m4_ptc_pnt1'`, then `summ.py ME13 heur ...`, `apair.py E13 <arm> heur` needs heur in the same
+run dir (use ME13). Next: if `_pab1` removes the deeper-commit cost, held-out (HO1 seeds 19M, 600 games) for the best arm
+per target deck; a sound bound changes tie order, so any later game needs the d8 b0 check.
