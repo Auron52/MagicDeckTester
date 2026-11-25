@@ -1,3 +1,12 @@
 {
- "entries": []
+ "entries": [
+  {
+   "branch": "wip/land-1125",
+   "head_since": "2026-11-25T04:53:47Z",
+   "host": "839667a3a15d",
+   "id": "839667a3a15d:wip/land-1125",
+   "joined": "2026-11-25T04:53:47Z",
+   "note": ""
+  }
+ ]
 }
