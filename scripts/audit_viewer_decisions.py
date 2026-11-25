@@ -620,6 +620,13 @@ MANIFEST = {
     # variants (one per legal artifact/enchantment, Action::tutor_target "AX<n>") in HUMAN play; the deck
     # provider withholds the mode autonomously (OffersModalExileArtEnch -- every legal target is our own).
     "modal_exile_target_artifact_enchantment": ("main_phase", truthy),
+    # ---- Enchanted Evening lock cluster steps 3 / 5 (2026-11-26) ----
+    # Calming Verse: KEEP (tap every land first) vs SWEEP-SELF are two cast variants (tutor_target "VK" / "VS"),
+    # listed in human play's main_phase menu. Force of Vigor's hard cast: one cast variant per target SET (0..2
+    # identity-folded targets, tutor_target "FV<n>[,<m>]"), likewise in the main_phase menu. (The off-turn pitch,
+    # lock step 7, will add its own end-step decision.)
+    "destroy_opp_enchantments_then_own_if_untapped_land": ("main_phase", truthy),
+    "destroy_up_to_artifacts_enchantments": ("main_phase", truthy),
     # ---- Maze's End (I2, 2026-11-17) ----
     # Gateway Plaza "When this land enters, sacrifice it unless you pay {1}": pay or sacrifice is asked at
     # the entry (ResolveEtbSacUnlessPay, every land-entry route) on the `dig` chooser -- one examined card

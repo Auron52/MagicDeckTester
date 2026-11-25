@@ -57689,6 +57689,92 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // CALMING VERSE / FORCE OF VIGOR post-pass (Enchanted Evening lock cluster steps 3 / 5, 2026-11-26). NO-GREEDY:
+    // each resolution choice of these casts is a SEARCHED axis, so in the DECISION space (and in human play, where
+    // the viewer's main_phase menu lists the variants) every option is its own cast variant (same hand_index, so
+    // mutually exclusive), pinned on tutor_target; #DV in both plan signatures keeps the dedup lossless.
+    //   * Calming Verse: KEEP "VK" (tap every untapped land into the float first, so clause 2 finds none) and
+    //     SWEEP-SELF "VS" (lands as they are). Both whenever we control an untapped land at emission; a KEEP that
+    //     a later cast of the line leaves with nothing to float coincides with SWEEP-SELF's board and is dropped by
+    //     the post-apply dedup. An untapped fetchland does NOT withhold KEEP: the line may crack it before the
+    //     Verse (the existing searched action), and the emission state cannot see that.
+    //   * Force of Vigor: one variant per option of DestroyUpToArtEnchOptions (the empty set, every class, two of
+    //     one class, every pair of classes; identity-folded, CastTriggerTargetOrder), which the provider may only
+    //     restrict / order (DecisionProvider::DestroyUpToArtEnchTargetOptions). The base carries the provider's
+    //     beyond-horizon option first (DestroyUpToArtEnchPick), so a budgeted search spends on it first. Targets
+    //     are taken off the EMISSION board: a permanent entering earlier in the same main phase is targetable from
+    //     the next main phase's root (each main is its own search root), never unfindable.
+    // Rollout leaves keep the UNPINNED base (the provider's beyond-horizon pick). A REMAND variant never resolves: no
+    // variants. Gated on the two params.
+    {
+        const bool dv_space = (g_search_candidate_enum || g_condemn_root_turn < 0) || HumanPlayActive();
+        const std::size_t dv_n = actions.size();
+        const int me = state.active_player_index;
+        bool fv_built = false;
+        std::vector<std::string> fv_pins;
+        for (std::size_t i = 0; dv_space && i < dv_n; ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand || actions[i].def == nullptr
+                || !actions[i].tutor_target.str().empty()) { continue; }
+            const CardParams& pp = actions[i].def->params;
+            const bool verse = pp.destroy_opp_enchantments_then_own_if_untapped_land;
+            const bool fov   = pp.destroy_up_to_artifacts_enchantments > 0;
+            if (!verse && !fov) { continue; }
+            if (!actions[i].remand_by.empty() && actions[i].remand_chain_by.empty()
+                && !pp.cant_be_countered) { continue; }
+            if (verse)
+            {
+                bool untapped = false;
+                for (const Permanent& p : state.battlefield)
+                { if (p.controller_index == me && p.card.IsLand() && !p.tapped) { untapped = true; break; } }
+                actions[i].tutor_target = std::string("VK");
+                if (untapped)
+                {
+                    Action v = actions[i];               // copy BEFORE push_back (reallocation)
+                    v.tutor_target = std::string("VS");
+                    actions.push_back(std::move(v));
+                }
+                continue;
+            }
+            if (!fv_built)
+            {
+                const std::vector<std::vector<int>> all
+                    = DestroyUpToArtEnchOptions(state, me, pp.destroy_up_to_artifacts_enchantments);
+                std::vector<std::vector<int>> offered = all;
+                ResolveProvider(state).DestroyUpToArtEnchTargetOptions(state, me, offered);
+                const int front = ResolveProvider(state).DestroyUpToArtEnchPick(state, me, all);
+                auto pin_of = [&](const std::vector<int>& opt)
+                {
+                    std::vector<int> nums;
+                    for (int bi : opt) { nums.push_back(state.battlefield[static_cast<std::size_t>(bi)].card.m_number); }
+                    return DestroyUpToArtEnchPin(nums);
+                };
+                std::vector<std::string> legal_pins;
+                for (const auto& o : all) { legal_pins.push_back(pin_of(o)); }
+                const std::string front_pin = (front >= 0 && front < static_cast<int>(all.size()))
+                                            ? legal_pins[static_cast<std::size_t>(front)] : std::string();
+                for (const auto& o : offered)
+                {
+                    const std::string pin = pin_of(o);
+                    if (std::find(legal_pins.begin(), legal_pins.end(), pin) == legal_pins.end()) { continue; }   // restrict only
+                    if (std::find(fv_pins.begin(), fv_pins.end(), pin) != fv_pins.end()) { continue; }
+                    fv_pins.push_back(pin);
+                }
+                const auto fit = std::find(fv_pins.begin(), fv_pins.end(), front_pin);
+                if (fit != fv_pins.end() && fit != fv_pins.begin()) { std::rotate(fv_pins.begin(), fit, fit + 1); }
+                fv_built = true;
+            }
+            if (fv_pins.empty()) { continue; }   // a provider withheld every option: the unpinned base stays
+            actions[i].tutor_target = fv_pins.front();
+            for (std::size_t k = 1; k < fv_pins.size(); ++k)
+            {
+                Action v = actions[i];
+                v.tutor_target = fv_pins[k];
+                actions.push_back(std::move(v));
+            }
+        }
+    }
+
     // ETB CHOICE AXIS post-pass (AccomplishedAlchemist, 2026-10-18). A choice the card makes AS IT
     // ENTERS is part of the play, so the SEARCH owns it: Utopia Sprawl's "As this Aura enters, choose a
     // color" (the colour is LOCKED for the object's life -- a U Sprawl pays Stroke of Genius / Crab
@@ -80935,6 +81021,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!remand_countered
             && (def.params.exile_all_permanents_hands_graveyards || def.params.each_player_life_becomes >= 0))
         { ResolveExileAllAndSetLife(state, def.params); }
+        // Calming Verse / Force of Vigor (Enchanted Evening lock cluster steps 3 / 5): the shared resolvers with the
+        // cast's searched pin -- executor twin in EffectHandler::ResolveImpl beside its Worldfire call (lockstep).
+        if (!remand_countered && def.params.destroy_opp_enchantments_then_own_if_untapped_land)
+        { ResolveCalmingVerse(state, state.active_player_index, def, tutor_target); }
+        if (!remand_countered && def.params.destroy_up_to_artifacts_enchantments > 0)
+        { ResolveDestroyUpToArtEnch(state, state.active_player_index, def, tutor_target); }
 
         // A resolved instant or sorcery goes to the graveyard (mirrors the real game's
         // MoveToGraveyard). This makes a retrace card recur and keeps the inline
@@ -87724,6 +87816,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.enters_with_x_plus_counters) { w.Put("#BX"); w.Int(act.chosen_x); }   // Walking Ballista's X
                 if (d && d->params.etb_modal_fight_opp_creature) { w.Put("#VM"); w.Put(act.tutor_target); }   // Voracious mode
                 if (d && d->params.modal_exile_target_artifact_enchantment) { w.Put("#AX"); w.Put(act.tutor_target); }   // Archdruid's Charm mode
+                if (d && (d->params.destroy_opp_enchantments_then_own_if_untapped_land || d->params.destroy_up_to_artifacts_enchantments > 0)) { w.Put("#DV"); w.Put(act.tutor_target); }   // Calming Verse KEEP/SWEEP, Force of Vigor target set
                 if (d && d->params.evoke_cost.has_value()) { w.Put(act.evoke ? "#E1" : "#E0"); }
                 if (d && d->params.emerge_cost.has_value()) { w.Put(act.emerge ? "#EM1" : "#EM0"); }   // Decimator (I4)
                 if (DiesTuckTagLive(p.actions, act)) { w.Put((act.dies_tuck & 1) ? "#DT1" : "#DT2"); }   // Ilharg's death (I5b)
@@ -93504,6 +93597,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         if (cd && cd->params.etb_modal_fight_opp_creature) { k += "#VM"; k += act.tutor_target.str(); }
                         // Archdruid's Charm: mode 1 vs exile <target> are DISTINCT plans (the #VM precedent).
                         if (cd && cd->params.modal_exile_target_artifact_enchantment) { k += "#AX"; k += act.tutor_target.str(); }
+                        if (cd && (cd->params.destroy_opp_enchantments_then_own_if_untapped_land || cd->params.destroy_up_to_artifacts_enchantments > 0)) { k += "#DV"; k += act.tutor_target.str(); }   // Calming Verse KEEP/SWEEP, Force of Vigor target set
                         // Evoke (Reveillark): the evoke cast and the hard cast are two different
                         // spells sharing a name (different cost, the body self-sacs) -- the
                         // bestow lesson. Gated on the param, so no existing deck moves.

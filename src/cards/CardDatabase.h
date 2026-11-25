@@ -5447,6 +5447,16 @@ struct CardParams
     //     shared SBA checkpoint (TypeStaticsSbaCheckpoint) in both worlds.
     bool                     static_all_permanents_enchantments = false;
     bool                     static_animate_other_nonaura_enchantments_mv = false;
+    // Calming Verse (lock cluster step 3; ResolveCalmingVerse in SpellEffects.h): "Destroy all enchantments you don't
+    // control. Then if you control an untapped land, destroy all enchantments you control." Its OWN param, never
+    // destroy_all_enchantments (ManaPayment's ApplyEnablerWipeRecheck and Reverent Silence's readers key on that one).
+    // The tap-all-lands-first choice is a searched two-variant cast axis (KEEP "VK" / SWEEP-SELF "VS" on tutor_target).
+    bool                     destroy_opp_enchantments_then_own_if_untapped_land = false;
+    // Force of Vigor clause 2 (lock cluster step 5; ResolveDestroyUpToArtEnch): "Destroy up to N target artifacts
+    // and/or enchantments." N = this value (2). The target SET (0..N distinct permanents, either side, shroud and an
+    // opponent's hexproof honoured) is a searched cast axis pinned on tutor_target "FV<n>[,<m>]". The off-turn pitch
+    // (clause 1) is a separate later param.
+    int                      destroy_up_to_artifacts_enchantments = 0;
     // Sterling Grove: "{1}, Sacrifice this enchantment: Search your library for an enchantment card,
     // reveal it, then shuffle and put that card on top." The mana half of an activated tutor-to-top
     // whose other cost is SACRIFICING THE SOURCE (no {T}: legal the turn it enters). The search spec is

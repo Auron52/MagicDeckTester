@@ -19620,6 +19620,34 @@
    "parameters": {
     "static_animate_other_nonaura_enchantments_mv": true
    }
+  },
+  {
+   "name": "Calming Verse",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Destroy all enchantments you don't control. Then if you control an untapped land, destroy all enchantments you control. [OWN PARAM destroy_opp_enchantments_then_own_if_untapped_land (never destroy_all_enchantments, which ManaPayment's wipe recheck keys on); shared resolver ResolveCalmingVerse (SpellEffects.h) at both worlds' sorcery resolution site. No target, so hexproof / shroud are no defence. Clause 1 destroys every permanent we don't control that is an enchantment on its copy -- under Enchanted Evening every opposing permanent (lands, spawn bodies; tokens cease to exist). Clause 2 is checked DURING resolution after clause 1 (Scryfall 2004-10-04): any untapped land we control (an uncracked fetchland counts) -> every enchantment we control (under Enchanted Evening: everything, lands included). The tap-all-lands-first choice is a SEARCHED two-variant cast axis (a sound fold of the 2^n tap subsets): KEEP (VK) taps every untapped land into the float first through the lock pre-float route (a dual as wild under deck_float_wild_exact; a fetchland cannot float, so crack it earlier in the line), SWEEP-SELF (VS) leaves the lands; both are offered in the decision space and the viewer's main_phase menu; an unpinned rollout-leaf cast takes the provider default (KEEP). Every destroy reaches the leave chokepoints (an Oblivion Ring returns its card); indestructible stays. The fairness check's virtual-board clear (lock step 6) is not built yet.]",
+   "template": "custom",
+   "parameters": {
+    "destroy_opp_enchantments_then_own_if_untapped_land": true
+   }
+  },
+  {
+   "name": "Force of Vigor",
+   "mana_cost": "{2}{G}{G}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "If it's not your turn, you may exile a green card from your hand rather than pay this spell's mana cost.\nDestroy up to two target artifacts and/or enchantments. [CLAUSE 2 (destroy_up_to_artifacts_enchantments: 2; ResolveDestroyUpToArtEnch, both worlds' instant resolution site): 0, 1 or 2 DISTINCT targets, either side, each an artifact or an enchantment on its copy (under Enchanted Evening: every permanent); shroud binds our own targeting (Sterling Grove's grant, PermanentHasShroud), an opponent's hexproof stops it; re-checked on resolution (an illegal target is unaffected); indestructible stays; every destroy reaches the leave chokepoints (an Oblivion Ring returns its card). The target SET is SEARCHED: one cast variant per identity-folded option, the empty set included (pin FV<n>[,<m>]); an unpinned rollout-leaf cast takes the provider's pick (the most opponent targets). Hard cast {2}{G}{G} on our turn as a main-phase instant (a passive opponent gives an instant no other window on our turn). CLAUSE 1 (the off-turn pitch: exile a green card from hand instead of paying, in the opponent's end-step window) is NOT YET MODELLED -- lock cluster step 7, deferred within this analysis.]",
+   "template": "custom",
+   "parameters": {
+    "destroy_up_to_artifacts_enchantments": 2
+   }
   }
 ]
 }

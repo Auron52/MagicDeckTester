@@ -4879,6 +4879,45 @@ public:
                                           const std::vector<int>& legal) const
     { return EtbDestroyTargetPick(s, controller, legal); }
 
+    // CALMING VERSE (CardParams::destroy_opp_enchantments_then_own_if_untapped_land; lock cluster step 3). Whether
+    // to tap every untapped land for mana before it resolves (KEEP: clause 2 then finds no untapped land and our
+    // board survives) or to leave the lands (SWEEP-SELF) is a SEARCHED two-variant cast axis (TurnSolver's
+    // Calming Verse post-pass pins "VK" / "VS" in the decision space and in human play). This hook decides ONLY an
+    // UNPINNED cast: a rollout leaf beyond the horizon and the d0 runner (the permitted playout greedy). Base: KEEP.
+    virtual bool CalmingVerseKeepDefault(const GameState& s, int controller) const
+    { (void)s; (void)controller; return true; }
+
+    // FORCE OF VIGOR clause 2 (CardParams::destroy_up_to_artifacts_enchantments; lock cluster step 5). "Destroy up to
+    // N target artifacts and/or enchantments": the target SET is a SEARCHED cast axis -- TurnSolver's post-pass emits
+    // one cast variant per option (DestroyUpToArtEnchOptions: every 0..N multiset of identity classes, ordered by
+    // CastTriggerTargetOrder), pinned "FV<n>[,<m>]". DestroyUpToArtEnchTargetOptions may only RESTRICT or ORDER that
+    // list (an option not in it is never emitted). Base: every option.
+    virtual void DestroyUpToArtEnchTargetOptions(const GameState& s, int controller,
+                                                 std::vector<std::vector<int>>& options) const
+    { (void)s; (void)controller; (void)options; }
+    // ...and the target set of an UNPINNED cast (a rollout leaf beyond the horizon, the d0 runner): an index into
+    // `options` (battlefield indices; option 0 is the empty set). A beyond-horizon order, never a pick inside the
+    // search window. Base: the first option that takes the most targets, all of them the opponent's (destroying an
+    // opponent's permanent costs us nothing against a passive opponent); none -> the empty set.
+    virtual int DestroyUpToArtEnchPick(const GameState& s, int controller,
+                                       const std::vector<std::vector<int>>& options) const
+    {
+        int best = 0;
+        std::size_t best_n = 0;
+        for (std::size_t o = 0; o < options.size(); ++o)
+        {
+            bool opp_only = true;
+            for (int bi : options[o])
+            {
+                if (bi < 0 || bi >= static_cast<int>(s.battlefield.size())
+                    || s.battlefield[static_cast<std::size_t>(bi)].controller_index == controller)
+                { opp_only = false; break; }
+            }
+            if (opp_only && options[o].size() > best_n) { best = static_cast<int>(o); best_n = options[o].size(); }
+        }
+        return best;
+    }
+
     // EtbDestroyTargetPick -- a MANDATORY "When this enters, destroy target <X>" trigger whose legal
     // set (BOTH sides, CR 603.3d: a trigger with a legal target must take one) can be only OUR OWN
     // permanents against the goldfish: Shriekmaw (nonartifact, nonblack creature) and Acidic Slime

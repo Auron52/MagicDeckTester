@@ -22472,6 +22472,318 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
     }
     SweepOrphanedAuras(state);   // an Aura on an exiled / destroyed host (CR 704.5m)
 }
+
+// ==== SIMULTANEOUS DESTROY (Enchanted Evening lock cluster steps 3 / 5: Calming Verse, Force of Vigor) ===========
+// ONE destroy event over several permanents, in two halves so a spell with a mid-resolution check (Calming Verse's
+// "Then if you control an untapped land") can read the board between its clauses before any trigger resolves
+// (CR 603.3: triggered abilities wait until the spell has finished resolving).
+//   * DestroyRemoveTogether: each listed permanent (by m_number; one that is gone is skipped, CR 608.2b) leaves:
+//     an indestructible one stays (CR 702.12b), an unearthed one is exiled instead (CR 702.84a, deferred), a TOKEN
+//     ceases to exist (CR 111.7 -- an opponent spawn body is a token though it carries no is_token), a card goes to
+//     its OWNER's graveyard (CR 400.3). Attachments pointing at it fall off (CR 301.5c); an orphaned Aura goes at the
+//     sweep below (CR 704.5m).
+//   * DestroyFireTogether: then, in battlefield order, each departure's cascade: a creature DIES (OnCreatureDies:
+//     leaves-the-battlefield + dies watchers + the board refreshes; FireOppCreatureDies for the opponent's), a
+//     noncreature only LEAVES (graveyard-entry triggers, FireLeavesBattlefieldTriggers -- an Oblivion Ring returns its
+//     card, an Exploration takes its drops with it -- and the refreshes). Every leave reaches the chokepoints, so the
+//     type statics are re-derived and step 1's checkpoint runs after the resolution in both worlds.
+struct DestroyedTogether
+{
+    Card card;
+    int  controller;
+    int  owner;
+    bool creature;
+    bool token;
+    int  minus_counters;
+    int  total_counters;
+};
+inline int DestroyRemoveTogether(GameState& state, const std::vector<int>& numbers, const std::string& src_name,
+                                 std::vector<DestroyedTogether>& gone, std::vector<Permanent>& unearth_left)
+{
+    int n = 0;
+    for (int num : numbers)
+    {
+        int bi = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == num) { bi = i; break; } }
+        if (bi < 0) { continue; }
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+        if (q.HasKeyword(Keyword::Indestructible))
+        {
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              src_name + ": " + q.card.m_name.str() + " is indestructible -- it stays");
+            }
+            continue;
+        }
+        if (UnearthExileDeferred(state, static_cast<std::size_t>(bi), "destroyed", unearth_left)) { ++n; continue; }
+        DestroyedTogether g{ q.card, q.controller_index, q.owner_index, q.card.IsCreature() || q.is_animated,
+                             q.is_token || q.card.m_number >= GameState::kFirstOppSpawnNumber,
+                             MinusCountersOn(q), DyingCountersTotal(q) };
+        if (!g.token) { state.players[static_cast<std::size_t>(g.owner)].graveyard.push_back(RevealedCard(g.card)); }
+        state.battlefield.erase(state.battlefield.begin() + bi);
+        for (Permanent& o : state.battlefield)
+        {
+            if (o.equipped_to      == num) { o.equipped_to      = 0; }
+            if (o.aura_attached_to == num) { o.aura_attached_to = 0; }
+        }
+        gone.push_back(std::move(g));
+        ++n;
+    }
+    return n;
+}
+inline void DestroyFireTogether(GameState& state, int controller, const std::vector<DestroyedTogether>& gone,
+                                const std::vector<Permanent>& unearth_left)
+{
+    GyShuffleBatch _gyb(state);   // simultaneous destroys: a graveyard shuffle waits for all of them
+    FireUnearthedLeaves(state, unearth_left);
+    bool noncreature_left = false;
+    for (const DestroyedTogether& g : gone)
+    {
+        if (g.creature)
+        {
+            OnCreatureDies(state, g.controller, g.card, g.token, g.minus_counters, nullptr, g.total_counters, g.owner);
+            if (g.controller != controller) { FireOppCreatureDies(state, g.controller); }
+            continue;
+        }
+        if (g.controller == state.active_player_index) { state.permanent_left_under_control_this_turn = true; }
+        if (!g.token) { FireGraveyardEntryTriggers(state, g.owner, g.card); }
+        FireLeavesBattlefieldTriggers(state, g.controller, g.card);
+        noncreature_left = true;
+    }
+    if (noncreature_left)
+    {
+        RefreshDevotionCreatures(state);
+        RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
+        RefreshReconfigureCreatures(state);
+    }
+    SweepOrphanedAuras(state);   // an Aura on a destroyed host (CR 704.5m)
+}
+
+// ---- CALMING VERSE (lock cluster step 3; design §4.3) --------------------------------------------------------
+// "Destroy all enchantments you don't control. Then if you control an untapped land, destroy all enchantments you
+// control." No target (hexproof and shroud are no defence, USER ruling 11). Clause 1: every permanent we do not
+// control that is an enchantment ON ITS COPY (under Enchanted Evening: every opposing permanent -- lands, spawn
+// bodies). Clause 2 is checked DURING resolution, after clause 1 (Scryfall 2004-10-04): any land we control that
+// is untapped (an uncracked fetchland counts) -> every enchantment we control (under EE: everything, lands too).
+//
+// THE TAP-ALL CHOICE is a two-variant cast axis, a SOUND fold of the 2^n tap subsets (design §4.3): we hold
+// priority with the Verse on the stack and may activate mana abilities (CR 605.3a); the mana floats to the end of
+// the phase (CR 106.4 / 500.4). Only one bit of the subset matters to clause 2 -- whether ANY untapped land
+// remains -- and among the subsets that leave one, leaving every land untapped weakly dominates. So:
+//   KEEP ("VK"): before resolution, every untapped land we control is tapped into the float through the lock
+//     pre-float route (g_lock_prefloat_hook: the payer's own pre-tap route and colour rule, a dual as `wild` only
+//     under deck_float_wild_exact). A land it cannot float (a fetchland: no mana ability; a dual without the stamp)
+//     stays untapped, so clause 2 fires -- the literal result; crack the fetch earlier in the line (the existing
+//     searched action) to keep.
+//   SWEEP-SELF ("VS"): the lands as they are.
+// Both are offered by TurnSolver's post-pass in the decision space and in human play (NO-GREEDY: SWEEP-SELF is
+// legal and almost never right, so the engine still offers it). An UNPINNED cast (a rollout leaf beyond the
+// horizon, the d0 runner) takes DecisionProvider::CalmingVerseKeepDefault. Destroys go through the simultaneous
+// destroy halves above, so every leave reaches the chokepoints (an Oblivion Ring returns its card).
+// Step 6 (the fairness check) clears the virtual board here, after clause 1 (design §3.4.3); not built yet.
+inline bool CalmingVersePinKeep(const std::string& pin, bool& keep)
+{
+    if (pin == "VK") { keep = true;  return true; }
+    if (pin == "VS") { keep = false; return true; }
+    return false;
+}
+inline void ResolveCalmingVerse(GameState& state, int controller, const CardDefinition& def, const std::string& pin)
+{
+    const std::string src = def.card.m_name.str();
+    bool keep = true;
+    if (!CalmingVersePinKeep(pin, keep)) { keep = ResolveProvider(state).CalmingVerseKeepDefault(state, controller); }
+    if (keep && g_lock_prefloat_hook != nullptr)
+    {
+        std::vector<int> lands;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == controller && p.card.IsLand() && !p.tapped) { lands.push_back(p.card.m_number); }
+        }
+        for (int num : lands) { g_lock_prefloat_hook(state, controller, num); }
+    }
+    std::vector<DestroyedTogether> gone;
+    std::vector<Permanent> unearth_left;
+    std::vector<int> theirs;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller && p.card.IsEnchantment()) { theirs.push_back(p.card.m_number); }
+    }
+    const int n1 = DestroyRemoveTogether(state, theirs, src, gone, unearth_left);
+    bool untapped_land = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.IsLand() && !p.tapped) { untapped_land = true; break; }
+    }
+    int n2 = 0;
+    if (untapped_land)
+    {
+        std::vector<int> ours;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == controller && p.card.IsEnchantment()) { ours.push_back(p.card.m_number); }
+        }
+        n2 = DestroyRemoveTogether(state, ours, src, gone, unearth_left);
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "removal",
+                      "\xF0\x9F\x92\x80 " + src + (keep ? " (lands tapped first)" : " (lands left untapped)")
+                      + ": destroys " + std::to_string(n1) + " opposing enchantment(s)"
+                      + (untapped_land ? ", then " + std::to_string(n2) + " of yours (you control an untapped land)"
+                                       : "; you control no untapped land, so yours survive"));
+    }
+    DestroyFireTogether(state, controller, gone, unearth_left);
+}
+
+// ---- FORCE OF VIGOR clause 2 (lock cluster step 5; design §4.5) ----------------------------------------------
+// "Destroy up to two target artifacts and/or enchantments." Targets are chosen as it is CAST (CR 601.2c), 0..N
+// DISTINCT permanents (CR 115.3), either side, each an artifact or an enchantment on its copy (under Enchanted
+// Evening: every permanent). Shroud binds our own targeting (CR 702.18a: Sterling Grove's grant -- PermanentHasShroud),
+// an opponent's hexproof stops us (CR 702.11b). On resolution each target is re-checked (CR 608.2b): an illegal one
+// is unaffected, the rest are destroyed together; an indestructible one stays.
+// THE TARGET SET IS SEARCHED (NO-GREEDY): DestroyUpToArtEnchOptions folds the legal set into identity classes
+// (CastTriggerTargetFoldKey -- two identical untapped Forests are one target), orders the class representatives
+// (CastTriggerTargetOrder, destroy) and lists every option -- the empty set, each class, two members of one class,
+// each pair of classes; TurnSolver's post-pass emits one cast variant per option, pinned "FV<n>[,<m>]" ("FV" alone =
+// no target, a legal "up to" choice). An UNPINNED cast (a rollout leaf, the d0 runner) takes
+// DecisionProvider::DestroyUpToArtEnchPick. The off-turn pitch (clause 1) is lock step 7.
+inline bool DestroyUpToArtEnchTargetLegal(const GameState& state, int controller, const Permanent& q)
+{
+    if (!(q.card.HasType(CardType::Artifact) || q.card.IsEnchantment())) { return false; }
+    if (PermanentHasShroud(q, state)) { return false; }
+    if (q.controller_index != controller && q.HasKeyword(Keyword::Hexproof)) { return false; }
+    return true;
+}
+// Every option (battlefield indices; option 0 = the empty set), at most `n_max` targets each.
+inline std::vector<std::vector<int>> DestroyUpToArtEnchOptions(const GameState& state, int controller, int n_max)
+{
+    std::vector<std::vector<int>> classes;
+    std::vector<std::uint64_t> keys;
+    std::vector<int> linked;
+    LandfallTargetLinks(state, linked);
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (!DestroyUpToArtEnchTargetLegal(state, controller, q)) { continue; }
+        std::uint64_t k = 0;
+        const bool foldable = CastTriggerTargetFoldKey(state, q, k, &linked) && k != 0;
+        bool placed = false;
+        if (foldable)
+        {
+            for (std::size_t c = 0; c < classes.size(); ++c)
+            { if (keys[c] == k) { classes[c].push_back(i); placed = true; break; } }
+        }
+        if (!placed) { classes.push_back({ i }); keys.push_back(foldable ? k : 0); }
+    }
+    if (classes.size() >= 2)
+    {
+        std::vector<int> reps;
+        for (const auto& c : classes) { reps.push_back(c.front()); }
+        ResolveProvider(state).CastTriggerTargetOrder(state, controller, /*destroy=*/true, reps);
+        std::vector<std::vector<int>> ordered;
+        for (int r : reps)
+        { for (const auto& c : classes) { if (c.front() == r) { ordered.push_back(c); break; } } }
+        if (ordered.size() == classes.size()) { classes.swap(ordered); }   // a provider must not add / drop
+    }
+    std::vector<std::vector<int>> out;
+    out.push_back({});
+    if (n_max >= 1) { for (const auto& c : classes) { out.push_back({ c[0] }); } }
+    if (n_max >= 2)
+    {
+        for (std::size_t a = 0; a < classes.size(); ++a)
+        {
+            if (classes[a].size() >= 2) { out.push_back({ classes[a][0], classes[a][1] }); }
+            for (std::size_t b = a + 1; b < classes.size(); ++b) { out.push_back({ classes[a][0], classes[b][0] }); }
+        }
+    }
+    return out;   // (no card of the pool asks for more than two; a larger N would extend the multisets here)
+}
+// The pin: "FV" + the targets' m_numbers, comma-separated. ONE encoder / parser for the enumerator, the resolver,
+// the plan signatures (#DV) and the viewer label.
+inline std::string DestroyUpToArtEnchPin(const std::vector<int>& numbers)
+{
+    std::string s = "FV";
+    for (std::size_t i = 0; i < numbers.size(); ++i)
+    {
+        if (i > 0) { s += ','; }
+        s += std::to_string(numbers[i]);
+    }
+    return s;
+}
+inline bool DestroyUpToArtEnchPinTargets(const std::string& pin, std::vector<int>& numbers)
+{
+    numbers.clear();
+    if (pin.size() < 2 || pin[0] != 'F' || pin[1] != 'V') { return false; }
+    int n = 0;
+    bool any = false;
+    for (std::size_t i = 2; i < pin.size(); ++i)
+    {
+        const char ch = pin[i];
+        if (ch == ',')
+        {
+            if (!any) { numbers.clear(); return false; }
+            numbers.push_back(n); n = 0; any = false;
+            continue;
+        }
+        if (ch < '0' || ch > '9') { numbers.clear(); return false; }
+        n = n * 10 + (ch - '0');
+        any = true;
+    }
+    if (any) { numbers.push_back(n); }
+    return true;
+}
+inline void ResolveDestroyUpToArtEnch(GameState& state, int controller, const CardDefinition& def,
+                                      const std::string& pin)
+{
+    const std::string src = def.card.m_name.str();
+    const int n_max = def.params.destroy_up_to_artifacts_enchantments;
+    std::vector<int> chosen;
+    if (!DestroyUpToArtEnchPinTargets(pin, chosen))
+    {
+        // Unpinned: the provider's beyond-horizon pick over the live options.
+        const std::vector<std::vector<int>> opts = DestroyUpToArtEnchOptions(state, controller, n_max);
+        int k = ResolveProvider(state).DestroyUpToArtEnchPick(state, controller, opts);
+        if (k < 0 || k >= static_cast<int>(opts.size())) { k = 0; }
+        for (int bi : opts[static_cast<std::size_t>(k)])
+        { chosen.push_back(state.battlefield[static_cast<std::size_t>(bi)].card.m_number); }
+    }
+    // CR 608.2b: re-check each target on resolution; an illegal one is unaffected.
+    std::vector<int> live;
+    for (int num : chosen)
+    {
+        if (static_cast<int>(live.size()) >= n_max) { break; }
+        if (std::find(live.begin(), live.end(), num) != live.end()) { continue; }
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.card.m_number == num && DestroyUpToArtEnchTargetLegal(state, controller, q))
+            { live.push_back(num); break; }
+        }
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        std::string names;
+        for (int num : live)
+        {
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.card.m_number != num) { continue; }
+                if (!names.empty()) { names += ", "; }
+                names += (q.controller_index == controller ? "your " : "the opponent's ") + q.card.m_name.str();
+                break;
+            }
+        }
+        EmitPlayEvent(state.turn_number, "removal",
+                      "\xF0\x9F\x92\x80 " + src + (live.empty() ? std::string(": destroys nothing")
+                                                               : ": destroys " + names));
+    }
+    if (live.empty()) { return; }
+    std::vector<DestroyedTogether> gone;
+    std::vector<Permanent> unearth_left;
+    DestroyRemoveTogether(state, live, src, gone, unearth_left);
+    DestroyFireTogether(state, controller, gone, unearth_left);
+}
 // "When you cast this spell, creatures you control get +P/+T and gain trample until end of turn" (Decimator of
 // the Provinces, cast_trigger_team_pump_*): resolving the trigger -- THE one resolver for both worlds (the
 // executor's TriggerKind::CastTeamPump, apply_one's inline cast-trigger block). Every creature the controller

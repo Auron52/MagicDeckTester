@@ -917,6 +917,42 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     { if (q.card.m_number == tn) { nm = q.card.m_name.str(); break; } }
                     tag += " (exile " + nm + " #" + std::to_string(tn) + ")";
                 }
+                else if (const CardDefinition* cvd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                         cvd && cvd->params.destroy_opp_enchantments_then_own_if_untapped_land
+                         && (a.tutor_target.str() == "VK" || a.tutor_target.str() == "VS"))
+                {
+                    // Calming Verse's searched KEEP / SWEEP-SELF axis.
+                    tag += a.tutor_target.str() == "VK" ? " (tap all lands first: yours survive)"
+                                                        : " (leave lands: destroys yours too if one is untapped)";
+                }
+                else if (const CardDefinition* fvd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                         fvd && fvd->params.destroy_up_to_artifacts_enchantments > 0
+                         && a.tutor_target.str().rfind("FV", 0) == 0)
+                {
+                    // Force of Vigor's searched target set: name the targets, not the pin.
+                    std::vector<int> nums;
+                    DestroyUpToArtEnchPinTargets(a.tutor_target.str(), nums);
+                    if (nums.empty()) { tag += " (no targets)"; }
+                    else
+                    {
+                        tag += " (destroy ";
+                        for (std::size_t ni = 0; ni < nums.size(); ++ni)
+                        {
+                            std::string nm = "permanent";
+                            std::string side;
+                            for (const Permanent& q : s.battlefield)
+                            {
+                                if (q.card.m_number != nums[ni]) { continue; }
+                                nm = q.card.m_name.str();
+                                side = q.controller_index == s.active_player_index ? "your " : "opponent's ";
+                                break;
+                            }
+                            if (ni > 0) { tag += ", "; }
+                            tag += side + nm + " #" + std::to_string(nums[ni]);
+                        }
+                        tag += ")";
+                    }
+                }
                 else if (!a.tutor_target.empty())
                 {
                     tag += " \xE2\x86\x92 " + a.tutor_target.str();

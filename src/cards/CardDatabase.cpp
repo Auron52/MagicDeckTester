@@ -2206,6 +2206,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.static_all_permanents_enchantments = params.value("static_all_permanents_enchantments", false);
     p.static_animate_other_nonaura_enchantments_mv
         = params.value("static_animate_other_nonaura_enchantments_mv", false);
+    p.destroy_opp_enchantments_then_own_if_untapped_land
+        = params.value("destroy_opp_enchantments_then_own_if_untapped_land", false);
+    p.destroy_up_to_artifacts_enchantments = params.value("destroy_up_to_artifacts_enchantments", 0);
     if (params.contains("sac_tutor_top_cost"))
         p.sac_tutor_top_cost = ManaCostFromString(params["sac_tutor_top_cost"].get<std::string>());
     p.sac_tutor_top_types       = params.value("sac_tutor_top_types", std::vector<std::string>{});
