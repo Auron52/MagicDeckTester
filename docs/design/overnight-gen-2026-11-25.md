@@ -65,3 +65,7 @@ still cut down the numbers somewhat."*
 - `expected_buckets` cleared from the profile (mull_gen d1 b1 kept) so mullgen re-records K under the ruling. The K=33
   journal and gencache were moved (not deleted) to `logs/maze_journal_stop-20261125T212636Z/k33-originals/`.
 - `build/scratch/overnight/chain_maze2.sh` waits for WF_FINISH.DONE, then mullgen, then the value leaf (MAZE2.DONE).
+- **Revised 21:50 UTC by the USER (14 land buckets, K=22, 734,074 size-7 hands, floor ~5.9 h):** Heap Gate, Planar Nexus
+  and Talon Gates of Madara stay separate (*"those have actual differences ... the ability to be dropped from hand and
+  ability to produce treasures"*); Basilisk Gate + The Black Gate merge (*"lands that do nothing in this deck except
+  come in untapped and produce colourless"*). Committed on wip/maze-gen-claude before the queued run started.
