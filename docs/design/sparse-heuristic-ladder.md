@@ -44,6 +44,9 @@ This document is the canonical description; those two are the measurement logs.
   heur -- an arm that costs more units than heur on any deck is a defect to root-cause, not an outcome.
   *"So what I want to see is all decks moving off the heuristic ladder after the value-leaf with at least a small
   benefit."* *"Ideally a bit bigger than that."*
+  *"The heuristic ladder is worth having up front, but most of the reason I want it is calibration, because I
+  consider it a problem if we cannot beat it."* So heur stays as the pre-value-leaf shape AND the yardstick every
+  post-leaf shape is measured against; a deck where nothing beats it is an open defect.
 
 ## The keys
 
