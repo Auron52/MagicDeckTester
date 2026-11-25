@@ -1,5 +1,30 @@
 # Creature Burn analyze-deck: handoff to Codex (2026-11-22 ~10:50 UTC)
 
+## Fast mulligan profile adoption (2026-11-25 UTC)
+
+The fast R=30 generator ran on frozen commit `0ef1bf7a0` using PGO+LTO. It found 19
+single-card buckets, 315,088 size-seven hands, and 272,242 sub-table cell-sides.
+Generation completed after 35h23m; the artifact check passed. The live profile
+and poolable raw sidecar are committed as `.json.gz`, alongside the generation-only
+`value_play` settings in `Creature Burn.profile.json`.
+
+The first-version validation passed both paired checks: exhaustive keep versus
+static keep improved by 0.072333 turns (6/6 seeds), and confounded exhaustive
+bottoming versus lookahead improved by 0.025125 turns (8/8 seeds). Scoped smoke
+changed 18 searched games slower and 26 faster; scoped regression changed 45
+searched slower and 56 faster. Both tiers were accepted with a provenance note.
+Per-game attribution reproduced the old and new baselines for standard and 2HG.
+All but two changed standard regression games were directly explained by keep,
+bottom, or bottomed-card order. The two same-hand, same-bottom digest changes
+(d3 s2002 gi52; d5 s2002 gi55) reproduce the old play trace when the new table
+keeps the hand but lookahead bottoming runs, confirming the documented bottomer
+rollout residue rather than table access during play. `check_gt_logs.py` reports
+1,435 consistent logs, zero stale/missing. After rebasing onto 113 shared-branch
+commits, the integrated Release smoke and regression rerun reproduced all 11
+Creature Burn win logs byte-identically; strict viewer replay passed 950 refs
+with zero drift and both required suboptimal refs beaten. Next: land through the push queue,
+then start `scripts/valueleaf.sh run` on the landed profile.
+
 ## Codex continuation (2026-11-22 ~21:50 UTC)
 
 **2026-11-23 08:29 UTC GT acceptance:** The regression classifier found 28/35 searched slowdowns
