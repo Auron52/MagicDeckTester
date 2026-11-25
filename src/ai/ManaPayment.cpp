@@ -12009,6 +12009,7 @@ static int AnyFilterFeedRouteHold(const GameState& state, const ManaCost& cost_i
 namespace
 {
 std::atomic<unsigned long long> g_slr_trial{0}, g_slr_strand{0}, g_slr_fired{0}, g_slr_us{0};
+std::atomic<unsigned long long> g_slr_acts_trial{0}, g_slr_acts_ample{0}, g_slr_acts_fired{0};
 struct ScaledLandRouteStats
 {
     ~ScaledLandRouteStats()
@@ -12016,6 +12017,8 @@ struct ScaledLandRouteStats
         if (!EnvOn("MTG_ANY_FILTER_ROUTE_STATS")) { return; }
         std::fprintf(stderr, "[scaled-land-route] trials=%llu stranded=%llu fired=%llu ms=%llu\n",
                      g_slr_trial.load(), g_slr_strand.load(), g_slr_fired.load(), g_slr_us.load() / 1000);
+        std::fprintf(stderr, "[scaled-land-route] acts-only: trials=%llu ample=%llu fired=%llu\n",
+                     g_slr_acts_trial.load(), g_slr_acts_ample.load(), g_slr_acts_fired.load());
     }
 };
 ScaledLandRouteStats g_slr_stats;
@@ -12092,6 +12095,29 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
         if (ScaledManaCreatureCount(state, &p) >= need_x) { scaled_up = true; break; }
     }
     if (!scaled_up) { return 0; }
+    // AMPLE PLAIN MANA (activations-only rest, all generic): the untapped plain-mana lands -- one each, the lines'
+    // activation {T} sources left out -- plus the float, less this bill at its worst (a coloured pip through a filter
+    // spends two sources), already cover the rest. Then ANY payment of this bill leaves the rest payable and the trial
+    // below could only agree; skip its board copy and two solves. A lower bound, so it only ever skips a trial that
+    // would have found nothing.
+    if (acts_only)
+    {
+        const PlanTraits* pt = CurrentPlanTraits();
+        int plain = static_cast<int>(state.floating_mana.Total());
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || !d->card.IsLand() || d->params.produces.empty() || d->params.ramp_filter) { continue; }
+            bool act_src = false;
+            for (int k = 0; pt != nullptr && k < pt->act_src_count; ++k)
+            { if (pt->act_src_nums[k] == p.card.m_number) { act_src = true; break; } }
+            if (!act_src) { ++plain; }
+        }
+        const int worst = cost_in.ManaValue() + (cost_in.ManaValue() - cost_in.generic - cost_in.colorless);
+        if (plain - worst >= later.ManaValue()) { g_slr_acts_ample.fetch_add(1, std::memory_order_relaxed); return 0; }
+        g_slr_acts_trial.fetch_add(1, std::memory_order_relaxed);
+    }
     // The cast being paid, if it is a mana rock that enters untapped (Sol Ring): the rest of the line meets its mana.
     const CardDefinition* rock = nullptr;
     if (const Card* pc = PayingSpellCard())
@@ -12150,6 +12176,7 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
         const ArmCredit _arm(grow);
         if (!RampLaterPayableConsume(b.Board(), later, rock)) { continue; }
         g_slr_fired.fetch_add(1, std::memory_order_relaxed);
+        if (acts_only) { g_slr_acts_fired.fetch_add(1, std::memory_order_relaxed); }
         return held;
     }
     return 0;
