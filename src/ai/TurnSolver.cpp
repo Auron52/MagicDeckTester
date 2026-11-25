@@ -57706,8 +57706,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     //     the next main phase's root (each main is its own search root), never unfindable.
     // Rollout leaves keep the UNPINNED base (the provider's beyond-horizon pick), EXCEPT a cast whose beyond-horizon
     // resolution does nothing (FoV's pick is the empty set; a Verse KEEP the provider withdrew as a no-op): the
-    // playout does not spend mana and a card on it (2026-11-25: the playout's no-op casts stole the mana of real
-    // plays and skewed leaf values -- EE sanity gi=13 lost a turn at d3 b0). A REMAND variant never resolves: no
+    // playout does not spend mana and a card on it (2026-11-25: the playout's no-op casts spend the mana of real
+    // plays). Measured neutral on 200 held-out EE games (seed 9000, d3 b10: 6.92 vs 6.93, -0.01 +- 0.03 turns,
+    // 17 faster / 16 slower); kept as wasted-work removal, no lever. A REMAND variant never resolves: no
     // variants. Gated on the two params.
     {
         const bool dv_space = (g_search_candidate_enum || g_condemn_root_turn < 0) || HumanPlayActive();
