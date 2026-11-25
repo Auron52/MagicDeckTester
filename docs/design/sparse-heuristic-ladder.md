@@ -451,3 +451,24 @@ rollouts are 86.5 % of Mill's units (T1 30.9 + T2+ 55.6), its superseded passes 
 1.6); Shadowborn 74.2 % / 13.5 %; Sea 57.0 % / 36.4 %. Skipping superseded work can only reach that second number, and a
 walk has to prove its win leafless to skip any of it. What is left on Mill is the committing pass's own rollouts (class
 (2): leaves that cannot change the decision), which the USER's 2026-11-19 scope allows only with lossless ideas.
+
+#### OR1: the ceilings on K1's seeds (oracle K from K2's heur trace, `MTG_P16_ORACLE`; 200 games x 8; measurement only)
+
+`oracle` = passes below heur's own committing K leafless, K on rollouts; `oracleasp` = plus the committing pass cut at its
+recorded final win (P17's aspiration oracle). Units / heur, quality 0/0 (an oracle file's tags must not start with a
+digit -- `p16::Oracle()` reads a numeric first field as the seed; the per-deck seeds are disjoint, so no tag is needed).
+
+| deck | m4 | oracle | oracleasp |
+|---|---|---|---|
+| Hydras | 0.990 | 0.886 | 0.887 |
+| Martyr Lifegain | 0.966 | 0.943 | 0.943 |
+| Maze's End | 1.004 | 0.982 | 0.980 |
+| Merfolk Turns | 1.000 | 0.927 | 0.927 |
+| Mill | 1.012 | **0.971** | 0.961 |
+| Sea Creatures | 0.915 | 0.753 | 0.760 |
+| Shadowborn Apostle | 1.009 | **0.940** | 0.889 |
+| Stuffy Doll | 1.000 | 0.922 | 0.899 |
+
+So with K known, Mill has 2.9 % and Shadowborn 6.0 % to bank (11 % with the final bound too). Mode 4 banks only the
+decisions whose win a leafless walk can PROVE in the window; the rest of the ceiling is choosing K without foresight
+(P17-handoff's open problem, mode 2 / 5's priced gate).
