@@ -296,6 +296,8 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**14:37 UTC 11-25:** Status check. Box fully used: gate-1125 resumed 14:27 (PGO mana_clean batch, 21 cores); lane: g803 attribution arms (attr.json, before/after) + maze-holdup cut2 slice; beam-adopt agent building in wip/beam-staged. Baldur ab2 DONE, agent on build 3. g803 identity arms NOT byte-identical: agent attributing to eot_seen->Visit / domin archive side effects in the skipped fans. maze-holdup at 273K, told to hand off after cut2. Push queue empty; nothing ready to land yet (batch waits on Baldur, hold-up, g803, beam-adopt).
+
 **14:15 UTC 11-25:** Beam (wip/beam-staged b584c7a16, report logs/beam-staged/report.md). 303,000-game pooled A/B, fresh seeds.
 - Fleet-wide rule is OUT: a W3 beam on the other 10 d5 decks nets +20 play / +12 2HG at cpu x1.67 (Hinata x1.89, Vampires x2.81).
 - New staged form SG50 (k-th extra plan admitted while Used < 0.5^k x Limit) is strictly better than today on CG/AL/DS at the same cost: net -34 play / -16 2HG, units x1.00 / x0.98. All 32 slower games recover at d8 b0.
