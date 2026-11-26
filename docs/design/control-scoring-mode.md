@@ -701,6 +701,41 @@ Per-game cost of the 63 suite decks at their most expensive regression shape: qu
 built from the cheapest quartile (Breaching, White Knights, Slivers, Burn, Kithkin, Dragons, Critter, Auras,
 Soldiers, Stompy, Angels, ... all <= ~200 ms at d3 b10) adds about 0.1-0.2 s per replayed game.
 
+### 7.5 The score is CONSULTED from a precomputed mapping, never replayed per game (USER 2026-11-26)
+
+USER, verbatim: "To be clear, I don't want to redo the gauntlet every playthrough. That seems like a disaster
+because it costs likely as much as 1v1 if not more. Instead I want to build some sort of mapping to decide the
+value that we can consult. There are more and less complex mappings. The most complex would state all of the
+control spells played and on which turns and play that out through the gauntlet. Less complex, but likely less
+accurate would make the value equal to a combination of individual values of the spells cast."
+
+This supersedes any reading of designs A/C as a per-game replay. The gauntlet is played ONLY to build the mapping.
+Scoring a control game (and every search node) is a lookup. Why: one game against every one of the 63 gauntlet
+decks costs about 148 core-s at the suite's play settings (sum of `cost_per_game_ms` in `test/suite_cost.json`;
+mean 2.4 s, median 0.7 s per deck), so a stable average (~50 games per deck) is about 2 core-hours per evaluated
+control sequence.
+
+The mapping spectrum, most to least exact:
+1. **Full joint table.** Key = the whole sequence of control effects with their turns (and targets as chosen by
+   the Q3 rule). Value = per-gauntlet-deck delays, measured by playing the sequence through the gauntlet. Exact,
+   including stacking, but each new key costs ~2 core-hours, and the key space grows combinatorially. Usable as a
+   CACHE for the sequences a deck actually produces most often. It is also the ground truth the cheaper mappings
+   are validated against.
+2. **Learned joint model** (value-leaf style). Features = the effect sequence (types, turns, counts) plus a coarse
+   opponent state per gauntlet deck. Trained offline on a sampled set of full-joint measurements. O(1) to consult;
+   accuracy is measured against held-out full-joint keys.
+3. **Individual values plus interaction terms.** A per-(effect type, turn) single-effect table, plus measured
+   corrections for the pairs the probe shows are far from additive: repeated land destruction (increasing),
+   repeated same-turn counters (diminishing), removal after targets run out.
+4. **Pure combination of individual values.** Sum (or another fixed combination) of the per-(effect, turn)
+   singles. Cheapest to build (the stage-1 table, ~2.5 core-hours on the probe's cheap decks), and wrong exactly
+   where section 8 measured non-additivity (+39% for paired land destruction; -0.38 rounds for a same-turn second
+   counter).
+
+Recommended route: build 4 first (it is the stage-1 table and gives the baseline), measure its error against a
+few hundred full-joint keys (1), and then add 3 or 2 only as far as that error demands. Every level records the
+gauntlet it was built on, so a changed gauntlet triggers a rebuild of the mapping rather than of any game.
+
 ## 8. Prototype probe: one effect vs the same effect twice and three times
 
 **The hook (branch `control-mode`, commit in section 10).** `src/core/ControlInject.h` + `GameEngine.cpp` +
