@@ -824,6 +824,78 @@ zeroed, so `solve_left` went negative and even a failed walk won -- SelesnyaLife
 the per-cast payer tapped an Elf the solve kept for the swing). The branch now restores the solve's pool and never
 declines on a failed walk; both games are T5 and digest-identical to the lever-off arm.
 
+### #22 measurement: held-out paired A/B, then the lever deletion
+
+Binary 366e96d52 (all four levers still present), levers OFF vs ON as per-job flags, seeds 9800001+off, `game_index`
+= off, ONE pooled batch of 41,200 games (`build/scratch/elves-mana/ab2/`, report `logs/elves/ab2_report.txt`; net =
+on - off in turns, a loss counted as turn 11). All 41,200 games won in both arms. Every deck is net <= 0.
+
+| deck | shape | games | net turns | faster / slower | ms/game off / on |
+|---|---|---|---|---|---|
+| Elves | d0 | 4000 | -75 (-0.0187/g) | 80 / 5 | ~0 / ~0 |
+| Elves | d5 b20 (play) | 1000 | -16 (-0.0160/g) | 16 / 0 | 907 / 929 |
+| Stompy Surprise | d0 | 5000 | -4 | 4 / 0 | 7 / 7 |
+| Stompy Surprise | d3 b10 | 400 | 0 | 0 / 0 | 220 / 226 |
+| Stompy Surprise | d6 b20 (play) | 2000 | 0 | 0 / 0 | 186 / 186 |
+| Stompy Surprise | 2HG d6 b20 | 400 | 0 | 0 / 0 | 404 / 409 |
+| SelesnyaLifegain | d0 | 5000 | -2 | 2 / 0 | 7 / 7 |
+| SelesnyaLifegain | d3 b10 | 400 | -1 | 1 / 0 | 293 / 307 |
+| SelesnyaLifegain | d6 b20 (play) | 2000 | -2 | 2 / 0 | 219 / 232 |
+| SelesnyaLifegain | 2HG d6 b20 | 400 | 0 | 0 / 0 | 395 / 421 |
+
+The levers were then deleted (2901347de). Identity check: the 3,900 ON-arm jobs (d0 x1000 and play depth x300 per
+deck) re-run on the post-deletion binary, digest for digest against the A/B's ON arm: **3900 / 3900 identical**. (The A/B
+binary already carried 366e96d52, so that fix moves nothing between the two; its own two games are the gi496 / gi980
+pair above.)
+
+Unit suite on the post-deletion binary: default 3972 / 3972 pass. The touched files (`test_elves`, `test_stompy_order`)
+were also run under `MTG_UNPRUNED=1` (36 / 36 pass) and `MTG_HUMAN_PLAY=1` (32 / 36). The four HUMAN_PLAY failures
+(Immaculate Magistrate's target, the two Leaf-Crowned Visionary pay-pin tests, and the new 22c Marwyn test) are all
+test assumptions that do not hold in human play. The Visionary pay pin (`mihail_pay_choice`) and the TapTargetPump
+target are enumerated only `if (!HumanPlayActive())`, because the human answers those at the trigger. A test that
+looks for a plan with `Paid(0)` therefore finds none. This is not a defect.
+
+### The five Elves d0 slower games: all five are 22a, and the mechanism is the d0 policy's ranking
+
+Elves d0 gi 1424 (5 -> 6), 3087 (4 -> 5), 3558 (4 -> 5), 3801 (5 -> 6), 3931 (4 -> 5), seed 9800001+gi. All five
+recover at d8 b0 (on == off: 5, 4, 4, 4, 4) and at the play shape d5 b20 (5, 4, 4, 4, 4). Per-lever isolation on
+the A/B binary (each lever alone on, each lever alone off; `build/scratch/elves-mana/d0iso/`): **every slower game
+is `MTG_HASTE_SCALED_YIELD` (22a) alone**. The other three levers are digest-inert on all five. Read with
+`MTG_SOLVE_PROJ_TRACE=<turn>` (every subset the greedy `Solve` scores, with its eval and projection):
+
+- **The common cause.** 22a credits a hasted scaled dork (Priest of Titania, Elvish Archdruid, Marwyn under
+  Concordant Crossroads) with its real entry yield, so a larger cast subset becomes payable. Each of those subsets
+  is legal and is priced correctly. The loss comes from how the d0 greedy (`SolveUncachedBody`) ranks them. A
+  non-lethal subset scores the SUM of its per-card `eval`, with ties going to the smallest mask. That sum has no
+  term for the value of holding a scaling sink (Genesis Wave's X, Joraga Warcaller's multikicker), so one more
+  card cast now outranks the same sink scaled up next turn. The USER's scaling-sink rule is enforced as a
+  PLAN-LIST restriction (`ElvesProvider::PlanListAdmitAt`, applied by `ApplyProviderPlanListFilter` to the
+  searched enumerations only). The greedy subset walk never consults it. That is why all five recover the moment
+  anything is searched.
+- **3087 (T3).** Supply 6 (off: 5) makes {Priest, Genesis Wave X=1} payable at eval 800. It ties {Priest,
+  Allosaurus Shepherd} at 800 and wins the smallest-mask tiebreak. The Wave reveals one card (a Joraga Warcaller).
+  Off: Priest + Shepherd T3, then Genesis Wave X=7 T4, 34 damage, win T4.
+- **3801 (T3).** Supply 6 (off: 5) makes {Priest, Genesis Wave X=1} (800) beat {Priest} (400). Off: Genesis Wave
+  X=4 T4, win T5. On: the Wave is gone at X=1 and the deck wins T6.
+- **1424 (T4).** Marwyn's hasted yield lifts supply to 7 (off: 6), so {Marwyn, Genesis Wave X=1} (600 + 100 = 700)
+  beats {Marwyn} (600). Marwyn and Elvish Mystic tap for the Wave instead of attacking: 4 damage, where the off arm
+  dealt 8 (opp 15 -> 7, then lethal T5). Here Wave's eval does scale with X (100 per X), but X=1 still adds a
+  positive 100 with nothing to offset it.
+- **3931 (T3).** Supply 6 (off: 4) makes {Leaf-Crowned Visionary, Priest, Joraga Warcaller UNKICKED} payable at
+  1200. Off: the best payable subset is {Visionary, Priest} at 800, and Warcaller is cast T4 with three kicks
+  (14 damage, lethal). The multikicker count is priced at +1 eval per kick (Warcaller e400 / e401 / ...), so the
+  greedy spends the sink at zero kicks one turn early.
+- **3558 (T4).** Supply 10 (off: 8) makes {Immaculate Magistrate, Clancaller, Archdruid, Joraga Warcaller} payable
+  at 3000. It outranks the off arm's pick {Clancaller, Archdruid, Visionary, Warcaller} (2700), which actually dealt
+  18 to an opponent at 18, i.e. lethal. The greedy's this-turn projection reads that subset at proj_atk 9 (supply-8
+  version), so `wins` stays false and the sum-of-eval rank decides. It prefers the 4-mana Magistrate (e900, its
+  counters ability unused this turn) to the Visionary lord. One fewer lord means 12 damage and a T5 win.
+
+So 22a is a correct payability fix. These five games show two gaps in the d0 POLICY (the permitted greedy: the
+depth-0 runner and the playout past the horizon), not defects in the search. (1) The additive eval rank puts no
+price on spending a scaling sink at minimum scale, and the scaling-sink plan-list rule does not reach the greedy
+walk. (2) For 3558, the lethal projection under-reads an Elf lord stack. Neither was tuned here.
+
 ## #23 -- a continuation's MULTIKICK / SQUAD count was dropped from its breakpoint record (found + fixed 2026-11-26)
 
 Exposed by #22d. Elves fd sweep (seeds 7001+off, gi off, d5 b20) seed 7161 gi160: `[fd-diverge] realized_win=4
