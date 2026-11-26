@@ -139,3 +139,14 @@ F. Fill the ledger Stage 2 + Viewer sections; commit on wip/elves-analysis.
 ## Build status at handoff
 The rebuild after the gate fix failed only with "Cannot allocate memory" reading SpellEffects.h from 9p (the
 known 9p order-4 alloc flake -- retry, do not cap jobs). A retry was started; see the log's last "EXIT" line.
+
+## Status at final stop (second commit)
+* Build GREEN (./build.sh Release; the 9p "Cannot allocate memory" flake needed several retries -- retry, never cap).
+* Unit tests: 3948/3948 pass (build/Release/mtg-test). Fixes in this commit: Keyword::Multikicker / Keyword::Squad
+  inert tags (Card.h + KeywordFromString) -- KeywordFromString THROWS on an unmapped Scryfall keyword; the Pirates
+  routing table (test/unit/test_pirates_provider.cpp) now pins {"Elves", "SelesnyaLifegain"} = the CURRENT
+  routing. Elves routes to SelesnyaLifegainProvider today -> the USER ruling 2 says derive an ElvesProvider; update
+  that table row when it exists.
+* Taunting Elf bracket note rewritten as USER-APPROVED (quote included).
+* NO NEW UNIT TESTS for the Elves mechanics yet (item C), NO smoke run yet (item E), Shepherd not wired (item B),
+  ElvesProvider scaling-sink restriction not started (USER ruling 2).
