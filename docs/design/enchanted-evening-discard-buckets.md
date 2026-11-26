@@ -64,8 +64,9 @@ hand has room for the lower buckets. Buckets in KEEP priority, highest first:
 | 8 | DEAD | copies beyond the quotas; tutors that fill no slot (Idyllic before Grove) | 0 |
 
 **Shed order, most expendable first** (the reverse of the keep priority; within one bucket the overflow goes first):
-DEAD -> EXPLORATION (unless 3+ kept lands in hand) -> LOW (Oblivion Ring) -> BEATDOWN overflow -> lands beyond the MANA quota once Exploration's need is met (basics that fix no
-missing colour first, then the fetches) -> mana Auras beyond the quota -> a 2nd Presence -> ANSWER overflow (every
+DEAD -> EXPLORATION (unless 3+ kept lands in hand) -> LOW (Oblivion Ring) -> lands beyond the MANA quota (basics that fix no missing colour first, then the fetches) ->
+mana Auras beyond the quota while no Enchantress's Presence is ours -> BEATDOWN overflow -> mana Auras beyond the quota
+while a Presence is ours (each draws a card off it) -> a 2nd Presence -> ANSWER overflow (every
 Force of Vigor while a Verse is kept, then extra Verses) -> DRAW filling no slot -> ANSWER -> EXPLORATION (with 3+ kept lands) -> MANA within the quota (a
 Presence filling a MANA slot sheds just before the real mana card would) -> LOCK (a Presence or tutor filling a
 LOCK slot sheds just before the real piece would) (Parallax Wave, then Opalescence, then Enchanted Evening
@@ -100,7 +101,10 @@ are shed in step 2 (orchestrator default; they are also not green, so they are n
 
 ## Open points for the USER
 
-1. SETTLED (USER 2026-11-26): Exploration's place, and the BEATDOWN extras shed early: *"Extra attackers can be
+1. SETTLED (USER 2026-11-26): Exploration's place, and the BEATDOWN extras. *"Extra attackers can be prioritized over
+   extra lands and maybe extra mana auras, though the latter is debatable because those can draw cards with
+   Enchantresses's Presence."* -> drafted: kept over extra lands always; over extra mana Auras only while no Presence
+   is ours. Earlier: *"Extra attackers can be
    discarded early if needed, I think."*
 2. LOCKED: spare EE / Opalescence are drafted as dead (the lock only ends by our own choice). Under the lock FoV
    (not Verse) is the kept answer, because Verse needs mana and FoV can be pitched.
