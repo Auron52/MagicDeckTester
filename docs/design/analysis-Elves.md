@@ -323,3 +323,30 @@ sweep 0; smoke) -> record `## Claude-play sweep` (flags: 0 unresolved once fixed
 `--deck=elves,elves2hg`, accept same filter, `test/check_gt_logs.py`, commit rows+GT+suite_cost -> also accept the
 smoke/regression keys of other decks the fixes moved (held-out A/B tables from the agents) -> 5b depth sweep, 5c2
 leaf_tiebreak_check, scaling-rule held-out A/B, discard bucket draft, Stage 6 report -> push_queue land, CI watch.
+
+## Coordinator checkpoint 4 (2026-11-26 ~12:00 UTC, pre-compaction) -- RESUME HERE
+
+Uncommitted in this worktree still: test/regression_cases.sh (22 elves rows, all three tiers) and test/suite_cost.json
+(Elves 0.34x Hinata, PASS). Commit them only with the accepted GT.
+
+Fix branches (all worktrees under .claude/worktrees/; none pushed to the shared branch):
+
+| branch | worktree | state |
+|---|---|---|
+| wip/elves-fd | agent-a8914a64a6ecea402 | DONE. bac7df0a2 (fix, reworded 4fc09f9b3) + 7274bbc1e (lockstep #20). Units 3965/3965; Elves fd sweep 200g d5 b20: 0 fd-diverge (pre-fix 1, s7036); smoke 243/243 unchanged. |
+| wip/elves-contpin | elves-contpin | IN PROGRESS (2nd agent). Based 7274bbc1e. WIP 8c0f031b2 = (1) ContPins Visionary pay-pin (fails-before confirmed), (2) human-play guards for 2 old test_elves failures, (3) labels + validate_line act=. Remaining: units 3 modes, fd sweep both bins, smoke, per-deck A/B, lockstep #21, 3-way commit split. Handoff logs/elves/contpin-handoff.md. |
+| wip/elves-wavebp | agent-a0234af8f175346b7 | IN PROGRESS (2nd agent). WIP 22bdb2433 = site-10 re-solve on battlefield puts; escape hatch MTG_BP_PUT_BATTLEFIELD (to be DELETED after A/B). Repro s9500006: T4 at d5 b200/d5 b0/d3 b0 (hatch off: T5). Remaining: units, fd, smoke, hatch-faithfulness smoke, A/B (Landfall, Selesnya cost), delete hatch, restore .claude/settings.local.json. Handoff logs/elves/wavebp-handoff.md. |
+| wip/elves-tapt | agent-acfa1e28af7026501 | IN PROGRESS (2nd agent). 2822dd408 = Magistrate same-plan hand targets + provider hook (Merfolk/Landfall prunes). fd 0/0 both bins; Elves 200g digest identical; held-out A/B: no win-turn change any deck (Elves digest moved, Merfolk/Maze identical); 0 slower. Remaining: units. Open: Nylea same hole; land-target same-plan. Handoff logs/elves/tapt-handoff.md. |
+| wip/elves-mana | agent-afb472d868144e4a1 | IN PROGRESS (2nd agent; 1st reached 534K). 1ef0bb101, eb79f7109, b1ba35a38 = 5 mana defects + squad/multikick count dropped in BP records (lockstep, renumber to #22), each behind default-ON lever. Units default 3971/3971. Smoke (no accept): 236/7 FAIL, all Stompy + Selesnya v2; searched slower 0; Selesnya d0 slower gi496, gi980 (5->6) need d8 b0. Remaining: UNPRUNED/HUMAN_PLAY units, A/B Elves/Stompy/Selesnya, Cavern side paths (rules bug), delete levers, re-validate. Handoff logs/elves/mana-handoff.md. |
+
+Note: wip/elves-wavebp, -tapt, -mana are based on 4fc09f9b3 (pre-reword); cherry-pick their own commits only.
+Lockstep numbering: #20 fd, #21 contpin, #22 mana (tell the merge).
+
+Deferred, not assigned: Mihail pay variants not emitted for continuation plans (Merfolk Turns completeness gap);
+Saproling Migration kicked/unkicked share a summary (kept: references contain it); Nylea same-plan target hole.
+
+Next, unchanged from checkpoint 3: once all four in-progress branches report -> cherry-pick fd, contpin, wavebp,
+tapt, mana onto wip/elves-analysis (resolve conflicts; rebuild; units 3 modes; Elves fd sweep 0; smoke) -> record
+`## Claude-play sweep` -> tiers `--deck=elves,elves2hg` + accept + check_gt_logs, commit rows+GT+suite_cost -> accept
+other decks' moved keys per the agents' A/B tables -> 5b depth sweep, 5c2 leaf_tiebreak_check, scaling-rule A/B,
+discard bucket draft, Stage 6 report -> push_queue land, CI watch --interval 60.
