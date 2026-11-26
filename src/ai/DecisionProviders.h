@@ -3977,6 +3977,11 @@ public:
     bool PlanListFilterLive(const GameState& s) const override;
     void PlanListAdmitAt(const GameState& s, bool is_pre_combat, const std::vector<PlanView>& plans,
                          std::vector<char>& admit) const override;
+    // The scaling rule groups plans by everything but the counts, and every sub-decision axis fans the count
+    // variants of one line identically (an axis reads the casts, the board and the hand, never a kick count or
+    // Wave X), so the rule's verdict on an axis variant is its verdict on the base: apply it before the fan too.
+    // A memory bound (see the base hook); play-neutral by that argument and measured digest-identical.
+    bool PlanListFilterBeforeAxes(const GameState&) const override { return true; }
     // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h): Genesis Wave's put subset. THIS DECK'S POLICY IS
     // "PUT EVERY LEGAL REVEAL", a SOUND DOMINANCE FOLD for this pool, not a judgement (2026-11-26, the coordinator):
     // an unpicked reveal is MILLED, and every permanent card in the Elves list is weakly better on the battlefield --

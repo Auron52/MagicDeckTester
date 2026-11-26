@@ -5574,6 +5574,16 @@ public:
     // in that X stay distinct (TurnSolver.cpp t_sig_wave_x). Widening only (lossless). Default false: the signature is
     // byte-identical and the dedup keeps the first-enumerated X per cast set. ElvesProvider: true (it offers every X).
     virtual bool PlanSignatureKeysWaveX(const GameState&) const { return false; }
+
+    // PlanListFilterBeforeAxes -- ALSO apply the plan-list restriction above (PlanListFilterLive / PlanListAdmitAt)
+    // to the BASE list, after the breakpoint variants and before the sub-decision axes fan it out (TurnSolver.cpp
+    // PreAxesProviderPlanListFilter). The restriction still runs at the end as before. A MEMORY bound, not a new
+    // prune: it is sound only for a restriction whose verdict on an axis variant equals its verdict on the variant's
+    // base -- i.e. one the axes commute with, so removing a base before the fan removes exactly the variants the end
+    // filter would remove after it. Without it the axes materialise every variant of plans the end filter then
+    // drops (Elves 2026-11-26: a 240,928-plan continuation list fanned to 1.66M plans, ~12 GB in one game, before
+    // the scaling rule kept a few thousand). Default false: byte-identical. ElvesProvider: true.
+    virtual bool PlanListFilterBeforeAxes(const GameState&) const { return false; }
 };
 
 // ---------------------------------------------------------------------------------------------------

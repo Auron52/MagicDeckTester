@@ -75484,7 +75484,10 @@ int ElvesHoldBackAttackers(const GameState& s, bool is_pre_combat)
 void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
                        const std::vector<DecisionProvider::PlanView>& plans, std::vector<char>& admit)
 {
-    struct Row { std::size_t i; std::string sink; int count; int unit; TurnSolver::Plan canon; };
+    // A row holds no copy of its plan: the blanked copy ("canon") is built on demand, and only each CLASS's first
+    // member keeps one. (It used to be one full Plan copy per row -- on a 240,928-plan Elves continuation list that
+    // doubled the enumeration's peak, ~1.2 GB; elves-mem 2026-11-26.)
+    struct Row { std::size_t i; std::string sink; int count; int unit; };
     std::vector<Row> rows;
     long long n_split = 0, n_band = 0;
     struct Flush
@@ -75515,20 +75518,24 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         r.sink  = (*plans[i].actions)[static_cast<std::size_t>(at)].card_name.str();
         r.count = one.count;
         r.unit  = one.unit;
-        r.canon = *static_cast<const TurnSolver::Plan*>(plans[i].plan);
-        for (Action& a : r.canon.actions) { if (ElvesSinkOf(a).count >= 0) { ElvesBlankSink(a); } }
-        r.canon.value          = 0;
-        r.canon.wins_this_turn = false;
-        r.canon.land_tie_key   = -1;
+        rows.push_back(std::move(r));
+    }
+    if (rows.empty()) { return; }
+    // The blanked copy of row r's plan: every sink's count, the cost/eval it prices and the plan value blanked.
+    auto canon_of = [&](std::size_t r, TurnSolver::Plan& out)
+    {
+        out = *static_cast<const TurnSolver::Plan*>(plans[rows[r].i].plan);
+        for (Action& a : out.actions) { if (ElvesSinkOf(a).count >= 0) { ElvesBlankSink(a); } }
+        out.value          = 0;
+        out.wins_this_turn = false;
+        out.land_tie_key   = -1;
         // A breakpoint VARIANT (bp_choice / bp_at set) carries the INDEX of its base plan in the list (bp_base),
         // which differs between the X=5 and X=3 copies of one Wave line, so without this blank every variant was
         // a class of its own and the band let the variants of a pruned count through (the Wave's site-10 put
         // half made its plans breakpoint-marked, 2026-11-26). Blanked, variant (k, at) of each count groups with
         // the same (k, at) of the others: the rule applies to a variant exactly as to its base.
-        r.canon.bp_base        = -1;
-        rows.push_back(std::move(r));
-    }
-    if (rows.empty()) { return; }
+        out.bp_base        = -1;
+    };
     const int k = ElvesHoldBackAttackers(s, is_pre_combat);
     // (2) Bucket by a cheap key (land + the sorted cast/activation names and slots + the sink), then split each
     // bucket into exact classes with Plan::operator== on the blanked copies.
@@ -75536,29 +75543,64 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
     for (std::size_t r = 0; r < rows.size(); ++r)
     {
         std::vector<std::string> parts;
-        for (const Action& a : rows[r].canon.actions)
+        // The key reads only fields the blank leaves alone (kind, name, hand slot, sac source) and the land, so it
+        // is read off the plan itself.
+        for (const Action& a : *plans[rows[r].i].actions)
         {
             parts.push_back(std::to_string(static_cast<int>(a.kind)) + ':' + a.card_name.str() + ':'
                             + std::to_string(a.hand_index) + ':' + std::to_string(a.sac_source_id));
         }
         std::sort(parts.begin(), parts.end());
-        std::string key = rows[r].canon.land_to_play + '\x1f' + rows[r].sink;
+        std::string key = std::string(static_cast<const TurnSolver::Plan*>(plans[rows[r].i].plan)->land_to_play)
+                        + '\x1f' + rows[r].sink;
         for (const std::string& p : parts) { key += '\x1e'; key += p; }
         buckets[key].push_back(r);
     }
     for (auto& [key, idx] : buckets)
     {
         (void)key;
+        // Exact classes under Plan::operator== on the blanked copies: each member joins the first class whose first
+        // member it equals, else opens a new one -- the same partition the old every-pair walk built. The walk is
+        // split first by a hash of fields the blank leaves alone and operator== compares (the ORDERED actions' kind,
+        // name, slots and targets; the breakpoint pin), so equal plans always share a sub-bucket and the compare
+        // stays inside it. (One bucket held 215k count variants on an Elves continuation list: the every-pair walk
+        // was 80% of a 30 s game; elves-mem 2026-11-26.)
         std::vector<int> cls(idx.size(), -1);
-        int ncls = 0;
+        std::unordered_map<std::uint64_t, std::vector<int>> sub;   // sub-hash -> the class ids opened under it
+        std::vector<TurnSolver::Plan> reps;
+        TurnSolver::Plan cur;
         for (std::size_t a = 0; a < idx.size(); ++a)
         {
-            if (cls[a] >= 0) { continue; }
-            cls[a] = ncls;
-            for (std::size_t b = a + 1; b < idx.size(); ++b)
-            { if (cls[b] < 0 && rows[idx[b]].canon == rows[idx[a]].canon) { cls[b] = ncls; } }
-            ++ncls;
+            const TurnSolver::Plan& op = *static_cast<const TurnSolver::Plan*>(plans[rows[idx[a]].i].plan);
+            std::uint64_t h = 1469598103934665603ull;
+            auto mix = [&h](std::uint64_t v) { h = (h ^ v) * 1099511628211ull; };
+            mix(static_cast<std::uint64_t>(op.bp_choice)); mix(static_cast<std::uint64_t>(op.bp_at));
+            mix(op.actions.size());
+            for (const Action& x : op.actions)
+            {
+                mix(static_cast<std::uint64_t>(x.kind));
+                mix(reinterpret_cast<std::uintptr_t>(x.card_name.c_str()));
+                mix(static_cast<std::uint64_t>(x.hand_index));
+                mix(static_cast<std::uint64_t>(x.sac_source_id));
+                mix(static_cast<std::uint64_t>(x.sac_victim_id));
+                mix(static_cast<std::uint64_t>(x.enchant_target));
+                mix(static_cast<std::uint64_t>(x.rec_pump_target));
+                mix(static_cast<std::uint64_t>(x.attach_equip_id));
+                mix(static_cast<std::uint64_t>(x.player_target));
+                mix(static_cast<std::uint64_t>(x.ability_mode));
+            }
+            canon_of(idx[a], cur);
+            std::vector<int>& opened = sub[h];
+            for (int c : opened)
+            { if (reps[static_cast<std::size_t>(c)] == cur) { cls[a] = c; break; } }
+            if (cls[a] < 0)
+            {
+                cls[a] = static_cast<int>(reps.size());
+                opened.push_back(cls[a]);
+                reps.push_back(cur);
+            }
         }
+        const int ncls = static_cast<int>(reps.size());
         std::vector<int> top(static_cast<std::size_t>(ncls), 0);
         for (std::size_t a = 0; a < idx.size(); ++a)
         { top[static_cast<std::size_t>(cls[a])] = std::max(top[static_cast<std::size_t>(cls[a])], rows[idx[a]].count); }

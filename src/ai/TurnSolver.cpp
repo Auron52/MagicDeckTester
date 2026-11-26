@@ -108805,6 +108805,18 @@ static void ApplyProviderPlanListFilter(const GameState& state, bool is_pre_comb
     all.resize(w);
 }
 
+// The same restriction on the BASE list, before the sub-decision axes fan it (DecisionProvider::
+// PlanListFilterBeforeAxes; ElvesProvider). The end-of-enumeration call above still runs. Placed AFTER
+// AppendBreakpointVariants on every host, so the breakpoint fan's base cap (MTG_BP_MAXBASE, list order) sees the
+// list it always saw. A memory bound: the axes no longer materialise variants of plans the end filter removes.
+static void PreAxesProviderPlanListFilter(const GameState& state, bool is_pre_combat,
+                                          std::vector<TurnSolver::Plan>& all, PbLazyLayout* pb_lazy)
+{
+    if (all.empty() || HumanPlayActive() || DecisionUnpruned()) { return; }
+    if (!ResolveProvider(state).PlanListFilterBeforeAxes(state)) { return; }
+    ApplyProviderPlanListFilter(state, is_pre_combat, all, pb_lazy);
+}
+
 static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state, PbLazyLayout* pb_lazy = nullptr)
 {
     std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, false);
@@ -108817,6 +108829,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     // bp_choice >= 0, which is what keeps the two additive rather than a cross product).
     // AppendBreakpointVariants self-gates on g_bp_enum_depth != 0.
     AppendBreakpointVariants(state, plans);
+    PreAxesProviderPlanListFilter(state, /*is_pre_combat=*/false, plans, pb_lazy);
     AppendSubdecisionAxes(state, /*is_pre_combat=*/false, plans, /*idle_pass=*/false, pb_lazy);   // during-cast axes only inside a derivation
     AppendSoulbondDeclineVariants(state, plans, pb_lazy);
     AppendMiraclePlanVariants(state, plans, pb_lazy);
@@ -109925,6 +109938,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             // During-cast axes only inside a derivation; then the soulbond decline twins (the vial-order
             // axis runs on the no-drop path too, m1 AND m2: a Vial deck spends most of its turns with no
             // land left to play, which is exactly when the puts and casts pile up).
+            PreAxesProviderPlanListFilter(state, is_pre_combat, plans, pb_lazy);
             const std::size_t n_axes = PbAxesAndTwins(state, is_pre_combat, plans, pb_lazy);
             g_nodrop_enum[is_pre_combat ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
             g_nodrop_axis_vars[is_pre_combat ? 1 : 0].fetch_add(
@@ -111543,6 +111557,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     if (EnvOn("MTG_AXES_MEM_TRACE") && all.size() >= 10000)
     { std::fprintf(stderr, "[axes-mem] turn=%d stage=post-bp plans=%zu pre-bp=%lld rss_mb=%lld\n",
                    state.turn_number, all.size(), pre_axes, membudget::CurrentRssBytes() / (1024 * 1024)); }
+    PreAxesProviderPlanListFilter(state, is_pre_combat, all, pb_lazy);
     PbAxesAndTwins(state, is_pre_combat, all, pb_lazy);   // the axes, then the soulbond decline twins
     if (axes_stats)
     {
