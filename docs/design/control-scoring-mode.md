@@ -15,8 +15,9 @@ deliverable. Every number below is from the suite's ground truth or from that pr
   turn-5 floor is derived rather than imposed, and "somewhere between Turn 3 and 4" for an early Parallax Wave
   followed by Opalescence falls out of it (section 4.3a).
 * **Recommendation** (section 7): score by MEASUREMENT (sequence replay D, then co-simulation C), search with a
-  MODEL (a delay table A as a floored prior, then a learned state-aware model E), credited to the search as
-  banked free turns, reusing the free-turn machinery that came from Worldfire. Stage 1 (the injection harness
+  MODEL (a delay table A as a prior, then a learned state-aware model E), credited to the search as a
+  fractional PARTIAL SCORE PER GAUNTLET DECK, with a bound that cuts a line only when it can no longer beat the
+  best verified line (USER 2026-11-26, Q4; section 4.5). Stage 1 (the injection harness
   and delay table) and stage 2 (the control score as a report) change no search code.
 * **The probe** (section 8; 5 suite decks x 26 effect schedules x 200 paired games, 45.8 core-minutes):
   single effects cost the opponent 0.24-1.76 rounds on average over the five decks, and from 0 to 3.9 rounds
@@ -198,7 +199,9 @@ effect on round t can at best freeze the count at t. That is the USER's invarian
 construction.
 What it lacks: a free turn is earned by the opponent's actual state, so it is all-or-nothing per opponent
 turn. A control mode needs credits from an estimated delay (fractional, averaged over a gauntlet), and credits
-banked by one effect that are consumed later.
+banked by one effect that are consumed later. (USER 2026-11-26, Q4: the control mode does NOT turn delay into
+banked integer free turns (kept only as the fallback if partial scores prove prohibitively expensive). It carries fractional per-gauntlet-deck partial scores instead; section 4.5. The
+free-turn rule itself stays as it is in goldfish.)
 
 ### 3.4 Enchanted Evening's virtual opponent board (prior art only; being deleted)
 
@@ -418,21 +421,65 @@ kind of thing as the turn-to-win it compares now:
 * `W` comes from the existing machinery: a verified win inside the window, or the value leaf / rollout beyond it.
 * `D_k` must come from a model that costs O(1) per node (section 5.5). A replay cannot be run at a node.
 
-**Integer form for the search: credited delay is banked free turns.** The existing search is built around
-integer win turns in rounds (window checks, win-turn prunes, folds whose soundness proofs assume the reward is a
-win turn). Rather than give TurnSolver a fractional objective, the first build credits delay the way the
-free-turn rule already does: an effect on round t raises the banked credit by its modelled delay increment, and whole free turns
-(the floor of the cumulative credit, Q4) are consumed one per following round. The round counter does not advance on a consumed free turn. This gives exactly
-`max(T, W - D)` for a single effect, because banked turns cannot be consumed before round T, and it keeps
-every window check and every free-turn depth rule (USER 2026-11-22: no ply cost) as they are. A lock banks
-"until it breaks". The exact fractional E is computed for the REPORT, from the measured delays (section 5.4).
-In control mode the free-turn rule's own lock test is replaced by this credit, so a lock is never credited
-twice.
+**Partial scores, carried per gauntlet deck (USER 2026-11-26, Q4).** The first draft turned the modelled delay
+into banked integer free turns, so the search could keep its integer win-turn machinery. The USER chose partial scores instead, keeping banking as the fallback:
+"This mode might have to be more complex and expensive in that you cannot stop immediately on finding a win.
+However, there are still limits to what we need to search, since only hands with a high control score that
+could outperform the known win need to be carried forward." / "We should be able to carry partial scores,
+because you may win at different turns vs different decks. Or rather you may delay deck 1 more than deck 2. The
+scores should be partial to reflect that." So the search objective is the fractional E itself, and a line carries
+one partial score per gauntlet deck, not one scalar credit.
 
-**Soundness work this implies:** every TurnSolver prune or fold whose proof says "this line cannot win by
-round X, so cut it" must be re-checked. Under credits, a line that does not kill can still score better.
-This is the largest engine cost of stage 3 (section 7), and it is why the first milestones need no search
-change at all.
+* **What a line carries.** Its control effects so far, with rounds `T_1..T_m`, and from the mapping (section 7.5)
+  each gauntlet deck's prefix delays `D_1(g)..D_m(g)`. Together they define, per gauntlet deck g, the partial
+  score as a function of the line's eventual kill round W:
+
+      P_g(W) = min( W,  min over k = 1..m of  max(T_k, W - D_k(g)) )
+
+  `P_g` is non-decreasing in W, and `P_g(W) <= W`. A line that delays deck 1 by three rounds and deck 2 by none
+  has `P_1` well below `P_2`. That difference is the partial-ness the USER asked for, and averaging only at the
+  end keeps it. Section 4.4's rule (floor and min per pair, then average) applies: the mapping supplies delays
+  per gauntlet GAME (at least 20 per deck), and `P_g` is the mean over those games. A per-deck histogram over
+  (base kill round, delay) is an equivalent compact form if the per-game vector is too large to carry at a node.
+* **A finished line's score** is `E = mean over g of P_g(W)`, with W its verified kill round, or the leaf or
+  rollout estimate beyond the window.
+* **The bound.** A line that is now at round t can only add effects on rounds `>= t`. Each such effect adds a
+  term `max(T_k, ...) >= t` to the min, and its kill round satisfies `W >= t`. Since `P_g` is non-decreasing:
+
+      LB(line, t) = mean over g of P_g(t)
+
+  This is the score the line would get if it won right now. No continuation of the line can score below it.
+  The bound holds for any mapping values, including ones where a longer prefix delays less, because it uses only
+  `W >= t` and `T_k >= t` for future effects.
+* **The cut.** Let `E*` be the best score of a VERIFIED line so far: a win inside the window, scored with its
+  known effects. A line with `LB >= E*` is cut, and everything else is carried forward. This is the USER's
+  "only hands with a high control score that could outperform the known win need to be carried forward". Two
+  consequences:
+  * Goldfish's rule is the special case. A line with no effects has `LB = t`, so once a win at `W*` is
+    verified, every effect-free line at round `>= W*` is cut, exactly as now. The extra work in control mode is
+    only the lines whose effects have already pushed some gauntlet decks' partial scores below `E*`.
+  * A win found early does not end the search. A line that wins on round 6 is beaten by one that wins on round 7
+    but already locked most of the gauntlet on round 4, and the second line is still carried when the first is
+    found.
+* **Only a verified incumbent cuts.** A leaf or rollout estimate beyond the window may ORDER lines, but it never
+  sets `E*`. This is the completeness invariant (everything findable at large budget): a cut has to be sound
+  against the exact objective, never against an estimate.
+* **No integer banking, and no rounding, unless the cost forces it.** The 0.4 + 0.4 + 0.4 case is credited as
+  1.2 rounds (averaged per pair), not as one free turn after the third effect. The USER keeps the banked-free-turn
+  form as the FALLBACK: "At least, I think that makes the most sense. Your turn banking idea is an option if this
+  is prohibitively expensive." So stage 3 measures the cost of partial scores (units and wall per control game,
+  against the same deck's goldfish game) before committing to it. Falling back is the USER's call, made on those
+  numbers. The optimizer's-curse protection that flooring would have
+  given now comes from the measured report and the modelled-vs-measured gap flag (section 5.5).
+* **The free-turn rule in control mode.** The mapping's credit replaces the free-turn rule's own lock test, so a
+  lock is never credited twice. Its round-counter machinery is not used to carry control credit.
+
+**Soundness work this implies (now larger):** the search's objective becomes a fractional score that is not a
+win turn. Every TurnSolver prune or fold whose proof says "this line cannot win by round X, so cut it", every
+window check (`win_turn <= turn + depth - 1`) and every win-turn memo has to be restated against `LB` and `E*`
+for control-mode decks. Goldfish decks (no `control_score`) keep the current integer objective and stay
+byte-identical. This is the largest engine cost of stage 3 (section 7), and it is why the first milestones need
+no search change at all. The cost the USER accepts: no stop at the first win, bounded by the cut above.
 
 ### 4.6 Play and draw
 
@@ -563,7 +610,7 @@ the counter pause in the gauntlet's executor. No change to single-player rules.
 Two passes per control game, no lockstep:
 
 1. The control deck plays its normal goldfish game, with its search crediting effects through a delay model
-   (section 5.5) as banked free turns (section 4.5), and records its effect SCHEDULE: (round, effect, target
+   (section 5.5) as per-gauntlet-deck partial scores (section 4.5), and records its effect SCHEDULE: (round, effect, target
    policy or named card).
 2. The paired gauntlet game is replayed with that schedule injected. The pairing is the gauntlet deck that is
    ALREADY the passive opponent in the control game: `pool[seed % 50]`, same seed and shuffle. Every prefix
@@ -605,7 +652,8 @@ Train a small model offline, the way the value leaf is trained, on injection run
 * **Cost at a node:** O(1), like the value leaf (the repo's gradient-boosted `eval_model` format already exists).
 * **Risk:** the optimizer's curse. The search seeks out the model's over-estimates. Mitigations: measure, never
   model, the reported score (D's replay or C's co-simulation). Flag any deck whose modelled and measured E
-  differ by more than the bias floor. Retrain with on-policy schedules from the decks that showed the gap.
+  differ by more than the bias floor. Retrain with on-policy schedules from the decks that showed the gap. (The USER chose fractional partial
+  scores over the floored integer credit, Q4, so these measured checks are the protection, not rounding.)
 * **Is it worth it over the table?** Only where stacking matters. Section 8 says whether it does, and by how
   much.
 
@@ -645,7 +693,7 @@ high-volume mode if stated.
 ## 7. Recommendation and staged build plan
 
 **Recommended route: the objective of section 4, scored by MEASUREMENT (D, then C), searched with a MODEL (A,
-then E), integrated through the free-turn credit.** Concretely, smallest useful first:
+then E), integrated as fractional per-gauntlet-deck partial scores with the bound of section 4.5.** Concretely, smallest useful first:
 
 ### Stage 1: the injection harness as a feature (smallest milestone; no search change)
 
@@ -678,10 +726,10 @@ it shows how much a card swap moves it, before the search is taught anything.
 * **Limitation it will show:** the control deck plays as a goldfisher that does not value its control. Its
   schedule is whatever its kill-seeking search chose. That makes the stage-3 gap measurable.
 
-### Stage 3: the search credits control (model + banked free turns)
+### Stage 3: the search credits control (model + per-deck partial scores)
 
-The control deck's search optimises E: delay credited as banked free turns from the stage-1 table (A), then
-from the learned model (E). Reported E stays measured (stage 2's replay). The prune/fold soundness audit of
+The control deck's search optimises E: delay credited as per-gauntlet-deck partial scores from the mapping
+(section 7.5: the stage-1 table first, then the learned model), with the verified-incumbent cut of section 4.5. Reported E stays measured (stage 2's replay). The prune/fold soundness audit of
 section 4.5 is part of this stage.
 * **Validation:** every deck without `control_score` is byte-identical. Each control deck's measured E must
   improve over stage 2. The adoption bar for search changes still holds (net <= 0 per deck on held-out seeds;
@@ -844,7 +892,9 @@ land 0.84 / 0.76 / 0.60, removal 0.58 / 0.66 / 0.60, counter 0.82 / 0.56 / 0.41,
     discard 0.51 and 0.24. Removal and sweepers go the other way against slow-to-deploy decks.
 * **What it favours among the designs:**
   * **A (the additive table) is refuted as a scoring method** and is only a usable first search prior, which is
-    what section 7 already restricts it to. The flooring of Q4 limits the damage of its over-credits.
+    what section 7 already restricts it to. Its over-credits are caught by the measured report and the gap flag
+    (section 5.5). The flooring that would have limited them was the old Q4 default, which the USER replaced
+    with fractional partial scores.
   * **A+ (pair terms) would fit the two-copy numbers but not the three-copy ones**, and the interactions change
     sign by deck. The cell count is quadratic before triples.
   * **The interactions are carried by STATE**: how many lands the opponent already lacks, whether a creature or
@@ -914,6 +964,18 @@ free turns, which must be whole rounds. Default: bank the FLOOR of the cumulativ
 Reason: flooring never over-credits, which blunts the optimizer's curse (section 5.5). The cost is that a single
 small effect is invisible to the search until others join it. The alternative is a fractional objective in
 TurnSolver, which reopens the soundness proof of every win-turn prune.
+
+*USER answer (2026-11-26), verbatim:* "This mode might have to be more complex and expensive in that you cannot stop
+immediately on finding a win. However, there are still limits to what we need to search, since only hands with a
+high control score that could outperform the known win need to be carried forward." / "We should be able to carry
+partial scores, because you may win at different turns vs different decks." / "Or rather you may delay deck 1 more
+than deck 2. The scores should be partial to reflect that." / "At least, I think that makes the most sense. Your turn
+banking idea is an option if this is prohibitively expensive." -> Partial scores are the design, with no integer
+banking and no rounding. The floored banked-free-turn form stays as the fallback if stage 3 measures partial scores
+as prohibitively expensive (the USER decides, on the numbers). The search
+optimises the fractional E. Each line carries a partial score per gauntlet deck, `P_g(W)`, and is cut only when
+`LB = mean_g P_g(t)` (the score if it won on the current round) is no better than the best VERIFIED line's score.
+Full form in section 4.5.
 
 **Q5. What horizon and loss score does the control mode use?** Goldfish uses `max_turns 8`, with an unwon game
 scored 9. Control decks kill late, and delays push the gauntlet's kills past round 8. Default: `max_turns 12`,
