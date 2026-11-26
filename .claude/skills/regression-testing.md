@@ -318,6 +318,16 @@ seeing a red-looking baseline then finds the reasoning instead of re-deriving it
 > (`tr '\n' ' '`) and verify afterwards that every non-comment line still matches
 > `^<key>=<avg>(/<digest>)?$`.
 
+The overnight tier is a periodic checkpoint, so a shared branch may advance while its full batch
+runs. Preserve and audit the completed batch against the exact source commit it measured. Integrate
+the current shared branch, then promote the saved overnight results without replaying them; record
+the measured source commit in the acceptance note and commit message and run the ground-truth
+consistency gate. If the branch moves again before landing, rebase and re-promote the saved results
+when needed to resolve GT overlap. Name any later play changes that this checkpoint did not measure.
+They remain for the next periodic overnight run; remote movement alone does not justify discarding
+or repeating a completed full batch. Keep smoke and regression current through their normal
+per-change checks.
+
 **It has now happened TWICE to the overnight tier specifically, and there is a one-line check for it.**
 Every rebaseline in a busy window tends to be `--smoke` + regression, because those are the tiers an
 agent just ran; overnight then accumulates the entire window silently. Measured 2026-09-26: **six
