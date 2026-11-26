@@ -4,8 +4,8 @@
 //       always stands, never cut) into a search whose nesting was bounded only by TurnSeqCapped. Under a finite budget
 //       pass 0 is now armed at the proportional ceiling and, when it trips, re-run with free turns counted as plies.
 //   (2) THE FORCE OF VIGOR OWN-TARGET DOMINANCE FOLD (EnchantedEveningProvider::FovOwnTargetInert): our mana lands,
-//       mana Auras, Exploration and Enchantress's Presence are withdrawn as targets (both windows); Sterling Grove,
-//       Parallax Wave, Oblivion Ring, Enchanted Evening and Opalescence stay; a fetchland stays while a Calming Verse
+//       mana Auras on our own lands and Exploration are withdrawn as targets (both windows); Sterling Grove, Parallax
+//       Wave, Oblivion Ring, Enchanted Evening, Opalescence and Enchantress's Presence (a mandatory draw) stay; a fetchland stays while a Calming Verse
 //       is in our hand or library.
 #include <doctest/doctest.h>
 
@@ -116,16 +116,16 @@ TEST_CASE("EE lock step 8a: Force of Vigor own-target fold -- which of our perma
     RefreshTypeStatics(s);
     const EnchantedEveningProvider& prov = L8Prov();
     // No Calming Verse in our hand or library: the fetchland is folded too.
-    for (int n : { 101, 102, 103, 104, 105, 106, 107 })
+    for (int n : { 101, 102, 103, 104, 105, 106 })
     { INFO("folded " << n); CHECK(prov.FovOwnTargetInert(s, 0, L8Perm(s, n))); }
-    for (int n : { 51, 108, 109, 110 })
+    for (int n : { 51, 107, 108, 109, 110 })
     { INFO("kept " << n); CHECK_FALSE(prov.FovOwnTargetInert(s, 0, L8Perm(s, n))); }
     CHECK_FALSE(prov.FovOwnTargetInert(s, 0, L8Perm(s, 700001)));   // never an opponent permanent
     // The searched pins (both windows build them here): nothing folded appears, alone or in a pair; the kept own
     // targets and the opponent land do, and so does the opponent land paired with a kept own target.
     const std::vector<std::string> pins = DestroyUpToArtEnchSearchPins(s, 0, 2);
-    for (int n : { 101, 102, 103, 104, 105, 106, 107 }) { INFO("pin " << n); CHECK_FALSE(PinsMention(pins, n)); }
-    for (int n : { 51, 108, 109, 110, 700001 })       { INFO("pin " << n); CHECK(PinsMention(pins, n)); }
+    for (int n : { 101, 102, 103, 104, 105, 106 }) { INFO("pin " << n); CHECK_FALSE(PinsMention(pins, n)); }
+    for (int n : { 51, 107, 108, 109, 110, 700001 })       { INFO("pin " << n); CHECK(PinsMention(pins, n)); }
     CHECK(std::find(pins.begin(), pins.end(), DestroyUpToArtEnchPin({ 700001 })) != pins.end());
     CHECK(std::find(pins.begin(), pins.end(), DestroyUpToArtEnchPin({})) == pins.end());   // the empty set: withdrawn
 
@@ -138,6 +138,11 @@ TEST_CASE("EE lock step 8a: Force of Vigor own-target fold -- which of our perma
     GameState h = s;
     h.players[0].hand.push_back(L8Card("Calming Verse", 951));
     CHECK_FALSE(prov.FovOwnTargetInert(h, 0, L8Perm(h, 103)));
+    // Our Wild Growth on an OPPONENT's land feeds their mana: a downside, so it stays a target.
+    GameState o = s;
+    L8Put(o, "Wild Growth", 111);
+    o.battlefield.back().aura_attached_to = 700001;
+    CHECK_FALSE(prov.FovOwnTargetInert(o, 0, L8Perm(o, 111)));
 }
 
 TEST_CASE("EE lock step 8a: Sterling Grove stays a target (ruling 17: its shroud blocks the Wave loop)")

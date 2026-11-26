@@ -33079,11 +33079,6 @@ inline bool AnyEotFovCandidate(const GameState& s)
     return s.deck_has_eot_fov_pitch && EotFovHandIndex(s) >= 0;
 }
 struct EotFovOption { std::string pitch; std::string pin; };   // pitch "" = paid with mana
-inline bool EotFovOppOnly()   // TEMPORARY lever (per-job: heurarm EE_FOV_EOT_OPP_ONLY, so both arms pool in one batch)
-{
-    static const bool s_env = EnvOn("MTG_EE_FOV_EOT_OPP_ONLY");
-    return heurarm::Flag(heurarm::EE_FOV_EOT_OPP_ONLY, s_env);
-}
 // The FoV options on `t` (the end-step state after the entry's flips / puts), in menu order: target-pin major (the
 // provider's pick first), pitch class minor (hand order). Empty outside the opponent's end-step window, without a
 // FoV in hand, with no way to pay, or when the provider withdrew every target.
@@ -33116,21 +33111,6 @@ inline std::vector<EotFovOption> EotFovOptions(const GameState& t)
     }
     std::vector<std::string> pins
         = DestroyUpToArtEnchSearchPins(t, t.active_player_index, def->params.destroy_up_to_artifacts_enchantments);
-    // TEMPORARY A/B lever (lock step 7 measurement, NOT a shipped default; delete after the A/B): keep only the target
-    // sets with no permanent of ours. A LOSSY narrowing (an own target can matter), so a USER decision if wanted.
-    if (EotFovOppOnly())
-    {
-        pins.erase(std::remove_if(pins.begin(), pins.end(), [&](const std::string& pin) {
-            std::vector<int> nums;
-            (void)DestroyUpToArtEnchPinTargets(pin, nums);
-            for (int num : nums)
-            {
-                for (const Permanent& q : t.battlefield)
-                { if (q.card.m_number == num && q.controller_index == t.active_player_index) { return true; } }
-            }
-            return false;
-        }), pins.end());
-    }
     for (const std::string& pin : pins)
     {
         if (hard) { out.push_back(EotFovOption{ std::string(), pin }); continue; }
@@ -33183,14 +33163,13 @@ inline bool EotFovMayOffer(const GameState& s)
 {
     if (!AnyEotFovCandidate(s)) { return false; }
     const int me = s.active_player_index;
-    const bool opp_only = EotFovOppOnly();
-    bool target = s.deck_has_crossing_land_put && !opp_only;
+    bool target = s.deck_has_crossing_land_put;
     for (std::size_t i = 0; !target && i < s.battlefield.size(); ++i)
     {
         const Permanent& q = s.battlefield[i];
         // An own permanent the provider's dominance fold withdraws as a target (FovOwnTargetInert, lock step 8a)
         // gives the menu no option, so it does not make the crossing pending.
-        if (q.controller_index == me && (opp_only || ResolveProvider(s).FovOwnTargetInert(s, me, q))) { continue; }
+        if (q.controller_index == me && ResolveProvider(s).FovOwnTargetInert(s, me, q)) { continue; }
         target = q.card.HasType(CardType::Artifact) || q.card.IsEnchantment();
     }
     const bool two = opponentdeck::HasSecondHead(s);

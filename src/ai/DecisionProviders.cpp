@@ -39363,9 +39363,12 @@ bool EnchantedEveningProvider::TutorNeedsCandidate(const GameState&, int, const 
 //   * a FETCHLAND (no mana ability) only while no Calming Verse is in our hand or library: without a Verse nothing
 //     reads it as an untapped land, and cracking it is always at least as good. With a Verse live it is KEPT (an
 //     uncrackable untapped fetch is the one state where destroying it changes clause 2).
-//   * a MANA AURA (Wild Growth, Utopia Sprawl): an extra mana from its land, nothing else.
-//   * EXPLORATION (an extra land drop) and ENCHANTRESS'S PRESENCE (a draw per enchantment spell): upside only, and
-//     under Opalescence each is one more attacker.
+//   * a MANA AURA (Wild Growth, Utopia Sprawl) only while it enchants a land WE control (on an opponent's land its
+//     extra mana is theirs: a downside, so it stays a target).
+//   * EXPLORATION (an extra land drop, a "may"): upside only, and under Opalescence one more attacker.
+// ENCHANTRESS'S PRESENCE IS KEPT (step-8a review, 2026-11-26): its draw is MANDATORY, so on a short library every
+// enchantment spell we cast is a draw toward decking (CR 704.5b; the engine models it, player_lost_on_draw), and
+// destroying the Presence first is the one line that lets the lock piece be cast safely. Rare, but not dominated.
 // The USER's tutor prune (rulings 15 / 16) reads our mana and our copies of a piece; a state with MORE mana or a
 // Presence already out is the state that prune itself treats as needing no fetch, so it adds no line the kept
 // permanent lacks. KEPT (not proven dominated; each has a real reason to be destroyed or a downside for us):
@@ -39392,7 +39395,14 @@ bool EnchantedEveningProvider::FovOwnTargetInert(const GameState& s, int control
         for (const Card& c : pl.library) { if (verse(c)) { return false; } }
         return true;
     }
-    if (eeprune::IsManaAura(d) || eeprune::IsPresence(d)) { return true; }
+    if (eeprune::IsManaAura(d))
+    {
+        // Only on a land WE control: our Aura on an opponent's land feeds THEIR mana, a downside destroying removes.
+        for (const Permanent& h : s.battlefield)
+        { if (h.card.m_number == q.aura_attached_to) { return h.controller_index == controller && h.card.IsLand(); } }
+        return false;
+    }
+    if (eeprune::IsPresence(d)) { return false; }   // KEPT: its draw is mandatory (decking, CR 704.5b), see above
     // Exploration, recognised by its one param (any other effect on the card would be a reader to check).
     return d->params.static_extra_land_drops > 0 && !d->params.is_aura && !eeprune::IsGrove(d)
         && !eeprune::IsEE(d) && !eeprune::IsOpal(d) && !eeprune::IsWave(d)
