@@ -36,10 +36,8 @@ happened after it.
   the rest. Ten slower games are listed in the report with their seeds (seed = 9600001 + gi).
 
 ## Remaining, in order
-1. Base-binary unit subset: the base worktree `.claude/worktrees/wavebp-base` (detached at 4fc09f9b3) is being
-   built with `MTG_BUILD_JOBS=14`. The log is `build/scratch/elves-wavebp/buildbase_j14.log`, which gets an `rc=` line.
-   If it failed, rerun: `cd .claude/worktrees/wavebp-base; MTG_BUILD_JOBS=14 MTG_RSS_CAP_GB=20 flock
-   /workspaces/MagicDeckTester/build/heavy.lock ./build.sh`. Then `bash scripts/box_lane.sh --slots 2 -- bash
+1. Base-binary unit subset: the base worktree `.claude/worktrees/wavebp-base` (detached at 4fc09f9b3) is BUILT
+   (rc=0, MTG_BUILD_JOBS=14, log `build/scratch/elves-wavebp/buildbase_j14.log`). Then `bash scripts/box_lane.sh --slots 2 -- bash
    build/scratch/elves-wavebp/subset.sh base /workspaces/MagicDeckTester/.claude/worktrees/wavebp-base`. Diff the
    resulting `sub_base_*.log` failure names (`failnames.py`) against the new ones. There must be no new failures.
    (test_boars_fetch_rank failing under UNPRUNED is expected.) Run binaries as `build/Release/...` from inside the
