@@ -260,6 +260,10 @@ function testLinkedWorktreeRefusal() {
     git(base, 'init', '-q', '-b', 'main', prim);
     fs.mkdirSync(path.join(prim, 'tools', 'play'), { recursive: true });
     for (const f of ['server.js', 'refsafe.js']) fs.copyFileSync(path.join(ROOT, 'tools', 'play', f), path.join(prim, 'tools', 'play', f));
+    // server.js requires ../lib/deck_modes (the per-deck modes marker); without it the scratch server
+    // dies with MODULE_NOT_FOUND (exit 1) before the refusal under test can run.
+    fs.mkdirSync(path.join(prim, 'tools', 'lib'), { recursive: true });
+    fs.copyFileSync(path.join(ROOT, 'tools', 'lib', 'deck_modes.js'), path.join(prim, 'tools', 'lib', 'deck_modes.js'));
     git(prim, 'add', '-A'); git(prim, 'commit', '-q', '-m', 'x');
     const linked = path.join(base, 'linked');
     git(prim, 'worktree', 'add', '-q', '-b', 'lw', linked);
