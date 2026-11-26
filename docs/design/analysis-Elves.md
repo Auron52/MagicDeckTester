@@ -275,7 +275,7 @@ earlier in the same plan (completeness gap, recommend a general fix); the k=2 ho
 PROVISIONALs (ledger "Provider heuristics"); inherited SelesnyaLifegain judgement hooks incl. its discard buckets;
 the Wave-X dedup collapse still live for Landfall / SelesnyaLifegain (fixing it moves their play).
 
-## Coordinator checkpoint UPDATE (2026-11-26 ~07:05 UTC) -- RESUME HERE
+## Coordinator checkpoint UPDATE (2026-11-26 ~07:05 UTC; superseded below)
 
 * Wave put-all policy COMMITTED `948933d6c`; `provider_audit.py --check` no longer lists Elves (only the pre-existing
   Landfall / Selesnya flags remain). Unit `test_elves*` 7/7 in default / MTG_UNPRUNED=1 / MTG_HUMAN_PLAY=1.
@@ -293,3 +293,33 @@ the Wave-X dedup collapse still live for Landfall / SelesnyaLifegain (fixing it 
   (`build/scratch/elves-bs20/`). No GT accepted yet -- accept AFTER the fd fix lands.
 * Claude-play sweep RUNNING: 6 Opus players x 3 games, seeds 9500001..9500018 (seed only; --game-index does not vary
   a --claude-play game), benchmark d5 b200, binary at 948933d6c.
+
+## Coordinator checkpoint 3 (2026-11-26, pre-compaction) -- RESUME HERE
+
+State of `wip/elves-analysis` (this worktree): HEAD `5cdf60ff0`. UNCOMMITTED: `test/regression_cases.sh` (all Elves rows:
+smoke/regression/overnight entry set + elves2hg + backstop 30081 REGRESSION / 30381 OVERNIGHT, 20 games, d3+d5 b0) and
+`test/suite_cost.json` (cost gate: elves 2082.4 ms/game worst case elves2hg_regression_d5_b20, 0.34x Hinata 6196.7 -> PASS).
+Commit them WITH the accepted GT, after the fixes below are merged.
+
+Claude-play sweep DONE (6 Opus players x 3, seeds 9500001..9500018, binary 948933d6c, bench d5 b200): 18 games, Claude
+faster 1 (9500006), equal 17, slower 0; 0 rules/card-data violations. Full per-seed tally + repro CSVs:
+`logs/elves/sweep-tally.md`. Flags -> four fix agents (all branch from `4fc09f9b3`, separate worktrees under
+`.claude/worktrees/`, each will report a branch to cherry-pick; heavy work serialised on `build/heavy.lock`):
+1. `wip/elves-fd` (worktree `agent-a8914a64a6ecea402`): fd-diverge s7036 FIXED in 4fc09f9b3 (breakpoint resume reset
+   `scripted_mihail_trigger_ordinal` via WritePostApplyStatePins -> continuation re-read a consumed Visionary pay bit,
+   drew an extra card). A continuation agent is finishing units / fd sweep / smoke / lockstep doc #20. OWED after it:
+   the second defect -- pay-{G} variants on continuation casts are inert (ContPins lacks the pay choice).
+2. `wip/elves-wavebp`: Genesis Wave puts open no re-solve (s9500006, misses T4 at every budget incl d3 b0).
+3. `wip/elves-tapt`: TapTargetPump (Magistrate) targets only pre-cast battlefield (fixture
+   `build/scratch/elves-sweep/mag4.json`, lethal unfindable at b0).
+4. `wip/elves-mana`: hasted scaled-dork credit=1 (~46448); in-plan scaled yield -1; PP_SCALER_GROWN misses Marwyn;
+   Lodge untap-burst unused by payer; Cavern `wild` paid a non-creature cost.
+Not yet assigned (small, do after merges): cosmetic labels (Clancaller "Merfolk" SpellEffects.h:40037; Visionary dig
+frame SpellEffects.h:~7995; Magistrate "X=0" menu + "+0/+0 until end of turn" log; kicked/unkicked Warcaller same
+summary); validate_line `act=X` for X in hand falls back to a cast.
+
+Next, in order: cherry-pick the four branches onto wip/elves-analysis (resolve conflicts; rebuild; units; Elves fd
+sweep 0; smoke) -> record `## Claude-play sweep` (flags: 0 unresolved once fixed) -> run each tier
+`--deck=elves,elves2hg`, accept same filter, `test/check_gt_logs.py`, commit rows+GT+suite_cost -> also accept the
+smoke/regression keys of other decks the fixes moved (held-out A/B tables from the agents) -> 5b depth sweep, 5c2
+leaf_tiebreak_check, scaling-rule held-out A/B, discard bucket draft, Stage 6 report -> push_queue land, CI watch.
