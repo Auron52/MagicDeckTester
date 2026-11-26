@@ -3972,8 +3972,6 @@ public:
     // Genesis Wave: every X 1..max (the base gives max only, which leaves no Wave in a plan that also casts
     // something). The plan-list rule below keeps, per plan, the X the rest of the plan leaves.
     std::vector<int> XCandidates(const GameState& s, const CardDefinition& def, int max_affordable) const override;
-    // Every Wave X stays its own plan through the dedup (the rule above needs them; lossless widening).
-    bool PlanSignatureKeysWaveX(const GameState&) const override { return true; }
     bool PlanListFilterLive(const GameState& s) const override;
     void PlanListAdmitAt(const GameState& s, bool is_pre_combat, const std::vector<PlanView>& plans,
                          std::vector<char>& admit) const override;

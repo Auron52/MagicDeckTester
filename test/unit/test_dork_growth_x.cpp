@@ -13,6 +13,7 @@
 #include "core/HeuristicDefaults.h"
 #include "ai/TurnSolver.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -101,4 +102,26 @@ TEST_CASE("Genesis Wave X counts same-plan Elf growth and the Lodge burst: X=10 
     int forests = 0;
     for (const Permanent& p : after.battlefield) { if (p.card.m_name.str() == "Forest") { ++forests; } }
     CHECK(forests == 10);
+}
+
+// THE SIGNATURE KEYS EVERY {X} (2026-11-26, CastKeysX in TurnSolver.cpp). The Wave branch offers the un-grown max
+// (8) and the grown max (10) for the same cast set {Llanowar Elves, Genesis Wave}; both are payable once the Elf
+// grows the Archdruids. The autonomous plan-dedup signature used to key the Wave's X only behind an Elves-only
+// opt-in, so for every other provider the two plans shared one signature and the dedup kept ONE of them -- the
+// other X was unfindable at any depth or budget. Both must survive now, under the default (generic) provider.
+TEST_CASE("Plan dedup keeps two plans that differ only in Genesis Wave's X (every provider)")
+{
+    GameState s = LodgeBoard();
+    std::vector<int> xs_with_elf;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        bool elf = false;
+        const int x = WaveX(p, elf);
+        if (x < 0 || !elf) { continue; }
+        int casts = 0;
+        for (const Action& a : p.actions) { if (a.kind == Action::Kind::CastFromHand) { ++casts; } }
+        if (casts == 2) { xs_with_elf.push_back(x); }
+    }
+    CHECK(std::find(xs_with_elf.begin(), xs_with_elf.end(), 8) != xs_with_elf.end());
+    CHECK(std::find(xs_with_elf.begin(), xs_with_elf.end(), 10) != xs_with_elf.end());
 }
