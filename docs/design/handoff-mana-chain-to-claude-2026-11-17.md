@@ -296,6 +296,8 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**05:58 UTC 11-26:** Origin moved to 9ca7deb5e: another session adopted the Worldfire keep table and the nlesc d6b20 value sidecar, with GT accepted. The worldfire-ad A/B (net -2) was measured before those artifacts existed, so I am re-measuring Worldfire only before landing it. The landing branch wip/land-1126 is worktree `.claude/worktrees/land-1126`, off 9ca7deb5e, with clean cherry-picks of worldfire-ad (1b3225f2a..fe0a48de2) and maze2hg-perf (f39eb1436, c53c4dfce, 69380de37). It is building into `build/scratch/land-1126/build.log`. The re-measure uses manifest `build/scratch/land-1126/wfab/ab.json` (the 1800 Worldfire jobs from the original A/B, off vs on) and runs under the box lock after the mill-k A/B. The mill-k A/B was at 82/648 jobs at 05:54, running 32/32. The maze successor (258K) is finishing its fold build and then writes `logs/maze2hg-perf/maze2hg-perf-handoff2.md`. I stopped three stale `pgrep -f` waiters from earlier work, which could never exit.
+
 **05:44 UTC 11-26:** pre-compaction checkpoint (the USER asked to compact).
 
 **Running.**
