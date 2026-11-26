@@ -12775,6 +12775,28 @@ static const CardDefinition* KickedFaceOr(const CardDefinition* d, bool kicked, 
     return k != nullptr ? k : d;
 }
 
+// A HARD-CAST creature that attacks the turn it arrives (printed haste, a lord's haste grant -- Concordant
+// Crossroads, Goblin Warchief -- or a durable artifact's conditional self-haste) and the power it attacks for
+// on the PRE-PLAN board: printed + the board's lord bonus, doubled for double strike. The one stamp of
+// Action::haste_attack_power, shared by the plain cast and the multikicker / squad faces (a kicked Joraga
+// Warcaller under Crossroads is as hasty as an unkicked one; Elves d0 gi3558). What the plan's OWN casts add
+// to it (a lord cast in the same plan, the face's enter counters, the walk's pumps) is ProjectPlanWalk's.
+static bool HardCastHasteCreature(const CardDefinition& def, const GameState& state)
+{
+    const int me = state.active_player_index;
+    return def.card.IsCreature()
+        && (def.card.HasKeyword(Keyword::Haste) || HasHasteFromLords(def.card, state.battlefield, me)
+            || HasConditionalSelfHaste(def.card, state.battlefield, me, /*durable_only=*/true));
+}
+static int HardCastHastePower(const CardDefinition& def, const GameState& state)
+{
+    const int me = state.active_player_index;
+    const int lord_pb = ComputeLordBonus(def.card, state, me).first;
+    const bool ds = def.card.HasKeyword(Keyword::DoubleStrike)
+                 || HasDoubleStrikeFromLords(def.card, state.battlefield, me);
+    return (def.card.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
+}
+
 // THE FACE A CAST ACTION REALLY CASTS, for the whole-turn prepay's bill (BatchPrepayMainCasts). An adventure
 // or bestow action carries only the card's NAME (the enumerator never sets `def`), so a lookup by name returns
 // the printed creature: Fungus s30055300 T3 {Forest + Sporecrown Thallid + Fungus Frolic} billed the Frolic at
@@ -16154,8 +16176,9 @@ static bool AttackPlanLifegainEnabled()
 // it). Now a lord body stays on the walk's board, TAPPED: a tapped lord still grants its static bonus (CR 613), and
 // tapped it is never counted as an attacker, so its own attack stays haste_cast_atk's (no double count). Exact,
 // through the same PendingAttackDamage / ComputeLordBonus the board uses (subtype filter, "other", double strike,
-// the spent mana sources tapped). A lord's pump on a HASTE body cast in the same plan is still not credited (the
-// conservative direction). Inert for a plan with no lord cast, and with no attack on the board (pending_atk 0).
+// the spent mana sources tapped). A lord's pump on a HASTE body cast in the same plan is NOT this lever: it is
+// credited unconditionally (ProjectPlanWalk's LORDS note; Elves d0 gi3558). This lever adds only the board's
+// attackers. Inert for a plan with no lord cast, and with no attack on the board (pending_atk 0).
 // Lockstep: Solve and EnumeratePlans both read it through AttackTapLoss. Default OFF (see the reader); =1 -> on.
 static bool AttackLordCastEnabled()
 {
@@ -16223,7 +16246,7 @@ static bool AttackReprojectIntentEnabled()
 }
 
 // Per-candidate walk flags (AttackTapCtx::cand_walk).
-enum : unsigned char { kWalkPump = 1, kWalkLife = 2, kWalkLord = 4 };
+enum : unsigned char { kWalkPump = 1, kWalkLife = 2, kWalkLord = 4, kWalkHaste = 8 };
 
 struct AttackTapCtx
 {
@@ -16254,6 +16277,9 @@ struct AttackTapCtx
     bool base_ord_built[2] = { false, false };
     // Stage 2 (see points 4 and 5 above). cand_walk empty = no candidate starts a walk.
     std::vector<unsigned char> cand_walk;
+    // MTG_ATTACK_LORD_CAST: a lord the plan casts also pumps the PRE-PLAN board's attackers (default off, USER
+    // call). Without it a cast lord still pumps the plan's own HASTY casts (kWalkHaste), unconditionally.
+    bool board_lord = false;
     std::map<std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>, int> memo2;   // (mask, spent, walk) -> attack
     // Point 10: the pre-plan board's attack intent, built on the first re-projection.
     AttackIntent intent;
@@ -16411,21 +16437,42 @@ std::vector<std::string> TurnSolver::PlanCastOrderNames(const GameState& state, 
 // is haste_cast_atk's, so the only part of it added here is what the walk GAVE a hasty one (the +X of a
 // Craterhoof cast at or after it, the counters of a later gain). Then the plan's lifegain activations,
 // in plan order, which is where the trailing pass applies them -- after every cast.
+//
+// LORDS (`lord`): a lord the plan casts is KEPT on the walk's board, TAPPED (a tapped lord still grants its
+// static bonus, CR 613; tapped it is never counted as an attacker, so its own attack stays haste_cast_atk's).
+// Every HASTY body the plan casts is then credited what the plan's casts add to its lord bonus -- read on the
+// final walk board through the same ComputeLordBonus combat uses, minus the pre-plan bonus haste_attack_power
+// already holds. Lords cast before or after it count alike (a static bonus, not an ETB). A multikicker face
+// enters with its K +1/+1 counters (Joraga Warcaller pumps the other Elves per counter) and a squad face makes
+// its K token copies (each a Galadhrim Brigade lord; their base attack is in haste_attack_power, 1 + K bodies).
+// `board_lord` (MTG_ATTACK_LORD_CAST) additionally leaves the kept lords on the board for the final read, so
+// they pump the PRE-PLAN board's attackers too; without it they are erased before PendingAttackDamage.
 static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vector<Action>& cands,
-                           const std::vector<int>& sel, bool pump, bool life, bool lord)
+                           const std::vector<int>& sel, bool pump, bool life, bool lord, bool board_lord)
 {
     RevealLogPause _rlp;   // a projection: no play events, no human choosers
     const int active = t.active_player_index;
     std::vector<int> order;
     PlanCastOrder(state, cands, sel, order);
     constexpr int kWalkNumberBase = 1 << 29;   // synthetic numbers for the bodies the walk enters
-    constexpr int kWalkLordBase   = 1 << 28;   // ... and for the lord bodies it KEEPS (MTG_ATTACK_LORD_CAST)
-    std::vector<std::pair<int, int>> entered;  // (number, this-turn attack weight: 0 sick, 1, 2 DS)
+    constexpr int kWalkLordBase   = 1 << 28;   // ... and for the lord bodies it KEEPS
+    const int n_c = static_cast<int>(cands.size());
+    struct Entered
+    {
+        int number;
+        int weight;      // this-turn attack weight: 0 sick, 1, 2 double strike
+        int pre_pb;      // the pre-plan lord bonus haste_attack_power already holds
+    };
+    std::vector<Entered> entered;
     for (int j : order)
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
+        // The face this cast really resolves (a multikicker / squad "(Kicked xK)" face carries K); the
+        // permanent it makes is the printed card `d`.
+        const CardDefinition* face = KickedFaceOr(d, a.kicked, a.kick_count);
+        const int kick_k = face->params.kick_times;
         // The STORM count, in lockstep with both apply worlds (apply_one / CastSpellFromHand ++ it at
         // each cast, before resolution): without it a walked Weather the Storm saw the PRE-plan count
         // and projected one instance where the plan's own earlier casts had made copies. Read only by
@@ -16433,8 +16480,8 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
         if (!d->card.IsLand()) { ++t.spells_cast_this_turn; }
         if (life) { ApplyCastLifegain(t, active, *d, a.player_target); }   // instants / sorceries only (inside)
         if (d->card.IsLand() || d->card.IsInstant() || d->card.IsSorcery()) { continue; }
-        // MTG_ATTACK_LORD_CAST: a lord body is kept (below kWalkNumberBase, so the erase skips it) and TAPPED, so
-        // its static pump reaches the board's attackers while it is never counted as one itself.
+        // A lord body is kept (below kWalkNumberBase) and TAPPED, so its static pump reaches the plan's hasty casts
+        // (and, with MTG_ATTACK_LORD_CAST, the board's attackers) while it is never counted as an attacker itself.
         const bool keep_lord = lord && IsLordPermanent(*d);
         const bool body = d->card.IsCreature() || keep_lord
                        || (life && (LifegainAttackWatcher(d->params) || EnterLifegainWatcher(d->params)));
@@ -16446,11 +16493,29 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
         p.owner_index       = active;
         p.entered_this_turn = true;
         if (keep_lord) { p.tapped = true; }
+        // Joraga Warcaller's as-enters counters (CR 702.33c; EffectHandler's twin). Its own attack reads them
+        // here, its lord pump reads them through ComputeLordBonus (lord_per_own_plus_counter).
+        if (lord && kick_k > 0 && face->params.multikick_enter_counters) { PutPlusCounters(t, p, kick_k); }
         t.battlefield.push_back(p);
         const int ei = static_cast<int>(t.battlefield.size()) - 1;
         const int weight = a.haste_attack_power > 0
                          ? (d->card.HasKeyword(Keyword::DoubleStrike) ? 2 : 1) : 0;
-        entered.push_back({ p.card.m_number, weight });
+        const int pre_pb = (lord && weight > 0) ? ComputeLordBonus(d->card, state, active).first : 0;
+        entered.push_back({ p.card.m_number, weight, pre_pb });
+        // Squad (CR 702.157a; ResolveSquadCopies' twin): K token copies of the printed card, each hasty when the
+        // cast is, each a lord when the card is.
+        if (lord && kick_k > 0 && d->params.squad_cost.has_value())
+        {
+            for (int c = 0; c < kick_k; ++c)
+            {
+                Permanent cp = p;
+                cp.counters.clear();
+                cp.is_token = true;
+                cp.card.m_number = (keep_lord ? kWalkLordBase : kWalkNumberBase) + 2 * n_c + j * kMaxMultikick + c;
+                t.battlefield.push_back(cp);
+                entered.push_back({ cp.card.m_number, weight, pre_pb });
+            }
+        }
         if (life && d->card.IsCreature()) { ProjectEnterLifegain(t, ei); }
         if (pump && d->params.etb_team_pump_per_creature)
         {
@@ -16559,19 +16624,23 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
         }
     }
     int extra = 0;
-    for (const auto& [num, w] : entered)
+    for (const Entered& e : entered)
     {
-        if (w == 0) { continue; }
+        if (e.weight == 0) { continue; }
         for (const Permanent& q : t.battlefield)
         {
-            if (q.controller_index != active || q.card.m_number != num) { continue; }
-            extra += std::max(0, q.temp_power_bonus + PlusCountersOn(q) - MinusCountersOn(q)) * w;
+            if (q.controller_index != active || q.card.m_number != e.number) { continue; }
+            const int lord_gain = lord ? ComputeLordBonus(q.card, t, active, q.AnimatedAllTypes(), &q).first - e.pre_pb
+                                       : 0;
+            extra += std::max(0, q.temp_power_bonus + PlusCountersOn(q) - MinusCountersOn(q) + lord_gain)
+                   * e.weight;
             break;
         }
     }
+    const int erase_from = board_lord ? kWalkNumberBase : kWalkLordBase;
     t.battlefield.erase(std::remove_if(t.battlefield.begin(), t.battlefield.end(),
                                        [&](const Permanent& q)
-                                       { return q.controller_index == active && q.card.m_number >= kWalkNumberBase; }),
+                                       { return q.controller_index == active && q.card.m_number >= erase_from; }),
                         t.battlefield.end());
     return PendingAttackDamage(t) + extra;
 }
@@ -16814,7 +16883,20 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
         }
         life = consumer;
     }
-    const bool lord = pending_atk > 0 && AttackLordCastEnabled();   // nothing on the board for a lord to pump
+    // A lord cast this turn pumps (a) the board's attackers -- MTG_ATTACK_LORD_CAST, nothing to pump without one --
+    // and (b) every HASTY body the same plan casts (Elves d0 gi3558: Clancaller + Archdruid + Visionary + Warcaller
+    // under Concordant Crossroads hit for 18, read 9 -- each hasty cast was priced with the PRE-PLAN board's lords
+    // only). (b) is unconditional: it is the same static bonus combat applies (CR 613.4c), read exactly.
+    ctx.board_lord = pending_atk > 0 && AttackLordCastEnabled();
+    bool haste_cast = false, lord_cast = false;
+    for (const Action& a : cands)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (a.haste_attack_power > 0) { haste_cast = true; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d != nullptr && IsLordPermanent(*d)) { lord_cast = true; }
+    }
+    const bool lord = lord_cast && (ctx.board_lord || haste_cast);
     if (!pump && !life && !lord) { return; }
     for (int j = 0; j < static_cast<int>(cands.size()); ++j)
     {
@@ -16829,7 +16911,8 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
             if (life && d->params.cast_lifegain > 0 && !d->params.solo_target_trick
                 && (d->card.IsInstant() || d->card.IsSorcery())) { f |= kWalkLife; }
             if (life && enter_lg && d->card.IsCreature()) { f |= kWalkLife; }
-            if (lord && IsLordPermanent(*d)) { f |= kWalkLord; }   // MTG_ATTACK_LORD_CAST
+            if (lord && IsLordPermanent(*d)) { f |= kWalkLord; }   // a lord body the walk keeps
+            if (lord && a.haste_attack_power > 0) { f |= kWalkHaste; }   // a body a kept lord can pump
         }
         else if (life && a.kind == Action::Kind::ActivatePermAbility
                  && (a.ability_mode == Action::AbilityMode::TapLifegain
@@ -16927,17 +17010,21 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
     std::uint64_t spent = 0;
     const int lost_base = AttackTapDiscountSplit(*pay, need, need_nc, &spent);
     // Stage 2: which re-projection terms THIS subset needs.
-    bool walk_pump = false, walk_life = false, walk_lord = false;
+    bool walk_pump = false, walk_life = false, walk_lord = false, walk_haste = false;
     if (!ctx.cand_walk.empty())
     {
         for (int j : sel)
         {
             const unsigned char f = ctx.cand_walk[static_cast<std::size_t>(j)];
-            if (f & kWalkPump) { walk_pump = true; }
-            if (f & kWalkLife) { walk_life = true; }
-            if (f & kWalkLord) { walk_lord = true; }
+            if (f & kWalkPump)  { walk_pump = true; }
+            if (f & kWalkLife)  { walk_life = true; }
+            if (f & kWalkLord)  { walk_lord = true; }
+            if (f & kWalkHaste) { walk_haste = true; }
         }
     }
+    // A kept lord changes the read only if it has something to pump: the board (MTG_ATTACK_LORD_CAST) or a
+    // hasty cast of the same plan.
+    walk_lord = walk_lord && (ctx.board_lord || walk_haste);
     const bool walk   = walk_pump || walk_life || walk_lord;
     const bool reproj = spent != 0 && (walk || AttackTapReprojectEnabled());
     if (!reproj && !walk) { return (ctx.pending_atk - pend1) + lost_base; }
@@ -16995,7 +17082,8 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
         }
     }
     AttackIntentScope intent_scope(PrePlanAttackIntent(state, ctx));   // point 10
-    const int pend2 = walk ? ProjectPlanWalk(t, state, cands, sel, walk_pump, walk_life, walk_lord)
+    const int pend2 = walk ? ProjectPlanWalk(t, state, cands, sel, walk_pump, walk_life, walk_lord,
+                                             walk_lord && ctx.board_lord)
                            : PendingAttackDamage(t);
     if (keyable) { ctx.memo2.emplace(key, pend2); }
     return (ctx.pending_atk - pend2) + (reproj ? 0 : lost_base);
@@ -46677,6 +46765,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.card_mv        = def.card.m_mana_cost.ManaValue();   // CR 202.3: kicking never changes MV
                 a.kicked         = true;
                 a.kick_count     = static_cast<std::int8_t>(k);
+                // A hasty kicked face attacks this turn exactly like the plain cast below: the stamp the plain
+                // cast gets (it was missing here, so a kicked Warcaller / Brigade under Concordant Crossroads
+                // projected NO attack at all). The battlefield permanent is the PRINTED card (CR 702.33c /
+                // 702.157: kicking changes no characteristic), so the printed card is what is priced. A squad
+                // face is 1 + K such bodies (its K token copies are hasted the same way). A Warcaller's K
+                // enter counters, and every lord the plan casts, are the walk's (ProjectPlanWalk).
+                if (HardCastHasteCreature(def, state))
+                {
+                    const int power = HardCastHastePower(def, state);
+                    if (power > 0)
+                    {
+                        a.haste_attack_power = power * (def.params.squad_cost.has_value() ? 1 + k : 1);
+                        a.haste_prowess      = def.card.HasKeyword(Keyword::Prowess);
+                    }
+                }
                 actions.push_back(std::move(a));
             }
         }
@@ -48067,21 +48170,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // Goblin Tomb Raider: a DURABLE artifact already on board hastes it for this whole turn (the
         // projection deliberately ignores Treasures/Clues, which the plan may sacrifice first -- the
         // never-over-credit direction; the real declare-attackers test is exact).
-        const bool cond_haste_now = HasConditionalSelfHaste(def.card, state.battlefield,
-                                                            state.active_player_index,
-                                                            /*durable_only=*/true);
-        if (def.card.IsCreature()
-            && (def.card.HasKeyword(Keyword::Haste)
-                || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)
-                || cond_haste_now))
+        if (HardCastHasteCreature(def, state))
         {
-            auto [lord_pb, lord_tb] = ComputeLordBonus(def.card, state,
-                                                       state.active_player_index);
-            (void)lord_tb;
-            const bool ds = def.card.HasKeyword(Keyword::DoubleStrike)
-                         || HasDoubleStrikeFromLords(def.card, state.battlefield,
-                                                     state.active_player_index);
-            const int power = (def.card.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
+            const int power = HardCastHastePower(def, state);
             if (power > 0)
             {
                 a.haste_attack_power = power;
