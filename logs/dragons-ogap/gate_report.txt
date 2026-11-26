@@ -1,0 +1,30 @@
+== /workspaces/MagicDeckTester/build/scratch/dragons-ogap/gate_base
+  classes: {'APPLY-DROP': 1127, 'DOMINATED-LAND': 158007, 'ORACLE-GAP': 3747}
+  ORACLE-GAP by family: {'gy-return': 3433, 'mind-stone': 238, 'other': 76}
+  === MANA ORACLE: decisions=1008545 plans=7174498 skipped=0 applies=386903370 frontiers=342836954 pruned=41483778 options=205340572 engine_drops=104577 gate_rejects=18408834(checked 18397938, skipped 10896) MISS=1127 ORACLE-GAP=3747 UNMODELED=0 CAPPED=0 ms=33362111 ===
+  === MANA ORACLE classes: ORACLE-GAP=3747 APPLY-DROP=1127 PHANTOM=99380 DOMINATED-LAND=158007 CONTINUATION-DIFFERS=468 DROP-COVERED=3858 ===
+     262 T3 m1 {land} dropped [cast Lightning Bolt]
+      35 T5 m1 {no land} dropped [cast Scourge of Valkas]
+      33 T5 m1 {land} dropped [cast Scourge of Valkas]
+      26 T4 m1 {land} dropped [cast Lightning Bolt]
+      22 T5 m1 {no land + cast:Lathliss, Dragon Queen} dropped [cast Dragon Tempest]
+      20 T6 m1 {no land + cast:Lathliss, Dragon Queen} dropped [cast Dragon Tempest]
+      19 T4 m1 {no land} dropped [cast Lightning Bolt]
+      18 T3 m1 {land} dropped [cast Dragon Tempest]
+== /workspaces/MagicDeckTester/build/scratch/dragons-ogap/gate_new
+  classes: {'APPLY-DROP': 1136, 'DOMINATED-LAND': 158050}
+  ORACLE-GAP by family: {}
+  === MANA ORACLE: decisions=1008545 plans=7174498 skipped=0 applies=386919744 frontiers=342967738 pruned=41605334 options=205377780 engine_drops=109079 gate_rejects=18408834(checked 18397938, skipped 10896) MISS=1136 ORACLE-GAP=0 UNMODELED=0 CAPPED=0 ms=25443329 ===
+  === MANA ORACLE classes: APPLY-DROP=1136 PHANTOM=103802 DOMINATED-LAND=158050 CONTINUATION-DIFFERS=187 DROP-COVERED=3970 ===
+     262 T3 m1 {land} dropped [cast Lightning Bolt]
+      35 T5 m1 {no land} dropped [cast Scourge of Valkas]
+      33 T5 m1 {land} dropped [cast Scourge of Valkas]
+      26 T4 m1 {land} dropped [cast Lightning Bolt]
+      22 T5 m1 {no land + cast:Lathliss, Dragon Queen} dropped [cast Dragon Tempest]
+      20 T6 m1 {no land + cast:Lathliss, Dragon Queen} dropped [cast Dragon Tempest]
+      19 T4 m1 {no land} dropped [cast Lightning Bolt]
+      18 T3 m1 {land} dropped [cast Dragon Tempest]
+gate_base batch cpu=25088 s
+gate_new batch cpu=25046 s
+ident_base batch cpu=13432 s
+ident_new batch cpu=13993 s
