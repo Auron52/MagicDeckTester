@@ -3961,11 +3961,17 @@ static bool TapAbilityDebitEnabled() { return g_tap_ability_debit; }
 // Sacrifice", Haunted Fengraf's "{3}, {T}, Sacrifice". Its {T} is part of the cost (ApplyGraveyardReturnAbility
 // needs the source untapped, and both apply worlds hold it while paying the mana half), so its own yield can fund
 // neither the rebuy nor anything else in the plan. A source that makes no mana (Cid) debits 0 and stays free.
+// CPU (USER "cut CPU"): a gy-return source with no printed mana ability (Cid, Freeflier Pilot) is not scanned -- its debit
+// is 0, so PermAbilityTapDebitOf's pool rebuild per enumeration would buy nothing. A creature GRANTED a mana ability is
+// then simply not debited: the pre-lever menu, never a loss.
 static bool TapDebitCand(const Action& ta, bool gyr_debit)
 {
     if (ta.sac_source_id < 0) { return false; }
     if (ta.kind == Action::Kind::ActivatePermAbility) { return PermAbilityTaps(ta.ability_mode); }
-    return gyr_debit && ta.kind == Action::Kind::GraveyardReturnAbility && ta.sac_source_id > 0;
+    if (!gyr_debit || ta.kind != Action::Kind::GraveyardReturnAbility || ta.sac_source_id <= 0) { return false; }
+    const CardDefinition* d = ta.def ? ta.def : CardDatabase::Instance().LookupInterned(ta.card_name);
+    return d == nullptr || d->card.IsLand() || d->params.mana_rock || d->tmpl == CardTemplate::ManaDork
+        || !d->params.produces.empty();
 }
 
 // Color-producibility gate for a chosen action subset. ManaPool::CanPay stores every
