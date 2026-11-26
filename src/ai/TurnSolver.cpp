@@ -72935,18 +72935,26 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             return false;
         };
         bool flat_tapped = false, fed_tapped = false;
+        int fed_tapped_n = 0, burst_tapped_n = 0;
         const int lim = std::min<int>(static_cast<int>(state.battlefield.size()), static_cast<int>(bf_snap.size()));
-        for (int i = 0; i < lim && !(flat_tapped && fed_tapped); ++i)
+        for (int i = 0; i < lim; ++i)
         {
             const Permanent& b = bf_snap[static_cast<std::size_t>(i)];
-            if (b.controller_index != active || b.tapped || !state.battlefield[static_cast<std::size_t>(i)].tapped
-                || !b.card.IsCreature())
+            if (b.controller_index != active || b.tapped || !state.battlefield[static_cast<std::size_t>(i)].tapped)
             { continue; }
             const CardDefinition* bd = CardDatabase::Instance().LookupCached(b.card);
+            // A Wirewood Lodge the solve tapped for its untap burst re-taps a scaled Elf it untapped: that Elf's tap
+            // is the burst's feed, and the line it models ("tap the Elf, {G}: untap it") leaves the Elf UP to tap
+            // again later at the grown count, so it is not a dork spent at its plan-start count.
+            if (!b.card.IsCreature())
+            {
+                if (s_fed_tapped && bd != nullptr && UntapBurstFeedColor(*bd).has_value()) { ++burst_tapped_n; }
+                continue;
+            }
             if (bd == nullptr || !IsScaledManaDork(*bd)) { flat_tapped = true; continue; }
-            if (s_fed_tapped && !fed_tapped && !bd->params.mana_per_life_gained && batch_feeds(b, *bd))
-            { fed_tapped = true; }
+            if (s_fed_tapped && !bd->params.mana_per_life_gained && batch_feeds(b, *bd)) { ++fed_tapped_n; }
         }
+        fed_tapped = fed_tapped_n > burst_tapped_n;
         if (flat_tapped || fed_tapped)
         {
             // The solve, kept aside; the board rolled back exactly as a declined solve rolls it back.
@@ -72965,6 +72973,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (energy_restore) { state.players[active].energy_counters = ea; }
             // The scaled dorks the batch feeds, and the board without them.
             bool fed_any = false;
+            std::uint64_t fed_mask = 0;
             ManaPool full, rest;
             for (const Permanent& p : state.battlefield)
             {
@@ -72974,6 +72983,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                     || !CanTapNow(p, state.battlefield))
                 { continue; }
                 if (!batch_feeds(p, *pd)) { continue; }
+                const std::ptrdiff_t fi = &p - state.battlefield.data();
+                if (fi < 64) { fed_mask |= 1ull << fi; }
                 if (!fed_any) { full = AvailableManaPool(state); rest = full; fed_any = true; }
                 const ManaPool without = AvailableManaPool(state, &p);
                 rest.white     -= full.white     - without.white;
@@ -72984,13 +72995,110 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 rest.colorless -= full.colorless - without.colorless;
                 rest.wild      -= full.wild      - without.wild;
             }
-            if (fed_any && (fed_tapped || !rest.CanPay(combined))) { return Pp(PP_SCALER_GROWN); }
-            state.battlefield                  = bf_solved;
-            state.floating_mana                = fm_solved;
-            state.players[active].life         = la_solved;
-            state.players[1 - active].life     = lo_solved;
-            state.opponent_lost_life_this_turn = oll_solved; nc_solved.Restore(state);
-            state.players[active].energy_counters = ea_solved;
+            // A FLAT body tapped and the fed dorks needed: decline, as before (the per-cast payer taps the dork when a cast
+            // needs it, at the count by then).
+            if (fed_any && flat_tapped && !rest.CanPay(combined)) { return Pp(PP_SCALER_GROWN); }
+            // A FED DORK tapped by the solve (MTG_PREPAY_SCALER_FED_TAPPED): it paid at its plan-start count. Two ways out,
+            // each taken only when it loses nothing the solve kept:
+            //  (1) the board without the fed dorks pays the batch -> re-solve HOLDING them (on top of the ladder's holds),
+            //      so they stay up and tap later at the grown count; refused if it taps a creature the solve left up (an
+            //      attacker, a {T} body: payer policy the ladder already decided -- SelesnyaLifegain d0 s1001 gi175, the
+            //      held solve tapped Elvish Mystic and the T4 swing fell 2 short);
+            //  (2) else walk the batch per cast on a copy, in apply order (each creature resolving onto the copy, so a
+            //      scaled dork taps at the count by then): decline to the per-cast payer only when that walk pays every
+            //      cast, taps no creature the solve left up, and floats MORE than the solve leaves -- Elves claude-play
+            //      seed 9500015 T3 ({Visionary, Ezuri} off two Priests: {G}{G} against {G}). A joint solve the per-cast
+            //      greedy cannot reproduce stands (SelesnyaLifegain d0 s1001 gi228: Priest pays Elvish Mystic's {G} and
+            //      Heroes' Reunion's {G}, Brushland the {W}; per cast, Brushland pays the Mystic and the {W} is stranded).
+            bool held_fed = false;
+            if (fed_any && fed_tapped)
+            {
+                const std::uint64_t won_hold_prev = won_hold;
+                const ManaPool produced_prev = produced;
+                if (rest.CanPay(combined) && fed_mask != 0 && n <= 64 && held_attempt(won_hold | fed_mask, -2))
+                {
+                    held_fed = true;
+                    const int lim2 = std::min<int>(static_cast<int>(state.battlefield.size()),
+                                                   static_cast<int>(bf_solved.size()));
+                    for (int i = 0; i < lim2 && held_fed; ++i)
+                    {
+                        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                        if (q.controller_index == active && q.tapped && q.card.IsCreature()
+                            && !bf_solved[static_cast<std::size_t>(i)].tapped)
+                        { held_fed = false; }
+                    }
+                    if (!held_fed)
+                    {
+                        won_hold = won_hold_prev; produced = produced_prev;
+                        state.battlefield = bf_snap; state.floating_mana = fm_snap;
+                        state.players[active].life = la; state.players[1 - active].life = lo;
+                        state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
+                        if (energy_restore) { state.players[active].energy_counters = ea; }
+                    }
+                }
+                if (!held_fed)
+                {
+                    // (2) the per-cast walk, on a copy of the rolled-back board.
+                    int walk_left = -1;
+                    {
+                        GameState w = state;
+                        RevealLogPause quiet;
+                        bool ok_walk = true;
+                        for (std::size_t k = 0; k < acts.size() && ok_walk; ++k)
+                        {
+                            const Action& a = acts[k];
+                            const ManaCost& c = act_bill[k];
+                            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                            const bool fc = a.kind == Action::Kind::CastFromHand && d != nullptr && d->card.IsCreature();
+                            if (c.ManaValue() > 0 && !TapForCostDirect(w, c, fc)) { ok_walk = false; break; }
+                            if (a.kind != Action::Kind::CastFromHand || d == nullptr) { continue; }
+                            if (fc || IsLordPermanent(*d))
+                            {
+                                Permanent perm;
+                                perm.card              = d->card;
+                                perm.controller_index  = active;
+                                perm.owner_index       = active;
+                                perm.entered_this_turn = true;
+                                w.battlefield.push_back(perm);
+                                if (fc) { FireCreatureEnterWatchers(w, active, static_cast<int>(w.battlefield.size()) - 1); }
+                            }
+                        }
+                        const int lim2 = std::min<int>(static_cast<int>(bf_solved.size()), static_cast<int>(w.battlefield.size()));
+                        for (int i = 0; i < lim2 && ok_walk; ++i)
+                        {
+                            const Permanent& q = w.battlefield[static_cast<std::size_t>(i)];
+                            if (q.controller_index == active && q.tapped && q.card.IsCreature()
+                                && !bf_solved[static_cast<std::size_t>(i)].tapped)
+                            { ok_walk = false; }
+                        }
+                        if (ok_walk) { walk_left = w.floating_mana.Total() + w.floating_creature_mana.Total(); }
+                    }
+                    // The solve's leftover: everything it produced (`produced`, the joint solve's full pool -- the
+                    // float itself is pre-loaded only below) plus the incoming float, less the batch's bill.
+                    const int solve_left = static_cast<int>(produced.Total()) + (float_in ? 0 : fm_snap.Total())
+                                         - combined.ManaValue();
+                    // MTG_SCALER_WALK_TRACE=1 (diagnosis only, print-only): the two leftovers this choice compares.
+                    static const bool s_walk_trace = EnvOn("MTG_SCALER_WALK_TRACE");
+                    if (s_walk_trace && !g_tap_speculating)
+                    {
+                        std::string names;
+                        for (const Action& a : acts) { names += a.card_name.str() + ";"; }
+                        std::fprintf(stderr, "[scaler-walk] T%d acts=%s combined=%d solved_float=%d walk_left=%d solve_left=%d\n",
+                                     state.turn_number, names.c_str(), combined.ManaValue(), fm_solved.Total(),
+                                     walk_left, solve_left);
+                    }
+                    if (walk_left > solve_left) { return Pp(PP_SCALER_GROWN); }
+                }
+            }
+            if (!held_fed)
+            {
+                state.battlefield                  = bf_solved;
+                state.floating_mana                = fm_solved;
+                state.players[active].life         = la_solved;
+                state.players[1 - active].life     = lo_solved;
+                state.opponent_lost_life_this_turn = oll_solved; nc_solved.Restore(state);
+                state.players[active].energy_counters = ea_solved;
+            }
         }
     }
     // MTG_PREPAY_COLOURS: settle the hybrid pips and the any-colour units (PrepayColoursFit) before the
