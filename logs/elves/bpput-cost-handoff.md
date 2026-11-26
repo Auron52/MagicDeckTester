@@ -87,3 +87,7 @@ heavy lock. Its output goes to `build/scratch/bpput/smoke.log`. Its markers: `bu
 Box rules: one heavy process at a time under `flock /workspaces/MagicDeckTester/build/heavy.lock`; MTG_RSS_CAP_GB=20;
 MTG_BUILD_JOBS=14; never cmake; never timeout; never accept GT; never push phase-1-2-deck-analyzer; never touch
 references/.
+
+## UPDATE: smoke finished
+`bash test/regression.sh --smoke` (no accept) on the fold binary: **251 passed, 0 failed, 0 new; scenarios 678/678** --
+digest-identical to committed GT, so no slower game to classify. Step 1 of "Remaining" is DONE; left: report.md + push.
