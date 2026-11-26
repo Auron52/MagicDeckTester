@@ -1,0 +1,12 @@
+src=creature_giving2hg|Crop Rotation armings=313984 Rotation armings=313984
+src=creature_giving|Crop Rotation armings=489832 Rotation armings=489832
+src=hydras|Nature's Lore armings=369359 Lore armings=367473
+src=hydras|Search for Tomorrow for Tomorrow
+src=hydras|Three Visits armings=109417 Visits armings=108128
+src=landfall|Cultivate armings=21 all_tapped_basic=21 armings=21 all_tapped_basic=21
+src=landfall|Genesis Wave armings=236069 Wave armings=236069
+src=landfall|Primeval Titan armings=138040 Titan armings=138040
+src=landfall|Rampant Growth armings=511486 Growth armings=511486
+src=landfall|Search for Tomorrow for Tomorrow
+src=melira|Chord of Calling of Calling
+src=melira|Reveillark armings=49 all_tapped_basic=0 armings=49 all_tapped_basic=0
