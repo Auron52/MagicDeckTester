@@ -178,6 +178,18 @@ public:
     // MTG_DOTH_AXIS_STATS census at the real upkeep (GameEngine::UpkeepTail), which counts a searched game's
     // Defense of the Heart resolutions that no plan's pin covered.
     bool SearchesTurnsForCensus() const { return m_lookahead_depth > 0 && !m_in_rollout && !HumanPlayActive(); }
+    // PROTOTYPE control-effect injection (core/ControlInject.h): only the REAL game is disrupted (never a
+    // bottoming / keep trial playout on this shared engine), and the disruption makes every queued plan stale,
+    // so the committed line and its pins are dropped and the disrupted turn is searched afresh.
+    bool InRolloutForCtrlInject() const { return m_in_rollout; }
+    void DropCommittedLineForCtrlInject()
+    {
+        m_committed_line.clear();
+        m_discard_choice_pin = -1;
+        m_vial_choice_pin    = -1;
+        m_atk_release_pin    = -1;
+        m_script_atk_pin.clear();
+    }
 
     // Sets the max-turns horizon used by ActivateLandsEdge rollouts (depth > 0).
     // Called by GameEngine::PlayOut so the value tracks each game's actual limit.
