@@ -2569,6 +2569,25 @@ public:
     // (GameState::deck_has_gy_equipment_return), which makes the predicate false at its first test.
     static std::vector<int> GraveyardEquipmentNumbers(const GameState& state);
     static bool EquipmentReturnedFromGraveyard(const std::vector<int>& gy_snapshot, const GameState& state);
+    // THE BATTLEFIELD-PUT TWIN (Genesis Wave, Elves 2026-11-26; MTG_BP_PUT_BATTLEFIELD, default ON).
+    // A cast whose resolution PUT a card permanent onto the active player's battlefield from a zone
+    // other than the hand -- the Wave's reveal-and-put, a look-top put (Turntimber), a tutor or
+    // reanimation to the battlefield, an ETB mass put (Muxus), a land search to the battlefield --
+    // has made objects the plan was enumerated without: a hasted or untapped mana source, a haste
+    // grant (Concordant Crossroads) to bodies already out, a target, a convoke body. Every plan was
+    // enumerated and priced against the battlefield it STARTED from, so "Wave, then spend the
+    // Archdruid it put" was unreachable at any depth or budget. It is a NEW OPTION exactly as a card
+    // arriving in hand is, so it arms the SAME site 10 (no BpSiteMask renumbering), in the same cast
+    // window as the other halves, in both worlds (apply_one's end; AIEngine's put_in_hand_armed).
+    // `PutWindowNumbers` takes the snapshot at the top of the cast: the m_numbers of the active
+    // player's CARD permanents and HAND cards. `CastPutACardPermanent` is true iff an own card
+    // permanent (token numbers excluded) is on the battlefield now whose number was in neither --
+    // i.e. it came from the library, graveyard or exile -- other than ONE copy named `cast_name`
+    // (the cast card itself, when it was cast from the graveyard or the library top). The full
+    // no-op argument is at the definition.
+    static std::vector<int> PutWindowNumbers(const GameState& state);
+    static bool CastPutACardPermanent(const std::vector<int>& snapshot, const GameState& state,
+                                      const std::string& cast_name);
 
     // ---- THE LAND-DROP POSITION (Plan::land_slot, 2026-10-15) -----------------------------------
     static constexpr int8_t kLandSlotFirst      = 0;    // before every cast (the default)

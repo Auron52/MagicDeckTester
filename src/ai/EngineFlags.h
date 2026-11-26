@@ -2536,6 +2536,17 @@ inline bool BpHandEntryEnabled()
     static const bool v = EnvOn("MTG_BP_HAND_ENTRY", true);   // DEFAULT ON (2026-09-27); =0 reverts
     return heurarm::Flag(heurarm::BP_HAND_ENTRY, v);
 }
+// MTG_BP_PUT_BATTLEFIELD -- site 10's BATTLEFIELD-PUT half (Genesis Wave, Elves 2026-11-26). A cast that PUT a
+// card permanent onto our battlefield from outside the hand arms the deferred re-solve, so the rest of the main
+// is searched on the board the put made (TurnSolver::CastPutACardPermanent; the rollout's end of apply_one and
+// AIEngine's put_in_hand_armed read this ONE reader -- the lockstep pair). A completeness fix: without it a line
+// that spends what the put made ("Wave, tap the hasted Archdruid, cast Visionary + Ezuri") was unfindable at any
+// depth or budget. DEFAULT ON; =0 -> as before (the A/B hatch).
+inline bool BpPutBattlefieldEnabled()
+{
+    static const bool v = EnvOn("MTG_BP_PUT_BATTLEFIELD", true);
+    return heurarm::Flag(heurarm::BP_PUT_BATTLEFIELD, v);
+}
 // MTG_BP_DROP_REARM -- the EXTRA-DROP RE-ARM after a breakpoint continuation (Maze's End F7, 2026-11-19; see the
 // end of ApplyPlanDirect's deferred loop and AIEngine's exec_drop_rearm_loop, the lockstep pair that reads this).
 // DEFAULT ON; =0 -> the second drop after a continuation's land is unreachable, as before (the A/B hatch).

@@ -493,3 +493,80 @@ TEST_CASE("Elvish Clancaller: the tutor finds only a card named Elvish Clancalle
         CHECK(EPow(*g, 31) == 1 + 1);                     // pumped by the first Clancaller
     }
 }
+
+// ---- 9. GENESIS WAVE: THE POST-PUT CONTINUATION (site 10's battlefield-put half) ----------------------------
+// Elves seed 9500006 T4: the Wave put a hasted Archdruid (Concordant Crossroads beside it) whose mana paid for the
+// hand's Visionary + Ezuri, but every plan is priced against the battlefield the main STARTED from and nothing
+// re-decided the turn after the put, so the line was unfindable at any depth or budget. Small form: Wave X=2 puts
+// Llanowar Elves + Crossroads; the hasted Llanowar's {G} pays the Elvish Mystic in hand. Checked as the whole
+// contract: the outcome predicate, the plan mark, a searched continuation that casts the Mystic, and the executor
+// realising the recorded continuation exactly (lockstep).
+TEST_CASE("Genesis Wave: the put opens site 10 -- a continuation spends the hasted dork it put, in BOTH worlds")
+{
+    GameState initial = EBase();
+    initial.players[0].library = Library{};
+    ELib(initial, "Llanowar Elves", 60);
+    ELib(initial, "Concordant Crossroads", 61);
+    for (int i = 0; i < 6; ++i) { ELib(initial, "Forest", 900 + i); }
+    EForests(initial, 5);                       // exactly {2}{G}{G}{G}: nothing left after the Wave
+    EHand(initial, "Genesis Wave", 70);
+    EHand(initial, "Elvish Mystic", 71);
+
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(initial, true);
+    const TurnSolver::Plan* wave = EFind(plans, [](const TurnSolver::Plan& q)
+    { return ECountCasts(q) == 1 && q.actions.size() == 1 && IsCast(q.actions[0], "Genesis Wave")
+          && q.actions[0].chosen_x == 2; });
+    REQUIRE(wave != nullptr);
+    // No base plan casts both: the Mystic is payable only off the mana the Wave puts.
+    CHECK(EFind(plans, [](const TurnSolver::Plan& q)
+    { return std::any_of(q.actions.begin(), q.actions.end(), [](const Action& a) { return IsCast(a, "Genesis Wave"); })
+          && std::any_of(q.actions.begin(), q.actions.end(), [](const Action& a) { return IsCast(a, "Elvish Mystic"); }); })
+          == nullptr);
+    CHECK((TurnSolver::PlanOpensBreakpointForTest(initial, *wave) & (1 << 10)) != 0);
+
+    // The board right after the put (no continuation).
+    TurnSolver::Plan prefix = *wave;
+    prefix.bp_choice = TurnSolver::kBpEmptyChoice;
+    prefix.bp_all    = true;
+    GameState reached = initial;
+    TurnSolver::ApplyPlan(reached, prefix, true);
+    REQUIRE(EN(reached, 60) != nullptr);
+    REQUIRE(EN(reached, 61) != nullptr);
+    CHECK(TurnSolver::CastPutACardPermanent(TurnSolver::PutWindowNumbers(initial), reached, "Genesis Wave"));
+    {   // ...and a plain creature cast from hand puts nothing: the cast card is not a put
+        GameState after = initial;
+        const std::vector<int> snap = TurnSolver::PutWindowNumbers(after);
+        after.players[0].hand.erase(std::remove_if(after.players[0].hand.begin(), after.players[0].hand.end(),
+                                                   [](const Card& c) { return c.m_number == 71; }),
+                                    after.players[0].hand.end());
+        EPut(after, "Elvish Mystic", 71, false, true);
+        CHECK_FALSE(TurnSolver::CastPutACardPermanent(snap, after, "Elvish Mystic"));
+    }
+
+    const std::vector<TurnSolver::Plan> cands = TurnSolver::EnumerateBreakpointPlans(reached, true);
+    const auto mystic = std::find_if(cands.begin(), cands.end(), [](const TurnSolver::Plan& p)
+    { return std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a) { return IsCast(a, "Elvish Mystic"); }); });
+    REQUIRE(mystic != cands.end());
+
+    TurnSolver::Plan recorded = *wave;
+    recorded.bp_at     = 0;
+    recorded.bp_choice = static_cast<int>(mystic - cands.begin());
+    GameState roll = initial;
+    TurnSolver::ApplyPlanWithRecordsForTest(roll, recorded, true);
+    CHECK(EN(roll, 71) != nullptr);   // the continuation cast the Mystic off the put Llanowar's {G}
+    CHECK(std::any_of(recorded.breakpoint_actions.begin(), recorded.breakpoint_actions.end(),
+                      [](const Action& a) { return IsCast(a, "Elvish Mystic"); }));
+
+    GameState exec = initial;
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, recorded, true);
+    eng.TakeTurn(exec, true, EResolveAll);
+    CHECK(EN(exec, 71) != nullptr);
+    REQUIRE(exec.battlefield.size() == roll.battlefield.size());
+    for (std::size_t i = 0; i < roll.battlefield.size(); ++i)
+    {
+        INFO("permanent ", roll.battlefield[i].card.m_number);
+        CHECK(exec.battlefield[i].card.m_number == roll.battlefield[i].card.m_number);
+        CHECK(exec.battlefield[i].tapped == roll.battlefield[i].tapped);
+    }
+}
