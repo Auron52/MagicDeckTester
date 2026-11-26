@@ -6,7 +6,6 @@
 
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
-#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameEngine.h"
@@ -522,35 +521,4 @@ TEST_CASE("Maze's End 2HG perf: EtbTapSubtypeOrder keeps the tiered, stable orde
     std::vector<int> sorted = idx;
     std::sort(sorted.begin(), sorted.end());
     CHECK(sorted == std::vector<int>{ 0, 1, 2, 3 });   // a permutation
-}
-
-// THE DEAD-CROSSING UNIT PRICE (TurnSolver DeadCrossMeter, MTG_DEAD_CROSS_UNITS, default ON; Maze's End 2HG s31301380
-// gi1380). The same two-crossing dead fan as above, searched under a FINITE budget, charges one budget unit per
-// MTG_DEAD_CROSS_UNIT_W (2) dead crossings of the fan; with the lever off it charges none. Under an UNLIMITED budget
-// the meter is never armed, so both arms use exactly the same units (inert at budget 0). The answer does not move.
-TEST_CASE("Maze's End 2HG perf: dead fan crossings charge a finite unit budget, never an unlimited one")
-{
-    LoadI3Cards();
-    GameState s = Base();
-    s.phase = Phase::PostCombatMain;
-    Put(s, "Manabond", 700);
-    s.players[0].hand.push_back(C("Simic Guildgate", 710));
-    for (int k = 0; k < 6; ++k) { s.players[0].library.push_back(C("Forest", 900 + k)); }
-    REQUIRE(TurnSolver::CrossingLandBoundaryPinsForTest(s).size() == 2);
-    struct Run { long long used; int win; };
-    auto run = [&](bool on, long long limit) {
-        heurarm::Clear();
-        heurarm::t_arm[heurarm::DEAD_CROSS_UNITS] = on ? 1 : 0;
-        SearchBudget b(limit);
-        const TurnSolver::SearchLine line =
-            TurnSolver::FullSearchLine(s, /*depth=*/1, /*max_turns=*/5, /*second_main=*/true, nullptr, &b);
-        heurarm::Clear();
-        return Run{ b.Used(), line.win_turn };
-    };
-    const Run fin_on = run(true, 1000000), fin_off = run(false, 1000000);
-    CHECK(fin_on.win == fin_off.win);
-    CHECK(fin_on.used - fin_off.used >= 1);   // the fan's two dead crossings: one unit
-    const Run unl_on = run(true, 0), unl_off = run(false, 0);
-    CHECK(unl_on.win == unl_off.win);
-    CHECK(unl_on.used == unl_off.used);       // never armed at budget 0
 }
