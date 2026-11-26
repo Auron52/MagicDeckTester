@@ -1,0 +1,10 @@
+=== BATCH (streaming per-job results as each job finishes) ===
+off.std: played=400 avg=4.3475 digest=86f60929e0e3513e ms=248774 units=5988126 cpu=246417
+on.std: played=400 avg=4.3475 digest=435306882006576a ms=264427 units=6013214 cpu=253436
+worst.std: played=400 avg=4.3475 digest=1618184c453e8a8a ms=311030 units=5925440 cpu=273327
+ncw.std: played=400 avg=4.3475 digest=86f60929e0e3513e ms=317172 units=5988126 cpu=280439
+off.2hg: played=400 avg=4.6900 digest=42a0a554cb5bac67 ms=903024 units=15172709 cpu=818166
+on.2hg: played=400 avg=4.6900 digest=ecf05599ca4a84fa ms=922919 units=15640021 cpu=862035
+worst.2hg: played=400 avg=4.6900 digest=42a0a554cb5bac67 ms=832887 units=14941771 cpu=811150
+ncw.2hg: played=400 avg=4.6900 digest=42a0a554cb5bac67 ms=778407 units=15172709 cpu=769654
+=== BATCH done (8 jobs, 3200 games) ===

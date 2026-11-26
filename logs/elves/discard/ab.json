@@ -1,0 +1,102 @@
+{
+ "jobs": [
+  {
+   "name": "off.std",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 400,
+   "seed": 9600000,
+   "budget_ms": 20,
+   "weight": 0
+  },
+  {
+   "name": "on.std",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 400,
+   "seed": 9600000,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "worst.std",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 400,
+   "seed": 9600000,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_SHED_WORST": true
+   }
+  },
+  {
+   "name": "ncw.std",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 400,
+   "seed": 9600000,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_NONCLEANUP_SHED_WORST": true
+   }
+  },
+  {
+   "name": "off.2hg",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 400,
+   "seed": 9600000,
+   "budget_ms": 20,
+   "weight": 0,
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.2hg",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 400,
+   "seed": 9600000,
+   "budget_ms": 20,
+   "weight": 0,
+   "starting_life": 30,
+   "opponent_heads": 2,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "worst.2hg",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 400,
+   "seed": 9600000,
+   "budget_ms": 20,
+   "weight": 0,
+   "starting_life": 30,
+   "opponent_heads": 2,
+   "flags": {
+    "MTG_SHED_WORST": true
+   }
+  },
+  {
+   "name": "ncw.2hg",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 400,
+   "seed": 9600000,
+   "budget_ms": 20,
+   "weight": 0,
+   "starting_life": 30,
+   "opponent_heads": 2,
+   "flags": {
+    "MTG_NONCLEANUP_SHED_WORST": true
+   }
+  }
+ ]
+}

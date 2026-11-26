@@ -79,6 +79,60 @@ seed 9700000 (avg 4.4125, digest f3c39ead7a34e7e5), 2HG 200 games seed 9800000 (
   (`MTG_DISCARD_NODE=0 MTG_DISCARD_TRACE=1`, analyze_deck `--discard-analysis`) needs thousands of games to say
   anything; the bound (below) is the instrument that answers the question.
 
-### Still to run (see logs/elves/discard-handoff.md)
+### The pooled A/B + bound batch (2026-11-26, binary 29633f152, d5 b20, 32 threads)
 
-The pooled A/B + bound batch, `logs/elves/discard/gen_manifest.py` (arms off / on / worst / ncw x std / 2hg).
+ONE batch, `logs/elves/discard/gen_manifest.py 400 9600000` (8 jobs x 400 games, seeds 9600000+gi, paired by
+gi), `MTG_DUMP_WINS=1 MTG_RSS_CAP_GB=20`, under the heavy lock. Heartbeat 32/32 until the tail. Copies:
+`logs/elves/discard/ab.json`, `ab.out` (per-job digests), `ab.pair.txt` (`pair.py ... off on worst ncw`),
+`ab.err.summary` (everything except the `[win]` lines). Scratch: `build/scratch/elves-discard/ab.err`.
+
+| arm | fmt | games | won | win-turn sum (unwon=9) | avg win turn | units vs off | faster | slower | digest |
+|---|---|---|---|---|---|---|---|---|---|
+| off (shipped: inherited Selesnya buckets) | std | 400 | 399 | 1739 | 4.3475 | -- | -- | -- | 86f60929e0e3513e |
+| on (`MTG_ELVES_BUCKET_DISCARD=1`) | std | 400 | 399 | 1739 | 4.3475 | +0.42% | 0 | 0 | 435306882006576a |
+| worst (`MTG_SHED_WORST`, BOUND) | std | 400 | 399 | 1739 | 4.3475 | -1.05% | 0 | 0 | 1618184c453e8a8a |
+| ncw (`MTG_NONCLEANUP_SHED_WORST`) | std | 400 | 399 | 1739 | 4.3475 | +0.00% | 0 | 0 | 86f60929e0e3513e (= off) |
+| off | 2hg | 400 | 399 | 1876 | 4.6900 | -- | -- | -- | 42a0a554cb5bac67 |
+| on | 2hg | 400 | 399 | 1876 | 4.6900 | +3.08% | 0 | 0 | ecf05599ca4a84fa |
+| worst (BOUND) | 2hg | 400 | 399 | 1876 | 4.6900 | -1.52% | 0 | 0 | 42a0a554cb5bac67 (= off) |
+| ncw | 2hg | 400 | 399 | 1876 | 4.6900 | +0.00% | 0 | 0 | 42a0a554cb5bac67 (= off) |
+
+Paired delta is **exactly 0.00000 in every arm and format**: not one of the 1,600 paired games moved its win
+turn (same won/unwon game too). The arms DID engage: `on` and `worst` change the units searched and three of the
+four digests, so the rollouts shed differently, and the search still lands on the same win turn every game.
+
+* **ncw is byte-identical to off** (digest and units, both formats), confirming the list has no non-cleanup
+  discard site, as predicted.
+* **The BOUND is zero.** `worst` makes every rollout cleanup shed take the LAST-ranked card of the shipped full
+  ranking (roughly 107 sheds per game by the census), i.e. the opposite of any sensible ranking, and it moves 0 of
+  800 games. If the worst ranking plays exactly like the shipped one, no ranking of the rollout shed can buy
+  anything measurable at the suite setting. Rule of three: under 3/800 = 0.375% of games (0.75% per format) can
+  be moved by the rollout axis at all (95%).
+* **The real-play axis is too rare to matter:** 2 real sheds in 600 census games (0.0025/game std, 0.005 2HG),
+  and `on` (which also changes the real shed) moved none of these 800 games.
+
+### Slower-game classification (d8 b0)
+
+**Nothing to classify.** No arm has a slower game vs `off` (0 slower, 0 faster in all six comparisons), so the
+d8 b0 recovery step has an empty input set. `logs/elves/discard/repro_manifest.py` (built for it) emits 0 jobs.
+
+### Rule-vs-searched label check: MOOT
+
+The label check asks whether the bucket rule's pick at a real cleanup shed matches the searched label. Its value
+is bounded twice over, and both bounds come back zero or close to it:
+1. The rollout bound above is 0 of 800 games: inverting the ranking in every rollout moves nothing.
+2. A perfect oracle at the real shed can only change games that shed for real, about 1 in 200-400. The `on` arm
+   already replaces that decision and moves 0 of 800 games.
+So even a perfect label oracle would move about nothing (at most about 1-2 games per 400, and none seen), and
+thousands of trace games (`MTG_DISCARD_NODE=0 MTG_DISCARD_TRACE=1`) would buy no decision. Not run.
+
+### Recommendation (for the USER; the flag stays default OFF)
+
+**Do not adopt `MTG_ELVES_BUCKET_DISCARD`; keep Elves on the inherited SelesnyaLifegain buckets.** At the suite
+setting the cleanup-discard axis is inert for this list. The anti-heuristic bound moves 0 of 800 games, and the
+drafted policy moves 0 of 800 while costing +0.42% (std) / +3.08% (2HG) units. Why it is inert: Elves empties its
+hand fast, real sheds happen only in land-screw games (0.0025-0.005 per game), and 99.85% of rollout sheds sit in
+land-light futures whose win turn the shed card does not decide. The draft is worth keeping on the branch as
+documentation of the Elves roles (it reads more sensibly than "shed the lords first"), but it buys no measured play,
+so its doubts 1-5 above need no answer unless the list changes (e.g. more card draw, or a higher curve that makes
+8-card hands common).

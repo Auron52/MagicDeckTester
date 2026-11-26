@@ -1,0 +1,24 @@
+[play] off.std depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] worst.std depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] ncw.std depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] worst.2hg depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] ncw.2hg depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[batch] workers=32 (hw_concurrency=32, affinity=32, requested=auto)
+[batch] mem: total=24027MB budget=12013MB workers=32 -> tt_cap=684885/table fsl_pool=1605MB fsl_cap=2000000 plan_cache=1003MB rss_cap=20.00G (MTG_MEM_BUDGET_MB / MTG_RSS_CAP_GB; each pool's own env var overrides)
+[goldfish] SLOW-GAME 35349ms  job=off.2hg gi=168 wt=5 units=480276  repro: --seed 9600168 --game-index 168 --games 1
+[goldfish] SLOW-GAME 33505ms  job=on.2hg gi=123 wt=5 units=525522  repro: --seed 9600123 --game-index 123 --games 1
+[goldfish] SLOW-GAME 30070ms  job=worst.2hg gi=123 wt=5 units=492075  repro: --seed 9600123 --game-index 123 --games 1
+[goldfish] SLOW-GAME 57848ms  job=on.2hg gi=168 wt=5 units=794819  repro: --seed 9600168 --game-index 168 --games 1
+[goldfish] SLOW-GAME 39014ms  job=worst.2hg gi=168 wt=5 units=588981  repro: --seed 9600168 --game-index 168 --games 1
+[batch] heartbeat: 0/32 workers busy (0%)  rss=0.6G fsl=0M/0M(of 1605M) plan=0M/1003M(of 1003M)  -> logs/batch/heartbeat.txt
+[inwin-cache] win_hits=0 nowin_hits=9534 win_stores=24940 nowin_stores=631867 widened=200296 full_refusals=0
+[game-line-cache] win_hits=27963 nowin_hits=422360 stores=870186 full_refusals=0 leafless_reads=0
+[id-hint-game] lookups=289598 cur_hits=113635 prev_hits=14827
+[determinism] plan cache refused 359 stores -- shared admission with exact keys, isolated channels and hit-equals-miss pricing; FSL did not bind.
+[rollout-game-cache] lookups=1360767 hits=298009 win_hits=57225 stores=2312005 full_refusals=0
+[enum-memo] hits=21741 misses=1000136 clears=0
+[solve-memo] hits=894425 misses=13720111 clears=192
+[leaf-eval] published=3158329 ties=2641373 flips=366508 life-equal-ties=399749

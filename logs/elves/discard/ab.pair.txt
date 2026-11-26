@@ -1,0 +1,6 @@
+    on vs off  2hg n=400 won 399->399 sum 1876->1876 delta=+0.00000 se=0.00000 t=+0.00 faster=0 slower=0
+    on vs off  std n=400 won 399->399 sum 1739->1739 delta=+0.00000 se=0.00000 t=+0.00 faster=0 slower=0
+ worst vs off  2hg n=400 won 399->399 sum 1876->1876 delta=+0.00000 se=0.00000 t=+0.00 faster=0 slower=0
+ worst vs off  std n=400 won 399->399 sum 1739->1739 delta=+0.00000 se=0.00000 t=+0.00 faster=0 slower=0
+   ncw vs off  2hg n=400 won 399->399 sum 1876->1876 delta=+0.00000 se=0.00000 t=+0.00 faster=0 slower=0
+   ncw vs off  std n=400 won 399->399 sum 1739->1739 delta=+0.00000 se=0.00000 t=+0.00 faster=0 slower=0
