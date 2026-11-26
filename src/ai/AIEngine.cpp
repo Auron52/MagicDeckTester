@@ -6350,7 +6350,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (a.cont_pins)
             {
                 rec_pins.reset();
-                rec_pins.emplace(a.cont_pins.get());
+                rec_pins.emplace(a.cont_pins.get(), state);
                 rec_scry = a.cont_pins->scry;
                 rec_bounce = a.cont_pins->bounce;
             }
@@ -6903,7 +6903,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
         const ContPins rdb_pins = ContPinsOf(extra);
         std::optional<ContPinScope> rdb_scope;
-        if (rdb_pins.Any()) { rdb_scope.emplace(&rdb_pins); }
+        if (rdb_pins.Any()) { rdb_scope.emplace(&rdb_pins, state); }
         // Lockstep trace (MTG_BP_TRACE): the EXECUTOR's breakpoint sequence, to be diffed against
         // ApplyPlanDirect's [bp-apply] lines for the same committed line. Diagnosis only.
         if (BpTraceEnabled())
@@ -7605,7 +7605,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // this applier before a pod deck that does ever exists.
                     const ContPins ca_pins = ContPinsOf(extra);   // the continuation's during-cast pins (ContPins)
                     std::optional<ContPinScope> ca_scope;
-                    if (ca_pins.Any()) { ca_scope.emplace(&ca_pins); }
+                    if (ca_pins.Any()) { ca_scope.emplace(&ca_pins, state); }
                     for (const Action& ca : extra.actions)
                     {
                         if (ca.kind == Action::Kind::SacForMana)
@@ -9627,7 +9627,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // ACTIVATIONS through the trailing dispatcher (the site-7 applier shape).
                 const ContPins ca_pins = ContPinsOf(extra);   // the continuation's during-cast pins (ContPins)
                 std::optional<ContPinScope> ca_scope;
-                if (ca_pins.Any()) { ca_scope.emplace(&ca_pins); }
+                if (ca_pins.Any()) { ca_scope.emplace(&ca_pins, state); }
                 for (const Action& ca : extra.actions)
                 {
                     if (ca.kind == Action::Kind::SacForMana)

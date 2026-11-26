@@ -26,9 +26,29 @@ struct ContPinScope
     std::optional<ScriptedPutBounce>  put_bounce;   // the continuation's Genesis Wave put Karoo
     std::optional<ScriptedPutBack>    putback;      // the continuation's Brainstorm put-back
 
-    explicit ContPinScope(const ContPins* p)
+    // `st` is the state the continuation's casts resolve on: the one pin kept in GameState (ContPins::mihail)
+    // is written there.
+    ContPinScope(const ContPins* p, GameState& st)
     {
         if (p == nullptr) { return; }
+        // THE CONTINUATION'S OWN CAST-TRIGGER PAYMENTS (LOCKSTEP #21). A pinned continuation starts its own
+        // ordinal stream: bit i is the i-th optional cast trigger of ITS casts, exactly as the plan enumeration
+        // that emitted the variant counted them (EnumeratePlans' Visionary block runs in continuation lists).
+        // Before this the field did not exist, so the continuation's casts read the OUTER plan's pin at the
+        // continued ordinal -- always past its bits -- and every pay variant of a continuation was inert:
+        // "pay {G} again for the Elf drawn off Visionary" was unfindable inside a searched continuation.
+        // STICKY, deliberately not restored at scope exit: the ordinal is a cursor the casts advance, and the
+        // two worlds bound a continuation differently (the rollout's frame closes after its block; the record
+        // replay's scope lasts until the next tagged record; the executor's searched re-solve route has already
+        // written this same plan's pin at ordinal 0 via WritePostApplyStatePins, which its scoring apply then
+        // advanced through the rest of the phase). Writing once at the start and letting every later cast
+        // advance the one cursor gives the same stream in all of them; a restore would rewind it in some.
+        // Unpinned = nothing written (the outer stream continues), as for every other field here.
+        if (p->mihail.IsPinned())
+        {
+            st.scripted_mihail_pay_choice     = p->mihail;
+            st.scripted_mihail_trigger_ordinal = 0;
+        }
         if (p->etbdig     >= 0) { etbdig.emplace(p->etbdig); }
         if (p->saga_ch1   >= 0) { saga_ch1.emplace(p->saga_ch1); }
         if (p->ponder     >= 0) { ponder.emplace(p->ponder); }
@@ -68,6 +88,7 @@ inline ContPins ContPinsOf(const TurnSolver::Plan& p)
     c.reflect_targets = p.reflect_targets;
     c.put_bounce  = PutBouncePinOf(p.bounce_choice, p.land_decided, p.land_to_play);
     c.putback     = p.putback_choice;
+    c.mihail      = p.mihail_pay_choice;
     return c;
 }
 
