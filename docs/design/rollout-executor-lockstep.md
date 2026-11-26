@@ -58,6 +58,7 @@ hold different physical copies (#4 below was invisible until the trace showed `I
 | 18 | the executor's CLEAN-set cast loop replayed a committed DEFERRED-class segment (a Remand-ridden plain cantrip) at the cast, before the deferred Karoo drop; the rollout runs it after | **FIXED** 2026-10-20 behind `MTG_EXEC_CLEAN_BP_DEFERRED` (default ON; below) |
 | 19 | an UNBRANCHED-CANON continuation (`Plan::cont_canon`) applies its casts only, but the rollout (and the executor's re-derived continuation) built its PlanTraits from the WHOLE list -- so the activation-line hold held mana for an activation nothing makes, while the committed-line record replay (the canon's casts only) held nothing, and the two paid the same cast from different sources | **FIXED** 2026-10-22 behind `MTG_CANON_CONT_TRAITS` (default ON; below) |
 | 20 | the Elves mana cluster (hasted scaled-dork credit, prepay tapping grown scalers, the Lodge burst unfed, a Cavern unit paying a noncreature pip): SHARED-code defects -- both worlds equally wrong, so NOT a divergence; recorded so the class is ruled out | **FIXED** 2026-11-26, four default-ON levers (below) |
+| 21 | a continuation's multikick / squad COUNT was dropped from its breakpoint record (`rec.kicked` copied, `rec.kick_count` not): the replay cast Galadhrim Brigade x1 as K = 0 | **FIXED** 2026-11-26 (below) |
 
 Rate per 500 games (seed 4004, 8 decks, 4000 games) after 1-4: **0 everywhere, Hinata included.**
 (Dragonstorm was 4-5 at the suite gate budgets before #1; Auras was 3 before #2; Hinata was 4 before
@@ -814,3 +815,21 @@ Payer *policy* note left alone (the standing exemption): in the 9500005 frame th
 Known remaining gap (20e): only `TapForCostShared` honours the mark -- a float spend that bypasses it (Soulfire's
 `ConsumeFloatingAny`, `PayCostFromFloat`) does not, and a MIXED batch's creature-stage Cavern unit is marked too but
 its creature-only float routing (creature_mana_only) is unchanged.
+
+## #21 -- a continuation's MULTIKICK / SQUAD count was dropped from its breakpoint record (found + fixed 2026-11-26)
+
+Exposed by #20d. Elves fd sweep (seeds 7001+off, gi off, d5 b20) seed 7161 gi160: `[fd-diverge] realized_win=4
+predicted_win=3`, and only with `MTG_UNTAP_FLOAT_FEED_RETRY` on (the other three #20 levers off still diverged; all
+four off reproduced the pre-fix binary's digest byte for byte). `MTG_BP_TRACE`'s first difference, T3, after Genesis
+Wave's continuation:
+
+```
+[bp-pay] apply T3 cast=Galadhrim Brigade cost=3/... G2 ...    <- the rollout: squad x1, {3}{G}{G}
+[bp-pay] exec  T3 cast=Galadhrim Brigade cost=2/... G1 ...    <- the record replay: {2}{G}, K = 0
+```
+
+The breakpoint recorder (`cast_by_name`'s record, beside #16's mode list) copied `rec.kicked` but not
+`rec.kick_count`, so a recorded "(Kicked x1)" squad cast replayed as the bare kicked face -- one Brigade token short,
+and a different float for the Crossroads after it. It was latent until #20d let the rollout afford the squad copy off
+Wirewood Lodge's float-fed burst. Fix: `rec.kick_count = riders.kick_count` (no lever: a record that drops a searched
+cast axis is a pure defect, the #16 class). Unit-tested by the fd sweep returning 0 `[fd-diverge]`.
