@@ -428,10 +428,12 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
             if (name.size() >= suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0)
             { has_profile = true; }
         }
-        // A user may have copied in a decklist before its baseline profile/provider is ready.
-        if (has_list && has_profile) { ++folders; }
+        // A newly committed deck can be routed before its profile exists. An unlisted
+        // local decklist is counted once its profile makes it a suite-ready deck.
+        const bool listed = expected.find(e.path().filename().string()) != expected.end();
+        if (has_list && (listed || has_profile)) { ++folders; }
     }
-    CHECK_MESSAGE(folders == checked, "decks/ holds ", folders, " profiled decklist folders but the table pins ", checked,
+    CHECK_MESSAGE(folders == checked, "decks/ holds ", folders, " listed or profiled decklist folders but the table pins ", checked,
                   " -- add the new deck's expected provider here");
 }
 
