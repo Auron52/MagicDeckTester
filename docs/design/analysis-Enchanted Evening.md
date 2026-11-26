@@ -291,6 +291,30 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
    the Wave keeps its counters until the loop is possible again. The tail is DELETED (not levered) in
    `PerformWaveOpalSweep` (ruling-15/16 change set, see "Ruling 15/16/17 prune" below).
 
+**Rulings 18-21 (2026-11-26)**, answering the step-6 / prune questions: (2) the 4-mana breakpoint of the ruling-16 tutor
+prune; (3) should a clause-3 hexproof non-threat block the free turn when there is no able Wave loop; (4) should
+Oblivion Ring be able to target the opponent's virtual board; (5) does an evasive hexproof creature (Gryff's Boon
+flying, Spirit Mantle protection from creatures) break the lock without trample + power >= 5.
+
+18. **(Q2, 4-mana breakpoint):** *"That sounds good to me, unless you are finding issues with the rule."*
+   -> the ruling-16 breakpoint stands as built.
+19. **(Q3, clause-3 hexproof non-threat):** *"No blocking should be done to be consistent for every deck."*
+   -> a hexproof creature that is not a threat does NOT veto the free turn, with or without an able Wave loop. Delete
+   clause 3 of `eefair::Veto`.
+20. **(Q4, Oblivion Ring vs the virtual board):** *"I suppose if this is the different between the lock and
+   not it should be an option. Otherwise I wouldn't cast it."* -> an Oblivion Ring we cast may target a permanent on
+   the opponent's virtual board, offered ONLY when exiling it is what makes the lock hold (it removes the last veto);
+   otherwise that target is not offered.
+21. **(Q5, evasive hexproof):** *"I suppose that is true. If they cannot be blocked by the creature then we
+   need to remove the flying or the creature itself to fully lock."* -> a hexproof creature our creatures cannot block
+   (flying with no flyer/reach of ours, protection from creatures, unblockable, ...) vetoes the lock (in addition to
+   the ruling-9 trample + power >= 5 case) until the creature or its evasion source (e.g. the Aura granting it, via
+   Force of Vigor) is removed. Orchestrator default, to confirm: power >= 1 (a 0-power creature deals no damage).
+
+   Also from the same message, on the tutor prune (Q1): *"For the tutor prune what information do you have regarding
+   the games that are lost between them? I think your exception is potentially fine, but I'd like to hear more about
+   the unrecoverable cases."*
+
 Reading: the lock is credited through the EXISTING free-turn rule (`MTG_FREE_TURNS`, default ON,
 `src/core/FreeTurns.h`, `docs/design/opponent-lockdown-free-turns.md`): a locked opponent turn does not advance the
 round. The deck's lock cards must join `GoldFishRunner::DeckMayLockOpponent`. Under EE + Opalescence the attackers are
