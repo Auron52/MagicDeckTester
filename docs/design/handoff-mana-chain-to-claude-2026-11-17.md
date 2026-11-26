@@ -296,6 +296,16 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**03:36 UTC 11-26:** results in.
+- **k-fleet done:** report at logs/k-fleet/report.md on wip/k-fleet (f8f4f8525); the rebased beam is wip/beam-staged2 0c2465c8a.
+  - K fleet-wide vs today: -71 std / -38 2HG = -109 net, mostly Maze's End (-77/-36, units x0.77/x0.74). Mill is +12/+2, and all 22 of its slower games recover at d8 b0. Of the 45 K slower games, 40 recover and 5 Gods games are NC-equal (clairvoyant).
+  - SG50+K on CG/AL/DS: -17 std / -17 2HG at units x0.99-1.00 on CG/DS (AL +1%/+3%). SG50 alone: -18/-14 at +1-6% units.
+  - USER QUESTIONS, data complete: (1) turn K on by default fleet-wide? (2) adopt SG50 together with K on CG/AL/DS? Both put to the USER.
+  - Mill mitigation agent a?? (wip/mill-k) launched, to root-cause K's Mill slower games and fix it in general K code.
+- **worldfire-ad done with steps 1-3:** report at logs/worldfire-ad/report.md (09acf714b). APPLY-DROP 6924 -> 2019 on 23k gate seeds; units 4197/4197; CPU +0.53% instr with RITUAL_TIGHT. Its 94,800-game play A/B is queued on the box lock (DONE marker build/scratch/worldfire-ad/ab_out/DONE). My waiter is on it. On DONE, launch a fresh agent from logs/worldfire-ad/handoff2.md for the analysis and d8 b0 checks.
+- **The Windswept Heath / Boars unit "failures" were a harness artifact:** a binary copied under build/scratch reads the primary checkout's older cards.json unless src/decks symlinks sit beside it.
+- **maze2hg-perf successor:** its A/B is queued on the box lock.
+
 **02:38 UTC 11-26:** status check.
 - **maze2hg-perf:** handed off at 359K. Report committed on wip/maze2hg-perf as 76a69d8db. Code c5c8877d9 adds byte-identical per-node cuts plus MTG_DEAD_CROSS_PRICE. g1380 went 990 s -> 410 s with the same digest; g1647 needed no fix (the g803 defect, already landed).
 - **Successor a2fef92a (maze2hg-perf branch):** its "stop when exhausted" variant takes g1380 to 15.6 s and g1647 to 4.3 s, both on the same win turn, but the digest moved, so it is a play change. Now running a census of which decks are affected, then a held-out A/B and d8 b0 checks.
