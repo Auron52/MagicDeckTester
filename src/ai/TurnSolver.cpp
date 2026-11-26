@@ -146806,7 +146806,7 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "TapSubtypeSteal", "TransformSelf", "TapTargetPump", "PayCounterSelf", "CounterPing", "PingLoop",
         "SacNamedTutorPut", "TargetPump", "UntapLand", "FigureTwo", "FigureFour", "FigureEight",
         "ThresholdLoot", "CounterDestroyArtEnch", "TurnFaceUp", "TurnFaceUpLate", "SelfBounce", "TapTutorPut", "TapTreasure",
-        "SelfPing", "TapPing", "TapFight", "TeamBasePT"
+        "SelfPing", "TapPing", "TapFight", "SacTutorTop", "FadeExileCreature", "TeamBasePT"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }
