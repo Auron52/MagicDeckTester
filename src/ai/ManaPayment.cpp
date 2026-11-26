@@ -12161,7 +12161,11 @@ static bool LineKeepCritGate(const GameState& s, const ManaCost& cost_in, const 
     constexpr int kMaxSrc = 48;
     unsigned src_mask[kMaxSrc];
     int      src_each[kMaxSrc];
+    bool     src_filter[kMaxSrc];
     int      n_src = 0;
+    // MTG_LINE_KEEP_CRIT_FILTER: the units of each colour that untapped hybrid-fed filter lands added to tot.
+    int filt[5] = { 0, 0, 0, 0, 0 };
+    const bool filter_on = LineKeepCritFilterOn();
     const int active = s.active_player_index;
     for (const Permanent& q : s.battlefield)
     {
@@ -12183,10 +12187,13 @@ static bool LineKeepCritGate(const GameState& s, const ManaCost& cost_in, const 
         const int amt = std::max(1, ManaProducedPerTap(*qd));
         const int each = n == 1 ? amt : std::max(1, amt / n);
         for (int ci = 0; ci < 5; ++ci) { if (m & (1u << ci)) { tot[ci] += each; } }
+        const bool fed_filter = filter_on && qd->params.is_filter && !LandTypeChangedToIsland(s, q);
+        if (fed_filter) { for (int ci = 0; ci < 5; ++ci) { if (m & (1u << ci)) { filt[ci] += each; } } }
         if ((m & owed) == 0) { continue; }
         if (n_src == kMaxSrc) { return true; }   // a board this wide: let the judge decide
         src_mask[n_src] = m;
         src_each[n_src] = each;
+        src_filter[n_src] = fed_filter;
         ++n_src;
     }
     for (int k = 0; k < n_src; ++k)
@@ -12218,6 +12225,30 @@ static bool LineKeepCritGate(const GameState& s, const ManaCost& cost_in, const 
             int took = 0;
             for (int k = 0; k < nu && took < nonc; ++k) { took += units[k]; }
             if (tot[ci] - took < rest_c[ci] + cost_c[ci]) { return true; }
+        }
+    }
+    // MTG_LINE_KEEP_CRIT_FILTER (EngineFlags.h): the same take with the filter lands' colours out of the supply. A
+    // hybrid-fed filter land (Cascade Bluffs) makes its colours only from a coloured unit of ANOTHER source, which this
+    // bill can spend, and unfed it makes {C}; so the colour it seems to add is not supply the bill must leave. Here the
+    // bill's non-c pips take the largest UNCONDITIONAL c sources (one or more), and the gate passes when what is left of
+    // c, without the filters, falls short. tot only shrinks, so this passes a superset of the tests above (it adds
+    // trials; the exact judge decides). Treasure Hunt s30133719 T8 {Bluffs + Land's Edge + Treasure Hunt}: Thundering
+    // Falls + Temple of Epiphany are the only unconditional {U}, Land's Edge's {1}{R}{R} took both, and two unfed Bluffs
+    // with a Reliquary Tower could not make Treasure Hunt's {U}; the gate had counted the Bluffs as two more {U}.
+    if (filter_on)
+    {
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (filt[ci] == 0 || !(owed & (1u << ci)) || mv <= cost_c[ci]) { continue; }
+            int units[kMaxSrc];
+            int nu = 0;
+            for (int k = 0; k < n_src; ++k)
+            { if ((src_mask[k] & (1u << ci)) && !src_filter[k]) { units[nu++] = src_each[k]; } }
+            std::sort(units, units + nu, std::greater<int>());
+            const int nonc = mv - cost_c[ci];
+            int took = 0;
+            for (int k = 0; k < nu && took < nonc; ++k) { took += units[k]; }
+            if (tot[ci] - filt[ci] - took < rest_c[ci] + cost_c[ci]) { return true; }
         }
     }
     return false;
