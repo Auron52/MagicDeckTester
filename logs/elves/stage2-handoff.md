@@ -150,3 +150,17 @@ known 9p order-4 alloc flake -- retry, do not cap jobs). A retry was started; se
 * Taunting Elf bracket note rewritten as USER-APPROVED (quote included).
 * NO NEW UNIT TESTS for the Elves mechanics yet (item C), NO smoke run yet (item E), Shepherd not wired (item B),
   ElvesProvider scaling-sink restriction not started (USER ruling 2).
+
+## SECOND INTEGRATOR -- items B-F DONE (2026-11-26)
+* d2cd4c39e: Allosaurus Shepherd PermAbilityMode::TeamBasePT (appended LAST, = 43) + Permanent::temp_base_set bit
+  (reset at GameEngine cleanup, TurnSolver SimulateEndAndStartNextTurn, EotWindowEndOfTurnReset, Combat.cpp
+  next-turn probe; folded beside `unearthed` everywhere; Dominance boundary refuses it); ResolveTeamBasePT
+  (SpellEffects.h, before ApplyPermAbility); all three ModeSpec tables, K-block exclusion, PlanDumpModeName
+  (also added the missing "TapPing"), UntapFloatSpendCap / S9SacManaDemand lists, PostEntryActivationPending.
+  test/unit/test_elves.cpp (9 cases, executor vs rollout), registered in CMakeLists.txt. Concordant Crossroads'
+  stale world-rule bracket rewritten. DECISIONS.md rows + audit_viewer_decisions.py MANIFEST / board-activation /
+  INERT_PARAMS rows. Units 3957/3957.
+* Gates: coverage missing [] ; audit_card_costs rc 0 (707/707) ; viewer audit rc 0 clean ; smoke 243/243,
+  play-changed 0 (searched and d0), 608 scenarios ; field audit offline rc 0 (snapshot gained the 8 Elves cards; --update rc 1 only from 429s on already-snapshotted cards).
+* Ledger Stage 2 + Viewer sections filled (docs/design/analysis-Elves.md).
+* NOT DONE (by design): the ElvesProvider / scaling-sink restriction (USER ruling 2) -- the next agent's.

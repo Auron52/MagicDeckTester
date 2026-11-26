@@ -199,6 +199,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Allosaurus Shepherd": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "This spell can't be countered.\nGreen spells you control can't be countered.\n{4}{G}{G}: Until end of turn, each Elf creature you control has base power and toughness 5/5 and becomes a Dinosaur in addition to its other creature types.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Shaman"
+  },
   "Almost Perfect": {
     "cmc": 6.0,
     "keywords": [
@@ -2235,6 +2244,15 @@
     "toughness": "2",
     "type_line": "Creature — Elf Druid"
   },
+  "Elvish Clancaller": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{G}",
+    "oracle_text": "Other Elves you control get +1/+1.\n{4}{G}{G}, {T}: Search your library for a card named Elvish Clancaller, put it onto the battlefield, then shuffle.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Druid"
+  },
   "Elvish Harbinger": {
     "cmc": 3.0,
     "keywords": [],
@@ -2939,6 +2957,17 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
+  },
+  "Galadhrim Brigade": {
+    "cmc": 3.0,
+    "keywords": [
+      "Squad"
+    ],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Squad {1}{G} (As an additional cost to cast this spell, you may pay {1}{G} any number of times. When this creature enters, create that many tokens that are copies of it.)\nOther Elves you control get +1/+1.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Elf Soldier"
   },
   "Galadriel of Lothlórien": {
     "cmc": 3.0,
@@ -3894,6 +3923,15 @@
     "toughness": "6",
     "type_line": "Legendary Creature — Boar God"
   },
+  "Immaculate Magistrate": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "{T}: Put a +1/+1 counter on target creature for each Elf you control.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Elf Shaman"
+  },
   "Impolite Entrance": {
     "cmc": 1.0,
     "keywords": [],
@@ -4078,6 +4116,17 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Legendary Creature — Human Soldier"
+  },
+  "Joraga Warcaller": {
+    "cmc": 1.0,
+    "keywords": [
+      "Multikicker"
+    ],
+    "mana_cost": "{G}",
+    "oracle_text": "Multikicker {1}{G} (You may pay an additional {1}{G} any number of times as you cast this spell.)\nThis creature enters with a +1/+1 counter on it for each time it was kicked.\nOther Elf creatures you control get +1/+1 for each +1/+1 counter on this creature.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Warrior"
   },
   "Jorn, God of Winter": {
     "cmc": 3.0,
@@ -4499,6 +4548,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery — Arcane"
+  },
+  "Leaf-Crowned Visionary": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{G}",
+    "oracle_text": "Other Elves you control get +1/+1.\nWhenever you cast an Elf spell, you may pay {G}. If you do, draw a card.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Druid"
   },
   "Leeching Sliver": {
     "cmc": 2.0,
@@ -5003,6 +5061,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Human Cleric"
+  },
+  "Marwyn, the Nurturer": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Whenever another Elf you control enters, put a +1/+1 counter on Marwyn.\n{T}: Add an amount of {G} equal to Marwyn's power.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Legendary Creature — Elf Druid"
   },
   "Massacre Wurm": {
     "cmc": 6.0,
@@ -7956,6 +8023,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Taunting Elf": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "All creatures able to block this creature do so.",
+    "power": "0",
+    "toughness": "1",
+    "type_line": "Creature — Elf"
   },
   "Tectonic Giant": {
     "cmc": 4.0,
