@@ -372,3 +372,28 @@ tapt, mana onto wip/elves-analysis (resolve conflicts; rebuild; units 3 modes; E
 `## Claude-play sweep` -> tiers `--deck=elves,elves2hg` + accept + check_gt_logs, commit rows+GT+suite_cost -> accept
 other decks' moved keys per the agents' A/B tables -> 5b depth sweep, 5c2 leaf_tiebreak_check, scaling-rule A/B,
 discard bucket draft, Stage 6 report -> push_queue land, CI watch --interval 60.
+
+## Coordinator checkpoint 5 (2026-11-26 ~13:30 UTC, pre-compaction) -- RESUME HERE
+
+INTEGRATION BRANCH IS NOW `wip/elves-int` (worktree `.claude/worktrees/elves-int`): wip/elves-analysis REBASED onto
+origin/phase-1-2-deck-analyzer 9e566000b (392 commits newer). Conflicts resolved: SpellEffects.h (kept origin's
+PrintedSpellManaValue + our squad/KickedFaceFor; tutor match = origin's TutorPutTargetMatches, which already has
+wish_requires_name), Permanent.h enum (TapFight then TeamBasePT), TurnSolver.cpp (activation table both; PlanDumpModeName
+fixed to "SelfPing","TapPing","TapFight","TeamBasePT" -- origin lacked TapPing), HeuristicArm.h both, DecisionProvider.h
+both, DecisionProviders.cpp (origin side + our ElvesProvider block appended at EOF). Then cherry-picked: fd (430997dae,
+9b0fe940b lockstep #20), contpin (5dd44269d lockstep #21, a74aa0754, d57236f5f), tapt 022db4183. UNCOMMITTED there:
+test/regression_cases.sh (Elves rows) + test/suite_cost.json (kept ORIGIN's hinata 18918.94; re-run
+`suite_gate.py --cost decks/Elves` on the integrated tree). Build of elves-int queued on heavy.lock
+(build/scratch/elves-int/build.N.log). NOT YET BUILT/VALIDATED.
+
+Agent results: contpin DONE (A/B 2000g net -2, 0 slower, smoke 243/243 identical). tapt DONE 022db4183 (smoke
+identical, A/B Elves/Maze/Merfolk 0 change). Still running: wavebp (agent a833..., fd 0, smoke pending; then hatch
+smoke, A/B, delete hatch, restore settings.local.json), mana (agent a099..., A/B + Cavern + delete levers + #22),
+discard-bucket draft (agent acbc..., worktree elves-discard, flag MTG_ELVES_BUCKET_DISCARD default OFF; USER decision).
+Unit gate (revised): default FULL suite + UNPRUNED/HUMAN_PLAY on touched test files only (full-suite UNPRUNED takes hours;
+full HUMAN_PLAY segfaults with 414 failures on base too).
+
+Next: cherry-pick wavebp + mana commits (only their own; based 4fc09f9b3) onto wip/elves-int -> build -> units ->
+Elves fd sweep 0 -> smoke (expect Stompy/Selesnya moves from mana; classify, d8 b0 slower) -> ledger sweep flags 0 ->
+tiers --deck=elves,elves2hg accept + check_gt_logs, commit rows+GT+suite_cost -> 5b, 5c2, scaling A/B, Stage 6 ->
+push_queue join/land, CI watch. 2-hourly status cron 61a8eb73 (session-only).
