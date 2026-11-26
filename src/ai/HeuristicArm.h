@@ -1140,6 +1140,7 @@ enum Slot : int
     SCALED_ROUTE_ACTS,        // MTG_SCALED_ROUTE_ACTS  MTG_SCALED_LAND_ROUTE's "rest of the line" also counts the plan's PENDING trailing activations (PlanTraits::act_mana_total net of those paid and the one being paid), not only its unpaid casts; a payment made while an activation is pending is no longer subtracted from the cast hold. Maze's End 2HG s26701483 gi1483 T4 (USER 2026-11-25 "We should be using Baldur's Gate"): Archdruid's Charm {G}{G}{G} off three Gates stranded the second Maze's End {3}; holding one out pays Charm through Baldur's Gate's fed mode and the surplus pays the {3}. Default ON; =0 -> the casts-only rest
     FETCH_HINT_TAPPED,        // MTG_FETCH_HINT_TAPPED  REPORT-ONLY arm (USER 2026-11-22): a fetchland's deck-derived hand hint (HandFixingProduces) also counts the always-tapped fetchable lands (triomes). Default OFF (the USER: untapped reach only)
     ROLLOUT_FETCH_STATIC_HINT,// MTG_ROLLOUT_FETCH_STATIC_HINT  the playout's legacy land drop (SimulateLandPlayOne) reads a fetchland's static `produces`, not its deck-derived hand reach (Worldfire +11 -> -1 at the heath-wf A/B). Default ON; =0 -> the playout reads the deck-derived reach
+    DEAD_CROSS_UNITS,         // MTG_DEAD_CROSS_UNITS  dead boundary-fan crossings charge the FINITE unit budget, one unit per MTG_DEAD_CROSS_UNIT_W (default 2) of one fan, and the fan stops when that overruns its pass (TurnSolver DeadCrossMeter; Maze's End 2HG s31301380 gi1380). A budget price, inert at budget 0. Default ON; =0 charges nothing
     COUNT
 };
 
@@ -2224,6 +2225,7 @@ inline const char* Name(int slot)
         "MTG_SCALED_ROUTE_ACTS",
         "MTG_FETCH_HINT_TAPPED",
         "MTG_ROLLOUT_FETCH_STATIC_HINT",
+        "MTG_DEAD_CROSS_UNITS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
