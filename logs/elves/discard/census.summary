@@ -1,0 +1,8 @@
+[discard] g9700126 T5 hand=8 cands=8 lip=0 landsinhand=0 tower=0 dropopen=1 -> Allosaurus Shepherd
+[discard] g9700126 T5 hand=8 cands=8 lip=0 landsinhand=0 tower=0 dropopen=1 -> Leaf-Crowned Visionary
+[discard] g9800196 T7 hand=8 cands=8 lip=2 landsinhand=0 tower=0 dropopen=1 -> Galadhrim Brigade
+[discard] g9800196 T7 hand=8 cands=8 lip=2 landsinhand=0 tower=0 dropopen=1 -> Genesis Wave
+=== SHED STATS: real=2  rollout=64100 (low-land=64004)  cleanups-that-shed=64001  sheds/cleanup=1.00 ===
+=== SHED COST: calls=64001  cpu=0.536s  (8.369 us/call, summed over threads) ===
+=== SHED HAND SIZE AT ENTRY: 8:63989 9:12 ===
+=== SHED POLICY: calls=64102  idx0-differs-from-generic=47939 (74.8%) ===

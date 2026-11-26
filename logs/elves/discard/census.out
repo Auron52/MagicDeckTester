@@ -1,0 +1,4 @@
+=== BATCH (streaming per-job results as each job finishes) ===
+census.2hg: played=200 avg=4.7150 digest=d1979697ecb7a769 ms=288768 units=6101908 cpu=283806
+census.std: played=400 avg=4.4125 digest=f3c39ead7a34e7e5 ms=279458 units=7080840 cpu=276736
+=== BATCH done (2 jobs, 600 games) ===
