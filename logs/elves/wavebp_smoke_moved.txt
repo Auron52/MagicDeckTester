@@ -1,0 +1,51 @@
+  FAIL  mazesend_smoke_d5_s1001    exp=5.5909/b8aaaf29762dc04f got=5.5833/2fcea1dd08216d34
+  FAIL  mazesend2hg_smoke_d5_s1001 exp=5.2000/ca508922665951d5 got=5.2000/782d25fe3a801268
+  FAIL  hydras_smoke_d3_s1001      exp=5.4600/a5653110723f94e6 got=5.4800/5529a99c02e2c935
+  FAIL  hydras_smoke_d5_s1001      exp=5.4500/a6a9f60b26b9d677 got=5.4500/2f960ab0bccc541c
+  FAIL  hydras2hg_smoke_d5_s1001   exp=5.7600/77ff1b7890472b47 got=5.7600/e94a3174a70390d7
+  FAIL  gods_smoke_d0_s1001        exp=8.7810/e88cb09d97a27a9e got=8.7810/209d7a2d504ed078
+  FAIL  gods_smoke_d3_s1001        exp=5.4800/13050eecf8084aae got=5.4800/020586da5936ad7d
+  FAIL  gods_smoke_d5_s1001        exp=5.4200/56f3bf22df45515c got=5.4200/37de952bdd951a43
+  FAIL  gods2hg_smoke_d5_s1001     exp=5.5600/c6852fdda8877a59 got=5.5600/84401a6144a706d6
+  FAIL  shadowborn_smoke_d3_s1001  exp=4.9800/930f64ed2f33207e got=4.9800/fd3cbace8e29faa1
+  FAIL  shadowborn_smoke_d5_s1001  exp=4.7700/01b926554db474fa got=4.7700/81a8f1774b48092a
+  FAIL  shadowborn2hg_smoke_d3_s1001 exp=5.2800/33c63e071ce23744 got=5.2800/5a45d40ee108c7fd
+  FAIL  auras_smoke_d3_s1001       exp=3.9300/1fc354f7923cef0f got=3.9300/939f3f8f0396c0aa
+  FAIL  auras_smoke_d5_s1001       exp=4.1022/4d3684e3a5aa1cbe got=4.1000/f85700801b3d161f
+  FAIL  goblins_smoke_d3_s1001     exp=3.6800/44ed57197427f989 got=3.6800/94b850c8627a311a
+  FAIL  goblins_smoke_d5_s1001     exp=3.5700/88cfed10552c95f7 got=3.5700/1d3d85e9725ac1b4
+  FAIL  creature_giving_smoke_d3_s1001 exp=4.6200/0463cae9da9cdcbe got=4.5800/b95cca9cc6271035
+  FAIL  creature_giving_smoke_d5_s1001 exp=4.6400/86ef26fb71aeb766 got=4.6133/b534a2832728aafd
+  FAIL  jumbo_smoke_d3_s1001       exp=3.9200/0d54e96e8b5ed80b got=3.9000/827bb8fb9b2887a0
+  FAIL  jumbo_smoke_d5_s1001       exp=3.9657/78e1771d7f481d4e got=3.9600/a90ac24d6cdc9d8b
+  FAIL  melira_smoke_d3_s1001      exp=4.7600/d9a27405e2f04816 got=4.7600/205aa7f7a170c398
+  FAIL  melira_smoke_d5_s1001      exp=4.6300/afcba1b83f5f1573 got=4.6300/a288573b78e81ea8
+  FAIL  goblins2hg_smoke_d5_s1001  exp=3.9867/7ed9172b7e4d0654 got=3.9867/b5e656009b5b81f3
+  FAIL  fluctuator2hg_smoke_d5_s1001 exp=3.4933/c05bf038c690c9c8 got=3.4800/e15d4f37c4e77a46
+  FAIL  creature_giving2hg_smoke_d5_s1001 exp=4.8800/82b05bf80f737881 got=4.8800/a4bca0e1e379ce5b
+  FAIL  melira2hg_smoke_d5_s1001   exp=4.8000/1a98303cc127bc45 got=4.8000/fa78be2056fc59c7
+  FAIL  elementals2hg_smoke_d5_s1001 exp=4.9600/c8ddbe855e53f5e2 got=4.9600/cd2b124019a931ec
+  FAIL  pd2hg_smoke_d5_s1001       exp=5.4800/63e3e0ed31b07ca5 got=5.5600/7bf7b8cf1a41836a
+  FAIL  fluctuator_smoke_d3_s1001  exp=3.4400/e9f5880ed9eaea61 got=3.4400/660ef308738e97a9
+  FAIL  fluctuator_smoke_d5_s1001  exp=3.5314/b9b5f096e865d86b got=3.5257/0d48859b0012f11e
+  FAIL  selesnyav2_smoke_d3_s1001  exp=4.4600/2189c7ce24f0e8d4 got=4.4600/b8d46b668f1fdd3a
+  FAIL  selesnyav2_smoke_d5_s1001  exp=4.5943/8fec93705d71d61b got=4.5943/03cc08580a9b29ff
+  FAIL  selesnyav22hg_smoke_d5_s1001 exp=4.7400/20eaa2a7c74c1dd5 got=4.7400/72e39c42f21e939a
+  FAIL  pd_smoke_d3_s1001          exp=5.2800/a49c9f57abc5bafa got=5.2800/3afbd5c19df3b8fe
+  FAIL  pd_smoke_d5_s1001          exp=5.4900/1a3a1fad589717f9 got=5.4900/9e7d12cfb888578b
+  FAIL  landfall_smoke_d3_s1001    exp=6.0400/0e06009bb30ddb0b got=6.0400/a4e7475fea734500
+  FAIL  landfall_smoke_d5_s1001    exp=5.7200/6a76e33d9425b437 got=5.7400/a1f1843a4cf7442b
+  FAIL  galadriel_smoke_d3_s1001   exp=4.8200/28171bed7f5f7bef got=4.8200/3d90b223b10aead0
+  FAIL  galadriel_smoke_d5_s1001   exp=5.0343/1e6758aab09aca5b got=5.0343/a6f9e607ebe61813
+  FAIL  galadriel2hg_smoke_d5_s1001 exp=4.8933/18d32938d1074fe6 got=4.8933/b1f95330448e25e3
+  FAIL  elementals_smoke_d3_s1001  exp=4.4400/26d17d610e9bc5f0 got=4.4400/8a2dc0c49493b4d0
+  FAIL  elementals_smoke_d5_s1001  exp=4.3440/27da29f1d5bca464 got=4.3440/f6577f7145a707aa
+    creature_giving2hg_smoke_d5_s1001 gi29: 5->6
+    creature_giving2hg_smoke_d5_s1001 gi39: 5->6
+    hydras_smoke_d3_s1001 gi30: 5->6
+    landfall_smoke_d3_s1001 gi4: 5->6
+    landfall_smoke_d5_s1001 gi16: 5->6
+    landfall_smoke_d5_s1001 gi88: 5->6
+    landfall_smoke_d5_s1001 gi90: 5->6
+    pd2hg_smoke_d5_s1001 gi20: 5->6
+    pd2hg_smoke_d5_s1001 gi21: 5->6

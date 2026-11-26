@@ -1,0 +1,12 @@
+Immaculate Magistrate: the target gets one +1/+1 counter per Elf we control, in BOTH worlds
+Landfall: a HELD battlefield fetch is two landfalls too -- its entry, then its searched activation
+Leaf-Crowned Visionary: a breakpoint child resumed from the node snapshot draws what a full apply draws
+Leaf-Crowned Visionary: the {G} pay-to-draw is a searched pin -- paid draws, declined does not
+Path: Colossus Hammer never casts it by default (USER 2026-10-18: excluded for goldfishing)
+Path: a self-target cast exiles our creature and fetches a TAPPED basic -- searched, in lockstep
+Path: a stale self-target (the creature left before the cast) is not cast in either world
+Path: an opponent target exiles it and nothing else; the ColossusHammer provider refuses that cast
+Path: exiling an equipped host DETACHES the Equipment, in both worlds (the exile-branch fix)
+Path: exiling the host of an attached Lizard Blades makes the Lizard a creature again, in both worlds
+Path: one cast variant per own-creature identity class; the second Path names the second member
+Path: the attack projection drops the creature a self-target Path exiles (and its Equipment)

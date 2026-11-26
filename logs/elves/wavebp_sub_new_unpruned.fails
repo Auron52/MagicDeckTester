@@ -1,0 +1,6 @@
+Land position: 'Khalni, then the Forest' with one Forest in play is not offered
+Land position: gi10's 'land after Phylath; Phylath, Khalni crack' is not offered -- its realised line is
+Landfall: a fetchland's drop is TWO landfall triggers -- the fetchland and the land it fetches
+Path: Colossus Hammer never casts it by default (USER 2026-10-18: excluded for goldfishing)
+Path: an opponent target exiles it and nothing else; the ColossusHammer provider refuses that cast
+Path: one cast variant per own-creature identity class; the second Path names the second member
