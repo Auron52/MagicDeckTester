@@ -96,3 +96,23 @@ main 1, K adds a Surgical Extraction cast.
   MTG_RSS_CAP_GB=40 MTG_PGO=0; small jobs via `scripts/box_lane.sh --slots N` (N <= 2); pool into ONE `mtg
   --batch`; builds under `claude_build.lock`, wait ~200 s after editing src; never `timeout`, `pgrep -f`, `pkill -f`.
 - Git: push only wip/mill-k; never the shared branch; rebase, never merge.
+
+## Parent session, 11-26 (step 1 result, and A/B relaunched)
+
+- The A/B was relaunched by the parent with `logs/mill-k/run.sh /workspaces/MagicDeckTester/build/scratch/mill-k/ab`
+  (launcher pid in `ab/run.pid`). It is queued on the box lock behind the worldfire-ad A/B. Marker: `ab/DONE`.
+- Step 1 (verify) FAILED to confirm. Manifest `build/scratch/mill-k/verify/v.json`: seed 58077083 gi83, arms T / K / KF,
+  1 thread, run with both binaries:
+
+  | binary | VERIFY | T | K | KF | leaf-kill-only line |
+  |---|---|---|---|---|---|
+  | mtg-ab (3fc84b086) | off | 3 (13181 u) | 4 (28633 u) | 3 (12503 u) | - |
+  | mtg (1f1da869c) | off | 3 (13181 u) | 4 (28633 u) | 3 (12503 u) | - |
+  | mtg-ab | on | 3 (13206 u) | 4 (5263 u) | 4 (5263 u) | armed_turns=0 verified=37 MISMATCHES=0 |
+  | mtg (1f1da869c) | on | 3 (13206 u) | 4 (5263 u) | 4 (5263 u) | armed_turns=0 verified=37 MISMATCHES=0 |
+
+  - The fix works with VERIFY off, on both binaries.
+  - VERIFY itself changes play: T's units move, K's drop from 28633 to 5263, and KF loses its fix.
+  - VERIFY reports armed_turns=0, so the per-job K flags do not seem to reach the path VERIFY takes. That is a separate
+    diagnostic defect. It does not affect the A/B, which runs without VERIFY. It is still owed before K's soundness can
+    be claimed from VERIFY numbers (the k-fleet "0 of 22,084" figure came from VERIFY).
