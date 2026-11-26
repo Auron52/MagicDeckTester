@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <lastLoadedTimestamp>Wed Nov 25 18:18:10 2026</lastLoadedTimestamp>
+    <deckname></deckname>
+    <format></format>
+    <bannerCard providerId=""></bannerCard>
+    <comments></comments>
+    <tags/>
+    <zone name="main">
+        <card number="1" name="Culling the Weak" setShortName="MB2" collectorNumber="40" uuid="fadd63e6-a016-4b68-b329-90f013287764"/>
+        <card number="2" name="Blood Scrivener"/>
+        <card number="2" name="Gray Merchant of Asphodel"/>
+        <card number="4" name="Undead Warchief"/>
+        <card number="1" name="Death Baron"/>
+        <card number="4" name="Dread Wanderer" setShortName="AKR" collectorNumber="103" uuid="e5d02e15-2020-466e-9857-b8741eaa9ff6"/>
+        <card number="4" name="Cemetery Reaper"/>
+        <card number="3" name="Lord of the Undead"/>
+        <card number="4" name="Gravecrawler"/>
+        <card number="4" name="Lord of the Accursed" setShortName="DRC" collectorNumber="95" uuid="15750fb6-4141-4ad9-937d-e18c76154a85"/>
+        <card number="4" name="Diregraf Ghoul"/>
+        <card number="1" name="Fleshbag Marauder"/>
+        <card number="4" name="Dark Ritual"/>
+        <card number="22" name="Swamp"/>
+    </zone>
+</cockatrice_deck>
