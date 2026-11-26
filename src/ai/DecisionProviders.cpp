@@ -75065,13 +75065,19 @@ bool BloodSunProvider::LandPlayOffered(const GameState& s, int controller, const
 //       per sink card, the TOP count is the largest one enumerated -- every member was enumerated and kept as
 //       payable, so the top is exactly "as much as the mana left after the plan's other casts pays", priced by the
 //       whole-turn bill (the ReplicateTopCountOnly shape). Keep counts >= top - h, drop the rest.
-//   (3) THE HOLD-BACK h: k = the 1-mana producers that could attack this turn (ElvesHoldBackAttackers: our untapped
-//       mana_dork creatures with a static one-mana tap -- Llanowar Elves, Elvish Mystic; not the scaled Priest /
-//       Archdruid / Marwyn -- that CanAttackFull now: not summoning-sick, or hasted by Concordant Crossroads),
-//       capped at kElvesMaxHoldBack = 2 ("keep k small"); h = ceil(k / mana per count unit) (Wave 1, a kick or a
-//       squad copy 2, Ezuri's pump 5), so each held dork's mana is one step down where a step costs 1, and one
-//       kick down covers two dorks. PRUNED WHEN ATTACKING CANNOT MATTER: k = 0 in the post-combat main (the attack
-//       is over) and with no such attacker on the board -- then only the top survives.
+//   (3) THE HOLD-BACK h (amended 2026-11-26, logs/elves/scaling-amend.md): the attackers a count could leave untapped
+//       are EVERY untapped mana creature of ours that CanAttackFull now (not summoning-sick, or hasted by Concordant
+//       Crossroads) -- Llanowar / Mystic at 1, and the SCALED dorks at their live tap: Priest and Archdruid at the
+//       Elf count, Marwyn at its power, each grown by the plan's other Elf casts (an upper bound; the count only
+//       grows while the plan resolves) -- ElvesHoldBackSources / ElvesHoldBackMana. H = the sum of those yields,
+//       h = ceil(H / mana per count unit) (Wave 1, a kick or squad copy 2, Ezuri's pump 5). So the band runs from
+//       the max down to the count that leaves every attack-capable mana creature untapped; below it the unspent mana
+//       could only come from lands or bodies that cannot attack, and those counts go. The first cut counted only the
+//       1-mana dorks, capped at 2: it lost 9 of 3,000 held-out games, every one a line that held back a scaled dork
+//       (with an anthem or Shepherd's 5/5 each held Elf is worth more than the kicks its tap buys) or three or more
+//       attackers, and none was findable at d8 b0. A cap of two attackers still lost one game of a fresh 3,000 (four
+//       held attackers) and one of the first sample (three). PRUNED WHEN ATTACKING CANNOT MATTER: post-combat (the attack is over) and with no
+//       attack-capable mana creature -- then only the top survives.
 //   Untouched: every plan with no scaled sink (the idle pass is never in this list -- the hosts append it -- and a
 //   plan of non-scaling casts, or with Warcaller K = 0 beside them, is never removed).
 // The search still branches over every survivor; nothing here picks one.
@@ -75079,17 +75085,16 @@ bool BloodSunProvider::LandPlayOffered(const GameState& s, int controller, const
 // LINES IT CAN MISS (disclosed in docs/design/analysis-Elves.md "Provider heuristics"): two sinks scaled together
 // (Warcaller x2 + Brigade x1); a count below the hold-back band that leaves mana for something that is NOT a plan
 // action -- Leaf-Crowned Visionary's {G} draw triggers (paid at trigger time), Ezuri's combat pump from leftover
-// mana (the K = 0 / no-sink plan keeps "Ezuri fully scaled"), a next-main / post-combat activation; holding back a
-// scaled dork (Priest / Archdruid / Marwyn) or a third dork as an attacker; and a fewer-count line whose value is
-// the CARDS left in hand for a later turn (a smaller Wave that does not mill the other Waves).
+// mana (the K = 0 / no-sink plan keeps "Ezuri fully scaled"), a next-main / post-combat activation, Wirewood Lodge's
+// untap; holding back a creature cast THIS turn with haste (it is not on the battlefield when the band is sized);
+// and a fewer-count line whose value is the CARDS left in hand for a later turn (a smaller Wave that does not mill
+// the other Waves).
 //
 // Lifted by MTG_ELVES_SCALING_PRUNE=0 (heurarm, per job), MTG_UNPRUNED, and MTG_UNPRUNE=replicate (the gate the
 // multikick fan already shares; the 64-gate mask is full) or =xspell (Genesis Wave's X); never in human play.
 
 namespace
 {
-constexpr int kElvesMaxHoldBack = 2;
-
 struct ElvesSink { int count = -1; int unit = 0; };   // count -1: not a sink
 
 ElvesSink ElvesSinkOf(const Action& a)
@@ -75150,13 +75155,6 @@ bool ElvesScalingPruneOn()
     return heurarm::Flag(heurarm::ELVES_SCALING_PRUNE, s_env);
 }
 
-// TEMPORARY A/B selector (heurarm ELVES_SCALING_AMEND, default ON; =0 -> the 1-mana-only band of the first cut).
-bool ElvesScalingAmendOn()
-{
-    static const bool s_env = EnvOn("MTG_ELVES_SCALING_AMEND", true);
-    return heurarm::Flag(heurarm::ELVES_SCALING_AMEND, s_env);
-}
-
 std::vector<ElvesHoldBackSource> ElvesHoldBackSources(const GameState& s, bool is_pre_combat)
 {
     std::vector<ElvesHoldBackSource> out;
@@ -75174,45 +75172,11 @@ std::vector<ElvesHoldBackSource> ElvesHoldBackSources(const GameState& s, bool i
     return out;
 }
 
-bool ElvesScalingHoldAllOn()
-{
-    static const bool s_env = EnvOn("MTG_ELVES_SCALING_HOLD_ALL");   // TEMPORARY A/B selector, default OFF
-    return heurarm::Flag(heurarm::ELVES_SCALING_HOLD_ALL, s_env);
-}
-
 int ElvesHoldBackMana(const std::vector<ElvesHoldBackSource>& src, int plan_elf_casts)
 {
-    if (ElvesScalingHoldAllOn())
-    {
-        int all = 0;
-        for (const ElvesHoldBackSource& h : src) { all += std::max(0, h.yield + (h.scaled ? plan_elf_casts : 0)); }
-        return all;
-    }
-    int a = 0, b = 0;   // the two largest yields
-    for (const ElvesHoldBackSource& h : src)
-    {
-        const int y = std::max(0, h.yield + (h.scaled ? plan_elf_casts : 0));
-        if (y > a) { b = a; a = y; }
-        else if (y > b) { b = y; }
-    }
-    return a + b;
-}
-
-int ElvesHoldBackAttackers(const GameState& s, bool is_pre_combat)
-{
-    if (!is_pre_combat) { return 0; }   // the attack is over: a held dork attacks nothing
-    const int me = s.active_player_index;
-    int k = 0;
-    for (const Permanent& p : s.battlefield)
-    {
-        if (p.controller_index != me || p.tapped || !p.card.IsCreature()) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d == nullptr || d->tmpl != CardTemplate::ManaDork || IsScaledManaDork(*d)) { continue; }
-        if (ManaProducedPerTap(*d) != 1) { continue; }
-        if (!CanAttackFull(p, s.battlefield, me)) { continue; }
-        if (++k >= kElvesMaxHoldBack) { break; }
-    }
-    return k;
+    int all = 0;
+    for (const ElvesHoldBackSource& h : src) { all += std::max(0, h.yield + (h.scaled ? plan_elf_casts : 0)); }
+    return all;
 }
 
 void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
@@ -75272,10 +75236,7 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         rows.push_back(std::move(r));
     }
     if (rows.empty()) { return; }
-    const bool amend = ElvesScalingAmendOn();
-    const int k = amend ? 0 : ElvesHoldBackAttackers(s, is_pre_combat);
-    const std::vector<ElvesHoldBackSource> held = amend ? ElvesHoldBackSources(s, is_pre_combat)
-                                                        : std::vector<ElvesHoldBackSource>{};
+    const std::vector<ElvesHoldBackSource> held = ElvesHoldBackSources(s, is_pre_combat);
     const int trace_turn = ElvesTraceTurn();
     const bool trace = trace_turn > 0 && s.turn_number == trace_turn;
     if (trace)
@@ -75286,8 +75247,8 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
             if (p.controller_index != s.active_player_index || p.card.IsLand()) { continue; }
             bf += p.card.m_name.str(); bf += p.tapped ? "(T) " : " ";
         }
-        std::fprintf(stderr, "[elves-scal-trace] turn=%d pre=%d amend=%d k=%d held=%zu plans=%zu bf: %s\n",
-                     s.turn_number, is_pre_combat ? 1 : 0, amend ? 1 : 0, k, held.size(), plans.size(), bf.c_str());
+        std::fprintf(stderr, "[elves-scal-trace] turn=%d pre=%d held=%zu plans=%zu bf: %s\n",
+                     s.turn_number, is_pre_combat ? 1 : 0, held.size(), plans.size(), bf.c_str());
     }
     // (2) Bucket by a cheap key (land + the sorted cast/activation names and slots + the sink), then split each
     // bucket into exact classes with Plan::operator== on the blanked copies.
@@ -75324,7 +75285,7 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         for (std::size_t a = 0; a < idx.size(); ++a)
         {
             const Row& r = rows[idx[a]];
-            const int hm = amend ? ElvesHoldBackMana(held, r.elf_casts) : k;   // mana the hold-backs free
+            const int hm = ElvesHoldBackMana(held, r.elf_casts);   // the mana every held attacker frees
             const int h = (hm + r.unit - 1) / r.unit;   // (3) the hold-back band in count steps
             const bool drop = r.count < top[static_cast<std::size_t>(cls[a])] - h;
             if (drop) { admit[r.i] = 0; ++n_band; }
