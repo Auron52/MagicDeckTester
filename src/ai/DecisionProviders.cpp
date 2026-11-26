@@ -39409,7 +39409,9 @@ bool EnchantedEveningProvider::FovOwnTargetInert(const GameState& s, int control
         && !d->params.etb_exile_nonland_until_leaves;
 }
 
-bool EnchantedEveningProvider::PlanListFilterLive(const GameState& s) const
+// THE GROVE HALF of the plan-list filter (USER rulings 15 / 16, MTG_EE_USER_PRUNE): live when a Sterling Grove
+// cast could put a second Grove beside one (see PlanListAdmit below).
+static bool EeGrovePruneLive(const GameState& s)
 {
     if (!eeprune::On()) { return false; }
     const int me = s.active_player_index;
@@ -39426,27 +39428,235 @@ bool EnchantedEveningProvider::PlanListFilterLive(const GameState& s) const
     return false;
 }
 
+// THE DEAD-LAND FOLD (lock step 8b, 2026-11-26; a SOUND dominance fold, default ON, no flag -- CLAUDE.md "collapse
+// wasted search"). Under Enchanted Evening + Opalescence a land we play is a 0/0 enchantment creature and dies to the
+// toughness SBA before we receive priority (LandDiesToTypeStatics; it can never be tapped or cracked). So a plan that
+// plays such a land reaches the state of its no-land TWIN (same actions, which the list also holds) plus: the land in
+// our graveyard instead of our hand, and the land drop used. PREMISE, true of this list (re-checked against
+// cards.json, step 8b): nothing reads a land entering, a land dying, our graveyard, our land count, lands played, or
+// cards in hand as such -- no landfall, no dies trigger, no recursion, no threshold, no hand-size payoff; Enchantress's
+// Presence counts enchantment SPELLS, Exploration only grants drops, Force of Vigor's pitch exiles a GREEN card (lands
+// are colourless), Calming Verse's clause 2 needs an untapped land we control (we control none under the lock). A held
+// land is therefore never worse than a dead one, with ONE exception, the cleanup discard: a held land can push the
+// hand past seven, and this deck's discard rule (the shared one, highest mana value first; not searched) would then
+// shed a NONLAND card the play line keeps. The fold is applied only where that cannot happen, and that bound holds for
+// the rest of the game, not just this turn:
+//   * no mana is available for the rest of the turn: nothing floats and we control no land (under the lock every
+//     land is dead, and the mana Auras went with them; this list has no other mana source). So nothing can be cast,
+//     Presence draws nothing, and the hand can only shrink before our cleanup;
+//   * the hand holds at most seven cards now, so the held line's cleanup sheds nothing.
+//   By induction over the following turns (the coupling "the held line = the played line + extra dead lands"): the
+//   held line reaches a main phase with at most eight cards (seven after cleanup, one draw); at eight the fold is OFF
+//   and a land play is offered, and the held line always has a land to play (an extra dead land) unless its hand
+//   equals the played line's. So it never sheds a card the played line keeps. And while the lock holds the extra land
+//   is inert; once our own action ends the lock (the plan restrictions below), the held land is playable for real.
+//   * the plan holds no cast (none is affordable; conservative) and no Parallax Wave activation on our own Enchanted
+//     Evening or Opalescence: exiling one ENDS the lock (for that plan the land play after it is a real land, so the
+//     plan is not folded; land-first vs activation-first order is the plan's business).
+//   * the twin must be in the list (it always is, "do nothing more" included; checked anyway).
+// Searched play only (PlanListAdmit is never consulted in human play or under the unpruned gate). A list that adds a
+// reader of any of the above, or a mana source that survives the lock, must drop the fold.
+static bool EeDeadLandFoldLive(const GameState& s)
+{
+    if (!s.deck_has_type_statics) { return false; }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+    if (ap.hand.size() > 7) { return false; }
+    if (s.floating_mana.Total() > 0 || s.floating_creature_mana.Total() > 0) { return false; }
+    const TypeStaticsPresent ts = TypeStaticsOnBattlefield(s);
+    if (!ts.ee || ts.opals <= 0) { return false; }
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == me && p.card.IsLand()) { return false; } }   // a land survived: not the lock shape
+    return true;
+}
+
+// Does this plan end the lock (or cast anything)? Then it is never folded.
+static bool EeDeadLandPlanExempt(const GameState& s, const std::vector<Action>& acts)
+{
+    const int me = s.active_player_index;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::FadeExileCreature)
+        { return true; }   // a cast, or any other activation: not the no-mana lock shape the proof covers
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.card.m_number != a.sac_victim_id) { continue; }
+            if (q.controller_index == me)
+            {
+                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                if (eeprune::IsEE(qd) || eeprune::IsOpal(qd)) { return true; }
+            }
+            break;
+        }
+    }
+    return false;
+}
+
+static bool EeSameActions(const std::vector<Action>& a, const std::vector<Action>& b)
+{
+    if (a.size() != b.size()) { return false; }
+    for (std::size_t i = 0; i < a.size(); ++i)
+    {
+        if (a[i].kind != b[i].kind || a[i].ability_mode != b[i].ability_mode || a[i].sac_source_id != b[i].sac_source_id
+            || a[i].sac_victim_id != b[i].sac_victim_id || a[i].chosen_x != b[i].chosen_x
+            || a[i].card_name != b[i].card_name) { return false; }
+    }
+    return true;
+}
+
+bool EnchantedEveningProvider::PlanListFilterLive(const GameState& s) const
+{
+    return EeGrovePruneLive(s) || EeDeadLandFoldLive(s);
+}
+
 void EnchantedEveningProvider::PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans,
                                              std::vector<char>& admit) const
 {
     const int me = s.active_player_index;
-    int ours = 0;
+    if (EeGrovePruneLive(s))
+    {
+        int ours = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index == me && eeprune::IsGrove(CardDatabase::Instance().LookupCached(p.card))) { ++ours; }
+        }
+        for (std::size_t i = 0; i < plans.size(); ++i)
+        {
+            if (!admit[i] || plans[i].actions == nullptr) { continue; }
+            int cast = 0, sac = 0;
+            for (const Action& a : *plans[i].actions)
+            {
+                if (a.kind == Action::Kind::CastFromHand && eeprune::IsGrove(a.def)) { ++cast; }
+                else if (a.kind == Action::Kind::ActivatePermAbility
+                         && a.ability_mode == Action::AbilityMode::SacTutorTop && eeprune::IsGrove(a.def)) { ++sac; }
+            }
+            if (cast > 0 && ours + cast - sac >= 2) { admit[i] = 0; }
+        }
+    }
+    if (EeDeadLandFoldLive(s))
+    {
+        for (std::size_t i = 0; i < plans.size(); ++i)
+        {
+            if (!admit[i] || plans[i].actions == nullptr || plans[i].land == nullptr || plans[i].land->empty())
+            { continue; }
+            const CardDefinition* ld = CardDatabase::Instance().Lookup(*plans[i].land);
+            if (ld == nullptr || !LandDiesToTypeStatics(s, *ld)) { continue; }
+            if (EeDeadLandPlanExempt(s, *plans[i].actions)) { continue; }
+            bool twin = false;
+            for (std::size_t j = 0; j < plans.size() && !twin; ++j)
+            {
+                twin = j != i && admit[j] && plans[j].actions != nullptr
+                    && (plans[j].land == nullptr || plans[j].land->empty())
+                    && EeSameActions(*plans[i].actions, *plans[j].actions);
+            }
+            if (twin) { admit[i] = 0; }
+        }
+    }
+}
+
+// PARALLAX WAVE OWN-TARGET DOMINANCE (lock step 8b, 2026-11-26; design §4.4's timing fold, reviewed class by class;
+// a SOUND fold, default ON, no flag). Exiling our own creature X with the Wave costs a fade counter, takes X off the
+// battlefield (no attack this turn, its static gone) until the Wave leaves, and returns it as a new object. Not
+// activating keeps all of that, so the exile is dominated unless X's ABSENCE (or its return) can pay. Per class:
+//   * FOLDED, EXPLORATION ("You may play an additional land", upside only; nothing reads it leaving or returning),
+//     only while no Calming Verse is in our hand or library. The one line its absence pays for is design §4.4's F2:
+//     exile it, then a Calming Verse whose clause 2 destroys all our enchantments (the Wave too) -- the Wave's leave
+//     returns Exploration, which the Verse would otherwise have destroyed. With no Verse left (no recursion in this
+//     list) that line does not exist. Proven.
+//   * KEPT, the Wave ITSELF (the self-reset / the loop), STERLING GROVE (the loop's enabler; its shroud blocks other
+//     targets), ANOTHER WAVE (its leave returns its linked cards; it re-enters with five counters), OBLIVION RING (its
+//     return re-ETBs and exiles a new target), ENCHANTED EVENING and a second OPALESCENCE (exiling one ENDS the lock:
+//     our lands live again, a real mana line), ENCHANTRESS'S PRESENCE (its draw is MANDATORY: exiling it is the line that
+//     avoids decking on a short library, CR 704.5b, as for Force of Vigor in step 8a; and F2 above), and every card this
+//     list does not name.
+//   * Opponent targets are KEPT (step 8b review): an opposing creature is inert in combat (the passive opponent never
+//     blocks), but it is what the free-turn check reads at the opponent's end step, and the end-step sweep does not
+//     always exist to remove it (no Opalescence, two Groves, a spent Wave; an exiled TOKEN is gone for good even if the
+//     Wave later leaves). No provable dominance.
+// Restrict only; never in human play (the human sees every legal target).
+std::vector<int> EnchantedEveningProvider::FadeExileCreatureTargets(const GameState& s, int controller,
+                                                                    const Permanent& src,
+                                                                    const std::vector<int>& legal) const
+{
+    (void)src;
+    if (HumanPlayActive() || DecisionUnpruned()) { return legal; }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    auto verse = [](const Card& c)
+    {
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+        return cd != nullptr && cd->params.destroy_opp_enchantments_then_own_if_untapped_land;
+    };
+    for (const Card& c : pl.hand)    { if (verse(c)) { return legal; } }
+    for (std::size_t i = 0; i < pl.library.size(); ++i) { if (verse(pl.library.RawAt(i))) { return legal; } }
+    std::vector<int> out;
+    out.reserve(legal.size());
+    for (int ti : legal)
+    {
+        if (ti >= 0 && ti < static_cast<int>(s.battlefield.size()))
+        {
+            const Permanent& q = s.battlefield[static_cast<std::size_t>(ti)];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            if (q.controller_index == controller && d != nullptr && !q.card.IsLand() && !d->params.is_aura
+                && d->params.static_extra_land_drops > 0 && !eeprune::IsGrove(d) && !eeprune::IsEE(d)
+                && !eeprune::IsOpal(d) && !eeprune::IsWave(d) && !eeprune::IsPresence(d)
+                && !d->params.etb_exile_nonland_until_leaves)
+            { continue; }   // Exploration: folded (above)
+        }
+        out.push_back(ti);
+    }
+    return out;
+}
+
+// UTOPIA SPRAWL's colour axis restricted to {G, W} (lock step 8b, 2026-11-26; a SOUND dominance prune on the
+// JumboCactuar / Beasts / Hydras precedent, default ON, no flag). The census of step 8b found every Sprawl cast fanned
+// over five colours (e.g. 176 plans at one T5 main, most of them colour copies). The chosen colour does one thing: the
+// extra mana the enchanted Forest adds (nothing in this list reads a chosen colour otherwise; the search puts a land
+// Aura only on our own lands). Every coloured pip of this list is {G}, {W} or the hybrid {W/U} of Enchanted Evening:
+// a U mana pays only generic and {W/U}, which W also pays; B and R pay only generic, which G and W also pay. So W
+// dominates U, and G (or W) dominates B and R, exactly: nothing is unfindable at any budget, and the search still
+// branches over G and W. The proof is LIST-SPECIFIC, so it is re-checked at runtime over our own cards in every zone:
+// a plain pip outside {G, W}, a hybrid pip with neither half in {G, W}, a phyrexian or twobrid pip, or a card with a
+// black or red colour (a coloured activation cost the mana-cost scan cannot see) returns the full fan. Human play
+// never consults this hook; MTG_UNPRUNED / MTG_UNPRUNE=etbcolor opens the full fan.
+static bool EeSprawlProofBreaks(const CardDefinition* d)
+{
+    if (d == nullptr) { return false; }
+    if (d->card.HasColor(Color::Black) || d->card.HasColor(Color::Red)) { return true; }
+    const ManaCost& c = d->card.m_mana_cost;
+    if (c.phyrexian_count != 0 || c.twobrid_count != 0) { return true; }
+    int plain[5] = { c.white, c.blue, c.black, c.red, c.green };   // flat counts hold each hybrid's FIRST colour
+    const int gw[2] = { static_cast<int>(Color::Green), static_cast<int>(Color::White) };
+    for (int i = 0; i < c.hybrid_count && i < 6; ++i)
+    {
+        const int c1 = c.hybrid_pair[i] >> 4, c2 = c.hybrid_pair[i] & 0xF;
+        if (c1 >= 0 && c1 < 5) { --plain[c1]; }
+        if (c1 != gw[0] && c1 != gw[1] && c2 != gw[0] && c2 != gw[1]) { return true; }
+    }
+    return plain[static_cast<int>(Color::Blue)] > 0 || plain[static_cast<int>(Color::Black)] > 0
+        || plain[static_cast<int>(Color::Red)] > 0;
+}
+
+std::vector<int> EnchantedEveningProvider::EtbChoiceCandidates(const GameState& s, int controller,
+                                                               const CardDefinition& def) const
+{
+    std::vector<int> out = DeckProvider::EtbChoiceCandidates(s, controller, def);
+    if (!(def.params.is_land_aura && def.params.etb_choose_color) || def.params.land_tap_bonus > 0) { return out; }
+    if (DecisionUnpruned(UnprunedGate::EtbColor)) { return out; }
+    const Player& me = s.players[static_cast<std::size_t>(controller)];
+    for (const std::vector<Card>* zone : { &me.hand, &me.graveyard, &s.exile })
+    { for (const Card& c : *zone) { if (EeSprawlProofBreaks(CardDatabase::Instance().LookupCached(c))) { return out; } } }
+    for (std::size_t i = 0; i < me.library.size(); ++i)
+    { if (EeSprawlProofBreaks(CardDatabase::Instance().LookupCached(me.library.RawAt(i)))) { return out; } }
     for (const Permanent& p : s.battlefield)
     {
-        if (p.controller_index == me && eeprune::IsGrove(CardDatabase::Instance().LookupCached(p.card))) { ++ours; }
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        if (EeSprawlProofBreaks(CardDatabase::Instance().LookupCached(p.card))) { return out; }
     }
-    for (std::size_t i = 0; i < plans.size(); ++i)
-    {
-        if (!admit[i] || plans[i].actions == nullptr) { continue; }
-        int cast = 0, sac = 0;
-        for (const Action& a : *plans[i].actions)
-        {
-            if (a.kind == Action::Kind::CastFromHand && eeprune::IsGrove(a.def)) { ++cast; }
-            else if (a.kind == Action::Kind::ActivatePermAbility
-                     && a.ability_mode == Action::AbilityMode::SacTutorTop && eeprune::IsGrove(a.def)) { ++sac; }
-        }
-        if (cast > 0 && ours + cast - sac >= 2) { admit[i] = 0; }
-    }
+    const int green = static_cast<int>(Color::Green) + 1, white = static_cast<int>(Color::White) + 1;
+    std::vector<int> kept;
+    for (int v : out) { if (v == green || v == white) { kept.push_back(v); } }
+    return kept.empty() ? out : kept;
 }
 
 // ---- WorldfireProvider: Rift Bolt is held for the combo -----------------------

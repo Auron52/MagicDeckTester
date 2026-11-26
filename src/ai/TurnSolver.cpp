@@ -107897,6 +107897,8 @@ static void ApplyProviderPlanListFilter(const GameState& state, bool is_pre_comb
     all.resize(w);
 }
 
+static void EeCensusNote(const GameState& state, bool is_pre_combat, std::vector<TurnSolver::Plan>& all,
+                         PbLazyLayout* pb_lazy);   // TEMPORARY DIAGNOSTIC (MTG_EE_CENSUS), defined below
 static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state, PbLazyLayout* pb_lazy = nullptr)
 {
     std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, false);
@@ -107913,6 +107915,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     AppendSoulbondDeclineVariants(state, plans, pb_lazy);
     AppendMiraclePlanVariants(state, plans, pb_lazy);
     ApplyProviderPlanListFilter(state, /*is_pre_combat=*/false, plans, pb_lazy);
+    EeCensusNote(state, false, plans, pb_lazy);
     return plans;
 }
 
@@ -108818,6 +108821,77 @@ struct Printer
 inline Printer g_printer;
 }   // namespace sbmain1
 
+// TEMPORARY DIAGNOSTIC (EE lock step 8b; MTG_EE_CENSUS, default off): per plan class counts of every
+// Enchanted Evening enumeration, printed at exit. Removed before the step closes.
+namespace eecensus
+{
+inline bool On() { static const bool v = EnvOn("MTG_EE_CENSUS"); return v; }
+inline std::atomic<std::uint64_t> g[16];
+struct Printer
+{
+    ~Printer()
+    {
+        if (!On()) { return; }
+        static const char* nm[16] = { "enums", "plans", "lock_enums", "lock_plans", "dead_land", "wave_self",
+                                      "wave_own", "wave_opp", "sprawl_any", "sprawl_nonGW", "wave_any", "m2_plans",
+                                      "search_plans", "", "", "" };
+        std::fprintf(stderr, "[ee-census]");
+        for (int i = 0; i < 13; ++i) { std::fprintf(stderr, " %s=%llu", nm[i], (unsigned long long)g[i].load()); }
+        std::fprintf(stderr, "\n");
+    }
+};
+inline Printer g_printer;
+}
+static void EeCensusNote(const GameState& state, bool is_pre_combat, std::vector<TurnSolver::Plan>& all,
+                         PbLazyLayout* pb_lazy)
+{
+    if (!eecensus::On() || !state.deck_has_wave_opal_sweep) { return; }
+    if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
+    using eecensus::g;
+    const int me = state.active_player_index;
+    const TypeStaticsPresent ts = TypeStaticsOnBattlefield(state);
+    const bool lock = ts.ee && ts.opals > 0;
+    ++g[0]; g[1] += all.size();
+    if (lock) { ++g[2]; g[3] += all.size(); }
+    if (!is_pre_combat) { g[11] += all.size(); }
+    if (g_search_candidate_enum) { g[12] += all.size(); }
+    for (const TurnSolver::Plan& p : all)
+    {
+        if (!p.land_to_play.empty())
+        {
+            const CardDefinition* ld = CardDatabase::Instance().Lookup(p.land_to_play);
+            if (ld != nullptr && LandDiesToTypeStatics(state, *ld)) { ++g[4]; }
+        }
+        bool self = false, own = false, opp = false, sp = false, spx = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::FadeExileCreature)
+            {
+                if (a.sac_victim_id == a.sac_source_id) { self = true; continue; }
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.card.m_number != a.sac_victim_id) { continue; }
+                    if (q.controller_index == me) { own = true; } else { opp = true; }
+                    break;
+                }
+            }
+            else if (a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->params.etb_choose_color
+                     && a.def->params.is_land_aura)
+            {
+                sp = true;
+                if (a.chosen_x != static_cast<int>(Color::Green) + 1 && a.chosen_x != static_cast<int>(Color::White) + 1)
+                { spx = true; }
+            }
+        }
+        if (self) { ++g[5]; }
+        if (own) { ++g[6]; }
+        if (opp) { ++g[7]; }
+        if (sp) { ++g[8]; }
+        if (spx) { ++g[9]; }
+        if (self || own || opp) { ++g[10]; }
+    }
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameState& state,
                                                                     bool is_pre_combat,
                                                                     PbLazyLayout* pb_lazy = nullptr)
@@ -108956,6 +109030,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         }
     }
     AppendMiraclePlanVariants(state, all, pb_lazy);
+    EeCensusNote(state, is_pre_combat, all, pb_lazy);
     return all;
 }
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const GameState& state,

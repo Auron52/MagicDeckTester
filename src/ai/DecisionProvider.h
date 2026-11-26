@@ -4935,8 +4935,8 @@ public:
     // from this enchantment: Exile target creature" (lock cluster step 4; one activation action per returned target).
     // `legal` = battlefield indices of one representative per identity class of legal target, both sides, the Wave
     // itself included under Opalescence (FadeExileAdmissibleTargets). RESTRICT / ORDER only. Base: every legal target.
-    // (Design §4.4's own-target folds are NOT applied: each has a counterexample in this list -- see the ledger's
-    // "Lock-cluster step 4" notes -- so they are step-8 work, not a sound default.)
+    // (Design §4.4's own-target folds were reviewed in lock step 8b: only Exploration with no Calming Verse left is
+    // provably dominated -- EnchantedEveningProvider's override; every other class has a counterexample.)
     virtual std::vector<int> FadeExileCreatureTargets(const GameState& s, int controller, const Permanent& src,
                                                       const std::vector<int>& legal) const
     { (void)s; (void)controller; (void)src; return legal; }
