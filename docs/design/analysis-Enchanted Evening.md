@@ -347,6 +347,13 @@ flying, Spirit Mantle protection from creatures) break the lock without trample 
    (`TurnSolver::GreedySite`) and in docs/design/no-greedy-in-search-window.md.
    Also recorded the same day, discard-bucket amendments: verbatim in docs/design/enchanted-evening-discard-buckets.md.
 
+23. **(`MTG_EE_USER_PRUNE` adoption, 2026-11-26):** asked "`MTG_EE_USER_PRUNE`: OFF, ON (as shipped), or ON + amendment?"
+   with the 224-game numbers (OFF 5.848; ON 5.799 net -11; ON + amendment 5.799 net -11, +4.6% units) and the two d3 b0
+   non-recoverers (8000 gi=84, 10000 gi=24) classified clairvoyant. USER, verbatim: *"Okay, if you showed the cases are
+   clairvoyance and it sounds like they are, we can proceed to turn it on."*
+   -> `MTG_EE_USER_PRUNE` is ADOPTED ON (it already ships ON; no code change). The second-Opalescence amendment
+   `MTG_EE_GROVE_PRELOCK` stays default OFF.
+
 Reading: the lock is credited through the EXISTING free-turn rule (`MTG_FREE_TURNS`, default ON,
 `src/core/FreeTurns.h`, `docs/design/opponent-lockdown-free-turns.md`): a locked opponent turn does not advance the
 round. The deck's lock cards must join `GoldFishRunner::DeckMayLockOpponent`. Under EE + Opalescence the attackers are
