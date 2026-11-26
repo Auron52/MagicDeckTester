@@ -12645,7 +12645,7 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     if (p.aura_attached_to != 0 || p.equipped_to != 0 || p.paired_with != 0)      { return false; }
     if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)                       { return false; }
     if (p.temp_lifelink || p.temp_double_strike || p.temp_vigilance || p.return_at_end_step
-        || p.skip_next_untap || p.etb_tap_pending)                                { return false; }
+        || p.skip_next_untap || p.etb_tap_pending || p.temp_base_set)             { return false; }
     if (!mix_doom && (p.temp_haste || p.exile_at_end || p.sac_at_end_step
                       || p.destroy_at_end_if_attacked || p.unearthed))           { return false; }
     if (p.is_animated || p.echo_resolved)                                         { return false; }
@@ -39951,6 +39951,7 @@ inline std::uint64_t StealAttackBodyKey(const GameState& s, const Permanent& q)
     c.tapped = false;
     c.temp_power_bonus = 0;
     c.temp_tough_bonus = 0;
+    c.temp_base_set = false;
     c.temp_haste = false;
     c.temp_lifelink = false;
     c.temp_double_strike = false;
@@ -39964,7 +39965,8 @@ inline std::uint64_t StealAttackBodyKey(const GameState& s, const Permanent& q)
     mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(q.temp_power_bonus + 4096)));
     mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(q.temp_tough_bonus + 4096)));
     mix((q.temp_haste ? 1u : 0u) | (q.temp_lifelink ? 2u : 0u) | (q.temp_double_strike ? 4u : 0u)
-        | (q.once_per_turn_used ? 8u : 0u) | (q.cond_haste ? 16u : 0u) | (q.temp_vigilance ? 32u : 0u));
+        | (q.once_per_turn_used ? 8u : 0u) | (q.cond_haste ? 16u : 0u) | (q.temp_vigilance ? 32u : 0u)
+        | (q.temp_base_set ? 64u : 0u));
     return k;
 }
 
@@ -42497,6 +42499,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::FigureTwo:   return "become a 2/2 Kithkin Spirit";
         case PermAbilityMode::FigureFour:  return "become a 4/4 Kithkin Spirit Warrior";
         case PermAbilityMode::FigureEight: return "become an 8/8 Kithkin Spirit Warrior Avatar";
+        case PermAbilityMode::TeamBasePT:  return "each of your creatures of the type has base P/T set until end of turn";
         case PermAbilityMode::CounterPing:    return "remove a +1/+1 counter: 1 damage to any target";
         case PermAbilityMode::CounterDestroyArtEnch: return "remove a +1/+1 counter: destroy target artifact or enchantment";
         case PermAbilityMode::FadeExileCreature:     return "remove a fade counter: exile target creature";
@@ -42776,6 +42779,55 @@ inline bool ResolveSacTutorTop(GameState& state, int controller, int idx, const 
     }
     PerformTutor(state, controller, *d->activated_tutor, target, src_name);
     return true;
+}
+
+// Allosaurus Shepherd: "Until end of turn, each Elf creature you control has base power and toughness 5/5"
+// (PermAbilityMode::TeamBasePT; CardParams::team_base_pt_*). THE shared resolver, so the executor and the
+// rollout cannot drift.
+//
+// LAYER 7b (CR 613.4b), applied to the creatures the controller has AS IT RESOLVES (CR 611.2c: one that enters
+// later is not affected). A 7b set replaces the BASE only -- the printed value (plus a 7a characteristic-
+// defining value, plus a land animation's base) -- so every 7c effect (lord bonuses, until-EOT pumps, and
+// +1/+1 / -1/-1 counters, CR 613.4c) keeps applying on top, in either timestamp order. Carried as the delta
+// (target - current base) inside temp_power_bonus / temp_tough_bonus: every P/T reader sums printed + temp +
+// counters + lords + CDA, so it reads exactly target + every 7c term, and cleanup's temp reset ends it.
+// Permanent::temp_base_set marks a creature already set, so a second activation (worth making only for Elves
+// that entered since) skips it instead of adding the delta twice -- setting 5/5 again is a no-op.
+// PARTIAL, inert in every list that runs it: a 7a CDA value is snapshotted at resolution (a later change in
+// its count would still move the creature; 7b should hide it) -- no Elf in the Elves list has a CDA.
+inline void ResolveTeamBasePT(GameState& state, int controller, const CardDefinition& src_def)
+{
+    const CardParams& sp = src_def.params;
+    if (sp.team_base_pt_subtype.empty()) { return; }
+    int changed = 0;
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || q.temp_base_set) { continue; }
+        if (!(q.card.IsCreature() || q.is_animated)) { continue; }
+        if (!CardHasSubtype(q.card, sp.team_base_pt_subtype) && !q.AnimatedAllTypes()) { continue; }
+        int base_p = q.card.m_power.value_or(0);
+        int base_t = q.card.m_toughness.value_or(0);
+        if (!q.def_absent)
+        {
+            if (const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card))
+            {
+                if (q.is_animated) { base_p += qd->params.animate_power; base_t += qd->params.animate_toughness; }
+                base_p += DynamicBasePower(*qd, state, q.controller_index);
+                base_t += DynamicBaseToughness(*qd, state, q.controller_index);
+            }
+        }
+        q.temp_power_bonus += sp.team_base_pt_power - base_p;
+        q.temp_tough_bonus += sp.team_base_pt_tough - base_t;
+        q.temp_base_set = true;
+        ++changed;
+    }
+    if (g_play_event_sink && !g_tap_speculating && changed > 0)
+    {
+        EmitPlayEvent(state.turn_number, "pump", src_def.card.m_name.str() + ": " + std::to_string(changed) + " "
+                      + sp.team_base_pt_subtype + " creature(s) have base P/T "
+                      + std::to_string(sp.team_base_pt_power) + "/" + std::to_string(sp.team_base_pt_tough)
+                      + " until end of turn");
+    }
 }
 
 inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode)
@@ -43066,6 +43118,9 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             }
             break;
         }
+        case PermAbilityMode::TeamBasePT:
+            ResolveTeamBasePT(state, controller, *d);
+            break;
         case PermAbilityMode::CounterPing:
             ResolveCounterPing(state, controller, source_id, /*ask_human=*/true, /*quiet=*/false);
             break;
@@ -44192,6 +44247,8 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
                                       ? &def.params.figure_four_cost
                                       : (mode == PermAbilityMode::FigureEight)
                                       ? &def.params.figure_eight_cost
+                                      : (mode == PermAbilityMode::TeamBasePT)
+                                      ? &def.params.team_base_pt_cost
                                       : &def.params.exile_opponent_top_cost;
     if (!rc->has_value()) { return 0; }
 
@@ -51196,6 +51253,7 @@ inline void EotWindowEndOfTurnReset(GameState& state)
         p.pending_death_trigger = 0;
         p.temp_power_bonus      = 0;
         p.temp_tough_bonus      = 0;
+        p.temp_base_set         = false;
         p.temp_haste            = false;
         p.temp_lifelink         = false;
         p.temp_double_strike    = false;
@@ -59075,7 +59133,7 @@ inline bool SacLandTwins(const GameState& state, const Permanent& a, const Perma
         if (p->card.IsCreature() || p->is_animated || !p->counters.empty() || p->damage != 0
             || p->storage_counters != 0 || p->charge_counters != 0 || p->verse_counters != 0
             || p->lore_counters != 0 || p->skip_next_untap || p->exile_at_end || p->sac_at_end_step
-            || p->destroy_at_end_if_attacked || p->return_at_end_step || p->unearthed
+            || p->destroy_at_end_if_attacked || p->return_at_end_step || p->unearthed || p->temp_base_set
             || p->marked_for_destruction || p->islandize_target != 0 || p->paired_with != 0
             || p->aura_attached_to != 0 || p->equipped_to != 0) { return false; }
     }
@@ -63045,7 +63103,8 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
         | (p.sac_at_end_step ? 8388608 : 0)
         | (p.landfall_resolved_once ? 16777216 : 0) | (p.landfall_resolved_twice ? 33554432 : 0)   // Scythecat Cub
         | (p.destroy_at_end_if_attacked ? 67108864 : 0)     // Berserk's delayed destroy
-        | (p.unearthed ? 134217728 : 0));                   // unearth's end-step / leave exile
+        | (p.unearthed ? 134217728 : 0)                     // unearth's end-step / leave exile
+        | (p.temp_base_set ? 268435456 : 0));               // Allosaurus Shepherd's until-EOT base set
     if (p.AttacksThisTurn() != 0) { k += "|atk"; add(p.AttacksThisTurn()); }   // Moraug's attack count (gated)
     if (p.return_at_end_step) { k += "|ret"; }   // Ilharg put body: returns to hand at end step (gated)
     if (p.enduring_noncreature) { k += "|encr"; }   // Enduring Innocence's noncreature return (gated)
