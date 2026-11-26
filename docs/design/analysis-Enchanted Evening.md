@@ -5,6 +5,18 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
 
 ## CHECKPOINT (orchestrator, updated 2026-11-26, pre-compaction #2) -- read this first after a compaction
 
+* **USER RULING 22 (the lock playout) BUILT, ON (2026-11-26): code 0508a9c11** (section "USER ruling 22: the lock
+  playout + step 8c"). Rulings 23-25 recorded (USER_PRUNE adopted ON; clause-4 power >= 1 kept; the O-Ring
+  virtual-target precondition kept). Units 4255/4255; smoke (Release, `MTG_PGO=0`, 0508a9c11) 247 passed / 0 failed / 0 new, play-changed=0 searched AND d0, scenarios 677/677 (no deck moves; EE is not a suite deck); GT not accepted. A/B m22 (224 games, d3
+  b10): lp 5.8080 vs nolp 5.7991, net +2 (1 faster / 2 slower, both recover at d3 b0), units -1.4%; the playout never
+  broke a credited lock. The gain at b10 is small: nearly all search happens before the lock is credited.
+  ho1 gi=70 / gi=3 d3 b0 were still running (unfinished at 30 min) at the handoff: `logs/ee/lock8c-handoff.md`.
+  Step 8c status: trace gaps FIXED; gi=12/13 CLOSED; gi=31 Verse = a real null cast (fold proposed, not built);
+  gi=90 narrowed, not root-caused (the T4 crossing's upkeep Grove -> Opalescence pin); gi=84 (prune-OFF) not re-run.
+  **ON HOLD (USER ruling 26, 2026-11-26: the USER may park the deck for goldfishing):** step 8c's remaining items
+  (gi=70 / gi=3 b0 tractability, gi=90, the gi=31 Verse fold, gi=84), the discard buckets and step 9 wait for the
+  USER's park decision. The list and its context: `logs/ee/lock8c-handoff.md` "Remaining".
+
 * **USER RULINGS 18-21 BUILT + PRUNE RE-MEASURED (2026-11-26): code 2df2cebb1 + the ledger commit** (section "USER
   rulings 18-21 + prune re-measure"). Units 4251/4251; smoke 247/0, play-changed=0 (no deck moves); GT not accepted.
   Three-arm A/B (224 games, d3 b10, fairness ON): OFF 5.848, ON 5.799 (net -11, units -59.7%), ON + amendment
@@ -362,6 +374,10 @@ flying, Spirit Mantle protection from creatures) break the lock without trample 
    until we are locking the opponent."* -> the precondition stays, as built in 2df2cebb1 (no code change). Disclosed gap
    for Stage 6: casting Oblivion Ring before the lock just for an Enchantress's Presence draw is only possible if it has
    some other legal target (whether the engine offers that line at all: see the step-8c section).
+26. **(parking the deck for goldfishing, 2026-11-26):** USER, verbatim: *"I'm starting to have second thoughts about
+   introducing Enchanted Evening for goldfishing, so we might want to park it in some form. The deck is very good in
+   real play, but pretty poor even with attempts to model the lock."* -> step 8c's remaining items are ON HOLD pending
+   the USER's park decision (ruling 22 was finished and committed first, as asked).
 
 Reading: the lock is credited through the EXISTING free-turn rule (`MTG_FREE_TURNS`, default ON,
 `src/core/FreeTurns.h`, `docs/design/opponent-lockdown-free-turns.md`): a locked opponent turn does not advance the
@@ -1406,6 +1422,107 @@ settings, so b0 can bottom differently.)
 2. Ruling 21's power >= 1 default: no real game reached clause 4 under a board lock, so there is no data either way.
 3. Ruling 20's "the board lock already stands" precondition (no virtual O-Ring target for an O-Ring cast before the
    lock pieces): fired in 1 real ON game (ho gi=31, one turn faster); the excluded ordering was never measured.
+
+## USER ruling 22: the lock playout + step 8c -- 2026-11-26
+
+Code: 0508a9c11. Scratch: `build/scratch/ee8c/` (`d0.*` the d0 probe, `m22.*` the A/B, `b0a.*` the
+d3 b0 repros, `g90*` the gi=90 dumps; `an22.py`, `lockcheck.py`, `div.py`, `post.py`). Summaries: `logs/ee/lock8c/`.
+
+**What is built (`MTG_EE_LOCK_PLAYOUT`, heurarm `EE_LOCK_PLAYOUT`, DEFAULT ON, USER-requested).**
+* `DecisionProvider::LockPlayoutNow(state)` (generic false). `EnchantedEveningProvider`: the free-turn lock is
+  CREDITED (`in_free_turn`: the opponent's last turn ended with the board lock and no fairness veto) AND Enchanted
+  Evening AND Opalescence are on our battlefield (ruling 1's full lock). A Calming Verse + EE credit (ruling 5's
+  temporary lock) stays searched: the d0 probe below lost four such games when they were played out greedily.
+* Search world: `FSLineWin` at such a turn returns the depth-0 playout of the rest of the game (no value leaf, no
+  phases); the rollout plays such a turn at depth 0; such a turn takes no free-turn depth give-back.
+* Executor world: `AIEngine::SyncLockPlayout` (called by `GameEngine::RunTurnFrom` after each turn-counter step)
+  drops the engine depth to 0 for the turn (and the opponent turn after it) and restores it at the first turn that
+  starts without the lock; the depth-0 runner's `Solve()` sites take the new `GreedySite::LockPlayout` permit, which
+  aborts outside that extent. Trial games (bottoming) save / restore the mode; game boundaries reset it.
+* Why not a `ComboRoute` action: that contract is one main-phase action verified to kill THIS turn. A lock finish
+  spans several of our turns with combat, end steps and opponent turns between them. Under the credited lock every
+  further turn shares the round, so the beyond-the-horizon playout (reused) scores the current round whenever it
+  keeps the lock and kills, the same dominance argument as a verified go-off. Documented in
+  `docs/design/no-greedy-in-search-window.md` ("USER-authorized site: LockPlayout") with the ruling verbatim.
+* Lock safety, provider restrictions while `LockPlayoutNow`: Parallax Wave exiles opponent permanents only; Force of
+  Vigor never targets our own permanents; no Calming Verse SWEEP-SELF; Oblivion Ring's forced own target is a
+  non-lock permanent while one exists (lowest MV).
+* The idle pass: unchanged. The playout picks from the same full menus (idle pass included); no menu loses an option.
+* Also (step 8c trace gaps, log only, NOT folded into the play digest): the upkeep-window Sterling Grove activation
+  is now a DRAW-phase `ABILITY` line ("upkeep: sacrifice, tutor X to the top"); every Force of Vigor resolution
+  writes an `ABILITY` line naming its targets ("destroys opp Grand Coliseum#100025, ..."; virtual targets named).
+* Units 4255/4255 (4 new, `test/unit/test_enchanted_evening_lock22.cpp`).
+* Smoke (Release, `MTG_PGO=0`, 0508a9c11): 247 passed / 0 failed / 0 new; configs changed 0 / 247; play-changed=0,
+  searched AND d0; scenarios 677/677. No deck moves (the lever is EE-provider-only; the trace lines are not in the digest).
+
+**d0 probe (before the restrictions; `d0.*`, 224 games at depth 0, so every credited turn was a greedy finish).**
+Credited games won in the credit round: 29 of 36. The 7 others: four Calming Verse + EE credits (no clock), and two
+full locks broken by the greedy Wave exiling our OWN Enchanted Evening on the credited turn (8000 gi=80, 10000
+gi=65). Hence the full-lock definition and the restrictions.
+
+**A/B: ONE pooled batch `m22`** (binary 2df2cebb1 + ruling 22 before the trace lines; 448 games: san 7000 x24,
+ho 8000 x100, hb 10000 x100, each x {lp = `MTG_EE_LOCK_PLAYOUT` on, nolp = off}; d3 b10, fairness ON, prune ON). The
+nolp arm is byte-identical to the shipped tree (san digest 6eb2aaf31332bca5 = step 8b's and rulings 19-21's).
+| family | arm | won | avg (loss 9) | units | game-s | vs nolp: net / faster / slower |
+|---|---|---|---|---|---|---|
+| san 7000 (24) | nolp | 24 | 5.5833 | 3.14M | 279 | |
+| | lp | 24 | 5.5833 | 3.07M | 275 | 0 / 0 / 0 |
+| ho 8000 (100) | nolp | 95 | 5.8900 | 13.77M | 1573 | |
+| | lp | 95 | 5.8800 | 13.62M | 1540 | -1 / 1 (gi=76 7->6) / 0 |
+| hb 10000 (100) | nolp | 98 | 5.7600 | 11.45M | 1142 | |
+| | lp | 98 | 5.7900 | 11.26M | 1333 | +3 / 0 / 2 (gi=56 6->7, gi=60 6->8) |
+| **all 224** | nolp / lp | 217 / 217 | 5.7991 / 5.8080 | 28.36M / 27.95M (-1.4%) | 2994 / 3148 | **+2** (1 / 2) |
+* game-s is contended wall (both arms in one pool); per game it moves on games whose units are identical (hb gi=99:
+  316k units both, 36 s vs 60 s), so units are the measure. Units fall in 135 of 224 games, rise in 53.
+* Lock kept after the credit: in the lp arm every credited game wins in its credit round except the same two as
+  nolp (ho gi=31, the ruling-20 O-Ring round; hb gi=24, a round-1 Verse credit). The playout never broke a lock.
+* At b10 the playout buys little: almost all of a game's search is spent before the lock is credited.
+
+**d3 b0 repros (`b0a`, lane 2 slots, per-game wall cap 2 h).**
+| game | nolp b10 (bar) | lp b10 | lp d3 b0 | wall / units | verdict |
+|---|---|---|---|---|---|
+| hb gi=56 | 6 | 7 | **5** | 3 s / 93k | RECOVERS (beats the bar). Diverges at T1 (lp plays no T1 land): budget churn |
+| hb gi=60 | 6 | 8 | **6** | 297 s / 3.28M | RECOVERS. Diverges at T3 (Exploration vs Grove): budget churn |
+| ho1 gi=70 | 7 (step 7) | 8 | RUNNING at the handoff (30 min in: still on T1/T2) | -- | see `logs/ee/lock8c-handoff.md` |
+| ho1 gi=3 | 7 (step 6) | 8 | RUNNING at the handoff (30 min in: still on T1/T2) | -- | see `logs/ee/lock8c-handoff.md` |
+* gi=70 / gi=3 are NOT expected to be fixed by ruling 22: at 30 min neither had reached a credited lock in the real
+  game, so their b0 work is spent before any full lock exists (the projected chains under the PARTIAL Calming Verse +
+  EE lock, which the playout deliberately leaves searched, and gi=3's non-free-turn cost found in step 8a). Results:
+  `build/scratch/ee8c/b0a.{out,err}`, marker `b0a.DONE`.
+
+**Step 8c, the rest.**
+* hb1 gi=90 (d3 b0 T6 vs step 6's T5): NOT root-caused yet; narrowed. Ruling 22 does not change it (b0 on the
+  ruling-22 tree: T6, 15 s, 118k units; b10 lp and nolp both T6). The T5 kill is: T4 Sprawl + Enchanted Evening (as
+  played), T5 UPKEEP Sterling Grove -> Opalescence to the top, draw it, cast it (6 mana), swing 9, the Wave +
+  Opalescence sweep clears the virtual board at the opponent's end step (it does so at round 6 in the real game:
+  virt 3 -> 0, spent 3), credited, free turns. The upkeep tutor is the T4 crossing's searched pin (the boundary fan's
+  `tutor_` digit; GameEngine::UpkeepTutorOptions, the ruling-16 TutorCandidates order puts Opalescence first). The
+  T4 root dump (`MTG_FS_ROOT_DUMP=4`, `g90.err`): the best tail of every T4 plan is 6; `MTG_FS_ROOT_DUMP_SIM=1`
+  (`g90s.err`) shows the EE + Sprawl plan's T5 rollouts (cutoff 5) start from boards WITHOUT the Grove whose hand is
+  [Enchantress's Presence] only -- no Opalescence in hand, and the Force of Vigor gone. So the crossing that
+  sacrificed the Grove did not put Opalescence into the T5 hand. NEXT: trace that crossing (which tutor target the
+  upkeep pin carried, and where the FoV went: a pitch needs a second green card and the T4-end hand is [FoV] alone).
+  Hypotheses: the upkeep pin's option index maps to a different (source, name) pair in the rollout's
+  UpkeepTutorOptions than in the executor's (`scripted_upkeep_tutor > 0` in GameEngine treats pick 0 as "none"), or
+  the FoV pitch / tutor ordering inside SimulateEndAndStartNextTurn differs from the executor's.
+* gi=12 / gi=13 (sanity 7000, the step-3+5 slower games, T6 -> T7): CLOSED, no longer slower. At b10 on the
+  ruling-22 tree gi=12 = T6 (= the step-2 baseline) and gi=13 = T5 (baseline T6).
+* hb1 gi=31's Calming Verse (T2, b10): checked FIRST against the virtual board, as the brief asked. The opponent is
+  Merfolk (Lord of Atlantis); the Verse cleared nothing virtual (`spent` stays 0 before and after) and there was no
+  EE, so it is a real null cast: no opposing enchantment and no untapped land left after its payment, so SWEEP-SELF
+  resolves to nothing. Not a virtual-board play. A sound fold exists in principle (a Verse that destroys nothing
+  real or virtual is dominated by the same plan without it, which the subset enumeration also lists), but it needs a
+  post-resolution test (the emission board cannot see the payment); not built (proposal only, listed for the next
+  agent). The game wins T6 in both arms.
+* 8000 gi=84 with the prune OFF at b0 (2 h, 2.64M units): not re-run (low priority; prune-OFF arm only, and ruling
+  23 adopted the prune ON).
+* Trace gaps: both FIXED (above): the upkeep Grove activation and main-phase FoV targets are now in the trace.
+* Ruling 25's check (does the engine offer Oblivion Ring before the lock, for a Presence draw): YES. The cast is an
+  ordinary hand cast at any time; its "exile another target nonland permanent" takes the provider's pick (an opponent
+  permanent first, else our least costly) or, with 2+ legal targets, a searched pinned variant per target; with no
+  legal target it resolves with nothing exiled. So the line exists whenever O-Ring is castable; the only cost is that
+  with no opposing nonland permanent it exiles one of OUR permanents (rules-correct: the trigger is mandatory). Nothing
+  built.
 
 ## Done items (formerly provisional Q1 / Q2 -- settled by standing CLAUDE.md rules, not USER questions)
 
