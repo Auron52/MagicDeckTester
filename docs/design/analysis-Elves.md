@@ -260,7 +260,32 @@ flags: 0 unresolved
 
 ## Stage 5 verification verdicts
 
-(pending)
+All on the integrated tree `wip/elves-int` (origin 9e566000b + every Elves fix), 2026-11-26.
+
+* **5a mismatch harnesses:** Elves fd sweep, 200 games (seeds 7001+off, d5 b20, `MTG_FD_ORACLE=1 MTG_FLAG_NONCONV=1`):
+  0 `[fd-diverge]`, 0 `[nonconv]`. `verify_deck.py` mismatch: clean across seeds [7001, 8001] x 60, both arms.
+* **5b multi-depth sanity** (accepted GT): d0 4.885-4.905 (2,000-game rows), d3 4.33-4.40, d5 4.32-4.45; 2HG d5
+  4.75-4.83. Monotone in depth. Distribution at d5: mostly T4 (~65%) / T5 (~30%), a few T3. Outliers read: the d5
+  non-wins (4 of ~1,260 overnight+regression games) are land screws -- e.g. regression d5 s3003 gi22 kept Wirewood
+  Lodge alone (colourless) and cast nothing until T7; a mulligan-profile question (no keep table yet), not play.
+* **5c budget:** every slower game in the smoke/regression audits of this landing recovers at d8 b0 (19 Genesis
+  Wave games, 5 Elves d0 mana games at d5 b20 / d8 b0, 9 smoke + 10 regression games on the integrated binary).
+* **5c2 horizon-honest tie-break:** UN-RUN so far -- `leaf_tiebreak_check.py` (24 x 1000-game pooled batch) was
+  killed twice by memory: a global OOM at 20.6 GB, then the engine's own `MTG_RSS_CAP_GB=20` guard at 20.18 GB
+  with the budgeted pools under 1 GB. Unbounded per-process growth in long Elves batches; under investigation on
+  `wip/elves-mem`. Re-run after that fix.
+* **5d claude-play sweep:** 18 games, Claude faster 1 / equal 17 / slower 0; 5 flags, all fixed (above).
+* **5e/5f scaling-sink prune (USER rule) held-out A/B** (seeds 9700001+gi, d5 b20 with profile): std 2000 g prune
+  4.3415 vs full 4.3385 (net +0.0030, 0 faster / 6 slower), 2HG 1000 g 4.6540 vs 4.6510 (+0.0030, 0 / 3); units
+  x0.92. Kept ON (USER's rule); the 9 losses are being root-caused with an amended rule (`wip/elves-scal`).
+* **5h viewer surface:** `verify_deck.py` viewer self-guard + surface sweep clean; 4 types wired (dig, dragon,
+  firebreathe, target); play_invariants 8 games / 148 decisions hold.
+* **5i discard buckets:** draft `MTG_ELVES_BUCKET_DISCARD` (default OFF) moved 0 of 800 paired games; even the
+  shed-worst bound moved 0 (95% ceiling 0.375% of games); real cleanup discards ~1 per 400 games. Recommendation:
+  do not adopt; Elves keeps the inherited SelesnyaLifegain buckets. USER decision.
+* **5j suite membership:** all three tiers with GT (a7516ef44); cost 1499.1 ms/game vs hinata 3616.2 in the same
+  run = 0.41x (limit 3x).
+* **`verify_deck.py --no-network`: GATE PASS.**
 
 ## Approved deferrals
 
