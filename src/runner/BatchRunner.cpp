@@ -9,6 +9,7 @@
 #include "../ai/EscStats.h"
 #include "../core/GameLogger.h"
 #include "../core/SpellEffects.h"   // MTG_PREPAY_WILD_AUDIT per-game counts (t_pwt_game_*)
+#include "../core/ControlInject.h"  // PROTOTYPE ctrl_inject job field
 #include "../core/EnvFlags.h"
 #include "../core/GameSetup.h"
 #include "../core/IndexCarry.h"
@@ -212,6 +213,7 @@ struct Job
     int              fm_count           = -1;
     std::vector<int> fm_bottom;
     bool            legacy_passive_opponent_lands = false; // historical Mill reference replay
+    ctrlinject::Spec ctrl_inject;                          // PROTOTYPE control-effect injection (ControlInject.h); none by default
     bool            legacy_shared_shuffle_ordinal = false; // reference recorded before the opponent's own shuffle ordinal
     int             depth               = 0;
     int             budget_ms           = 0;
@@ -857,6 +859,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
         if (!fm.empty()) { ParseForcedMulliganSpec(fm, j.fm_count, j.fm_bottom); }
     }
     j.legacy_passive_opponent_lands = jspec.value("legacy_passive_opponent_lands", false);
+    j.ctrl_inject = ctrlinject::Parse(jspec.value("ctrl_inject", std::string()));
     j.legacy_shared_shuffle_ordinal = jspec.value("legacy_shared_shuffle_ordinal", false);
     j.depth               = jspec.value("depth", 0);
     j.budget_ms           = jspec.value("budget_ms", 0);
@@ -2611,8 +2614,10 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 const long long e0[9] = { escstats::t_take_n, escstats::t_take_u, escstats::t_disc_n, escstats::t_disc_u, escstats::t_disc_ver_n, escstats::t_disc_ver_earlier, escstats::t_disc_ver_equal, escstats::t_disc_rescued_n, escstats::t_disc_rescued_main_n };
                 escstats::t_job = job.name.c_str(); escstats::t_gi = wi.game;
                 const long long pbp0 = TurnSolver::PutBackPriceCharged();
+                ctrlinject::Install(job.ctrl_inject, job.name.c_str(), global_gi);
                 int wt = engine->RunGame(state, job.max_turns);
                 escstats::t_job = nullptr; escstats::t_gi = -1;
+                ctrlinject::Clear();
                 // FREE TURNS (MTG_FREE_TURNS): one line per game that took any, so a measurement can report the
                 // credited win turn (wt) beside the RAW round (wt + free). Never printed with the flag off.
                 if (state.free_turns_taken != 0)

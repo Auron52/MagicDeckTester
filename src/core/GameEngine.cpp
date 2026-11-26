@@ -2,6 +2,7 @@
 #include "OpponentDeck.h"
 #include "EffectHandler.h"
 #include "SpellEffects.h"
+#include "ControlInject.h"     // PROTOTYPE ctrl_inject (default off)
 #include "FreeTurns.h"         // MTG_FREE_TURNS: the end-of-opponent-turn lock check (lockstep twin in TurnSolver)
 #include "../ai/AIEngine.h"
 #include "../ai/Combat.h"
@@ -251,6 +252,138 @@ static void NoteOwnDeath(const GameState& state)
     }
 }
 
+// ---- PROTOTYPE control-effect injection (ControlInject.h; docs/design/control-scoring-mode.md) ----------
+// Destroy OUR permanent at battlefield index i. Returns false when it is indestructible.
+static bool CtrlInjectDestroyAt(GameState& state, int i)
+{
+    Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+    if (p.HasKeyword(Keyword::Indestructible)) { return false; }
+    const Permanent dead = p;
+    if (UnearthExileInstead(state, static_cast<std::size_t>(i), "destroyed")) { return true; }
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.equipped_to      == dead.card.m_number) { q.equipped_to      = 0; }
+        if (q.aura_attached_to == dead.card.m_number) { q.aura_attached_to = 0; }
+    }
+    if (!dead.is_token) { state.players[static_cast<std::size_t>(dead.owner_index)].graveyard.push_back(RevealedCard(dead.card)); }
+    state.battlefield.erase(state.battlefield.begin() + i);
+    return true;
+}
+
+// Apply every turn-start effect due this turn. Returns true when the turn is skipped; `any` = something applied.
+static bool CtrlInjectTurnStart(GameState& state, bool& any)
+{
+    using namespace ctrlinject;
+    bool skip = false;
+    const int me = state.active_player_index;
+    for (std::size_t k = 0; k < t_spec.size(); ++k)
+    {
+        const Effect& e = t_spec[k];
+        if (t_done[k] || e.turn != state.turn_number || e.kind == Kind::Counter) { continue; }
+        t_done[k] = 1;
+        int count = 0, applied = 0;
+        std::string what;
+        auto nth = [&](auto pred) -> int
+        {
+            int n = 0, at = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                if (q.controller_index != me || !pred(q)) { continue; }
+                if (n == e.arg) { at = i; }
+                ++n;
+            }
+            count = n;
+            return at;
+        };
+        int at = -1;
+        switch (e.kind)
+        {
+        case Kind::Land:     at = nth([](const Permanent& q) { return q.card.IsLand(); }); break;
+        case Kind::Creature: at = nth([](const Permanent& q) { return q.card.IsCreature(); }); break;
+        case Kind::Nonland:  at = nth([](const Permanent& q) { return !q.card.IsLand(); }); break;
+        case Kind::BigCreature:
+        {
+            int best = -1000;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                if (q.controller_index != me || !q.card.IsCreature()) { continue; }
+                ++count;
+                if (q.EffectivePower() > best) { best = q.EffectivePower(); at = i; }
+            }
+            break;
+        }
+        case Kind::Sweep:
+            for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+            {
+                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                if (q.controller_index != me || !q.card.IsCreature()) { continue; }
+                ++count;
+                if (CtrlInjectDestroyAt(state, i)) { ++applied; }
+            }
+            break;
+        case Kind::Discard: case Kind::BigDiscard:
+        {
+            auto& hand = state.players[static_cast<std::size_t>(me)].hand;
+            int pick = -1;
+            if (e.kind == Kind::Discard)
+            {
+                count = static_cast<int>(hand.size());
+                if (e.arg < count) { pick = e.arg; }
+            }
+            else
+            {
+                int best = -1;
+                for (int i = 0; i < static_cast<int>(hand.size()); ++i)
+                {
+                    if (hand[static_cast<std::size_t>(i)].IsLand()) { continue; }
+                    ++count;
+                    const int mv = hand[static_cast<std::size_t>(i)].m_mana_cost.ManaValue();
+                    if (mv > best) { best = mv; pick = i; }
+                }
+            }
+            if (pick >= 0)
+            {
+                const Card c = hand[static_cast<std::size_t>(pick)];
+                what = c.m_name.str();
+                hand.erase(hand.begin() + pick);
+                state.players[static_cast<std::size_t>(me)].graveyard.push_back(RevealedCard(c));
+                applied = 1;
+            }
+            break;
+        }
+        case Kind::Skip: count = 1; applied = 1; skip = true; break;
+        case Kind::Counter: case Kind::None: break;
+        }
+        if (at >= 0)
+        {
+            what = state.battlefield[static_cast<std::size_t>(at)].card.m_name.str();
+            applied = CtrlInjectDestroyAt(state, at) ? 1 : 0;
+        }
+        if (applied) { any = true; }
+        Report(state, e, count, applied, what);
+    }
+    return skip;
+}
+
+// The counter effect, at the executor's stack resolution: true = this entry was countered.
+static bool CtrlInjectCounter(GameState& state, const StackEntry& entry)
+{
+    using namespace ctrlinject;
+    if (entry.type != StackEntry::EntryType::Spell || entry.controller_index != state.active_player_index) { return false; }
+    for (std::size_t k = 0; k < t_spec.size(); ++k)
+    {
+        const Effect& e = t_spec[k];
+        if (t_done[k] || e.kind != Kind::Counter || e.turn != state.turn_number) { continue; }
+        if (entry.source.m_mana_cost.ManaValue() < e.arg) { continue; }
+        t_done[k] = 1;
+        Report(state, e, 1, 1, entry.source.m_name.str());
+        return true;
+    }
+    return false;
+}
+
 void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
 {
     const int at = static_cast<int>(from);
@@ -278,6 +411,14 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
             EmitPlayEvent(state.turn_number, "extra_turn",
                           "\xE2\x8F\xB3 Extra turn begins (turn " + std::to_string(state.turn_number)
                           + ", extra " + std::to_string(static_cast<int>(state.extra_turns_taken)) + ")");
+        }
+        // PROTOTYPE control-effect injection (ControlInject.h): inert unless a batch job set ctrl_inject.
+        if (ctrlinject::Armed() && !m_ai.InRolloutForCtrlInject() && !state.InSameRoundTurn())
+        {
+            bool any = false;
+            const bool skip = CtrlInjectTurnStart(state, any);
+            if (any) { m_ai.DropCommittedLineForCtrlInject(); }
+            if (skip) { return; }
         }
         UntapStep(state);
         UpkeepStep(state);   // includes UpkeepTail
@@ -1745,6 +1886,19 @@ void GameEngine::ResolveStack(GameState& state)
             { hand_before_nums.push_back(c.m_number); }
         }
 
+        // PROTOTYPE control-effect injection: an opponent's counterspell (ControlInject.h). Real game only.
+        if (ctrlinject::Armed() && !m_ai.InRolloutForCtrlInject() && CtrlInjectCounter(state, entry))
+        {
+            // A countered spell leaves the stack for its owner's graveyard (CR 701.6a); flashback exiles it;
+            // a copy ceases to exist. (Prototype: an adventure / kicked face goes to the graveyard as cast.)
+            if (!entry.is_copy)
+            {
+                if (entry.cast_with_flashback) { state.exile.push_back(entry.source); }
+                else { state.players[static_cast<std::size_t>(entry.controller_index)].graveyard.push_back(entry.source); }
+            }
+            m_ai.DropCommittedLineForCtrlInject();
+            continue;
+        }
         EffectHandler::Resolve(state, entry, *def);
 
         if (m_logger && is_draw_spell)
