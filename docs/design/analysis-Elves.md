@@ -196,11 +196,16 @@ opaque `plan` pointer for the group key. Nothing in generic enumeration changed.
 * **Genesis Wave's X menu** is widened to every X (`ElvesProvider::XCandidates`, largest first) so "Wave for what
   the rest of the plan leaves" exists to be kept; before, the base gave only the whole-pool max, so no plan cast
   Wave beside anything else.
-* **Hold-back rule:** k = our untapped mana_dork creatures with a static one-mana tap (Llanowar Elves, Elvish
-  Mystic; not Priest / Archdruid / Marwyn) that can attack this turn (`CanAttackFull`: not summoning-sick, or
-  hasted by Concordant Crossroads), capped at 2; h = ceil(k / mana per count step) (Wave 1, a kick or squad copy
-  2, Ezuri's pump 5). **Pruned when attacking cannot matter:** k = 0 in the post-combat main, and with no such
-  attacker on the board.
+* **Hold-back rule (AMENDED 2026-11-26 on wip/elves-scal, pending the USER; `logs/elves/scaling-amend.md`):** the
+  attackers a lower count could leave untapped are EVERY untapped mana creature of ours that can attack this turn
+  (`CanAttackFull`: not summoning-sick, or hasted by Concordant Crossroads): Llanowar / Mystic at 1, and the
+  scaled dorks at their live tap (Priest / Archdruid at the Elf count, Marwyn at its power, each grown by the
+  plan's other Elf casts). H = the sum of those yields; h = ceil(H / mana per count step) (Wave 1, a kick or squad
+  copy 2, Ezuri's pump 5). The band runs from the max down to the count that leaves all of them untapped. **Pruned
+  when attacking cannot matter:** post-combat, and with no attack-capable mana creature. *First cut (superseded):*
+  only 1-mana dorks, capped at 2 -- it lost 9 of 3,000 held-out games, each a line holding back a scaled dork or
+  three or more attackers, none findable at d8 b0; a cap of two attackers of any kind still lost std 1957 of the
+  fresh 3,000 (four held attackers) and 2HG 689 of the first sample (three).
 * **Lift switches:** `MTG_ELVES_SCALING_PRUNE=0` (heurarm `ELVES_SCALING_PRUNE`, per job; default ON) -> every
   count and split. `MTG_UNPRUNED`, and `MTG_UNPRUNE=replicate` (the gate the multikick fan already shares -- the
   64-gate mask is full) or `=xspell` (Wave's X), lift it. Human play never sees it (the host skips it under
@@ -208,8 +213,8 @@ opaque `plan` pointer for the group key. Nothing in generic enumeration changed.
 * **Lines it can miss:** two sinks scaled together (Warcaller x2 + Brigade x1, Wave + a kicked Warcaller); a
   count below the band that frees mana for something that is not a plan action -- Visionary's {G} draws (paid at
   trigger time), Ezuri's combat pump from leftover mana (only the no-sink / K = 0 plan keeps "Ezuri fully
-  scaled"), a post-combat activation; holding back a scaled dork (Priest / Archdruid / Marwyn) or a third 1-mana
-  dork to attack; a smaller Wave chosen to keep the other Waves in the library. The hold-back variants only help
+  scaled"), a post-combat activation, Wirewood Lodge's untap; holding back a creature cast THIS turn with haste
+  (not on the battlefield when the band is sized); a smaller Wave chosen to keep the other Waves in the library. The hold-back variants only help
   if the mana payer then leaves the attacker untapped (they at least leave the mana for Ezuri's combat pump).
 * **Measurement (2026-11-26, quick probe, NOT the adoption A/B):** ONE pooled `mtg --batch`, 30 blocks x 10 games
   per arm, arms innermost, seed 7007+off / game_index off, d5 b20, no profile (none exists yet). Manifest:

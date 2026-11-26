@@ -4,8 +4,8 @@
 //     reveal_x_put_permanents); SelesnyaLifegain and AccomplishedAlchemist are unchanged. The every-deck table is
 //     test_pirates_provider.cpp's.
 //  2. THE USER'S SCALING-SINK RULE (ElvesScalingAdmit through EnumerateMainPlans): one sink scaled to the max the
-//     plan's other casts leave, hold-back counts for the 1-mana attackers, no partial splits across two sinks; the
-//     idle-adjacent / unscaled plans untouched.
+//     plan's other casts leave, hold-back counts for the attack-capable mana creatures (amended 2026-11-26), no
+//     partial splits across two sinks; the idle-adjacent / unscaled plans untouched.
 //  3. THE LIFT SWITCHES: MTG_ELVES_SCALING_PRUNE=0 (heurarm, per job) restores every count and every split;
 //     MTG_UNPRUNED / MTG_UNPRUNE=replicate|xspell and human play are process-static, so their case asserts the
 //     contract in whichever process runs it (run once under MTG_UNPRUNED=1 and once under MTG_HUMAN_PLAY=1 to
@@ -152,19 +152,28 @@ TEST_CASE("Elves routing: decks/Elves -> ElvesProvider; SelesnyaLifegain and Acc
 
 // ---- 2. THE RULE -----------------------------------------------------------------------------------------------
 
-TEST_CASE("Elves scaling rule: hold-back attackers -- untapped unsick 1-mana dorks, Crossroads haste, pre-combat, cap 2")
+TEST_CASE("Elves scaling rule: hold-back sources -- untapped attack-capable mana creatures at their live yield, pre-combat")
 {
     GameState s = PBase();
-    CHECK(ElvesHoldBackAttackers(s, true) == 1);              // the Llanowar
-    CHECK(ElvesHoldBackAttackers(s, false) == 0);             // post-combat: the attack is over
+    std::vector<ElvesHoldBackSource> src = ElvesHoldBackSources(s, true);
+    REQUIRE(src.size() == 1);                                 // the Llanowar
+    CHECK(ElvesHoldBackMana(src, 0) == 1);
+    CHECK(ElvesHoldBackSources(s, false).empty());            // post-combat: the attack is over
     PPut(s, "Elvish Mystic", 201, /*sick=*/true);
-    CHECK(ElvesHoldBackAttackers(s, true) == 1);              // a summoning-sick Mystic cannot attack
-    PPut(s, "Priest of Titania", 202);
-    CHECK(ElvesHoldBackAttackers(s, true) == 1);              // a scaled dork is not a 1-mana producer
-    PPut(s, "Concordant Crossroads", 203);
-    CHECK(ElvesHoldBackAttackers(s, true) == 2);              // Crossroads hastes the Mystic
-    PPut(s, "Llanowar Elves", 204);
-    CHECK(ElvesHoldBackAttackers(s, true) == 2);              // capped at 2
+    CHECK(ElvesHoldBackSources(s, true).size() == 1);         // a summoning-sick Mystic cannot attack
+    PPut(s, "Priest of Titania", 202);                        // a SCALED dork counts, at its live tap
+    PPut(s, "Elvish Archdruid", 203, /*sick=*/true);
+    PPut(s, "Marwyn, the Nurturer", 204, /*sick=*/true);
+    src = ElvesHoldBackSources(s, true);
+    REQUIRE(src.size() == 2);                                 // Llanowar + Priest
+    // The Priest counts every Elf on the battlefield (Llanowar, Mystic, Priest, Archdruid, Marwyn = 5).
+    CHECK(ElvesHoldBackMana(src, 0) == 1 + 5);
+    CHECK(ElvesHoldBackMana(src, 2) == 1 + 7);                // two Elf casts in the plan grow the Priest's tap
+    PPut(s, "Concordant Crossroads", 205);                    // haste: Mystic, Archdruid and Marwyn can attack now
+    src = ElvesHoldBackSources(s, true);
+    CHECK(src.size() == 5);
+    // Llanowar 1 + Mystic 1 + Priest 5 + Archdruid 5 (Elves you control) + Marwyn 2 (1 + the Archdruid's +1).
+    CHECK(ElvesHoldBackMana(src, 0) == 1 + 1 + 5 + 5 + 2);
 }
 
 TEST_CASE("Elves scaling rule: one sink at the max after the other casts, hold-back counts, no splits")
@@ -224,6 +233,36 @@ TEST_CASE("Elves scaling rule: post-combat (and no attacker) keeps the top count
     for (const TurnSolver::Plan& p : kept) { unscaled_after += ScaledSinks(Casts(p)) == 0; }
     CHECK(unscaled_before == unscaled_after);
     CHECK(unscaled_before > 0);
+}
+
+TEST_CASE("Elves scaling rule: a held SCALED dork widens the band by its live yield; post-combat keeps the top")
+{
+    if (!RuleLive()) { return; }
+    PruneArm on(1);
+    GameState s = PBase();
+    PPut(s, "Priest of Titania", 202);                        // 7 Forests + Llanowar 1 + Priest 2 = 10 mana
+    s.players[0].hand.clear();
+    PHand(s, "Joraga Warcaller", 1);
+    const std::set<CastSet> m = Menu(TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, nullptr));
+    // Top K 4 ((10 - 1) / 2). Leaving the Priest AND the Llanowar untapped frees 3 mana: ceil(3 / 2) = 2 kicks
+    // down. (The first cut counted only the Llanowar: one kick down, K 2 dropped.)
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 4 } }) == 1);
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 3 } }) == 1);
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 2 } }) == 1);
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 1 } }) == 0);   // only the Forests' mana would be unspent
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 0 } }) == 1);   // the unscaled cast is never touched
+    // Post-combat the band is the top alone.
+    std::vector<TurnSolver::Plan> plans;
+    { PruneArm off(0); plans = TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, nullptr); }
+    std::vector<DecisionProvider::PlanView> views;
+    for (const TurnSolver::Plan& p : plans) { views.push_back({ &p.actions, &p.land_to_play, &p }); }
+    std::vector<char> admit(plans.size(), 1);
+    ElvesScalingAdmit(s, /*is_pre_combat=*/false, views, admit);
+    std::vector<TurnSolver::Plan> kept;
+    for (std::size_t i = 0; i < plans.size(); ++i) { if (admit[i]) { kept.push_back(plans[i]); } }
+    const std::set<CastSet> mk = Menu(kept);
+    CHECK(mk.count(CastSet{ { "Joraga Warcaller", 4 } }) == 1);
+    CHECK(mk.count(CastSet{ { "Joraga Warcaller", 3 } }) == 0);
 }
 
 // ---- 3. THE LIFT SWITCHES ----------------------------------------------------------------------------------------

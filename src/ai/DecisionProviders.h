@@ -3956,8 +3956,12 @@ bool ElvesScalingPruneOn();
 // The rule itself, a free function so a unit test can drive it with an explicit phase.
 void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
                        const std::vector<DecisionProvider::PlanView>& plans, std::vector<char>& admit);
-// k: the hold-back attackers -- untapped 1-mana producer creatures of ours that can attack this turn.
-int ElvesHoldBackAttackers(const GameState& s, bool is_pre_combat);
+// The hold-back band: every untapped mana creature of ours that can attack this turn (pre-combat only), with its
+// live one-tap yield; ElvesHoldBackMana is the mana leaving all of them untapped frees (scaled yields grown by the
+// plan's other Elf casts).
+struct ElvesHoldBackSource { int yield = 0; bool scaled = false; };
+std::vector<ElvesHoldBackSource> ElvesHoldBackSources(const GameState& s, bool is_pre_combat);
+int ElvesHoldBackMana(const std::vector<ElvesHoldBackSource>& src, int plan_elf_casts);
 class ElvesProvider : public SelesnyaLifegainProvider
 {
 public:
