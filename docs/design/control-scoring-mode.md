@@ -73,7 +73,8 @@ destruction, removal and locks. Real 1v1 stays a later, lower-volume mode.
   opponent's actual state, with no model of the opponent's denied plays. Worldfire is the boundary case
   that stays: it wipes every zone, so the turn after it is decided by what the opponent actually draws and
   plays. The free-turn rule credits that from real state, with no model of what the opponent would have had.
-  The USER: "it wipes everything and leaves no trace ... close enough".
+  The USER: "Essentially Worldfire is easy to consider because it wipes everything and leaves no trace." and
+  "So, Worldfire can remain in goldfish because even though it doesn't fit 100% perfectly, it is close enough."
 * **Yes: control mode.** A large part of the deck's value is the opponent's plays that never happen: the
   land that is destroyed, the threat that is countered or discarded, the creature that is exiled, and the
   turns the opponent spends locked. Crediting any of that against the passive opponent needs a counterfactual
@@ -84,7 +85,7 @@ destruction, removal and locks. Real 1v1 stays a later, lower-volume mode.
 * A secondary signal: the deck's goldfish kill turn is far behind the gauntlet's (section 3.1: the suite's decks
   kill on turn 4.6 on average). Its real strength is the race it wins by slowing the other side.
 
-**The per-deck switch.** Another agent is adding `decks/<Name>/<Name>.modes.json`, for example
+**The per-deck switch.** A separate change adds `decks/<Name>/<Name>.modes.json`, for example
 `{"goldfish": false}`. The viewers, `deck_registry.py`, `suite_gate.py`, the generators and the deck walkers
 will honour it, and Enchanted Evening is the first deck marked. This mode adds one key there:
 `"control_score": true`. Its consumers:
@@ -233,8 +234,10 @@ For ONE control game paired with ONE gauntlet game g:
   paired with one gauntlet game (section 5.4), so this is a mean over games. It is not computed per deck from
   averaged delays.
 
-This is the USER's candidate form. It is not just a convenient formula: it is the race, rewritten as an
-equivalent goldfish turn. The derivation shows why the floor is where it is.
+The USER asked for "<win turn - average control impact>", with the floor quoted in section 1. This exact form
+(the min over prefixes of `max(T_k, W - D_k)`, taken per pair) is a CANDIDATE proposed for this design, not a
+USER ruling (Q9). It is not just a convenient formula: it is the race, rewritten as an equivalent goldfish
+turn. The derivation shows why the floor is where it is.
 
 ### 4.2 Derivation: it is the goldfish turn that wins exactly the same races
 
@@ -253,14 +256,21 @@ a round-5 kill would, so it scores 5.
 
 ### 4.3 The invariant, and the properties that keep it from being gamed
 
-* **A lone effect on round T never scores below T.** With one effect, `E = min(W, max(T, W - D_1)) >= min(W, T)`.
+* **A lone effect on round T never scores below T.** The USER: "One thing that should definitely be true is
+  that a spell cast on Turn 5 on its own should never reduce <win turn - average control impact> below Turn 5.
+  Best case scenario you locked them on Turn 5 and that is equivalent to a Turn 5 win, but it cannot do better
+  than that." With one effect, `E = min(W, max(T, W - D_1)) >= min(W, T)`.
   If `W < T`, we won before casting it and the effect is irrelevant. A lock scores exactly T.
-* **Earlier control moves the floor, legitimately (the USER's refinement).** If the prefix up to round 4 (Wave
+* **Earlier control moves the floor, legitimately.** The USER: "Now, if you cast a whole bunch of other
+  control spells earlier that would change things. In Enchanted Evening that might be Parallax Waving the
+  opponent's creatures or even Opalescence with Parallax Wave. That would stop a lot of decks in their tracks
+  even without Enchanted Evening." If the prefix up to round 4 (Wave
   on round 3 plus Opalescence on round 4) already stops g, then `D_2(g) = infinity` and `E(g) = 4`, even
   though Enchanted Evening lands on round 5. If the round-3 Wave alone stops g, `E(g) = 3`. The floor is the
   round of the last effect the credit actually depends on, not of the last effect cast.
 * **Fractional scores come from averaging per pair.** If an early Wave alone stops 40% of the gauntlet games
-  and Opalescence stops the rest, `E = 0.4 * 3 + 0.6 * 4 = 3.4`. The USER's "somewhere between Turn 3 and 4".
+  and Opalescence stops the rest, `E = 0.4 * 3 + 0.6 * 4 = 3.4`: the USER's "somewhere between Turn 3 and 4"
+  (section 4.3a works it through).
 * **Monotone in our speed:** E never increases when W decreases.
 * **Monotone in delay:** E never increases when any `D_k` increases.
 * **Later effects can only help, never hurt, the score itself:** adding effect n+1 adds one more term to the
@@ -272,6 +282,83 @@ a round-5 kill would, so it scores 5.
 * **Gaming risk lives in the delay model, not the formula.** The formula is sound if `D_k` is right. Any
   positive error in an estimated `D_k` is what a search will exploit (the optimizer's curse; the repo saw
   it with keep tables). Hence section 5.5: model delays for the search, but MEASURE them for the score.
+
+### 4.3a Worked example: Parallax Wave on round 3, then Opalescence on round 4
+
+The USER, 2026-11-26: "Or even somewhere between Turn 3 and 4 if the early Parallax is effective enough. In
+my experience it can be pretty devastating just exiling a few creatures and then following up with
+Opalescence." This example shows the formula producing exactly that, and what the measurement has to model
+for it to be true.
+
+**The cards** (`src/cards/data/cards.json`, as implemented for Enchanted Evening):
+* **Parallax Wave** {2}{W}{W}, enchantment. Fading 5: it enters with five fade counters, and at the beginning
+  of our upkeep one is removed; if none can be, it is sacrificed. "Remove a fade counter: exile target
+  creature" (no mana, no tap, instant speed, repeatable). When it leaves the battlefield, every card exiled
+  with it returns to the battlefield under its owner. A token exiled with it ceases to exist.
+* **Opalescence** {2}{W}{W}, enchantment. Every OTHER non-Aura enchantment is a creature with base P/T equal
+  to its mana value. The Wave becomes a 4/4 creature, so the Wave can target itself.
+* A round-3 Wave needs one mana accelerant on turn 1 or 2 (the list runs Utopia Sprawl and Wild Growth).
+
+**The schedule:** `T_1 = 3` (the Wave, exiling `j` of the opponent's creatures), `T_2 = 4` (Opalescence).
+`W` is our own raw kill turn.
+
+**Prefix k = 1, the Wave alone: a temporary, bounded delay.**
+* Each exile spends a fade counter, and fading spends one more per upkeep. After `j` exiles on round 3 the
+  Wave has `5 - j` counters. It is sacrificed at our upkeep of round `3 + (5 - j) + 1 = 9 - j`. With `j = 3`
+  that is round 6.
+* The exiled cards then return as new objects during our upkeep. On the play, the opponent's turn of that
+  round starts after they return, so they can attack in it. With `j = 3` they miss the opponent's turns of
+  rounds 3, 4 and 5.
+* A counter kept back can exile a creature cast later, at instant speed, but every counter spent shortens the
+  Wave's life by a round, and every exile comes back together. When to spend counters is a target-policy choice
+  (Q3) in the replay and a searched choice in the co-simulation (section 5.3).
+* Creatures that arrive after the counters are gone are untouched. Damage that does not come from a creature
+  (burn, a storm or spell-combo kill) is not slowed at all: there `D_1 = 0`.
+* So `D_1(g)` is finite. It is at most what losing those creatures for three of the opponent's turns costs g.
+  The round-3 term `max(3, W - D_1)` equals 3 only when `D_1 >= W - 3`. The slower our own kill, the more the
+  Wave alone has to buy.
+
+**Prefix k = 2, Wave plus Opalescence: a lock against creature decks.**
+* With Opalescence out, the loop is: activate the Wave targeting each opposing creature, and last, on top of
+  the stack, activate it targeting itself. The self-exile resolves first. The Wave leaves; its leave trigger
+  returns every card linked to it (so the round-3 exiles come back), and the Wave returns as a new object with
+  five fade counters. The activations still on the stack then resolve with their source gone, so those
+  creatures are exiled for good (CR 607.2a).
+* The round-3 exiles that just came back are caught by the next loop of the new Wave before the opponent
+  untaps with them. Repeated each turn (for example at each opponent end step), every creature
+  the opponent deploys is exiled for good, and the Wave never fades.
+* So `D_2(g) = infinity` for a creature deck, until the lock breaks: enchantment removal, a hexproof creature,
+  two Sterling Groves shrouding the Wave, or a kill that needs no creature. In this high-volume mode the
+  gauntlet never casts anything at us (section 6.2), so only the last two can break it.
+* Opalescence changes nothing before round 4, so the prefix replay stays causal (section 5.4). What it changes
+  is the round-3 Wave's exiles, from "back on round 6" to "gone". **This is the sharpest non-additivity in the
+  design:** Opalescence alone does nothing to an opponent (a per-effect table would give it 0), yet with the
+  Wave it is a lock. Design A cannot represent it; A+ can only with a measured pair term; D and C measure it
+  directly.
+
+**Per-pair scores, for illustration with `W = 9`:**
+
+| gauntlet game g | `D_1` (Wave r3) | `D_2` (+ Opalescence r4) | k = 0: `W` | k = 1: `max(3, W - D_1)` | k = 2: `max(4, W - D_2)` | `E(g)` |
+|---|---|---|---|---|---|---|
+| creature deck, the Wave takes its whole early board, its kill moves from round 5 to 11 | 6 | inf | 9 | 3 | 4 | **3** |
+| creature deck that rebuilds quickly, its kill moves from 5 to 7 | 2 | inf | 9 | 7 | 4 | **4** |
+| creatures plus a burn finish: the lock stops the creatures, not the burn | 1 | 3 | 9 | 8 | 6 | **6** |
+| burn, or a spell-combo kill | 0 | 0 | 9 | 9 | 9 | **9** |
+
+* Against a creature-heavy gauntlet where half the games are the first row and half the second:
+  `E = 0.5 * 3 + 0.5 * 4 = 3.5`, the USER's "somewhere between Turn 3 and 4".
+* Against a mixed gauntlet of 40% / 30% / 15% / 15% of the four rows:
+  `E = 0.4 * 3 + 0.3 * 4 + 0.15 * 6 + 0.15 * 9 = 4.65`. The burn and combo decks are where the deck needs its
+  own clock (W), and the score says so.
+* Enchanted Evening on round 5 adds a third term, `max(5, W - D_3)`. It only lowers E in games the first two
+  effects did not already stop, which is the USER's "That would stop a lot of decks in their tracks even
+  without Enchanted Evening."
+
+**What the measurement must model for this example (stage 1's vocabulary, section 7):** exile-until-leaves with
+the return round computed from the fade counters; the return as new objects, with summoning sickness judged
+against the opponent's turn; tokens never returning; the self-exile loop, legal only with Opalescence out and
+at most one Sterling Grove; hexproof creatures as illegal targets. The probe's `bigcrt` effect (section 8) is a
+permanent destroy. That is the Wave-plus-Opalescence loop applied to one creature, not the Wave alone.
 
 ### 4.4 Per pair first, then average (not the other way round)
 
@@ -286,7 +373,7 @@ nothing (`D = 0`).
 | average D first, uncapped | | | **4.0** |
 
 Averaging first credits the lock against A as half a lock against B. It also makes the result depend on an
-arbitrary cap. Per-pair is also what makes "stops a lot of decks in their tracks" mean what the USER means: a
+arbitrary cap. Per-pair is also what makes "stop a lot of decks in their tracks" mean what the USER means: a
 partial lock fully stops some decks and not others.
 
 ### 4.5 What the control deck's search maximises
@@ -315,12 +402,32 @@ round X, so cut it" must be re-checked. Under credits, a line that does not kill
 This is the largest engine cost of stage 3 (section 7), and it is why the first milestones need no search
 change at all.
 
+### 4.6 Play and draw
+
+The derivation in section 4.2 assumes we act first in each round (on the play). Goldfish games alternate:
+`GoldFishRunner` sets `on_the_play = (seed % 2 == 0)`, so half of every run is on the draw.
+
+* **On the draw** the opponent's turn of round t comes before ours. A goldfish kill on round W wins iff
+  `K > W`. A sorcery-speed effect on our round `T_k` needs us alive after their turn `T_k` (`K > T_k`), and it
+  first affects their turn `T_k + 1`, so the disrupted race is won iff `K + D_k > W`. Together: won iff
+  `K > max(T_k, W - D_k)` for some k.
+* So **both comparisons become strict and the formula's form is unchanged**: `E(g)` is the same expression, and
+  it is still the equivalent goldfish turn, now for a deck on the draw. The deck's E averages over both
+  positions, as its goldfish W already does.
+* One timing detail: an instant cast during the opponent's turn of round t is credited to round t on the play
+  (section 4.1) but to round `t - 1` on the draw, because there that turn comes before our turn t.
+* **The pairing must give the gauntlet game the opposite position.** If we are on the play, the paired gauntlet
+  deck is on the draw (it draws on its turn 1), and vice versa. A replay that reuses our seed unchanged would
+  give both sides the same position. Stage 2 must decouple the gauntlet game's position from its seed's
+  parity, or pick the paired seed with the opposite parity.
+
 ## 5. Candidate designs
 
 ### 5.1 A: a per-(effect, turn) delay table, credited additively
 
 Measure, once per gauntlet, `S[e, t]` = the mean delay of a gauntlet deck's kill turn when effect e is applied
-before its round t (the USER's original idea). This is the injection harness (section 8). The control deck
+before its round t. This is the USER's original idea: a mode "that assigns scores to controls effects used on
+a certain turn based on an average of how they impact real decks". This is the injection harness (section 8). The control deck
 then goldfishes alone, and each effect it casts on round t is credited `S[e, t]`.
 
 * **Targets:** fixed by the table's policy, since the control game has no opponent board: "the largest
@@ -417,7 +524,7 @@ about us.
 **Engineering:** two engines in one worker, a round-synchronous scheduler, the channel's effect vocabulary, and
 the counter pause in the gauntlet's executor. No change to single-player rules.
 
-### 5.4 D: sequence replay (the USER's "a goldfish plays through them")
+### 5.4 D: sequence replay (the USER's "having a goldfish play through them and figuring out how much they get delayed")
 
 Two passes per control game, no lockstep:
 
@@ -622,6 +729,49 @@ land-destruction and mixed control decks. Default: Enchanted Evening first (its 
 first list you supply of a counterspell deck, because counters are the effect family that stacks upward (section
 8) and the one designs A and D handle worst. Reason: only you know which of your lists matter.
 
+**Q9. Is the per-pair form of section 4.1 what you mean by "<win turn - average control impact>"?** The design
+scores each (control game, gauntlet game) pair as `min over prefixes k of max(T_k, W - D_k)` and only then
+averages. Default: yes. Reason: it is derived, not chosen (section 4.2: it is the goldfish turn that wins exactly
+the same races), it satisfies your turn-5 floor by construction, it gives the "somewhere between Turn 3 and 4"
+of section 4.3a, and the plain average-first reading gives a different and cap-dependent number (section 4.4).
+The difference from a literal "W minus the average delay" is the floor and the per-pair min, and that is your
+decision.
+
 ## 10. Provenance
 
-PROVENANCE_PLACEHOLDER
+Everything in section 8 can be reproduced from these. Nothing on branch `control-mode` is pushed or landed;
+the prototype is evidence, not a deliverable.
+
+* **Base:** `34bd5960c` (the shared branch's tip when the branch was cut; `HEAD:src` tree `8d0e5cf5b737`).
+* **Prototype:** `d02db29a7` "PROTOTYPE (not for landing): ctrl_inject batch field". `HEAD:src` tree
+  `32f8c15f4ff8`. Files: `src/core/ControlInject.h` (the spec parser and per-game schedule),
+  `src/core/GameEngine.cpp` (`CtrlInjectTurnStart`, `CtrlInjectDestroyAt`, `CtrlInjectCounter`; the hook in
+  `RunTurnFrom` after `AdvanceTurnCounter`, and the counter hook in `ResolveStack`), `src/ai/AIEngine.h`
+  (`InRolloutForCtrlInject`, `DropCommittedLineForCtrlInject`), `src/runner/BatchRunner.cpp` (the job field,
+  installed and cleared around `RunGame`), and `scripts/control_inject_probe.py` (`make` writes the manifest,
+  `report` prints the paired table). 397 lines added, none removed.
+* **Effect vocabulary of the prototype** (`kind:round[:arg]`, `;`-separated, all aimed at the GOLDFISHING
+  deck): `skip` (it takes no part of that round: a one-round Time Walk for its opponent, used as an analytic
+  control), `land:T:i` (destroy its i-th land in battlefield order), `creature:T:i`, `nonland:T:i`, `bigcrt`
+  (destroy its creature with the largest effective power), `sweep` (destroy every creature it controls),
+  `discard:T:i`, `bigdisc` (discard its highest-mana-value nonland), `counter:T:m` (counter the first spell of
+  mana value >= m it casts that round; the mana stays spent). An index past the candidate count is a no-op,
+  logged `applied=0`. Board and hand effects apply at the start of the round, after the round counter
+  advances and before untap: an opponent's sorcery cast on its preceding turn.
+* **Binary:** `build/Release/mtg` in the worktree (a symlink onto the build volume, `build/wt/control-mode`),
+  built with `./build.sh` (Release, `--target mtg` only) at 14:05 UTC on 2026-11-26; sha256
+  `5018ac0f7ffab6077a1df36f79008744e8b221efbeda2ffae3ccca3e90378dd0`. Unit tests were not built or run: the
+  prototype will not land.
+* **Hook off = byte-identical.** With no job carrying `ctrl_inject`, the smoke cases `burn_smoke_d3_s1001`
+  (100 games) and `whiteknights_smoke_d3_s1001` (75 games) gave `4.4400/66921a2e4aaff4ad` and
+  `4.1467/13fe195aa47a42c7`, both equal to `test/regression_gt.txt`.
+* **Probe manifest:** `python3 scripts/control_inject_probe.py make <manifest> --games 200 --seed 7900001`:
+  130 jobs (5 decks x 26 arms), 26,000 games, every arm of a deck on the same seeds (`game_index 0`), d3 b10,
+  `ignore_play_profile`, `max_turns 12`.
+* **Probe command** (run from the worktree, in the small-job lane):
+  `scripts/box_lane.sh --slots 2 -- build/Release/mtg --batch <manifest> --threads 2 --game-log-dir <dir> --resume`.
+  PROBE_WALL_PLACEHOLDER
+* **Report:** `python3 scripts/control_inject_probe.py report <game_log_dir> <batch_stderr>`, plus the
+  additivity and analytic checks of section 8 computed from the same per-game `.wins` files. Scratch output
+  lives on the build volume (`build/scratch/control-mode/`); the summary is copied to
+  `logs/control-mode/probe-summary.txt`.
