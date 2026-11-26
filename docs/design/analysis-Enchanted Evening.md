@@ -336,6 +336,17 @@ flying, Spirit Mantle protection from creatures) break the lock without trample 
    the games that are lost between them? I think your exception is potentially fine, but I'd like to hear more about
    the unrecoverable cases."*
 
+**Ruling 22 (2026-11-26)**
+
+22. **(play out a full lock by heuristic):** *"Once we have the full lock we should just go off and win
+   playing out via heuristic so that it is faster."* and *"(just like with out Combo Out situations)"*.
+   -> Once the lock is credited for us (the free-turn lock holds: board lock + no fairness veto), the search stops
+   branching. The rest of the game is played out by a heuristic, mirroring the deck ComboRoute / go-off routes
+   (`ComboRouteEnabled` / `UntapLoopRouteEnabled` in src/ai/DecisionProvider.h: one standalone route action, played
+   out mechanically on a copy). This is a USER-authorized greedy site and needs its own entry in the NO-GREEDY gate
+   (`TurnSolver::GreedySite`) and in docs/design/no-greedy-in-search-window.md.
+   Also recorded the same day, discard-bucket amendments: verbatim in docs/design/enchanted-evening-discard-buckets.md.
+
 Reading: the lock is credited through the EXISTING free-turn rule (`MTG_FREE_TURNS`, default ON,
 `src/core/FreeTurns.h`, `docs/design/opponent-lockdown-free-turns.md`): a locked opponent turn does not advance the
 round. The deck's lock cards must join `GoldFishRunner::DeckMayLockOpponent`. Under EE + Opalescence the attackers are
