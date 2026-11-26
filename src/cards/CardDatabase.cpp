@@ -1595,6 +1595,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.grants_lifelink        = params.value("grants_lifelink", false);
     p.grants_vigilance       = params.value("grants_vigilance", false);   // Kaheera (Beasts 2026-11-21)
     p.grants_first_strike    = params.value("grants_first_strike", false);   // Vampires 2026-10-18
+    p.grants_deathtouch     = params.value("grants_deathtouch", false);
     p.affinity_for_subtype   = params.value("affinity_for_subtype", false);
     p.cost_less_per_creature_on_battlefield = params.value("cost_less_per_creature_on_battlefield", false);
     p.upkeep_adds_charge     = params.value("upkeep_adds_charge", false);
@@ -2241,6 +2242,13 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.eternalize_cost = ManaCostFromString(params["eternalize_cost"].get<std::string>());
     if (params.contains("unearth_cost"))
         p.unearth_cost = ManaCostFromString(params["unearth_cost"].get<std::string>());
+    if (params.contains("gy_self_return_battlefield_cost"))
+        p.gy_self_return_battlefield_cost = ManaCostFromString(
+            params["gy_self_return_battlefield_cost"].get<std::string>());
+    p.gy_self_return_hand_max = params.value("gy_self_return_hand_max", -1);
+    if (params.contains("gy_exile_creature_zombie_cost"))
+        p.gy_exile_creature_zombie_cost = ManaCostFromString(
+            params["gy_exile_creature_zombie_cost"].get<std::string>());
     p.champion_subtype = params.value("champion_subtype", std::string{});
     p.attack_trigger_reanimate         = params.value("attack_trigger_reanimate", false);
     p.attack_trigger_reanimate_subtype = params.value("attack_trigger_reanimate_subtype", std::string{});
@@ -2785,6 +2793,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
 
     // ---- Minotaur tribal (see CardParams' block comment for each field's semantics) ----
     p.etb_damage_devotion_color       = params.value("etb_damage_devotion_color", std::string{});
+    p.etb_drain_devotion_color        = params.value("etb_drain_devotion_color", std::string{});
     p.reduces_subtype_colored_subtype = params.value("reduces_subtype_colored_subtype", std::string{});
     if (params.contains("reduces_subtype_colored_cost"))
         p.reduces_subtype_colored_cost =

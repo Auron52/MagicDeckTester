@@ -2930,10 +2930,11 @@ function renderBoard() {
     const gset = new Set(me.gycast_gy||[]);    // graveyard permanents castable via Lurrus of the Dream-Den
     const eset = new Set(me.eternalize_gy||[]); // graveyard creatures with Eternalize (Timeless Witness)
     const uset = new Set(me.unearth_gy||[]);    // graveyard creatures with Unearth (Hellspark Elemental)
+    const selfReturnSet = new Set(me.self_return_gy||[]);
     const gyThumbs = me.graveyard.map(n => uset.has(n)
-      ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-unearth="1" title="click to UNEARTH from the graveyard (it returns with haste; exiled at the next end step or if it would leave)">`+
+      ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-unearth="1" title="${selfReturnSet.has(n)?'click to return from graveyard (activate only with one or fewer cards in hand)':'click to UNEARTH from the graveyard (it returns with haste; exiled at the next end step or if it would leave)'}">`+
         `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
-        `<span class="rtbadge" title="Unearth — activate from here">⟳</span><em>${esc(n)}</em></span>`
+        `<span class="rtbadge" title="${selfReturnSet.has(n)?'Return from graveyard':'Unearth — activate from here'}">⟳</span><em>${esc(n)}</em></span>`
       : eset.has(n)
       ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-eternalize="1" title="click to ETERNALIZE from the graveyard (pay {5}{G}{G}, exile it: a 4/4 black Zombie token copy)">`+
         `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
@@ -3596,7 +3597,10 @@ function unearthCard(name) {
   const queued = S.plan.filter(p=>p.kind==='unearth' && p.name===name).length;
   if (queued >= copies) { S.plan = S.plan.filter(p=>!(p.kind==='unearth' && p.name===name)); renderBoard(); return; }
   S.plan.push({name, kind:'unearth'});
-  flashHint(`Unearthing ${name} (${queued+1} of ${copies}) -- it returns with haste and is exiled at the end step. Commit to resolve.`);
+  const selfReturn = (me.self_return_gy||[]).includes(name);
+  flashHint(selfReturn
+    ? `Returning ${name} from the graveyard (${queued+1} of ${copies}). Commit to resolve.`
+    : `Unearthing ${name} (${queued+1} of ${copies}) -- it returns with haste and is exiled at the end step. Commit to resolve.`);
   renderBoard();
 }
 

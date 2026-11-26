@@ -35791,8 +35791,11 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     }
     if (d == nullptr) { return; }
     const CardParams& pp = d->params;
-    if (pp.pharika_exile_cost.has_value()
-        && ActAffordable(state, ctrl, p.card, pp.pharika_exile_cost, total_cache))
+    const bool reaper_exile = pp.gy_exile_creature_zombie_cost.has_value();
+    const std::optional<ManaCost>& exile_cost = reaper_exile
+        ? pp.gy_exile_creature_zombie_cost : pp.pharika_exile_cost;
+    if (exile_cost.has_value() && (!reaper_exile || CanTapNow(p, state.battlefield))
+        && ActAffordable(state, ctrl, p.card, exile_cost, total_cache))
     {
         for (int owner = 0; owner < 2; ++owner)
         {
@@ -56179,7 +56182,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         {
             if (src.controller_index != state.active_player_index) { continue; }
             const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
-            if (!sd || !sd->params.pharika_exile_cost.has_value()) { continue; }
+            if (!sd) { continue; }
+            const bool reaper_exile = sd->params.gy_exile_creature_zombie_cost.has_value();
+            const std::optional<ManaCost>& exile_cost = reaper_exile
+                ? sd->params.gy_exile_creature_zombie_cost : sd->params.pharika_exile_cost;
+            if (!exile_cost.has_value() || (reaper_exile && !CanTapNow(src, state.battlefield)))
+            { continue; }
             for (int owner = 0; owner < 2; ++owner)
             {
                 for (const Card& gc : state.players[owner].graveyard)
@@ -56195,8 +56203,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.sac_victim_id = gc.m_number;
                     a.player_target = owner;
                     a.tutor_target = gc.m_name;
-                    a.cost = *sd->params.pharika_exile_cost;
-                    a.eval = owner == state.active_player_index ? 2 : -2;
+                    a.cost = *exile_cost;
+                    a.eval = reaper_exile ? 2 * DMG : (owner == state.active_player_index ? 2 : -2);
                     a.is_noncreature = true;
                     actions.push_back(std::move(a));
                 }
@@ -56505,16 +56513,22 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         for (const Card& gc : ap.graveyard)
         {
             const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
-            if (!gd || !gd->params.unearth_cost.has_value()) { continue; }
+            if (!gd || (!gd->params.unearth_cost.has_value()
+                        && !gd->params.gy_self_return_battlefield_cost.has_value())) { continue; }
+            if (gd->params.gy_self_return_hand_max >= 0
+                && static_cast<int>(ap.hand.size()) > gd->params.gy_self_return_hand_max)
+            { continue; }
+            const bool is_unearth = gd->params.unearth_cost.has_value();
             const Card& uc = gd->card;
             Action a;
             a.kind           = Action::Kind::Unearth;
             a.card_name      = gc.m_name;
             a.hand_index     = -1;
             a.sac_source_id  = gc.m_number;       // this copy: the fold's source key
-            a.cost           = gd->params.unearth_cost.value();
+            a.cost           = is_unearth ? gd->params.unearth_cost.value()
+                                           : gd->params.gy_self_return_battlefield_cost.value();
             a.is_noncreature = false;
-            if (is_pre_combat && uc.IsCreature())
+            if (is_unearth && is_pre_combat && uc.IsCreature())
             {
                 auto [lord_pb, lord_tb] = ComputeLordBonus(uc, state, state.active_player_index);
                 (void)lord_tb;
@@ -56527,7 +56541,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             else
             {
                 a.vial_attack_power = 0;
-                a.eval              = -2;
+                a.eval              = is_unearth ? -2 : DMG;
             }
             // Nonzero tag shared by every copy of this name (FinalizeFoldTags validates the class:
             // field-identical members, one action per source; a collision with another class's tag only
@@ -58827,6 +58841,10 @@ static int ActivationFamilyKey(const Action& a)
     if (s_off) { return 0; }
     switch (a.kind)
     {
+        case Action::Kind::PharikaExile:
+            // Cemetery Reaper's {T} makes its target variants mutually exclusive.
+            return (a.def && a.def->params.gy_exile_creature_zombie_cost.has_value()
+                    && a.sac_source_id >= 0) ? -6000000 - a.sac_source_id : 0;
         case Action::Kind::GarthActivate:
         case Action::Kind::ActivateLoyalty:
         case Action::Kind::Equip:

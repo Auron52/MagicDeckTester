@@ -7845,7 +7845,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false)
                 && ApplyPharikaExile(state, state.active_player_index, a.sac_source_id,
                                       a.player_target, a.sac_victim_id) && m_logger)
-            { m_logger->LogAbility(a.sac_source_id, a.card_name.str(), "exile creature; Snake token"); }
+            {
+                m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                    a.def && a.def->params.gy_exile_creature_zombie_cost.has_value()
+                        ? "exile creature; Zombie token" : "exile creature; Snake token");
+            }
         }
         else if (a.kind == Action::Kind::BronzePut)
         {
@@ -7889,8 +7893,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 {
                     ApplyUnearth(state, state.active_player_index, a.card_name.str(), a.sac_source_id);
                     if (m_logger)
-                    { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
-                                           "unearth from graveyard (haste; exiled at end step or if it would leave)"); }
+                    {
+                        const CardDefinition* ud = CardDatabase::Instance().Lookup(a.card_name.str());
+                        m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                            ud && ud->params.gy_self_return_battlefield_cost.has_value()
+                                ? "return from graveyard"
+                                : "unearth from graveyard (haste; exiled at end step or if it would leave)");
+                    }
                 }
             }
         }

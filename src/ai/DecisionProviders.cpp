@@ -30771,6 +30771,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
                            // of the archetype-neutral misroute class.
     bool melira_pod = false; // Persist combo -- routes to MeliraPodProvider BEFORE the goblin check
     bool fungus = false;   // Thallid/Saproling tokens -- routes to Generic BEFORE the goblin check
+    bool zombies = false;  // Undead Warchief otherwise trips Goblins; Lord of the Undead trips Dragons
     bool aura = false;     // Bogle Auras -- Light-Paws' aura_cast_tutor_attach is unique to it
     bool fluctuator = false;  // Fluctuator cycling combo -- routes ABOVE anti (Enlightened Tutor)
     bool gods = false; // Gods-specific mechanics; route above Mystic Retrieval's `anti` signature.
@@ -31511,6 +31512,16 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             dragons = true;
         }
 
+        // These are Zombie-specific, independently present across several cards.
+        // Route above the archetype-neutral Goblin/Dragon signatures and keep
+        // generic search until a Zombies heuristic has been measured.
+        if (p.reduces_spell_subtype == "Zombie"
+            || p.gy_return_requires_subtype == "Zombie"
+            || p.gy_exile_creature_zombie_cost.has_value()
+            || p.gy_self_return_battlefield_cost.has_value()
+            || p.etb_drain_devotion_color == "B")
+        { zombies = true; }
+
         // Melira Pod persist combo. MUST be detected and MUST win over the goblin check below --
         // Carrion Feeder / Bloodthrone Vampire carry sac_creature_outlet, which ALONE sets the
         // Goblin signature (the FIFTH occurrence of the misroute class recorded for Mirrorwing,
@@ -31836,6 +31847,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // has since gained real judgement hooks too (sac outlets, the devour ladder, the main-phase split,
     // the USER's cleanup-discard buckets), so it is no longer "Generic plus one override".
     if (gods)        { return g_gods; }
+    if (zombies)     { return g_generic; }
     if (fungus)      { return g_fungus; }
     if (eldrazi)     { return g_eldrazi_flicker; }
     if (dragonstorm) { return g_dragonstorm; }

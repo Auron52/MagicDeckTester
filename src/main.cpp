@@ -1047,7 +1047,12 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 if (a.tutor_target.str() == kGyReturnRandom)
                 { tag = a.card_name + ": sacrifice \xE2\x86\x92 return a creature card at random"; }
                 else
-                { tag = a.card_name + ": sacrifice \xE2\x86\x92 return " + a.tutor_target + " to hand"; }
+                {
+                    const CardDefinition* rd = CardDatabase::Instance().Lookup(a.card_name.str());
+                    const bool sacrifice = !rd || rd->params.gy_return_sacrifices_source;
+                    tag = a.card_name + (sacrifice ? ": sacrifice \xE2\x86\x92 return " : ": return ")
+                        + a.tutor_target + " to hand";
+                }
                 break;
             case Action::Kind::GraveyardPlayAbility:
                 // One plan variant per legal target: the label names WHICH card is played.
@@ -1312,11 +1317,14 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 break;
             }
             case Action::Kind::PharikaExile:
-                tag = "Pharika: exile " + a.tutor_target.str() + " #"
+            {
+                const bool reaper = a.def && a.def->params.gy_exile_creature_zombie_cost.has_value();
+                tag = a.card_name.str() + ": exile " + a.tutor_target.str() + " #"
                     + std::to_string(a.sac_victim_id) + " from "
                     + (a.player_target == s.active_player_index ? "own" : "opponent")
-                    + " graveyard; owner creates Snake";
+                    + (reaper ? " graveyard; create Zombie" : " graveyard; owner creates Snake");
                 break;
+            }
             case Action::Kind::BronzePut:
                 tag = "Purphoros, Bronze-Blooded: put " + a.card_name.str()
                     + " (sacrifice at next end step)";
@@ -1329,8 +1337,13 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 tag = a.card_name + ": eternalize from graveyard (4/4 black Zombie token copy)";
                 break;
             case Action::Kind::Unearth:
-                tag = a.card_name + ": unearth from graveyard (haste; exiled at end step or if it would leave)";
+            {
+                const CardDefinition* ud = CardDatabase::Instance().Lookup(a.card_name.str());
+                tag = ud && ud->params.gy_self_return_battlefield_cost.has_value()
+                    ? a.card_name + ": return from graveyard"
+                    : a.card_name + ": unearth from graveyard (haste; exiled at end step or if it would leave)";
                 break;
+            }
             case Action::Kind::ActivatePump:
             {
                 const int k = std::max(1, a.chosen_x);
@@ -1847,13 +1860,20 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
     // in the graveyard zone (the `unearth=` verb), one entry per COPY (each copy is its own activation).
     // Absent when there are none, so every other deck's state JSON is byte-identical.
     {
-        std::vector<std::string> ue;
+        std::vector<std::string> ue, self_return;
         for (const Card& c : me.graveyard)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (d && d->params.unearth_cost.has_value()) { ue.push_back(c.m_name); }
+            if (!d) { continue; }
+            if (d->params.unearth_cost.has_value()) { ue.push_back(c.m_name); }
+            if (d->params.gy_self_return_battlefield_cost.has_value()
+                && (d->params.gy_self_return_hand_max < 0
+                    || static_cast<int>(me.hand.size()) <= d->params.gy_self_return_hand_max))
+            { ue.push_back(c.m_name); self_return.push_back(c.m_name); }
         }
         if (!ue.empty()) { std::sort(ue.begin(), ue.end()); os << ", \"unearth_gy\": "; JsonNameArray(os, ue); }
+        if (!self_return.empty())
+        { std::sort(self_return.begin(), self_return.end()); os << ", \"self_return_gy\": "; JsonNameArray(os, self_return); }
     }
     os << ", \"library_size\": " << me.library.size();
     // THE REVEALED LIBRARY TOP (Courser of Kruphix: "Play with the top card of your library

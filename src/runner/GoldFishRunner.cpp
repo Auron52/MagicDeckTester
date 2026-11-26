@@ -933,8 +933,15 @@ std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
         if (p.endstep_tokens_equal_descend)  { m |= GyR_DescendCount; }
         // Haven of the Spirit Dragon / Haunted Fengraf: a graveyard-return ability reads the
         // graveyard's CREATURE cards (see GyR_CreatureNames). MISSED CLASS 5, closed 2026-10-15.
-        if (p.gy_return_cost.has_value())    { m |= GyR_CreatureNames; }
+        if (p.gy_return_cost.has_value())
+        {
+            // Lord of the Undead can return any Zombie card, including a tribal
+            // noncreature card. Preserve exact names for subtype-filtered returns.
+            m |= p.gy_return_requires_subtype.empty() ? GyR_CreatureNames : GyR_AllNames;
+        }
         if (p.pharika_exile_cost.has_value()) { m |= GyR_BothCreatureNames; }
+        if (p.gy_exile_creature_zombie_cost.has_value()) { m |= GyR_BothCreatureNames; }
+        if (p.gy_self_return_battlefield_cost.has_value()) { m |= GyR_CreatureNames; }
         // Forge Anew: the ETB returns a graveyard EQUIPMENT card (see GyR_EquipmentNames).
         if (p.etb_return_equipment_from_gy)  { m |= GyR_EquipmentNames; }
         // Bloodghast: a GRAVEYARD landfall watcher -- whether a copy sits in our graveyard decides

@@ -18,7 +18,18 @@ fetch-hold question.
 ## Investigation
 
 Live Scryfall Oracle and engine-pattern research completed for the 11 missing
-cards. No implementation has been made yet:
+cards. Implementation has begun: Diregraf Ghoul, Undead Warchief, Gray Merchant,
+Lord of the Undead, Death Baron, Lord of the Accursed, Dread Wanderer, and
+Cemetery Reaper have entries. Shared
+ETB devotion drain, lord deathtouch, graveyard return, and viewer labels were
+extended. Dread Wanderer's conditional graveyard return and Cemetery Reaper's
+targeted exile/token activation now use the shared graveyard ability paths. The
+Warchief's lord bonus includes itself. Three cards remain missing: Blood
+Scrivener, Gravecrawler, and Fleshbag Marauder. These entries still need Stage
+2 review, cost audit, a completed build,
+and game checks. Lord of the Undead's opposing-Zombie buff and Lord of the
+Accursed's menace activation are provisionally omitted as goldfish inert; user
+sign-off remains pending under the analyze-deck workflow.
 
 | Card | Likely implementation | Choice / risk |
 | --- | --- | --- |

@@ -9892,6 +9892,26 @@ inline bool CreatureHasFirstStrike(const Permanent& creature, const GameState& s
     return false;
 }
 
+inline bool CreatureHasDeathtouch(const Permanent& creature, const GameState& state)
+{
+    if (creature.card.HasKeyword(Keyword::Deathtouch)) { return true; }
+    for (const Permanent& source : state.battlefield)
+    {
+        if (source.controller_index != creature.controller_index || source.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(source.card);
+        if (!d || !d->params.grants_deathtouch) { continue; }
+        if (d->params.lord_excludes_self && source.card.m_number == creature.card.m_number) { continue; }
+        if (d->params.affects_all_creatures) { return true; }
+        if (creature.AnimatedAllTypes() && !d->params.subtypes_affected.empty()) { return true; }
+        for (const std::string& sub : d->params.subtypes_affected)
+        {
+            for (const std::string& actual : creature.card.m_subtypes)
+            { if (sub == actual) { return true; } }
+        }
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------------------------
 // BoardSources -- every board-level source list a per-creature combat loop needs, gathered in ONE
 // walk. The generalisation of HasteSources (above) and of ResolveCombatDamage's hand-rolled
@@ -12058,12 +12078,17 @@ inline bool ApplyPharikaExile(GameState& state, int controller, int source_id,
                               int graveyard_owner, int target_number)
 {
     if (graveyard_owner < 0 || graveyard_owner > 1) { return false; }
-    bool source_live = false;
-    for (const Permanent& p : state.battlefield)
+    bool source_live = false, reaper = false;
+    int source_index = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
         if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        source_live = d && d->params.pharika_exile_cost.has_value();
+        reaper = d && d->params.gy_exile_creature_zombie_cost.has_value();
+        source_live = d && (d->params.pharika_exile_cost.has_value()
+                            || (reaper && CanTapNow(p, state.battlefield)));
+        source_index = i;
         break;
     }
     if (!source_live) { return false; }
@@ -12073,8 +12098,16 @@ inline bool ApplyPharikaExile(GameState& state, int controller, int source_id,
         if (it->m_number != target_number) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(*it);
         if (!(d ? d->card : *it).IsCreature()) { return false; }
+        if (reaper) { state.battlefield[static_cast<std::size_t>(source_index)].tapped = true; }
         state.exile.push_back(*it);
         gy.erase(it);
+        if (reaper)
+        {
+            TokenProto zombie = BuildTokenProto(2, 2, {"Zombie"}, "B", {});
+            const int reps = 1 << DoublerShift(state, controller, true);
+            for (int i = 0; i < reps; ++i) { CreateTokenFromProto(state, controller, zombie); }
+            return true;
+        }
         TokenProto snake = BuildTokenProto(1, 1, {"Snake"}, "BG", {"Deathtouch"});
         snake.card.AddType(CardType::Enchantment);
         const int reps = 1 << DoublerShift(state, graveyard_owner, true);
@@ -16225,6 +16258,27 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
     // "Each opponent" damage (Chainwhirler ping, Fanatic's devotion burn) fires once per head
     // (2HG = x2 into the shared team pool); the single-target etb_damage_any stays x1.
     const int heads    = gamesetup::OpponentHeads();
+    if (!p.etb_drain_devotion_color.empty())
+    {
+        const int devotion = DevotionTo(state, controller, p.etb_drain_devotion_color);
+        // In 2HG, both opponents lose life separately from the shared team pool.
+        // Life can go below zero; the full amount is lost and gained.
+        const int lost = devotion * heads;
+        state.players[opp].life -= lost;
+        if (lost > 0)
+        {
+            state.opponent_lost_life_this_turn = true;
+            GainLife(state, controller, lost);
+        }
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "drain",
+                          def->card.m_name.str() + " (devotion to "
+                          + p.etb_drain_devotion_color + " = " + std::to_string(devotion)
+                          + "): opponents lose " + std::to_string(lost)
+                          + " life; you gain " + std::to_string(lost));
+        }
+    }
     // Murderous Redcap ("damage equal to its power"): substitute the entering permanent's LIVE
     // EffectivePower() for the printed etb_damage_any value -- a persisted 1/1 Redcap deals 1,
     // not 2. Every other reader (valuation, face_burst) keeps the printed number.
@@ -17089,7 +17143,7 @@ inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& 
     // beginning of the next end step." Both are how the OBJECT enters, so set before the enter cascade (an
     // enter trigger -- a returned Nova Chaser's champion -- sees it tapped and doomed). The sacrifice is a
     // delayed trigger keyed on this object (PerformEndStepDelayedSacrifices). false for every other caller.
-    if (tapped)          { perm.tapped          = true; }
+    if (tapped || (d && d->params.enters_tapped)) { perm.tapped = true; }
     if (sac_at_end_step) { perm.sac_at_end_step = true; }
     state.battlefield.push_back(perm);
     const int idx = static_cast<int>(state.battlefield.size()) - 1;
@@ -21507,7 +21561,11 @@ inline int UnearthGraveyardIndex(const GameState& state, int controller, const s
         const Card& c = gy[static_cast<std::size_t>(g)];
         if (c.m_name.str() != name) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d == nullptr || !d->params.unearth_cost.has_value()) { continue; }
+        if (d == nullptr || (!d->params.unearth_cost.has_value()
+                             && !d->params.gy_self_return_battlefield_cost.has_value())) { continue; }
+        if (d->params.gy_self_return_hand_max >= 0
+            && static_cast<int>(state.players[controller].hand.size()) > d->params.gy_self_return_hand_max)
+        { continue; }
         if (number > 0 && c.m_number == number) { return g; }
         if (any < 0) { any = g; }
     }
@@ -21526,10 +21584,14 @@ inline bool ApplyUnearth(GameState& state, int controller, const std::string& na
     if (gi < 0) { return false; }
     Player& pl = state.players[controller];
     const Card c = pl.graveyard[static_cast<std::size_t>(gi)];
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+    const bool unearthed = def && def->params.unearth_cost.has_value();
     pl.graveyard.erase(pl.graveyard.begin() + gi);
     GraveyardEnterScope from_gy;
-    PutCardOntoBattlefield(state, controller, c, "unearth: haste; exiled at the next end step or if it would leave",
-                           0, false, controller, /*unearthed=*/true);
+    PutCardOntoBattlefield(state, controller, c,
+                           unearthed ? "unearth: haste; exiled at the next end step or if it would leave"
+                                     : "return from graveyard",
+                           0, false, controller, unearthed);
     return true;
 }
 
@@ -40636,9 +40698,9 @@ inline int ResolveFight(GameState& state, int a, int b, const std::string& why)
     const int pow_b = std::max(0, CombatPowerOf(pb, state));
     pb.damage += pow_a;
     pa.damage += pow_b;
-    if (pow_a > 0 && pa.card.HasKeyword(Keyword::Deathtouch))
+    if (pow_a > 0 && CreatureHasDeathtouch(pa, state))
     { pb.damage = std::max(pb.damage, LethalToughness(pb, state)); }
-    if (pow_b > 0 && pb.card.HasKeyword(Keyword::Deathtouch))
+    if (pow_b > 0 && CreatureHasDeathtouch(pb, state))
     { pa.damage = std::max(pa.damage, LethalToughness(pa, state)); }
     if (g_play_event_sink && !g_tap_speculating)
     {

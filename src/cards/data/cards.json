@@ -1,6 +1,136 @@
 {
  "cards": [
   {
+   "name": "Diregraf Ghoul",
+   "mana_cost": "{B}",
+   "types": ["Creature"],
+   "subtypes": ["Zombie"],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "This creature enters tapped.",
+   "template": "vanilla_creature",
+   "parameters": {"enters_tapped": true}
+  },
+  {
+   "name": "Undead Warchief",
+   "mana_cost": "{2}{B}{B}",
+   "types": ["Creature"],
+   "subtypes": ["Zombie"],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Zombie spells you cast cost {1} less to cast.\nZombie creatures you control get +2/+1.",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": ["Zombie"],
+    "power_bonus": 2,
+    "tough_bonus": 1,
+    "reduces_spell_subtype": "Zombie"
+   }
+  },
+  {
+   "name": "Gray Merchant of Asphodel",
+   "mana_cost": "{3}{B}{B}",
+   "types": ["Creature"],
+   "subtypes": ["Zombie"],
+   "keywords": [],
+   "power": 2,
+   "toughness": 4,
+   "oracle_text": "When this creature enters, each opponent loses X life, where X is your devotion to black. You gain life equal to the life lost this way. (Each {B} in the mana costs of permanents you control counts toward your devotion to black.)",
+   "template": "vanilla_creature",
+   "parameters": {"etb_drain_devotion_color": "B"}
+  },
+  {
+   "name": "Lord of the Undead",
+   "mana_cost": "{1}{B}{B}",
+   "types": ["Creature"],
+   "subtypes": ["Zombie"],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Other Zombie creatures get +1/+1.\n{1}{B}, {T}: Return target Zombie card from your graveyard to your hand. [PARTIAL, PROVISIONAL: the static bonus to opposing Zombies is omitted. The fixed passive opponent's spawned creatures are not Zombies, so the omission is inert in current goldfish games. User sign-off pending.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": ["Zombie"],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "gy_return_cost": "{1}{B}",
+    "gy_return_requires_subtype": "Zombie",
+    "gy_return_sacrifices_source": false
+   }
+  },
+  {
+   "name": "Death Baron",
+   "mana_cost": "{1}{B}{B}",
+   "types": ["Creature"],
+   "subtypes": ["Zombie", "Wizard"],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Skeletons you control and other Zombies you control get +1/+1 and have deathtouch. (Any amount of damage they deal to a creature is enough to destroy it.)",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": ["Skeleton", "Zombie"],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "grants_deathtouch": true
+   }
+  },
+  {
+   "name": "Lord of the Accursed",
+   "mana_cost": "{2}{B}",
+   "types": ["Creature"],
+   "subtypes": ["Zombie"],
+   "keywords": [],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "Other Zombies you control get +1/+1.\n{1}{B}, {T}: All Zombies gain menace until end of turn. [PARTIAL, PROVISIONAL: the menace activation has no effect against the fixed passive opponent, which never blocks; no line in this goldfish can benefit from activating it. User sign-off pending.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": ["Zombie"],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Dread Wanderer",
+   "mana_cost": "{B}",
+   "types": ["Creature"],
+   "subtypes": ["Zombie", "Jackal"],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "This creature enters tapped.\n{2}{B}: Return this card from your graveyard to the battlefield. Activate only as a sorcery and only if you have one or fewer cards in hand.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "enters_tapped": true,
+    "gy_self_return_battlefield_cost": "{2}{B}",
+    "gy_self_return_hand_max": 1
+   }
+  },
+  {
+   "name": "Cemetery Reaper",
+   "mana_cost": "{1}{B}{B}",
+   "types": ["Creature"],
+   "subtypes": ["Zombie"],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Other Zombie creatures you control get +1/+1.\n{2}{B}, {T}: Exile target creature card from a graveyard. Create a 2/2 black Zombie creature token.",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": ["Zombie"],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "gy_exile_creature_zombie_cost": "{2}{B}"
+   }
+  },
+  {
    "name": "Deeproot Pilgrimage",
    "mana_cost": "{1}{U}",
    "types": ["Enchantment"],

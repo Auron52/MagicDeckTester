@@ -439,6 +439,7 @@ struct CardParams
     // (Drana's counters, a first-step lifelink gain feeding Archangel of Thune / a life anthem, a
     // first-step combat-damage trigger), which is exactly when the split is observable.
     bool grants_first_strike = false;
+    bool grants_deathtouch = false; // Death Baron: Skeletons and other Zombies
 
     // Affinity for subtype: reduce this card's generic mana cost by 1 per matching
     // permanent you control (e.g. Thrumming Hivepool — Affinity for Slivers).
@@ -2855,6 +2856,13 @@ struct CardParams
     // sacrifice, destroy, the lethal-damage / toughness-0 SBAs, the legend rule, sweeps, bounce).
     // Unset (nullopt) for every other card.
     std::optional<ManaCost> unearth_cost;
+    // Dread Wanderer: graveyard activated return, without unearth's haste/exile.
+    // A nonnegative hand limit is checked when the action is activated.
+    std::optional<ManaCost> gy_self_return_battlefield_cost;
+    int gy_self_return_hand_max = -1;
+    // Cemetery Reaper: tap to exile a creature card from either graveyard and
+    // create a 2/2 black Zombie under the activator's control.
+    std::optional<ManaCost> gy_exile_creature_zombie_cost;
     // CHAMPION (CR 702.72; Nova Chaser "Champion an Elemental"): "When this enters, sacrifice it unless you
     // exile another <subtype> you control. When this leaves the battlefield, that card returns to the
     // battlefield under its owner's control." The subtype is read LIVE (PermCountsAsSubtype: a Metallic
@@ -4638,6 +4646,10 @@ struct CardParams
     // exact here, and DevotionTo() adds the SECOND colour of each hybrid pip explicitly so a
     // future devotion-to-white card is right too. Empty = no ETB devotion damage.
     std::string etb_damage_devotion_color;
+
+    // Gray Merchant of Asphodel: life loss (not damage) for each opponent, then
+    // one life-gain event equal to the total life actually lost this way.
+    std::string etb_drain_devotion_color;
 
     // Ragemonger: "Minotaur spells you cast cost {B}{R} less to cast. This effect reduces only the
     // amount of COLORED mana you pay." The coloured twin of reduces_spell_subtype (which reduces
