@@ -477,3 +477,15 @@ push_queue join/land, CI watch. 2-hourly status cron 61a8eb73 (session-only).
    profile (`mullgen.sh run decks/Elves`); the Wave-X dedup fix for Landfall / SelesnyaLifegain; re-testing
    `MTG_ATTACK_LORD_CAST` now that the sacrifice under-read is fixed (USER's call); the remaining under-reads in the
    lethal projection (same-plan haste-granting lords, double strike, Marwyn counters, replicate copies' lord share).
+
+## Coordinator checkpoint 6 (2026-11-26 ~22:45 UTC, pre-compaction) -- RESUME HERE
+
+LANDED 3f91b7d4a (Elves in all 3 tiers + GT, every fix; Windows CI 45895290416 success). Now at the push-queue HEAD
+again with batch 2 = 871f02be1 memory bound (`PlanListFilterBeforeAxes`, play-neutral) + Stage 6 ledger, rebased on
+91ef541bb; `push_queue.py hold -- build/scratch/elves-int/postrebase1.sh` running (build -> units -> smoke; smoke must
+be 0 changed vs GT). Then: check_gt_logs, `push_queue.py land`, CI watch (--interval 60).
+Running agents: wip/wavex-sig (Genesis Wave X signature completeness for every deck; A/B running), wip/bpput-cost
+(sound fold for site-10 put continuation cost, 1.2-1.45x on ramp decks). USER decisions open: scaling-rule
+"hold-all" amendment (wip/elves-scal 8de45a937, net 0.0000 both formats vs prune-off; current rule +0.0025/+0.0040,
+lines unfindable at d8 b0); discard draft (recommend not adopting); MTG_ATTACK_LORD_CAST re-test; PROVISIONALs.
+Mulligan profile deferred until the hold-all decision (Rule 0: no pending play change). Cron 61a8eb73 still armed.
