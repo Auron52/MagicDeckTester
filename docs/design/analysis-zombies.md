@@ -56,8 +56,22 @@ regression tiers remain. No proposed Oracle deferrals have been approved.
   Snapshot all legal sacrifice victims before changing either board; the own
   victim is a searched and human-surfaced choice, including Fleshbag itself.
   Shared death watchers must observe the simultaneous sacrifice correctly.
-The full overnight checkpoint is being pushed separately from the primary
-checkout before this deck analysis joins the shared branch.
+The full overnight checkpoint landed on the shared branch as `ffee59231` before
+this deck's implementation began.
+
+### Implementation order
+
+1. Add the existing-schema bodies and static lords first (Diregraf Ghoul,
+   Undead Warchief, Death Baron, and the static parts of the other lords). Check
+   that each lord's self-exclusion and affected subtypes match Oracle.
+2. Add the graveyard action paths together (Gravecrawler, Dread Wanderer, Lord
+   of the Undead, Cemetery Reaper). Keep every target or cast choice visible to
+   both autonomous search and the play viewer.
+3. Add the shared draw replacement, devotion life swing, and simultaneous ETB
+   sacrifice (Blood Scrivener, Gray Merchant, Fleshbag Marauder). Exercise each
+   in executor and rollout before producing a baseline profile.
+4. Run the analyzer's convergence checks and record all resulting decisions in
+   this ledger before adding the deck to the regression matrix.
 
 ## Approved deferrals
 
