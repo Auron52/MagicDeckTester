@@ -14047,10 +14047,10 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
                     }
                     // MTG_ONDEMAND_VISIBLE_LUMP_EXACT (EngineFlags.h): the colour comparison above reads an uncracked
                     // lump as no supply at all, so trading the lump for one unit of another colour reads as a gain.
-                    // The early crack is made only when the ordinary payment leaves the later bill (the named rest's
-                    // pips, any visible closer's, the rest's generic) unpayable and the early one does not, both
-                    // judged with every way of cracking the lumps left (LumpAwareBillPayable) and the float of the
-                    // ritual this payment is for. When neither board pays it, the comparison above stands.
+                    // The early crack is refused when the ordinary payment pays the later bill (the named rest's pips,
+                    // any visible closer's, the rest's generic) and the early crack's board does not, both judged with
+                    // every way of cracking the lumps left (LumpAwareBillPayable) and the float of the ritual this
+                    // payment is for. Otherwise (both pay, or the ordinary one does not) the comparison above stands.
                     if (saves_later_source && OnDemandVisibleLumpExactOn())
                     {
                         ManaCost later_bill;
@@ -14059,9 +14059,14 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
                         later_bill.green = later_pips[4];
                         later_bill.generic = std::max(0, rest_mv - rest_pip_sum);
                         const ManaPool ritual = LineKeepRockFor(state).ritual;
+                        // Only a crack that STRANDS the bill is refused. When both boards pay it, the comparison
+                        // stands: the crack still frees the source it saves for later mana use (2HG s5131993 gi1993
+                        // T5 {Rite, Seething Song, Kolaghan}: paying Song's generic with the Bloom's {B} keeps
+                        // Sandstone Needle's {R}{R} for Scourge of Valkas's firebreathing, which a leftover {B}
+                        // cannot pay; refusing it there cost the T5 kill).
                         const bool ord_pays = LumpAwareBillPayable(*ordinary, later_bill, ritual);
-                        if (ord_pays) { saves_later_source = false; }
-                        else if (!LumpAwareBillPayable(*early, later_bill, ritual)) { /* neither: as before */ }
+                        const bool early_pays = ord_pays && LumpAwareBillPayable(*early, later_bill, ritual);
+                        if (ord_pays && !early_pays) { saves_later_source = false; }
                     }
                     if (saves_later_source)
                     { return OnDemandPayWith(state, { k }, true, cost_in, for_creature, available, honor_legacy_cco); }

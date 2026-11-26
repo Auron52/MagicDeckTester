@@ -173,8 +173,10 @@ TEST_CASE("Dragonstorm line keep: s30087280 T4 -- the floating {B} is kept throu
     }
 }
 
-// No strand: a Swamp and a Forest are up, so the Blooms are not the last {B} / {G}. Both arms pay alike.
-TEST_CASE("Dragonstorm line keep: no strand -- the widened gate changes nothing")
+// No strand: a Swamp and a Forest are up, so the Blooms are not the last {B} / {G}. Both arms pay the line and leave the
+// same amount of mana (floating + untapped lands). WHICH unit is left may differ: the 2026-11-26 unit run had one more
+// land untapped with the levers on and a different float (the levers re-attribute a generic pip; they never tap more).
+TEST_CASE("Dragonstorm line keep: no strand -- both arms pay the line and leave the same mana")
 {
     GameState s0 = BaseDlk(5);
     PutDlk(s0, "Mercadian Bazaar", 24).tapped = true;
@@ -199,10 +201,47 @@ TEST_CASE("Dragonstorm line keep: no strand -- the widened gate changes nothing"
         CHECK(PayRitualThenCreature(b, line, 7));
     }
     CHECK(CountNamed(a, "Lotus Bloom") == CountNamed(b, "Lotus Bloom"));
-    CHECK(a.floating_mana == b.floating_mana);
-    for (std::size_t i = 0; i < a.battlefield.size() && i < b.battlefield.size(); ++i)
+    REQUIRE(a.battlefield.size() == b.battlefield.size());
+    const auto left = [](const GameState& g)
     {
-        CAPTURE(i);
-        CHECK(a.battlefield[i].tapped == b.battlefield[i].tapped);
+        int n = static_cast<int>(g.floating_mana.Total());
+        for (const Permanent& p : g.battlefield) { if (p.card.IsLand() && !p.tapped) { ++n; } }
+        return n;
+    };
+    CHECK(left(a) == left(b));
+    int untapped_a = 0, untapped_b = 0;
+    for (std::size_t i = 0; i < a.battlefield.size(); ++i)
+    {
+        untapped_a += a.battlefield[i].tapped ? 0 : 1;
+        untapped_b += b.battlefield[i].tapped ? 0 : 1;
+    }
+    CHECK(untapped_a >= untapped_b);   // the wide swap never taps more than the narrow one
+}
+
+// 2HG s5131993 gi1993 T5 {Rite of Flame, Seething Song, Dragonlord Kolaghan}, Scourge of Valkas attacking after: Rite's
+// {R}{R} floats beside an untapped Sandstone Needle and Lotus Bloom. Both payments of Song pay Kolaghan later (the
+// ordinary one taps the Needle, Kolaghan cracks the Bloom for {B}), so neither strands the bill; the early crack pays
+// Song's generic with the Bloom's {B} and keeps the Needle's {R}{R} for firebreathing. The strand-only refusal leaves the
+// early crack alone: both arms crack the Bloom at Song and keep the Needle (the first EXACT refused it and cost the kill).
+TEST_CASE("Dragonstorm line keep: s5131993 2HG T5 -- both boards pay, the early crack keeps the Needle")
+{
+    GameState s0 = BaseDlk(5);
+    PutDlk(s0, "Mountain", 26).tapped = true;
+    Permanent& n = PutDlk(s0, "Sandstone Needle", 46);
+    PutDepletionCounters(s0, n, 2);
+    PutDlk(s0, "Lotus Bloom", 18);
+    s0.floating_mana.red = 2;
+    const std::vector<Action> line = { CastDlk(s0, "Seething Song"), CastDlk(s0, "Dragonlord Kolaghan") };
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmDlk as(heurarm::ONDEMAND_VISIBLE_LUMP_EXACT, on);
+        GameState s = s0;
+        CHECK(PayRitualThenCreature(s, line, 5));
+        CHECK(CountNamed(s, "Lotus Bloom") == 0);
+        bool needle_up = false;
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_name.str() == "Sandstone Needle" && !p.tapped) { needle_up = true; } }
+        CHECK(needle_up);
     }
 }
