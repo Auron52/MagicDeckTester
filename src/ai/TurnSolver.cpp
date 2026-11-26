@@ -10569,6 +10569,13 @@ static bool HasteDorkCastCreditOn()
     static const bool on = EnvOn("MTG_HASTE_DORK_CAST_CREDIT", true);
     return heurarm::Flag(heurarm::HASTE_DORK_CAST_CREDIT, on);
 }
+// MTG_HASTE_SCALED_YIELD (DEFAULT ON; =0 -> a hasted scaled dork is credited one mana, as before): a hasted
+// scaled dork's cast credit is its entry yield (ScaledDorkEntryYield), not ManaProducedPerTap.
+static bool HasteScaledYieldOn()
+{
+    static const bool on = EnvOn("MTG_HASTE_SCALED_YIELD", true);
+    return heurarm::Flag(heurarm::HASTE_SCALED_YIELD, on);
+}
 // MTG_DOMAIN_WIDEN_PARTIAL (DEFAULT ON; =0 -> the all-widener credit only). See the PARTIAL DOMAIN
 // WIDEN rescue at EnumeratePlans' flat mana test.
 static bool DomainWidenPartialOn()
@@ -46459,7 +46466,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                  && !def.params.enters_tapped && !def.params.gy_land_exile_mana
                  && (def.card.HasKeyword(Keyword::Haste)
                      || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)))
-        { AddSourceToPool(a.rock_mana, state, def); }
+        {
+            // A SCALED dork (Priest of Titania, Elvish Archdruid, Marwyn) taps for its live count, not one
+            // (ScaledDorkEntryYield: the board's count plus itself -- a lower bound, so never a phantom).
+            const int y = (HasteScaledYieldOn() && IsScaledManaDork(def))
+                        ? ScaledDorkEntryYield(state, state.active_player_index, def) : -1;
+            AddSourceToPool(a.rock_mana, state, def, y);
+        }
         // ...and a hasted creature with NO printed mana ability that the board's LIVE mana grant
         // reaches (Brightcap Badger on the battlefield: "each Fungus and Saproling you control has
         // {T}: Add {G}"). Under Concordant Crossroads it taps the turn it is cast exactly like the
@@ -70966,21 +70979,48 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // for Mystic, then Archdruid alone for 3, keeps Llanowar Elves up to attack. A payment-order choice only (no
     // option is added or removed); the same function serves both apply worlds -> lockstep. Judged here, after the
     // solve, so a batch that taps no flat creature pays one battlefield scan for the check.
+    //
+    // A FED SCALED DORK TAPPED BY THE SOLVE (MTG_PREPAY_SCALER_FED_TAPPED, DEFAULT ON; =0 -> only a tapped flat body
+    // arms the check, as before). With no flat body tapped the solve stood even when it tapped a dork the batch
+    // grows -- at its plan-start count, so the batch floated less than it makes: Elves claude-play seed 9500015 T3,
+    // {Leaf-Crowned Visionary, Ezuri} off two Priests at 3 floated {G} where casting the Visionary first taps the
+    // second Priest for 4 ({G}{G}), and the lost {G} is a Visionary draw or a post-draw cast. Such a solve is now
+    // declined too (the per-cast payer taps the dork when a cast needs it; ManaSourceRank taps scaled dorks last).
+    // "Fed" is CastGrowsScaledDork: the subtype shape, and Marwyn's (an Elf entering adds a counter, a lord adds
+    // power) -- the guard used to read mana_per_creature_subtype only, so Marwyn was never fed and the prepay
+    // tapped it at power 2 under {Taunting Elf, Immaculate Magistrate} (seed 9500008 T6). Payment order only.
     static const bool s_scaler_grown = EnvOn("MTG_PREPAY_SCALER_GROWN", true);
+    static const bool s_fed_tapped_env = EnvOn("MTG_PREPAY_SCALER_FED_TAPPED", true);
     if (!aura_staged && heurarm::Flag(heurarm::PREPAY_SCALER_GROWN, s_scaler_grown))
     {
-        bool flat_tapped = false;
+        const bool s_fed_tapped = heurarm::Flag(heurarm::PREPAY_SCALER_FED_TAPPED, s_fed_tapped_env);
+        auto batch_feeds = [&](const Permanent& p, const CardDefinition& pd) -> bool
+        {
+            for (const Action& a : acts)
+            {
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                if (d == nullptr) { continue; }
+                if (s_fed_tapped ? CastGrowsScaledDork(pd, p, *d)
+                                 : (d->card.IsCreature() && CardHasSubtype(d->card, pd.params.mana_per_creature_subtype)))
+                { return true; }
+            }
+            return false;
+        };
+        bool flat_tapped = false, fed_tapped = false;
         const int lim = std::min<int>(static_cast<int>(state.battlefield.size()), static_cast<int>(bf_snap.size()));
-        for (int i = 0; i < lim && !flat_tapped; ++i)
+        for (int i = 0; i < lim && !(flat_tapped && fed_tapped); ++i)
         {
             const Permanent& b = bf_snap[static_cast<std::size_t>(i)];
             if (b.controller_index != active || b.tapped || !state.battlefield[static_cast<std::size_t>(i)].tapped
                 || !b.card.IsCreature())
             { continue; }
             const CardDefinition* bd = CardDatabase::Instance().LookupCached(b.card);
-            flat_tapped = bd == nullptr || !IsScaledManaDork(*bd);
+            if (bd == nullptr || !IsScaledManaDork(*bd)) { flat_tapped = true; continue; }
+            if (s_fed_tapped && !fed_tapped && !bd->params.mana_per_life_gained && batch_feeds(b, *bd))
+            { fed_tapped = true; }
         }
-        if (flat_tapped)
+        if (flat_tapped || fed_tapped)
         {
             // The solve, kept aside; the board rolled back exactly as a declined solve rolls it back.
             const std::vector<Permanent> bf_solved = state.battlefield;
@@ -71006,16 +71046,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 if (pd == nullptr || pd->params.mana_per_life_gained || !IsScaledManaDork(*pd)
                     || !CanTapNow(p, state.battlefield))
                 { continue; }
-                bool fed = false;
-                for (const Action& a : acts)
-                {
-                    if (a.kind != Action::Kind::CastFromHand) { continue; }
-                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
-                    if (d != nullptr && d->card.IsCreature()
-                        && CardHasSubtype(d->card, pd->params.mana_per_creature_subtype))
-                    { fed = true; break; }
-                }
-                if (!fed) { continue; }
+                if (!batch_feeds(p, *pd)) { continue; }
                 if (!fed_any) { full = AvailableManaPool(state); rest = full; fed_any = true; }
                 const ManaPool without = AvailableManaPool(state, &p);
                 rest.white     -= full.white     - without.white;
@@ -71026,7 +71057,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 rest.colorless -= full.colorless - without.colorless;
                 rest.wild      -= full.wild      - without.wild;
             }
-            if (fed_any && !rest.CanPay(combined)) { return Pp(PP_SCALER_GROWN); }
+            if (fed_any && (fed_tapped || !rest.CanPay(combined))) { return Pp(PP_SCALER_GROWN); }
             state.battlefield                  = bf_solved;
             state.floating_mana                = fm_solved;
             state.players[active].life         = la_solved;
@@ -71539,6 +71570,40 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // The kept {C} rides into the float as a subset count, for a {C}-pip deck's payer (GameState::floating_prepay_c).
     if (state.deck_spends_c_pip && (prepay_c_kept > 0 || prepay_c_prior > 0))
     { SetPrepayKeptC(state, prepay_c_prior + prepay_c_kept); }
+    // THE CAVERN-CLASS UNITS (MTG_CCO_FLOAT_WILD, DEFAULT ON; =0 -> they float as unrestricted `wild`, as before;
+    // GameState::floating_cco_wild). Every unit this solve tapped out of a colored_creature_only source and left
+    // in the general float's `wild` -- an every-colour unit, so PrepayWildTrue does not record it -- is marked:
+    // a noncreature spend (a Leaf-Crowned Visionary trigger, a post-draw noncreature cast) may take it as {C} only.
+    // The units attributed are the general float's UNRECORDED wild, the most a Cavern can own (an any-colour
+    // Birds unit may be counted with them: a {C}-for-noncreature reading of it is under-credit, never a laundering).
+    {
+        static const bool s_cco_env = EnvOn("MTG_CCO_FLOAT_WILD", true);
+        const bool s_cco_float = heurarm::Flag(heurarm::CCO_FLOAT_WILD, s_cco_env);
+        int cco_new = 0;
+        const int nb = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
+        for (int bi = 0; s_cco_float && bi < nb; ++bi)
+        {
+            const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
+            if (!bp.tapped || bf_snap[static_cast<std::size_t>(bi)].tapped || bp.def_absent) { continue; }
+            const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+            if (bd == nullptr || !bd->params.colored_creature_only || bd->params.creature_mana_only
+                || LandTypeChangedToIsland(state, bp)) { continue; }
+            cco_new += std::max(1, ManaProducedPerTap(*bd));
+        }
+        if (cco_new > 0)
+        {
+            int recorded = 0;
+            if (PrepayWildTrack() && state.prepay_wild_true.stamp == PrepayCStampNow(state))
+            {
+                WildTrueRec gen;
+                gen.lim = WildTrueRec::kCap;
+                PwtDecodeSlots(state.prepay_wild_true.gen, gen);
+                recorded = gen.n;
+            }
+            const int unrecorded = std::max(0, state.floating_mana.wild - recorded);
+            SetCcoFloatWild(state, std::min(unrecorded, CcoFloatWild(state) + cco_new));
+        }
+    }
     // PREVENT DAMAGE (armed only): the batch prepay is a payment that bypasses TapForCostShared, so
     // it resolves its own tap triggers here, once the whole-turn solve has committed.
     dmgev::FlushDamageEvents(state);
@@ -108503,6 +108568,8 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         }
         // The prepay's kept {C} (EDF only): value-gated, so every other deck's key is unchanged.
         if (const int pk = PrepayKeptC(state); pk != 0) { mix(0xC0F1u + static_cast<std::uint64_t>(pk)); }
+        // The prepay's Cavern-class `wild` (MTG_CCO_FLOAT_WILD): value-gated, so every other deck's key is unchanged.
+        if (const int cw = CcoFloatWild(state); cw != 0) { mix(0xCC0F1A00ull + static_cast<std::uint64_t>(cw)); }
         // The prepay's colour-restricted `wild` (MTG_PREPAY_WILD_TRUE): which colour pips the float can still pay.
         if (const std::uint64_t pw = PrepayWildTrueKey(state); pw != 0) { mix(0x9A7D1E5Bull); mix(pw); }
         if (state.scripted_early_ondemand_crack) { mix(0xEA4CCA11ull); }
@@ -140329,6 +140396,21 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                 perm.controller_index = cp.active_player_index;
                 perm.owner_index      = cp.active_player_index;
                 cp.battlefield.push_back(perm);
+            }
+            // A CREATURE resolves onto the copy too (summoning-sick), so the casts after it are priced on the
+            // board they really meet: a scaled dork counts it, Marwyn's watcher counts it, a lord pumps Marwyn,
+            // and a hasted mana creature taps (CanTapNow sees Concordant Crossroads). Without it the walk read
+            // "Leaf-Crowned Visionary, Priest of Titania, Ezuri" under Crossroads as unpayable (Elves claude-play
+            // seed 9500015 T3: the second Priest taps for 4). Supply only grows, so no payable line turns illegal.
+            else if (pc.def->card.IsCreature() && !pc.def->card.IsLand())
+            {
+                Permanent perm;
+                perm.card              = pc.def->card;
+                perm.controller_index  = cp.active_player_index;
+                perm.owner_index       = cp.active_player_index;
+                perm.entered_this_turn = true;
+                cp.battlefield.push_back(perm);
+                FireCreatureEnterWatchers(cp, cp.active_player_index, static_cast<int>(cp.battlefield.size()) - 1);
             }
             else if (pc.def->params.lens_imprint_land)
             {
