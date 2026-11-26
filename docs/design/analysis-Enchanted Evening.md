@@ -354,6 +354,15 @@ flying, Spirit Mantle protection from creatures) break the lock without trample 
    -> `MTG_EE_USER_PRUNE` is ADOPTED ON (it already ships ON; no code change). The second-Opalescence amendment
    `MTG_EE_GROVE_PRELOCK` stays default OFF.
 
+24. **(ruling 21's power >= 1 default for the evasive-hexproof veto, clause 4, 2026-11-26):** asked whether to keep it.
+   USER, verbatim: *"Sure, that works."* -> clause 4 keeps power >= 1, as built in 2df2cebb1 (no code change).
+25. **(ruling 20's precondition, 2026-11-26):** asked whether to keep the requirement that the real board lock already
+   stands before an Oblivion Ring may target a virtual permanent. USER, verbatim: *"I think that makes sense. The one
+   annoying part is that we might want to play Oblivion Ring earlier for cards, but mostly it doesn't make sense to cast
+   until we are locking the opponent."* -> the precondition stays, as built in 2df2cebb1 (no code change). Disclosed gap
+   for Stage 6: casting Oblivion Ring before the lock just for an Enchantress's Presence draw is only possible if it has
+   some other legal target (whether the engine offers that line at all: see the step-8c section).
+
 Reading: the lock is credited through the EXISTING free-turn rule (`MTG_FREE_TURNS`, default ON,
 `src/core/FreeTurns.h`, `docs/design/opponent-lockdown-free-turns.md`): a locked opponent turn does not advance the
 round. The deck's lock cards must join `GoldFishRunner::DeckMayLockOpponent`. Under EE + Opalescence the attackers are
