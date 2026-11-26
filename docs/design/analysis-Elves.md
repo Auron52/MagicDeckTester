@@ -76,7 +76,13 @@ PARTIAL / disclosed (Shepherd): both "can't be countered" clauses are inert (the
 "becomes a Dinosaur" is not applied (nothing reads the type; the Elf type is kept); a CDA value is
 snapshotted at resolution rather than hidden for the turn (inert: no Elf in the list has a CDA).
 
-Tests: `test/unit/test_elves.cpp` -- TEST_COUNT_PLACEHOLDER.
+Tests: `test/unit/test_elves.cpp`, 9 cases, each run from ONE enumerated plan in the rollout (`ApplyPlan`) and the
+committed-plan executor (`AIEngine::TakeTurn`): Shepherd 7b semantics (lords / earlier pump / counters on top,
+no stacking, a newcomer reached by a second activation) and same-plan Elf cast + cleanup; Warcaller K fan
+{0,1,2}, K counters, per-counter lord read live; Brigade K fan + two token copies, each a lord; Magistrate N
+counters (N = 3 Elves); Marwyn's counter on Marwyn and its live-power yield; Visionary pay / decline (the
+shared trigger pinned both ways, a non-Elf spell does not trigger, both plan variants realise identically);
+the world rule; Clancaller's name filter (no other find offered) and the put. Full suite 3957/3957.
 
 Known gaps / items to raise:
 * Multikick / squad faces stop at 16 kicks (Warcaller x16 = 33 mana). A model bound.
@@ -93,7 +99,21 @@ Known gaps / items to raise:
   scaling-sink restriction (ruling 2) is the ElvesProvider agent's, not done here; the deck still routes to
   SelesnyaLifegainProvider (pinned in `test_pirates_provider.cpp`).
 
-Gates: GATES_PLACEHOLDER
+Gates (second integrator, 2026-11-26):
+* Coverage (`analyze_deck.py --coverage-only`): 18/18 `full`, `missing: []`; remaining bracket notes are the
+  disclosed inert / model-bound items above, plus Ezuri's pre-existing regenerate / trample PROVISIONAL note and
+  its PENDING main-phase pump (chunk C of alchemist-untap-loop.md), neither touched here.
+* Cost audit (`audit_card_costs.py`): rc 0, 707 of 707 costed cards compared, all match Scryfall.
+* Field audit: `--update` added the eight new Elves cards to `scryfall_reference.json` (committed); it exited 1
+  because 240 ALREADY-snapshotted cards hit HTTP 429 on refresh (their existing entries are kept, so nothing
+  is unverified for this deck). Offline `audit_card_fields.py`: rc 0, "All hard fields (cost, P/T, types,
+  keywords) match the snapshot"; the Elves oracle_text lines are the bracket-note advisories only.
+* Viewer audit (`audit_viewer_decisions.py --no-sweep`): rc 0, oracle cross-check clean, expected types
+  dig / dragon / firebreathe / target.
+* Units: 3957/3957 (3948 + the 9 Elves cases).
+* Smoke (`MTG_PGO=0 bash test/regression.sh --smoke`, Release, d2cd4c39e): 243 passed, 0 failed, 0 new;
+  scenarios 608/608; searched AND d0: slower 0, faster 0, play-changed 0. No existing deck's play moved. No GT
+  accepted. (Elves is not yet a suite case -- Stage 4-bis.)
 
 ## Viewer classification (2c-ter)
 
@@ -114,7 +134,9 @@ USER's OK, collected, not blocking).
 | Marwyn | -- | none | its tap is the mana-payment exemption |
 | Taunting Elf, Concordant Crossroads | -- | none | no choice (lure inert; world rule is mandatory) |
 
-`audit_viewer_decisions.py decks/Elves/Elves.cod --no-sweep`: VIEWER_PLACEHOLDER
+`audit_viewer_decisions.py decks/Elves/Elves.cod --no-sweep`: rc 0, no unclassified param, oracle cross-check
+clean (the Clancaller "search" advisory closed by teaching the cross-check that `tap_tutor_put_cost` models a
+search -- also true for Seahunter / Maze's End). The live 5h sweep is Stage 5.
 
 ## Stage 5 verification verdicts
 
