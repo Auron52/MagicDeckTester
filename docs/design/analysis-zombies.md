@@ -3,6 +3,8 @@
 Worktree: `.claude/worktrees/zombies-analysis` (`wip/zombies-analysis-1126`).
 Started 2026-11-26 from shared commit `9e566000b`. The deck file was copied
 from the primary checkout, where it is still untracked; keep that original.
+Rebased onto the pushed overnight checkpoint `ffee59231` after its landing gate
+passed; implementation work starts from this shared source.
 
 ## Coverage
 
