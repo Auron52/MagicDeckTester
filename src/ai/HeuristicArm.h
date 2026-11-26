@@ -1154,6 +1154,8 @@ enum Slot : int
     LINE_KEEP_CRIT_FILTER,    // MTG_LINE_KEEP_CRIT_FILTER  the crit-mode gate (LineKeepCritGate) also asks its last-source tests with every FED source's colours (a filter land: Cascade Bluffs; a {1}-fed converter: Ferrous Lake, Izzet Signet) left out of the supply: they need a feed the bill can spend (Treasure Hunt {Land's Edge + Treasure Hunt}: Thundering Falls + Temple paid Land's Edge, two unfed Bluffs made {C}{C}). The exact judge decides as before. DEFAULT ON; =0 -> byte-identical
     GYRETURN_TAP_DEBIT,       // MTG_GYRETURN_TAP_DEBIT  the plan enumerators' self-funding debit (PermAbilityTapDebitOf) also covers a graveyard-return ability's source ({2}, {T}, sacrifice: Haven of the Spirit Dragon; {3}, {T}, sacrifice: Haunted Fengraf), so a rebuy only its own source could pay is not offered (a dead branch: the apply never pays a source's own {T} ability with that source). Sound collapse, DEFAULT ON; =0 -> byte-identical
     DIG_FLOAT_HAND_DEMAND,    // MTG_DIG_FLOAT_HAND_DEMAND  a sacrifice-draw dig's payment (Mind Stone's {1}, {T}, sacrifice: draw), the last act of a line before its draw continuation re-solves, reads the coloured pips of the HAND's nonland cards as later demand in the line-float rung (LineFloatTapFirstPlan), so a floating colour a held card needs is kept and the generic is paid from a spare source (Dragons s30096713 T3: Gruul Turf's bounce floated {R}, the dig spent it, Haven's {C} stayed up and the continuation's Lightning Bolt had no red). DEFAULT ON; =0 -> byte-identical
+    LEFTOVER_SWAP_WIDE,       // MTG_LEFTOVER_SWAP_WIDE  MTG_LEFTOVER_LINE_SWAP's re-attribution also moves a leftover unit that floated BEFORE the payment (not only one the payment produced), and its strand test credits the float of the ritual the payment is for (Dragonstorm s30087280 T4: Irencrag Feat's {1} ate the floating {B} Dragonlord Kolaghan owes while Sandstone Needle's second {R} floated). DEFAULT ON; =0 -> the produced-only swap, byte-identical
+    ONDEMAND_VISIBLE_LUMP_EXACT, // MTG_ONDEMAND_VISIBLE_LUMP_EXACT  Dragonstorm's visible-closer lump rule cracks a Lotus Bloom early only when the ordinary payment leaves the later bill unpayable and the early crack does not (both judged with every crack of the lumps left and the ritual's float); its colour comparison read an uncracked Bloom as no supply (s30152662 T5: Irencrag Feat cracked the second Bloom for {B} with {B} already floating, and Karrthus's {G} had no source). DEFAULT ON; =0 -> the comparison alone, byte-identical
     COUNT
 };
 
@@ -2252,6 +2254,8 @@ inline const char* Name(int slot)
         "MTG_LINE_KEEP_CRIT_FILTER",
         "MTG_GYRETURN_TAP_DEBIT",
         "MTG_DIG_FLOAT_HAND_DEMAND",
+        "MTG_LEFTOVER_SWAP_WIDE",
+        "MTG_ONDEMAND_VISIBLE_LUMP_EXACT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

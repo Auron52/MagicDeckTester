@@ -725,6 +725,35 @@ inline bool LineKeepRitualOn()
     return heurarm::Flag(heurarm::LINE_KEEP_RITUAL, env_on);
 }
 
+// MTG_LEFTOVER_SWAP_WIDE (DEFAULT ON; =0 restores the produced-only swap byte for byte) -- SwapLeftoverForLine
+// (ManaPayment.cpp, MTG_LEFTOVER_LINE_SWAP) re-attributes a generic pip the float drain paid with a colour the rest of
+// the line owes to a leftover unit of another colour. It took only units the payment PRODUCED (net of the float), and
+// judged the rest without the float of the ritual the payment is for. Both are too narrow: any leftover unit was in
+// the pool the payment spent from (CR 601.2h: the player chooses which mana pays which pip), and the ritual resolves
+// before the rest of the line. Dragonstorm (mana-clean gate claude-queue-20261125a) s30087280 T4 {Desperate Ritual,
+// Scourge of Valkas, Irencrag Feat, Dragonlord Kolaghan}: {B}{R}{R} floating, Irencrag drained the {B} into its {1}
+// and floated Sandstone Needle's second {R}; Kolaghan's {B} was gone. docs/design/dragonstorm-apply-drop-2026-11-26.md.
+inline bool LeftoverSwapWideOn()
+{
+    static const bool env_on = EnvOn("MTG_LEFTOVER_SWAP_WIDE", true);
+    return heurarm::Flag(heurarm::LEFTOVER_SWAP_WIDE, env_on);
+}
+
+// MTG_ONDEMAND_VISIBLE_LUMP_EXACT (DEFAULT ON; =0 restores the colour comparison alone byte for byte) -- Dragonstorm's
+// visible-closer lump rule (MTG_ONDEMAND_VISIBLE_LUMP, the on-demand payer in ManaPayment.cpp) cracks a Lotus Bloom
+// early, for a colour a later cast owes, when the early crack's board "gains" a colour over the ordinary payment's.
+// That comparison reads an uncracked Bloom as NO supply, so a crack that buys one unit of another colour reads as a
+// gain while it spends the Bloom's three of any colour. The crack is now made only when the ordinary payment leaves
+// the later bill unpayable and the early crack's board pays it, both judged exactly (every crack of the lumps left;
+// the float of the ritual this payment is for). Neither paying: the comparison stands. Dragonstorm s30152662 T5
+// {Seething Song, Irencrag Feat, Karrthus}: {B} and seven {R} floating paid Irencrag, yet the second Bloom was cracked
+// for {B} and Karrthus's {G} had no source. docs/design/dragonstorm-apply-drop-2026-11-26.md.
+inline bool OnDemandVisibleLumpExactOn()
+{
+    static const bool env_on = EnvOn("MTG_ONDEMAND_VISIBLE_LUMP_EXACT", true);
+    return heurarm::Flag(heurarm::ONDEMAND_VISIBLE_LUMP_EXACT, env_on);
+}
+
 // MTG_LINE_SPARE_FILTER_FEED (DEFAULT ON; =0 restores the plain over-count) -- LineSpareSourceMask's SHORT test
 // also reads the supply LEFT AFTER the generic pip eats a one-unit float that is the only feed of an untapped
 // filter land (the filter's credit goes with it). mana-clean item 6, treasure_hunt {Cascade Bluffs + Land's Edge +
