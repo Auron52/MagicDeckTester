@@ -4,6 +4,37 @@ Status: DESIGN (2026-11-26), not built. A default-off injection prototype was bu
 to measure the size of the effects and how they stack (section 8). It is evidence for this design, not a
 deliverable. Every number below is from the suite's ground truth or from that probe, as stated.
 
+**Summary (read this first).**
+* **Does this mode need 1v1 play built first? No** (section 6.3). Every design here uses the existing
+  single-player engine plus a narrow effect-injection hook into a gauntlet deck's goldfish game (about 275
+  lines of engine code in the prototype, default off, byte-identical with it off). The one design that couples
+  two games (C, co-simulation) still keeps each game single-player. It is a stepping stone TOWARD 1v1, not something that
+  needs it.
+* **The objective** (section 4): per (control game, gauntlet game) pair, `E = min over prefixes k of
+  max(T_k, W - D_k)`, then averaged. It is exactly the goldfish turn that wins the same races, so the USER's
+  turn-5 floor is derived rather than imposed, and "somewhere between Turn 3 and 4" for an early Parallax Wave
+  followed by Opalescence falls out of it (section 4.3a).
+* **Recommendation** (section 7): score by MEASUREMENT (sequence replay D, then co-simulation C), search with a
+  MODEL (a delay table A as a floored prior, then a learned state-aware model E), credited to the search as
+  banked free turns, reusing the free-turn machinery that came from Worldfire. Stage 1 (the injection harness
+  and delay table) and stage 2 (the control score as a report) change no search code.
+* **The probe** (section 8; 5 suite decks x 26 effect schedules x 200 paired games, 45.8 core-minutes):
+  single effects cost the opponent 0.24-1.76 rounds on average over the five decks, and from 0 to 3.9 rounds
+  for one deck. They do NOT add up, and the direction depends on the effect and the deck:
+  * Land destruction: increasing returns. Two cost 0.45 rounds (39%) more than the sum of the singles, and
+    1.36 more against a combo deck.
+  * Removal: target exhaustion shows in the hit rate (Burn: 98% for the first, 80% for the third copy), but the
+    delay stays about additive per copy (+0.13 on a pair).
+  * Counters: NOT the increasing returns the USER expected, except against the combo deck. On different rounds
+    they are additive (+0.03). A second counter in the same round is worth 0.38 rounds LESS than two singles,
+    because there is often no second spell that round, but 0.76 MORE against Breaching Dragonstorm's combo turn.
+    The probe's counter takes the first spell it sees. Which spell a counter takes changes its value more than
+    the number cast does, so the USER's compounding needs a counter aimed at the important spell (Q3).
+  * The third copy of every family adds less than the second.
+  So an additive table is wrong by about as much as the effects themselves. The stacking is carried by the
+  opponent's state, which favours a measured per-pair score and a state-aware model.
+* **Open USER questions:** section 9 (Q1-Q9).
+
 ## 1. The problem, in the USER's words
 
 The simulator measures a deck by GOLDFISHING: the deck plays alone against a passive opponent, and the metric
@@ -123,8 +154,9 @@ least 500 games (several have 6,000+), at their shipped settings.
 
   So against an undisrupted goldfish gauntlet, a pure lock that lands on turn 5 is in time in about 15% of
   games, and one that lands on turn 6 in about 3%. Enchanted Evening's goldfish score with every lock credit
-  in place was 5.80 (d3 b10, 224 games, its ledger's step-8c A/B). **This is why the deck looks poor, and the
-  same table shows the calibration problem of section 6.1.** Goldfish kill turns are what a deck does to a
+  in place was 5.80 (d3 b10, 224 games: the step-8c A/B in `docs/design/analysis-Enchanted Evening.md` on
+  branch `ee-analysis`). **This is why the deck looks poor, and the same table shows the calibration problem of
+  section 6.1.** Goldfish kill turns are what a deck does to a
   player who never blocks, never removes anything and never counters. A real opponent kills later than this,
   and a lock on turn 5 wins real games far more often than 15%.
 
@@ -439,8 +471,9 @@ then goldfishes alone, and each effect it casts on round t is credited `S[e, t]`
   goldfish cost, nothing more.
 * **What it gets wrong:**
   1. **Stacking.** It is additive by construction, and section 8 measures how far from additive the real
-     effects are. Diminishing returns (the second removal finds no creature) and increasing returns (repeated
-     counters, land destruction into mana screw) are both real.
+     effects are. Both kinds are real (section 8.2): increasing returns for land destruction into mana screw
+     (+0.45 rounds on a pair, +1.36 against a combo deck) and two counters on a combo turn; diminishing returns
+     for a second counter in the same round (-0.38) and for the third copy of every family.
   2. **State blindness.** The control deck casts removal with the same credit whether or not the opponent
      would have had a creature. The table is unbiased only on average, and the search will learn to time
      casts to the table's best cells regardless of board.
@@ -452,13 +485,14 @@ then goldfishes alone, and each effect it casts on round t is credited `S[e, t]`
 
 **Variant A+: interaction terms.** Add measured pair terms `S2[e1, t1, e2, t2]`. The cell count is quadratic:
 40 (effect, round) cells give ~800 ordered pairs x 10 decks x 200 games = 1.6M games, ~70 core-hours. That is
-before triples, and repeated counters are a triple-and-beyond effect. It is only workable as sparse samples
+before triples, and the probe's third copies already depart from the pair terms (section 8.2). It is only workable as sparse samples
 feeding a fitted model, which is design E.
 
 **Variant A-state: a state-conditioned table.** Delay as a function of what the opponent has left: e.g. for
 removal, the number of creatures it has and holds; for land destruction, its lands in play and in hand; for a
 counter, its castable spells. This fixes "exhausted targets" (a second removal against a deck with no second
-creature is worth ~0) and captures much of the counter compounding (its hand of threats shrinks). But the
+creature is worth ~0) and captures much of the counter stacking (whether a second spell exists that round, and whether the key one
+is still in hand). But the
 control game has no opponent board to condition on. Only the hand and library counts are real (section 3.2),
 and they are hidden information. So it only becomes usable with design C or with the paired replay of
 design D supplying the state.
@@ -597,7 +631,8 @@ high-volume mode if stated.
 ### 6.3 Does it need 1v1 first? No.
 
 * A, B, D and E need only the existing single-player engine, plus an effect-injection hook into the goldfisher.
-  The prototype hook is about 250 lines in three files, default off, with no change to any existing game.
+  The prototype hook is about 275 lines of engine code in four files, default off, with no change to any
+  existing game.
 * C needs a two-game scheduler and an effect channel. It does not need a two-player rules engine: each game
   stays single-player, and the other side is reached only through the channel.
 * What real 1v1 adds is the opponent acting AGAINST us: removal on our threats, its own counters, combat with
@@ -616,13 +651,17 @@ then E), integrated through the free-turn credit.** Concretely, smallest useful 
 
 Make the prototype a proper default-off feature: the `ctrl_inject` batch field, a fuller effect vocabulary
 (exile-until with a return round for the Wave, a land "tapped down", a tax, and a skip / lock), and correct
-leave-the-battlefield triggers. Build `S[e, t, g]` on a gauntlet of ~10 cheap, varied suite decks, with the
-stacking probes of section 8 widened.
+leave-the-battlefield triggers. Two prototype defects to fix (section 8.3): a skipped round must not end the
+goldfisher's "until the end of your next turn" windows, and a counter needs a target policy beyond "the first
+spell". Record the opponent's state (lands, creatures, spells in hand and cast that round) beside every
+measured delay, so the table can feed the model of design E. Build `S[e, t, g]` on a gauntlet of ~10 cheap,
+varied suite decks, with the stacking probes of section 8 widened.
 * **Deliverable:** the per-deck delay table and a stacking report: how far from additive each effect family is.
 * **Validation:** off = byte-identical (smoke play-changed = 0 with no job carrying the field). Spot-check
   injected games in the viewer's trace for the three families (land, creature, counter). The `skip` arm must
   give `+1` for every game not yet won by that round (analytic check). Paired seeds.
-* **Cost:** ~80,000 gauntlet games, about 3-4 core-hours with the cheap decks; one pooled batch.
+* **Cost:** ~80,000 gauntlet games, about 2.5-4 core-hours with the cheap decks (the probe measured 0.11 s per
+  game over five of them, section 8.3); one pooled batch.
 
 ### Stage 2: the control score as a REPORT (sequence replay, D, with no search change)
 
@@ -633,8 +672,8 @@ it shows how much a card swap moves it, before the search is taught anything.
 * **Validation:** a deck with no control effect gives `E == W` exactly, per game. A hand-built schedule with a
   known lock gives `E == L`. Monotonicity checks on synthetic schedules. Enchanted Evening as the first deck:
   its E against its raw W, and how much of the difference comes from the round-3 Wave alone.
-* **Cost per deck:** its own goldfish cost (EE: 224 games at d3 b10 took ~4.5 min of batch wall in its ledger)
-  plus ~n replays of a cheap gauntlet game per game. For a 1,000-game report, roughly 1,000 x (own cost +
+* **Cost per deck:** its own goldfish cost (EE: 224 games at d3 b10 took ~4.5 min of batch wall in the
+  same A/B) plus ~n replays of a cheap gauntlet game per game. For a 1,000-game report, roughly 1,000 x (own cost +
   n x 0.2-0.7 s).
 * **Limitation it will show:** the control deck plays as a goldfisher that does not value its control. Its
   schedule is whatever its kill-seeking search chose. That makes the stage-3 gap measurable.
@@ -679,7 +718,108 @@ have already fired.
 `max_turns 12` so a delayed kill is not cut at the goldfish horizon (unwon = 13). One pooled batch, 2 threads
 in the small-job lane. `scripts/control_inject_probe.py make|report`.
 
-PROBE_RESULTS_PLACEHOLDER
+The run finished cleanly (`=== BATCH done (130 jobs, 26000 games) ===`): 26 min of wall at 2 threads, 45.8
+core-minutes of engine CPU, i.e. 20 (Breaching) to 219 (Burn) ms per game. The heartbeat showed 2/2 workers busy.
+The full table, with a standard error for every cell, is `logs/control-mode/probe-summary.txt`.
+
+### 8.1 Delay per effect (rounds; paired per game against the base arm; 200 games per cell)
+
+Base kill turn (avg, unwon = 13): Burn 4.31, White Knights 4.16, Stompy 4.05, Dragons 5.61, Breaching 3.14. A
+per-deck cell's standard error is 0.02-0.16 rounds; the mean over decks has a standard error of 0.02-0.05.
+
+| arm | Burn | W.Knights | Stompy | Dragons | Breaching | mean of 5 |
+|---|---|---|---|---|---|---|
+| skip3 (analytic control) | +1.12 | +1.00 | +1.00 | +1.00 | +1.00 | +1.02 |
+| land2 / land3 / land4 | .80 / .52 / .30 | 1.10 / .69 / .18 | .60 / .35 / .08 | 1.46 / 1.31 / .89 | 1.34 / 1.34 / .10 | **1.06 / .84 / .31** |
+| land 3+4 / 3+4+5 | .98 / 1.14 | 1.00 / 1.06 | .55 / .66 | 2.66 / 3.83 | 2.81 / 4.34 | **1.60 / 2.20** |
+| bigcrt 2 / 3 / 4 | 1.37 / 1.07 / .69 | .38 / .89 / .75 | .85 / .88 / .68 | 0 / .06 / .54 | 0 / 0 / 0 | **.52 / .58 / .53** |
+| bigcrt 3+4 / 3+4+5 | 2.00 / 2.56 | 1.67 / 2.38 | 1.93 / 2.96 | .60 / 1.28 | 0 / 0 | **1.24 / 1.84** |
+| sweep3 / sweep4 | 2.35 / 1.95 | 1.34 / 2.44 | 2.54 / 3.86 | .06 / .56 | 0 / 0 | **1.26 / 1.76** |
+| counter 2 / 3 / 4 | .87 / .67 / .58 | .86 / .92 / .38 | .45 / .81 / .53 | .54 / .90 / .99 | 0 / .79 / .12 | **.54 / .82 / .52** |
+| counter 3+4 / 3+4+5 | 1.09 / 1.42 | 1.35 / 1.56 | 1.64 / 2.15 | 1.77 / 2.60 | .99 / 1.19 | **1.37 / 1.78** |
+| two counters in round 3 | .91 | 1.06 | 1.05 | .93 | 2.33 | **1.25** |
+| counter MV >= 3, round 3 | .08 | .73 | 1.39 | .81 | .79 | **.76** |
+| bigdisc 2 / 3 / 4 | .48 / .40 / .28 | .36 / .30 / .11 | .49 / .64 / .23 | .70 / .58 / .49 | .52 / .49 / .08 | **.51 / .48 / .24** |
+| bigdisc 2+3 / 2+3+4 | .88 / 1.12 | .70 / .77 | 1.19 / 1.49 | 1.36 / 1.98 | 1.27 / 1.62 | **1.08 / 1.40** |
+
+Share of casts that found a target (from the `[ctrl-inject]` lines; for counters, applications divided by the
+games that reached that round): removal on round 3 hits 98-100% against the three creature decks, 6% against
+Dragons and 0% against Breaching; the third removal of `3+4+5` hits 80% against Burn. The second counter in
+round 3 finds a second spell in only 48-82% of games (Dragons 48%), against 90-98% for the first. Land
+destruction and discard hit 83-100% throughout. Unwon games stay rare (at most 12%, Dragons `land 3+4+5`), so
+the 12-round horizon barely truncates the delays.
+
+### 8.2 Is it additive? (interaction = joint delay minus the sum of the parts, paired per game)
+
+| test | Burn | W.Knights | Stompy | Dragons | Breaching | mean of 5 (se) |
+|---|---|---|---|---|---|---|
+| land: (3+4) - 3 - 4 | +0.16 | +0.13 | +0.12 | +0.47 | +1.36 | **+0.45 (0.03)** |
+| bigcrt: (3+4) - 3 - 4 | +0.24 | +0.03 | +0.38 | +0.01 | 0 | **+0.13 (0.03)** |
+| counter: (3+4) - 3 - 4 | -0.16 | +0.06 | +0.30 | -0.12 | +0.09 | **+0.03 (0.03)** |
+| discard: (2+3) - 2 - 3 | -0.01 | +0.04 | +0.06 | +0.08 | +0.26 | **+0.09 (0.04)** |
+| counter: two in round 3 - 2 x one | -0.44 | -0.77 | -0.57 | -0.88 | +0.76 | **-0.38 (0.05)** |
+| land: 3rd increment - 2nd | -0.31 | -0.26 | -0.10 | -0.19 | +0.07 | **-0.16 (0.04)** |
+| bigcrt: 3rd increment - 2nd | -0.37 | -0.06 | -0.02 | +0.14 | 0 | **-0.06 (0.04)** |
+| counter: 3rd increment - 2nd | -0.11 | -0.24 | -0.31 | -0.06 | -0.02 | **-0.14 (0.04)** |
+| discard: 3rd increment - 2nd | -0.14 | -0.27 | -0.40 | -0.06 | -0.40 | **-0.25 (0.04)** |
+| sweep3 - bigcrt3 | +1.29 | +0.46 | +1.66 | 0 | 0 | **+0.68 (0.03)** |
+
+(A positive interaction is increasing returns; a negative one is diminishing returns. Mean increments per copy:
+land 0.84 / 0.76 / 0.60, removal 0.58 / 0.66 / 0.60, counter 0.82 / 0.56 / 0.41, discard 0.51 / 0.57 / 0.32.)
+
+### 8.3 What it shows
+
+* **The harness works.** `skip3` gives exactly +1.000 in every game that was not won by round 2 for four of five
+  decks. Burn's +0.12 excess is a prototype artefact, traced in one game (seed 7900005, game index 4: base wins
+  on round 4, skip on round 6). Light Up the Stage cast on round 2 lets Burn play two exiled cards "until the end
+  of your next turn". The prototype's skip consumes round 3 as that turn, so the cards are lost. In real Magic an
+  opponent's extra turn is not ours, so a stage-1 `skip` must not end "your next turn" windows.
+* **Stacking is real, and its SIGN depends on the effect AND on the deck.** The additive table of design A is
+  wrong by up to 1.4 rounds on a two-effect schedule (land destruction against Breaching), and the error is about
+  as large as the effects themselves.
+  * **Land destruction: increasing returns.** A land destroyed on round 4 alone costs 0.31 rounds, but 0.76
+    after one destroyed on round 3: the pair is 0.45 rounds (39%) more than the sum, and 1.36 more against the
+    combo deck. This is mana screw compounding. The third copy then adds less than the second (-0.16), so the
+    returns rise at first and then fall.
+  * **Removal: about additive per copy, with target exhaustion visible.** The pair is +0.13 over the sum (Stompy
+    +0.38), and the third increment is flat. The fall in hit rate (Burn 98% to 80%) is the "exhausted all of the
+    targets" effect the USER expected. It shows mostly in the hit rate, because a removal that does hit costs a
+    creature deck more once it is already short. A sweeper on round 3 is worth 0.68 rounds more than a spot
+    removal, and its value RISES from round 3 to 4 against Stompy (2.54 to 3.86) and White Knights, because
+    there is more to sweep. Against Dragons and Breaching, removal is worth nothing until a creature exists.
+  * **Counters: NOT increasing returns in this probe, except against the combo deck.** On different rounds the
+    pair is additive (+0.03), each extra copy adds less (0.82, then 0.56, then 0.41), and a second counter in the
+    same round is strongly diminishing (-0.38; Dragons -0.88), because there is often no second spell to counter
+    that round. The exception is Breaching Dragonstorm (+0.76): two counters on its combo turn break it, the
+    USER's "they can't land anything important". **This is not the result the USER's intuition predicted, and the
+    reason is worth stating:** the probe's counter takes the FIRST spell of mana value >= 1, not the one that
+    matters. Counting only mana value 3 or more changes Stompy's value from 0.81 to 1.39 and Burn's from 0.67 to
+    0.08 (Burn's key spells are cheap). So a counter's value depends on WHICH spell it takes much more than on how
+    many counters were cast. The compounding the USER describes needs a counter aimed at the important spell, plus
+    an opponent with few of them. That is a target policy (Q3) or a searched choice (design C), not a property of
+    the count. Real opponents also bait counters (section 6.2), which pulls the other way.
+  * **Discard: about additive for two, then diminishing** (the third adds 0.25 less than the second), as the
+    hand's best card is gone.
+  * **Timing matters as much as kind.** Land destruction is worth 1.06 rounds on round 2 and 0.31 on round 4;
+    discard 0.51 and 0.24. Removal and sweepers go the other way against slow-to-deploy decks.
+* **What it favours among the designs:**
+  * **A (the additive table) is refuted as a scoring method** and is only a usable first search prior, which is
+    what section 7 already restricts it to. The flooring of Q4 limits the damage of its over-credits.
+  * **A+ (pair terms) would fit the two-copy numbers but not the three-copy ones**, and the interactions change
+    sign by deck. The cell count is quadratic before triples.
+  * **The interactions are carried by STATE**: how many lands the opponent already lacks, whether a creature or
+    a second spell exists that round, and whether the spell taken is the key one. That favours **A-state and E**
+    (a model whose inputs are the opponent's lands, creatures and spells), and confirms that the score itself must
+    be **measured jointly per pair (D, then C)**, which needs no model of stacking at all.
+  * The section 7 recommendation therefore stands, with one change of emphasis: the stage-1 table should record
+    the state features above beside every delay, so it can feed E directly.
+* **Cost.** 26,000 games of the five cheap decks took 45.8 core-minutes (0.11 s/game on average). The stage-1
+  table of section 7 (~80,000 games) is therefore about 2.5 core-hours at these decks' cost, at the low end of
+  the 3-4 core-hour estimate.
+* **Limits of the probe.** Five decks, all fast and proactive, so the delays are for the goldfish-fast gauntlet
+  of section 6.1. Target policies are fixed (largest power, highest mana value, first spell), so these are
+  delays for a blind control player, not a skilled one. Dies and leave triggers do not fire. The goldfisher
+  re-plans after each effect, but never anticipates one (it plays no differently into an open counter).
 
 ## 9. Open questions for the USER
 
@@ -702,7 +842,9 @@ colour the opponent's hand needs most); (b) the target that delays the opponent 
 target (exact, but clairvoyant: the control player "knows" the opponent's future); (c) random. Default: (a) for
 the score, with (b) reported beside it in the stage-1 table as the upper bound. Reason: (b) over-credits and (c)
 under-credits a competent control player. Stage 4 (co-simulation) replaces all three with a searched choice on
-the real board.
+the real board. The same question applies to counters, where the probe shows it matters MORE than the number of
+counters cast (section 8.3). Default for (a) there: the first spell of the round whose mana value is at least the
+gauntlet deck's own median nonland mana value, rather than the first spell of all.
 
 **Q4. How should the search's integer credit be rounded (stage 3)?** The search credits modelled delay as banked
 free turns, which must be whole rounds. Default: bank the FLOOR of the cumulative modelled delay (credits of 0.4
@@ -726,8 +868,10 @@ questions need it.
 
 **Q8. Which decks should follow Enchanted Evening into the mode?** You named counterspell, discard, sweeper,
 land-destruction and mixed control decks. Default: Enchanted Evening first (its cards are implemented). Then the
-first list you supply of a counterspell deck, because counters are the effect family that stacks upward (section
-8) and the one designs A and D handle worst. Reason: only you know which of your lists matter.
+first list you supply of a counterspell deck, because a counter's value depends most on WHICH spell it takes
+(section 8.3: countering only spells of mana value >= 3 moves Stompy's value from 0.81 to 1.39 rounds and Burn's
+from 0.67 to 0.08), so counters are the family designs A and D handle worst and the first that needs design C.
+Reason: only you know which of your lists matter.
 
 **Q9. Is the per-pair form of section 4.1 what you mean by "<win turn - average control impact>"?** The design
 scores each (control game, gauntlet game) pair as `min over prefixes k of max(T_k, W - D_k)` and only then
@@ -770,8 +914,14 @@ the prototype is evidence, not a deliverable.
   `ignore_play_profile`, `max_turns 12`.
 * **Probe command** (run from the worktree, in the small-job lane):
   `scripts/box_lane.sh --slots 2 -- build/Release/mtg --batch <manifest> --threads 2 --game-log-dir <dir> --resume`.
-  PROBE_WALL_PLACEHOLDER
-* **Report:** `python3 scripts/control_inject_probe.py report <game_log_dir> <batch_stderr>`, plus the
-  additivity and analytic checks of section 8 computed from the same per-game `.wins` files. Scratch output
+  Started 14:06:45 UTC, finished 14:32:45 UTC on 2026-11-26 (`=== BATCH done (130 jobs, 26000 games) ===`).
+  Scratch: `build/scratch/control-mode/probe.json`, `probe.out`, `probe.err`, `probe_logs/<deck>__<arm>.wins`.
+* **Skip diagnosis:** the two-job manifest `build/scratch/control-mode/diag.json` (Burn base and `skip:3`, seed
+  7900005, game index 4, `--game-trace-dir`). The traces show Light Up the Stage's two staged cards on round 2
+  and an empty staged list on round 4 in the skip arm.
+* **Report:** `python3 scripts/control_inject_probe.py report <game_log_dir> <batch_stderr>` (per-arm delays),
+  and `python3 scripts/control_inject_additivity.py <game_log_dir> <batch_stderr>` (every table of section 8:
+  delays, hit rates, unwon shares, the interaction terms and the `skip` analytic check), both reading the same
+  per-game `.wins` files. Scratch output
   lives on the build volume (`build/scratch/control-mode/`); the summary is copied to
   `logs/control-mode/probe-summary.txt`.
