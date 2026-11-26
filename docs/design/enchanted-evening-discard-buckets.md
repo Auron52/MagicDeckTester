@@ -100,7 +100,7 @@ are shed in step 2 (orchestrator default; they are also not green, so they are n
 
 ## Open points for the USER
 
-1. PRE-LOCK: where the BEATDOWN extras sit (drafted: shed early, after Exploration and Oblivion Ring). Exploration's
-   place is settled (USER 2026-11-26).
+1. SETTLED (USER 2026-11-26): Exploration's place, and the BEATDOWN extras shed early: *"Extra attackers can be
+   discarded early if needed, I think."*
 2. LOCKED: spare EE / Opalescence are drafted as dead (the lock only ends by our own choice). Under the lock FoV
    (not Verse) is the kept answer, because Verse needs mana and FoV can be pitched.
