@@ -1,0 +1,12 @@
+v0_K: K: played=1 avg=4.0000 digest=057854ac9d997100 ms=1098 units=28633 cpu=907
+v1_K: K: played=1 avg=4.0000 digest=057854ac9d997100 ms=3674 units=28633 cpu=1565
+v1_K: [leaf-kill-only] MISMATCH job=K gi=0 t3 depth=1 cutoff=3 kill_only=9 full=3 budget=finite bf=[Oboro, Palace in the Clouds,Hedron Crab,Polluted Delta] hand=[Surgical Extraction,Fractured Sanity,Drown in the Loch,Island,Drown in the Loch,Archive Trap]
+v1_K: [leaf-kill-only] MISMATCH job=K gi=0 t3 depth=1 cutoff=3 kill_only=9 full=3 budget=finite bf=[Oboro, Palace in the Clouds,Hedron Crab,Island] hand=[Surgical Extraction,Fractured Sanity,Drown in the Loch,Drown in the Loch,Polluted Delta,Archive Trap]
+v1_K: [ko-verify] job=K forks=77 verified=77 MISMATCHES=2 bound_diff=2 bound_same=37 lost=0
+v1_K: [leaf-kill-only] armed_turns=77 candidate_rollouts_skipped=2101 memo_ko_entries=0 m1_cands=0 m2_cands=0 m2_apply_empty=0 m2_no_reach=0 fsl_edge_no_reach=0 verified=77 MISMATCHES=2 bound_diff=2 bound_same=37 lost=0
+v0_KF: KF: played=1 avg=3.0000 digest=e9323241ae2d6f8f ms=441 units=12503 cpu=361
+v1_KF: KF: played=1 avg=3.0000 digest=e9323241ae2d6f8f ms=1008 units=12503 cpu=514
+v1_KF: [ko-verify] job=KF forks=20 verified=20 MISMATCHES=0 bound_diff=0 bound_same=0 lost=0
+v1_KF: [leaf-kill-only] armed_turns=20 candidate_rollouts_skipped=513 memo_ko_entries=0 m1_cands=0 m2_cands=0 m2_apply_empty=0 m2_no_reach=0 fsl_edge_no_reach=0 verified=20 MISMATCHES=0 bound_diff=0 bound_same=0 lost=0
+v0_T: T: played=1 avg=3.0000 digest=e9323241ae2d6f8f ms=539 units=13181 cpu=440
+v1_T: T: played=1 avg=3.0000 digest=e9323241ae2d6f8f ms=504 units=13181 cpu=428
