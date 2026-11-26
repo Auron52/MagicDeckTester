@@ -237,7 +237,7 @@ opaque `plan` pointer for the group key. Nothing in generic enumeration changed.
   opponent's spawn bodies never block (`GoldFishRunner::PopulateOpponentSpawns`; no blocker path in
   Combat.cpp). USER, 2026-11-26: *"Yes, Taunting Elf's ability does nothing in goldfish."*
 
-## Coordinator checkpoint (2026-11-26 ~07:00 UTC) -- RESUME HERE
+## Coordinator checkpoint (2026-11-26 ~07:00 UTC; superseded by the update below)
 
 Work tree `.claude/worktrees/elves`, branch `wip/elves-analysis` (local commits only; nothing on the shared branch).
 Done: Stage 1; Stage 2 (all 18 cards full; units 3964/3964; smoke 243/243, play-changed 0); ElvesProvider +
@@ -274,3 +274,22 @@ classifications in `audit_viewer_decisions.py`; Magistrate/Kessig/Merfolk tap-ta
 earlier in the same plan (completeness gap, recommend a general fix); the k=2 hold-back cap and other provider
 PROVISIONALs (ledger "Provider heuristics"); inherited SelesnyaLifegain judgement hooks incl. its discard buckets;
 the Wave-X dedup collapse still live for Landfall / SelesnyaLifegain (fixing it moves their play).
+
+## Coordinator checkpoint UPDATE (2026-11-26 ~07:05 UTC) -- RESUME HERE
+
+* Wave put-all policy COMMITTED `948933d6c`; `provider_audit.py --check` no longer lists Elves (only the pre-existing
+  Landfall / Selesnya flags remain). Unit `test_elves*` 7/7 in default / MTG_UNPRUNED=1 / MTG_HUMAN_PLAY=1.
+* fd-diverge seed 7036 DIAGNOSED to the line level (trace `logs/elves/fd7036-bptrace.err`): the committed T4 plan
+  `Forest + spells[Genesis Wave X=2, Llanowar Elves] bp[k0:Taunting Elf] bp_choice=0` is unaffordable after
+  Llanowar + Visionary's pay-{G} draw (7 mana needed, 6 available). The fd-pred replay and the executor agree
+  (Wave `[bp-pay] -> FAILED`, continuation casts Taunting Elf, opp 15/10/4, realised T6) -- only the SEARCH's own
+  scoring of that line reaches T5. Not a cache (all *_VERIFY clean; caches off still reproduces). Delegated to an
+  Opus agent in its own worktree (branch from 948933d6c; it will report a branch to cherry-pick). After the fix:
+  rebuild, re-run verify_deck, re-smoke.
+* Tier rows WRITTEN (uncommitted) in `test/regression_cases.sh`: smoke / regression / overnight ENTRY set +
+  elves2hg canaries + DECK_FILE/DECK_PROF. Backstop screen (`logs/elves/backstop_screen_manifest.py`, 56 jobs, 3
+  games each, budget 0, abandon 2M, MTG_SLOW_GAME_MS=5000): ALL 28 blocks finished every game, 0 SLOW-GAME, max job
+  4.9 s -> Elves is cheap unbudgeted; 20-game confirmation of 30081 / 30101 / 30381 running
+  (`build/scratch/elves-bs20/`). No GT accepted yet -- accept AFTER the fd fix lands.
+* Claude-play sweep RUNNING: 6 Opus players x 3 games, seeds 9500001..9500018 (seed only; --game-index does not vary
+  a --claude-play game), benchmark d5 b200, binary at 948933d6c.
