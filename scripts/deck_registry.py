@@ -105,7 +105,8 @@ def _unique_decklist_stem(d):
 
 
 def discover(root="decks"):
-    """-> {key: Deck} for every deck folder that has a decklist AND a profile.
+    """-> {key: Deck} for every deck folder that has a decklist AND a profile, and is not marked
+    goldfish-disabled by a modes marker (deck_modes below; its variants are skipped with it).
 
     ARCHIVED / VARIANT LISTS. A deck folder may hold an immediate subdirectory carrying its OWN
     copy of the same-stem files (`decks/<Name>/<Variant>/<Name>.cod` + `.profile.json`) -- an
@@ -146,6 +147,8 @@ def discover(root="decks"):
         if not hit:
             alt = _unique_decklist_stem(d)
             hit = _deck_at(d, alt) if alt else None
+        if not goldfish_enabled(d):
+            continue   # goldfish-disabled (decks/<Name>/<Name>.modes.json): not a deck this tooling scores
         if hit:
             # The Deck's stem is the FILE stem (it names the sidecars); the key is the FOLDER's slug.
             out[slug(stem)] = Deck(slug(stem), d, hit[1], hit[0])
@@ -159,6 +162,81 @@ def discover(root="decks"):
                 out[key] = Deck(key, sub, sub_hit[1], sub_hit[0])
     _assign_seed_bases(out)
     return out
+
+
+# ---------------------------------------------------------------------------------------------------
+# PER-DECK MODES MARKER: decks/<Name>/<Name>.modes.json  (USER 2026-11-26)
+#
+#   {"goldfish": false, "note": "<why>"}
+#
+# THE ONE PYTHON READER (the JS twin is tools/lib/deck_modes.js; keep the two in step). A MISSING file
+# means every mode keeps its default, so every deck without one is unchanged. "goldfish": false marks a
+# deck that must not be scored by goldfishing (a lock / control deck such as Enchanted Evening): the
+# registry does not discover it, the viewers do not list it, suite_gate.py refuses it for the regression
+# suite, and mullgen.sh / valueleaf.sh refuse to generate for it. An EXPLICIT path (mtg, analyze_deck.py
+# decks/<Name>/...) still works for development. The file is meant to grow: a future control-scoring
+# mode will be switched on per deck here. The USER's words: "Maybe just add a way to mark something as
+# disabled for goldfish rather than moving it into another worktree? Realistically we'll need this anyway
+# as decks like this one don't want to be doing goldfishing."
+#
+# A marker that does not parse (or is not a JSON object) reads as goldfish DISABLED with an "error"
+# key: a typo in a file whose only job is to switch goldfishing off must not quietly switch it back on.
+# A variant / archived list (decks/<Name>/<Variant>/) inherits its parent folder's marker.
+MODES_SUFFIX = ".modes.json"
+
+
+def _modes_file_in(d):
+    """-> the path of directory `d`'s modes marker, or None. `<folder>.modes.json` (case-insensitive)
+    first, else the folder's ONE `*.modes.json` (a list named after neither, like decks/Vampires)."""
+    hit = ci_entry(d, os.path.basename(os.path.normpath(d)) + MODES_SUFFIX)
+    if not hit:
+        try:
+            marks = [e for e in os.listdir(d) if e.lower().endswith(MODES_SUFFIX)]
+        except OSError:
+            return None
+        hit = marks[0] if len(marks) == 1 else None
+    return os.path.join(d, hit) if hit else None
+
+
+def deck_modes(path):
+    """-> the modes dict for the deck at `path` (a deck folder, or any file inside one: decklist,
+    profile, sidecar). {} when there is no marker. A variant folder (decks/<Name>/<Variant>/) inherits
+    its parent's marker. Only folders BELOW a `decks` directory are consulted, never `decks` itself."""
+    import json
+    d = os.path.abspath(path if os.path.isdir(path) else os.path.dirname(os.path.abspath(path)))
+    cands = [d]
+    parent = os.path.dirname(d)
+    if os.path.basename(os.path.dirname(parent)) == "decks":
+        cands.append(parent)          # decks/<Name>/<Variant> -> also decks/<Name>
+    for c in cands:
+        f = _modes_file_in(c)
+        if not f:
+            continue
+        try:
+            with open(f) as fh:
+                m = json.load(fh)
+            if not isinstance(m, dict):
+                raise ValueError("not a JSON object")
+        except (OSError, ValueError) as e:
+            return {"goldfish": False, "error": "unreadable modes marker %s: %s" % (f, e), "file": f}
+        m = dict(m)
+        m["file"] = f
+        return m
+    return {}
+
+
+def goldfish_enabled(path):
+    """False when the deck at `path` carries a modes marker with "goldfish": false (or an unreadable one)."""
+    return deck_modes(path).get("goldfish", True) is not False
+
+
+def goldfish_disabled_reason(path):
+    """-> a one-line human reason when goldfish is disabled for the deck at `path`, else None."""
+    m = deck_modes(path)
+    if m.get("goldfish", True) is not False:
+        return None
+    why = m.get("error") or m.get("note") or "no note"
+    return "goldfish is DISABLED for this deck by %s (%s)" % (m.get("file", "its modes marker"), why)
 
 
 # Which LIST a folder of hand-played references was played on.
@@ -228,6 +306,16 @@ def all_keys(decks=None, staged=True):
 
 if __name__ == "__main__":
     import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--goldfish-check":
+        # Shell gate (mullgen.sh / valueleaf.sh): exit 0 when goldfish is enabled for every path given,
+        # 4 (the reason on stderr) when any is goldfish-disabled.
+        rc = 0
+        for p in sys.argv[2:]:
+            why = goldfish_disabled_reason(p)
+            if why:
+                sys.stderr.write("%s: %s\n" % (p, why))
+                rc = 4
+        sys.exit(rc)
     ds = discover()
     if len(sys.argv) > 1 and sys.argv[1] == "--shell":
         # key|dir|stem|key|seed_base|row_games -- the driver's DECK_TABLE, generated not maintained.

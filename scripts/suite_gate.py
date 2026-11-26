@@ -84,6 +84,9 @@ import shlex
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from deck_registry import goldfish_disabled_reason  # noqa: E402  (the ONE modes-marker reader)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CASES = os.path.join(ROOT, "test/regression_cases.sh")
 COST_CACHE = os.path.join(ROOT, "test/suite_cost.json")
@@ -576,6 +579,19 @@ def main():
     ap.add_argument("--no-run", action="store_true",
                     help="with --cost: reuse the last tier log instead of re-running")
     a = ap.parse_args()
+    # A GOLDFISH-DISABLED deck (decks/<Name>/<Name>.modes.json says "goldfish": false) is never a regression
+    # case: the suite scores goldfish play, and such a deck (a parked lock / control deck) is not scored that
+    # way (USER 2026-11-26: "The main thing I probably do not want yet is to have it in the regression tester
+    # or generate any resources for it."). --require fails (exit 3, so mullgen.sh / valueleaf.sh refuse), and
+    # --cost / --measure refuse rather than time a deck that may not enter.
+    for which, arg in (("--require", a.require), ("--cost", a.cost), ("--measure", a.measure)):
+        if arg:
+            why = goldfish_disabled_reason(resolve_decklist(arg))
+            if why:
+                sys.stderr.write(f"suite gate: REFUSED ({which}) -- {arg}: {why}.\n"
+                                 "   A goldfish-disabled deck may not join the regression suite (nor get a value leaf\n"
+                                 "   or a keep table). Remove the marker only on the USER's decision.\n")
+                return 3
     if a.report:
         return mode_report()
     if a.measure_all:

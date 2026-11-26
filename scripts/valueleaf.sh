@@ -493,6 +493,15 @@ if [ ${#DECK_DIRS[@]} -gt 0 ]; then
         # own docstring is about exactly this failure mode ("a registry that must be edited by hand
         # is a registry that is wrong"), and `--shell` already emits the key|dir|stem row this loop
         # builds.
+        # A GOLDFISH-DISABLED deck (decks/<Name>/<Name>.modes.json: "goldfish": false) never gets a value leaf
+        # (checked before the registry lookup, which does not discover such a deck)
+        # (USER 2026-11-26: "The main thing I probably do not want yet is to have it in the regression tester or
+        # generate any resources for it."). Not overridable by MTG_ALLOW_UNTESTED_DECK: removing the marker is
+        # the USER's decision.
+        python3 scripts/deck_registry.py --goldfish-check "$_dd" || {
+            echo "value-leaf generation REFUSED for $_dd: goldfish is disabled for this deck (its .modes.json marker)"
+            exit 3
+        }
         _reg=$(python3 scripts/deck_registry.py --shell "$ROW_GAMES" | awk -F'|' -v d="$_dd" '$2==d{print; exit}')
         if [ -z "$_reg" ]; then
             echo "no registry entry for deck dir $_dd"

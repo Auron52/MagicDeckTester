@@ -115,7 +115,17 @@ def ParseArgs():
     p.add_argument("--discard-ab-threads", type=int, default=0,
                    help="Threads for the outcome-A/B batch (0 = all cores). Lower this when "
                         "running several decks' analyses concurrently.")
-    return p.parse_args()
+    a = p.parse_args()
+    # A goldfish-disabled deck (decks/<Name>/<Name>.modes.json) still runs on an explicit path, for development;
+    # say so in one line, since its numbers are not goldfish scores anyone should adopt.
+    try:
+        from deck_registry import goldfish_disabled_reason
+        why = goldfish_disabled_reason(a.decklist)
+        if why:
+            sys.stderr.write("WARNING: %s -- running anyway (explicit path, development only)\n" % why)
+    except ImportError:
+        pass
+    return a
 
 # ---------------------------------------------------------------------------
 # Decklist parsing — plain text and Cockatrice .cod XML

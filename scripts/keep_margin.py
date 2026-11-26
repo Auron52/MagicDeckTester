@@ -47,6 +47,9 @@ import os
 from array import array
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import sys  # noqa: E402
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+from deck_registry import goldfish_enabled  # noqa: E402  (the ONE modes-marker reader)
 HAND = 7
 SE_PRIOR = 8.0          # ExhaustiveKeepConfig::se_prior -- matches the C++ flip gate's shrink
 
@@ -494,7 +497,8 @@ def main():
     dirs = a.decks
     if a.all:
         dirs = sorted(os.path.dirname(p) for p in
-                      glob.glob(os.path.join(ROOT, "decks/*/*.keepmodel.exhaustive.raw.json.gz")))
+                      glob.glob(os.path.join(ROOT, "decks/*/*.keepmodel.exhaustive.raw.json.gz"))
+                      if goldfish_enabled(p))   # a goldfish-disabled deck (its .modes.json marker) is skipped
     if not dirs:
         ap.error("name a deck folder or pass --all")
     out = [r for r in (report(d, not a.no_verify) for d in dirs) if r]

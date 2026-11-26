@@ -10,6 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const Core = require('./keepcore.js');
+const DeckModes = require('../lib/deck_modes');   // per-deck modes marker (decks/<Name>/<Name>.modes.json)
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = path.join(__dirname, 'decks.js');
@@ -25,7 +26,10 @@ function walk(dir, rel, depth, out) {
 function render() {
   const entries = [];
   walk(path.join(ROOT, 'decks'), 'decks', 0, entries);
-  const decks = Core.discoverDecks(entries).map(d => d.archived ? { key: d.key, label: d.label, archived: true }
+  // A goldfish-disabled deck (its modes marker says "goldfish": false, e.g. the parked Enchanted Evening) is not
+  // listed (USER 2026-11-26: "Ideally it shouldn't show up in any viewers"). Such a deck never gets a keep table
+  // (mullgen.sh refuses it), so this only matters if one is ever copied in by hand.
+  const decks = Core.discoverDecks(entries).filter(d => DeckModes.goldfishEnabled(path.join(ROOT, d.list.path))).map(d => d.archived ? { key: d.key, label: d.label, archived: true }
                                                                  : { key: d.key, label: d.label });
   return '// The decks under decks/ that have a mulligan table, so tools/mulligan/index.html can list them\n'
     + '// before the browser has been allowed to read the folder. GENERATED: node tools/mulligan/build_deck_list.js\n'

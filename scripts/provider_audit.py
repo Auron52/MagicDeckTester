@@ -37,6 +37,8 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+from deck_registry import goldfish_enabled  # noqa: E402  (the ONE modes-marker reader)
 BIN = os.path.join(ROOT, "build", "Release", "mtg")
 
 
@@ -44,8 +46,10 @@ def discover(args):
     dirs = [a for a in args if not a.startswith("-")]
     if not dirs:
         base = os.path.join(ROOT, "decks")
+        # A goldfish-disabled deck (its .modes.json marker) is skipped by the walk: it is parked, never routed
+        # for goldfish play, and would otherwise read as an "unprofiled" hole. Naming it explicitly still audits it.
         dirs = [os.path.join(base, d) for d in sorted(os.listdir(base))
-                if os.path.isdir(os.path.join(base, d))]
+                if os.path.isdir(os.path.join(base, d)) and goldfish_enabled(os.path.join(base, d))]
     out, unprofiled = [], []
     for d in dirs:
         profs = [f for f in sorted(os.listdir(d)) if f.endswith(".profile.json")]

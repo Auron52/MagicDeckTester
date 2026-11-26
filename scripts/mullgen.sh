@@ -506,6 +506,14 @@ case "$CMD" in
     # skipping (nothing to move)" and returns 0, so the adoption reports PASSED having run one fewer
     # check than every other deck gets -- which is exactly what happened on WhiteKnights.
     # MTG_ALLOW_UNTESTED_DECK=1 overrides, and that is a USER decision, never an agent's.
+    # A GOLDFISH-DISABLED deck (decks/<Name>/<Name>.modes.json: "goldfish": false) never gets a keep table
+    # (USER 2026-11-26: "The main thing I probably do not want yet is to have it in the regression tester or
+    # generate any resources for it."). Not overridable by MTG_ALLOW_UNTESTED_DECK: removing the marker is the
+    # USER's decision.
+    python3 scripts/deck_registry.py --goldfish-check "$DECKDIR" || {
+      echo "mulligan generation REFUSED for $STEM: goldfish is disabled for this deck (its .modes.json marker)"
+      exit 3
+    }
     if [ "${MTG_ALLOW_UNTESTED_DECK:-0}" != 1 ]; then
       python3 scripts/suite_gate.py --require "$DECKDIR" >/dev/null || {
         python3 scripts/suite_gate.py --require "$DECKDIR"

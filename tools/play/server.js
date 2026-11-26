@@ -23,6 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync, spawn } = require('child_process');
 const refsafe = require('./refsafe');                       // reference-game safety (see its header)
+const deckModes = require('../lib/deck_modes');              // per-deck modes marker (decks/<Name>/<Name>.modes.json)
 
 const ROOT = path.resolve(__dirname, '..', '..');          // repo root
 // HARD GUARD (user directive 2026-10-05, see CLAUDE.md): the viewer saves the user's hand-played
@@ -1436,6 +1437,10 @@ function listDecks() {
   for (const name of fs.readdirSync(DECKS_DIR)) {
     const dir = path.join(DECKS_DIR, name);
     if (!fs.statSync(dir).isDirectory()) continue;
+    // A goldfish-disabled deck (its modes marker says "goldfish": false; a parked lock / control deck such as
+    // Enchanted Evening, USER 2026-11-26: "Ideally it shouldn't show up in any viewers") is not offered, nor
+    // are its archived lists.
+    if (!deckModes.goldfishEnabled(dir)) continue;
     // `deckFile` is the FOLDER-named id the client sends back (resolveDeck maps it to the file on
     // disk case-insensitively, and the folder name is what names references/<Deck>/); `onDisk` is
     // the actual file, whose stem names the sidecars.
