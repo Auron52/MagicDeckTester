@@ -6886,6 +6886,71 @@ static bool SelfBounceOffered(const GameState& state, const CardDefinition& def)
     return HumanPlayActive() || ResolveProvider(state).OffersSelfBounce(state, def);
 }
 
+// THE SAME-PLAN HALF OF A TapTargetPump's TARGET SET (Immaculate Magistrate, Kessig Wolf Run, Basilisk
+// Gate, Merfolk Sovereign ...; Elves claude-play sweep 2026-11-26). The activation is a TRAILING one: both
+// apply worlds run it after every cast of the plan (TurnSolver::IsTrailingActivation; the rollout's
+// ApplyPlanDirect and the executor's trailing pass), so a creature the SAME plan casts is on the
+// battlefield, and a legal target (CR 115.1, 602.2b: the target is chosen on activation), when it
+// resolves. The battlefield-only target list made "cast Joraga Warcaller, then Magistrate's five counters
+// on it" unfindable at ANY budget -- a completeness hole, not a lever.
+//
+// One (card number, name) per creature NAME in hand, the number being the copy the name's FIRST cast
+// lands (the executor's cast_by_name and the rollout's apply_one pick the earliest-expiring STAGED copy,
+// else the first copy in hand order -- mirrored here, so the pin names the permanent that cast creates).
+// SAME-NAME FOLD (sound, the pump-trick / sacrifice-victim precedent): two hand copies of one card are the
+// same card until one is cast, and whichever the plan casts first is the one this pin names; a pin on a
+// second copy is reachable only by a plan casting both, where it is the same board as the first copy's
+// pin up to which per-copy number holds the effect. The pin rides Action::sac_victim_id like every
+// battlefield target, and the name rides Action::trick_hand_target, which SubsetHasMissingTrickTarget
+// reads as "this subset must cast a creature of that name" (else the activation has no target -- CR
+// 601.2c -- and is rejected, not applied as a no-op). If the cast does not happen after all (dropped as
+// unpayable), the pinned target is absent and PermAbilitySourceLive refuses the activation in BOTH worlds
+// (the stale-pin rule every pinned activation follows), so the two stay in lockstep.
+//
+// Restriction / ordering is the PROVIDER's (DecisionProvider::TapTargetPumpSamePlanTargets); the engine
+// offers every name. Human play is handed the full list (the viewer picks the target on the live board at
+// activation, ChooseTapTargetPumpTargetAtActivation; the caller keeps one representative). A land-target
+// ability (tap_target_pump_targets_land) takes none: its targets are lands, and a creature card is not one.
+static void TapTargetPumpSamePlanTargets(const GameState& state, const Permanent& src, const CardDefinition& sd,
+                                         bool is_pre_combat, bool human,
+                                         std::vector<std::pair<int, std::string>>& out)
+{
+    out.clear();
+    if (sd.params.tap_target_pump_targets_land) { return; }
+    const Player& ap = state.players[static_cast<std::size_t>(state.active_player_index)];
+    std::vector<int> idx;   // hand indices, one per name: the copy the name's first cast lands
+    for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        if (c.m_number <= 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->card.IsCreature()) { continue; }
+        if (!sd.params.tap_target_pump_requires_subtype.empty()
+            && !CardHasSubtype(d->card, sd.params.tap_target_pump_requires_subtype)) { continue; }
+        int seen = -1;
+        for (int k = 0; k < static_cast<int>(idx.size()); ++k)
+        {
+            if (ap.hand[static_cast<std::size_t>(idx[static_cast<std::size_t>(k)])].m_name == c.m_name)
+            { seen = k; break; }
+        }
+        if (seen < 0) { idx.push_back(i); continue; }
+        // cast_by_name's pick: a STAGED copy over a hand copy, the earliest-expiring among staged ones.
+        const Card& cur = ap.hand[static_cast<std::size_t>(idx[static_cast<std::size_t>(seen)])];
+        if (c.m_is_staged && (!cur.m_is_staged || c.m_staged_expiry < cur.m_staged_expiry))
+        { idx[static_cast<std::size_t>(seen)] = i; }
+    }
+    if (idx.empty()) { return; }
+    const std::vector<int> offered = idx;
+    if (!human) { ResolveProvider(state).TapTargetPumpSamePlanTargets(state, src, is_pre_combat, idx); }
+    for (int i : idx)
+    {
+        // A provider may only REMOVE or ORDER: anything it adds is dropped.
+        if (std::find(offered.begin(), offered.end(), i) == offered.end()) { continue; }
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        out.emplace_back(c.m_number, c.m_name.str());
+    }
+}
+
 static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const Permanent& src,
                                                   const CardDefinition& sd, const ManaPool& pool)
 {
@@ -24166,6 +24231,25 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
             if (!landed) { return true; }
             continue;
         }
+        // A TapTargetPump activation pinned to a SAME-PLAN hand creature (TapTargetPumpSamePlanTargets;
+        // trick_hand_target = its name) needs this subset to cast a creature of that name: without the
+        // cast the activation has no target (CR 601.2c via 602.2b). The activation is a trailing one, so
+        // a cast in the same subset always precedes it in both apply worlds.
+        if (cands[j].kind == Action::Kind::ActivatePermAbility && !cands[j].trick_hand_target.empty())
+        {
+            bool cast = false;
+            for (int k : sel)
+            {
+                if (k == j) { continue; }
+                const Action& c = cands[k];
+                if (c.kind != Action::Kind::CastFromHand || c.card_name != cands[j].trick_hand_target) { continue; }
+                if (c.adventure || c.bestow) { continue; }   // lands no creature of that number
+                const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
+                if (cd != nullptr && cd->card.IsCreature()) { cast = true; break; }
+            }
+            if (!cast) { return true; }
+            continue;
+        }
         if (cands[j].kind != Action::Kind::CastFromHand) { continue; }
         // RIPPLE (Shadowborn INT-3): a chain pin that only means something with a granter cast by this plan
         // (EmitRipplePins, the Stone in hand) -- without one it is a duplicate of its "no ripple" sibling.
@@ -26284,6 +26368,9 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
             case Action::Kind::GarthActivate:
             case Action::Kind::ActivatePermAbility:
                 p.dup_source = true;                      // one activation per source per plan
+                // A TapTargetPump's same-plan hand target (SubsetHasMissingTrickTarget's activation clause).
+                if (a.kind == Action::Kind::ActivatePermAbility && !a.trick_hand_target.empty())
+                { p.trick_target = true; }
                 break;
             case Action::Kind::PutFromHandAbility:
                 // A put champion's same-line entrant pin (SubsetHasMissingTrickTarget's put clause).
@@ -51242,13 +51329,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     }
                     if (!human && !tgts.empty())
                     { ResolveProvider(state).TapTargetPumpTargets(state, src, is_pre_combat, tgts); }
+                    // SAME-PLAN TARGETS (TapTargetPumpSamePlanTargets): a creature card in HAND that this
+                    // plan casts first is a legal target when the activation resolves -- the activation
+                    // runs in the trailing pass, after every cast (Immaculate Magistrate's counters on a
+                    // Joraga Warcaller cast off the same turn's Forest). Without these the target set was
+                    // read off the battlefield as it stood BEFORE the casts, so such a line was
+                    // unfindable at any budget. (number, name) pairs; SubsetHasMissingTrickTarget
+                    // requires the subset to cast that name (trick_hand_target), the pump-trick shape.
+                    std::vector<std::pair<int, std::string>> hand_tgts;
+                    TapTargetPumpSamePlanTargets(state, src, *sd, is_pre_combat, human, hand_tgts);
                     // The human chooses a target on the live board at activation. One
-                    // representative per X is enough here; a same-line land is seen then.
-                    if (human && !tgts.empty()) { tgts.resize(1); }
+                    // representative per X is enough here; a same-line land is seen then. A
+                    // same-plan creature is the representative only when no battlefield one exists
+                    // (each needs its own cast, so one per name is kept).
+                    if (human && !tgts.empty()) { tgts.resize(1); hand_tgts.clear(); }
+                    std::vector<std::pair<int, std::string>> all_tgts;
+                    all_tgts.reserve(tgts.size() + hand_tgts.size());
                     for (int ti : tgts)
                     {
                         if (ti < 0 || ti >= static_cast<int>(state.battlefield.size())) { continue; }
-                        const Permanent& q = state.battlefield[static_cast<std::size_t>(ti)];
+                        all_tgts.emplace_back(state.battlefield[static_cast<std::size_t>(ti)].card.m_number,
+                                              std::string());
+                    }
+                    for (auto& h : hand_tgts) { all_tgts.push_back(std::move(h)); }
+                    for (const auto& tgt : all_tgts)
+                    {
                         for (int x : xs)
                         {
                             const bool all = x == kTapTargetPumpXAll;
@@ -51258,9 +51363,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             a.def            = sd;
                             a.hand_index     = -1;
                             a.sac_source_id  = src.card.m_number;
-                            a.sac_victim_id  = q.card.m_number;
+                            a.sac_victim_id  = tgt.first;
                             a.ability_mode   = Action::AbilityMode::TapTargetPump;
                             a.chosen_x       = x;
+                            // A same-plan hand target's co-cast requirement (empty for a battlefield one).
+                            if (!tgt.second.empty()) { a.trick_hand_target = tgt.second; }
                             // The books: the activation at its X; the max-X fold's sentinel reserves X = 1
                             // and spends the rest at the activation (TapTargetPumpPay), which runs last.
                             a.cost           = cost_at(all ? 1 : x);
@@ -139184,7 +139291,10 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             else if (a.kind == Action::Kind::ActivatePermAbility
                      && a.ability_mode == Action::AbilityMode::TapTargetPump)
             {
-                const std::string hn = SubChoiceHostLabel(state, a.sac_victim_id);
+                // Hand-aware: a same-plan target (TapTargetPumpSamePlanTargets) is still in hand here, and
+                // the battlefield-only label would drop its sub -- merging it into a battlefield variant.
+                const std::string hn = a.trick_hand_target.empty() ? SubChoiceHostLabel(state, a.sac_victim_id)
+                                                                   : SubChoiceAuraHostLabel(state, a.sac_victim_id);
                 std::string art;
                 for (const Permanent& perm : state.battlefield)
                 { if (perm.card.m_number == a.sac_victim_id) { art = perm.card.m_name.str(); break; } }

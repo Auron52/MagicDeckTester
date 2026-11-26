@@ -4796,6 +4796,8 @@ public:
                                               bool is_pre_combat) const override;
     void             TapTargetPumpTargets(const GameState& s, const Permanent& source, bool is_pre_combat,
                                           std::vector<int>& targets) const override;
+    void             TapTargetPumpSamePlanTargets(const GameState& s, const Permanent& source, bool is_pre_combat,
+                                                  std::vector<int>& hand_targets) const override;
 };
 
 // Melira Pod (persist combo / creature toolbox: Melira / Vizier of Remedies + Kitchen Finks /
@@ -5049,6 +5051,8 @@ public:
                                    int board_merfolk, int added_merfolk) const override;
     void TapTargetPumpTargets(const GameState& state, const Permanent& source,
                               bool is_pre_combat, std::vector<int>& targets) const override;
+    void TapTargetPumpSamePlanTargets(const GameState& state, const Permanent& source,
+                                      bool is_pre_combat, std::vector<int>& hand_targets) const override;
     uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,
                                      const CardDefinition& entering) const override;
 };
