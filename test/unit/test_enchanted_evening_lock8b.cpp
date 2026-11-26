@@ -1,8 +1,9 @@
 // Enchanted Evening lock cluster, STEP 8b (2026-11-26): two SOUND dominance folds in EnchantedEveningProvider.
-//   (1) THE DEAD-LAND FOLD (PlanListAdmit, EeDeadLandFoldLive): under Enchanted Evening + Opalescence, with no mana left
-//       this turn and at most seven cards in hand, a plan that plays a land (it dies at once) is dropped for its no-land
-//       twin. A plan that exiles our own Enchanted Evening / Opalescence with the Wave (it ends the lock) keeps its land.
-//   (2) UTOPIA SPRAWL's colour axis held to {G, W} (EtbChoiceCandidates), re-checked over our cards at runtime.
+//   (1) UTOPIA SPRAWL's colour axis held to {G, W} (EtbChoiceCandidates), re-checked over our cards at runtime.
+//   (2) PARALLAX WAVE own-target: our Exploration withdrawn while no Calming Verse is in hand or library.
+// The dead-land fold (a land played under Enchanted Evening + Opalescence dies, so fold it into holding it) was
+// reviewed and WITHDRAWN: the held land can cost a nonland card at a later cleanup (the ranked discard never sheds
+// the land). The first case pins that the land play stays offered.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -96,82 +97,17 @@ bool HasWavePlanOn(const std::vector<TurnSolver::Plan>& plans, int victim, bool 
 }
 } // namespace
 
-TEST_CASE("EE lock step 8b: under the lock with no mana and <= 7 cards, a dead land play is folded into holding it")
+TEST_CASE("EE lock step 8b: under the lock a dead land play stays offered (the dead-land fold is not sound)")
 {
     GameState s = L8bLockBoard();
     REQUIRE(LandDiesToTypeStatics(s, L8bDef("Forest")));
+    for (int k = 0; k < 5; ++k) { s.players[0].hand.push_back(L8bCard("Calming Verse", 70 + k)); }
+    REQUIRE(s.players[0].hand.size() == 7);
     const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
-    REQUIRE_FALSE(plans.empty());
-    // Every land plan that does not end the lock is gone; its twin (the same activations, no land) stays.
-    for (const TurnSolver::Plan& p : plans)
-    {
-        if (p.land_to_play.empty()) { continue; }
-        bool ends_lock = false;
-        for (const Action& a : p.actions)
-        {
-            if (a.ability_mode == Action::AbilityMode::FadeExileCreature && (a.sac_victim_id == 51 || a.sac_victim_id == 52))
-            { ends_lock = true; }
-        }
-        CHECK_MESSAGE(ends_lock, "a dead land plan survived: ", p.land_to_play);
-    }
-    // The Wave activations are still offered without a land (the twins), self-reset included.
-    CHECK(HasWavePlanOn(plans, 53, /*with_land=*/false));
-    // Exiling our own Enchanted Evening ends the lock: that plan keeps its land variant (the land then survives).
-    CHECK(HasWavePlanOn(plans, 51, /*with_land=*/false));
-    CHECK(HasWavePlanOn(plans, 51, /*with_land=*/true));
-}
-
-TEST_CASE("EE lock step 8b: the dead-land fold is OFF with eight cards in hand, with floating mana, or without the lock")
-{
-    SUBCASE("eight cards: the held land could cost a nonland cleanup discard")
-    {
-        GameState s = L8bLockBoard();
-        for (int k = 0; k < 6; ++k) { s.players[0].hand.push_back(L8bCard("Calming Verse", 70 + k)); }
-        REQUIRE(s.players[0].hand.size() == 8);
-        CHECK(LandPlans(TurnSolver::EnumerateMainPlans(s, true)) > 0);
-    }
-    SUBCASE("seven cards: folded")
-    {
-        GameState s = L8bLockBoard();
-        for (int k = 0; k < 5; ++k) { s.players[0].hand.push_back(L8bCard("Calming Verse", 70 + k)); }
-        REQUIRE(s.players[0].hand.size() == 7);
-        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
-        for (const TurnSolver::Plan& p : plans)
-        {
-            if (p.land_to_play.empty()) { continue; }
-            bool ends_lock = false;
-            for (const Action& a : p.actions)
-            { if (a.sac_victim_id == 51 || a.sac_victim_id == 52) { ends_lock = true; } }
-            CHECK(ends_lock);
-        }
-    }
-    SUBCASE("floating mana: a cast (and a Presence draw) is still possible this turn")
-    {
-        GameState s = L8bLockBoard();
-        s.floating_mana.green = 1;
-        CHECK(LandPlans(TurnSolver::EnumerateMainPlans(s, true)) > 0);
-    }
-    SUBCASE("no Opalescence: the land lives")
-    {
-        GameState s = L8bLockBoard();
-        s.battlefield.erase(s.battlefield.begin() + 1);   // Opalescence
-        RefreshTypeStatics(s);
-        REQUIRE_FALSE(LandDiesToTypeStatics(s, L8bDef("Forest")));
-        CHECK(LandPlans(TurnSolver::EnumerateMainPlans(s, true)) > 0);
-    }
-    SUBCASE("the land drop is spent: nothing to fold, nothing breaks")
-    {
-        GameState s = L8bLockBoard();
-        s.players[0].lands_played_this_turn = 1;
-        CHECK(LandPlans(TurnSolver::EnumerateMainPlans(s, true)) == 0);
-    }
-}
-
-TEST_CASE("EE lock step 8b: the dead-land fold lives in the EE provider only")
-{
-    GameState s = L8bLockBoard();
-    s.m_provider = nullptr;   // the base provider: no fold
-    CHECK(LandPlans(TurnSolver::EnumerateMainPlans(s, true)) > 0);
+    CHECK(LandPlans(plans) > 0);
+    bool idle = false;   // the no-land, no-action twin ("do nothing more" with the land held) is there too
+    for (const TurnSolver::Plan& p : plans) { if (p.land_to_play.empty()) { idle = true; } }
+    CHECK(idle);
 }
 
 TEST_CASE("EE lock step 8b: Utopia Sprawl's colour axis is held to G and W; the full fan returns when the proof breaks")

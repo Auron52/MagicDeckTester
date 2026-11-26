@@ -39409,9 +39409,17 @@ bool EnchantedEveningProvider::FovOwnTargetInert(const GameState& s, int control
         && !d->params.etb_exile_nonland_until_leaves;
 }
 
-// THE GROVE HALF of the plan-list filter (USER rulings 15 / 16, MTG_EE_USER_PRUNE): live when a Sterling Grove
-// cast could put a second Grove beside one (see PlanListAdmit below).
-static bool EeGrovePruneLive(const GameState& s)
+// THE DEAD-LAND FOLD WAS REVIEWED AND WITHDRAWN (lock step 8b, 2026-11-26). Under Enchanted Evening + Opalescence a
+// land we play dies at once, so "play it" looked dominated by "hold it". It is NOT, in this engine: the held land
+// can cost a NONLAND card at a later cleanup, because this deck's cleanup discard is the ranked pick (highest mana
+// value first, CleanupDiscardSearchWidth 1, never the land). Counterexample within a d3 horizon: hand 7 (Forest
+// included), two Presences out, a Wave with counters. Played line: the Forest dies (6). Next turn both draw (7 / 8);
+// the Wave exiles our own Opalescence (the lock ends), both play a Forest and cast Wild Growth (two Presence draws):
+// played ends at 7, held at 8 and sheds its highest-MV card. A provable narrowing ("no later net card gain" or
+// "the lock can never end") never holds with four Presences, four Force of Vigor and four Waves in the list, so the
+// fold is deleted rather than kept as a lossy default.
+
+bool EnchantedEveningProvider::PlanListFilterLive(const GameState& s) const
 {
     if (!eeprune::On()) { return false; }
     const int me = s.active_player_index;
@@ -39428,130 +39436,26 @@ static bool EeGrovePruneLive(const GameState& s)
     return false;
 }
 
-// THE DEAD-LAND FOLD (lock step 8b, 2026-11-26; a SOUND dominance fold, default ON, no flag -- CLAUDE.md "collapse
-// wasted search"). Under Enchanted Evening + Opalescence a land we play is a 0/0 enchantment creature and dies to the
-// toughness SBA before we receive priority (LandDiesToTypeStatics; it can never be tapped or cracked). So a plan that
-// plays such a land reaches the state of its no-land TWIN (same actions, which the list also holds) plus: the land in
-// our graveyard instead of our hand, and the land drop used. PREMISE, true of this list (re-checked against
-// cards.json, step 8b): nothing reads a land entering, a land dying, our graveyard, our land count, lands played, or
-// cards in hand as such -- no landfall, no dies trigger, no recursion, no threshold, no hand-size payoff; Enchantress's
-// Presence counts enchantment SPELLS, Exploration only grants drops, Force of Vigor's pitch exiles a GREEN card (lands
-// are colourless), Calming Verse's clause 2 needs an untapped land we control (we control none under the lock). A held
-// land is therefore never worse than a dead one, with ONE exception, the cleanup discard: a held land can push the
-// hand past seven, and this deck's discard rule (the shared one, highest mana value first; not searched) would then
-// shed a NONLAND card the play line keeps. The fold is applied only where that cannot happen, and that bound holds for
-// the rest of the game, not just this turn:
-//   * no mana is available for the rest of the turn: nothing floats and we control no land (under the lock every
-//     land is dead, and the mana Auras went with them; this list has no other mana source). So nothing can be cast,
-//     Presence draws nothing, and the hand can only shrink before our cleanup;
-//   * the hand holds at most seven cards now, so the held line's cleanup sheds nothing.
-//   By induction over the following turns (the coupling "the held line = the played line + extra dead lands"): the
-//   held line reaches a main phase with at most eight cards (seven after cleanup, one draw); at eight the fold is OFF
-//   and a land play is offered, and the held line always has a land to play (an extra dead land) unless its hand
-//   equals the played line's. So it never sheds a card the played line keeps. And while the lock holds the extra land
-//   is inert; once our own action ends the lock (the plan restrictions below), the held land is playable for real.
-//   * the plan holds no cast (none is affordable; conservative) and no Parallax Wave activation on our own Enchanted
-//     Evening or Opalescence: exiling one ENDS the lock (for that plan the land play after it is a real land, so the
-//     plan is not folded; land-first vs activation-first order is the plan's business).
-//   * the twin must be in the list (it always is, "do nothing more" included; checked anyway).
-// Searched play only (PlanListAdmit is never consulted in human play or under the unpruned gate). A list that adds a
-// reader of any of the above, or a mana source that survives the lock, must drop the fold.
-static bool EeDeadLandFoldLive(const GameState& s)
-{
-    if (!s.deck_has_type_statics) { return false; }
-    const int me = s.active_player_index;
-    const Player& ap = s.players[static_cast<std::size_t>(me)];
-    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
-    if (ap.hand.size() > 7) { return false; }
-    if (s.floating_mana.Total() > 0 || s.floating_creature_mana.Total() > 0) { return false; }
-    const TypeStaticsPresent ts = TypeStaticsOnBattlefield(s);
-    if (!ts.ee || ts.opals <= 0) { return false; }
-    for (const Permanent& p : s.battlefield)
-    { if (p.controller_index == me && p.card.IsLand()) { return false; } }   // a land survived: not the lock shape
-    return true;
-}
-
-// Does this plan end the lock (or cast anything)? Then it is never folded.
-static bool EeDeadLandPlanExempt(const GameState& s, const std::vector<Action>& acts)
-{
-    const int me = s.active_player_index;
-    for (const Action& a : acts)
-    {
-        if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::FadeExileCreature)
-        { return true; }   // a cast, or any other activation: not the no-mana lock shape the proof covers
-        for (const Permanent& q : s.battlefield)
-        {
-            if (q.card.m_number != a.sac_victim_id) { continue; }
-            if (q.controller_index == me)
-            {
-                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
-                if (eeprune::IsEE(qd) || eeprune::IsOpal(qd)) { return true; }
-            }
-            break;
-        }
-    }
-    return false;
-}
-
-static bool EeSameActions(const std::vector<Action>& a, const std::vector<Action>& b)
-{
-    if (a.size() != b.size()) { return false; }
-    for (std::size_t i = 0; i < a.size(); ++i)
-    {
-        if (a[i].kind != b[i].kind || a[i].ability_mode != b[i].ability_mode || a[i].sac_source_id != b[i].sac_source_id
-            || a[i].sac_victim_id != b[i].sac_victim_id || a[i].chosen_x != b[i].chosen_x
-            || a[i].card_name != b[i].card_name) { return false; }
-    }
-    return true;
-}
-
-bool EnchantedEveningProvider::PlanListFilterLive(const GameState& s) const
-{
-    return EeGrovePruneLive(s) || EeDeadLandFoldLive(s);
-}
-
 void EnchantedEveningProvider::PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans,
                                              std::vector<char>& admit) const
 {
     const int me = s.active_player_index;
-    if (EeGrovePruneLive(s))
+    int ours = 0;
+    for (const Permanent& p : s.battlefield)
     {
-        int ours = 0;
-        for (const Permanent& p : s.battlefield)
-        {
-            if (p.controller_index == me && eeprune::IsGrove(CardDatabase::Instance().LookupCached(p.card))) { ++ours; }
-        }
-        for (std::size_t i = 0; i < plans.size(); ++i)
-        {
-            if (!admit[i] || plans[i].actions == nullptr) { continue; }
-            int cast = 0, sac = 0;
-            for (const Action& a : *plans[i].actions)
-            {
-                if (a.kind == Action::Kind::CastFromHand && eeprune::IsGrove(a.def)) { ++cast; }
-                else if (a.kind == Action::Kind::ActivatePermAbility
-                         && a.ability_mode == Action::AbilityMode::SacTutorTop && eeprune::IsGrove(a.def)) { ++sac; }
-            }
-            if (cast > 0 && ours + cast - sac >= 2) { admit[i] = 0; }
-        }
+        if (p.controller_index == me && eeprune::IsGrove(CardDatabase::Instance().LookupCached(p.card))) { ++ours; }
     }
-    if (EeDeadLandFoldLive(s))
+    for (std::size_t i = 0; i < plans.size(); ++i)
     {
-        for (std::size_t i = 0; i < plans.size(); ++i)
+        if (!admit[i] || plans[i].actions == nullptr) { continue; }
+        int cast = 0, sac = 0;
+        for (const Action& a : *plans[i].actions)
         {
-            if (!admit[i] || plans[i].actions == nullptr || plans[i].land == nullptr || plans[i].land->empty())
-            { continue; }
-            const CardDefinition* ld = CardDatabase::Instance().Lookup(*plans[i].land);
-            if (ld == nullptr || !LandDiesToTypeStatics(s, *ld)) { continue; }
-            if (EeDeadLandPlanExempt(s, *plans[i].actions)) { continue; }
-            bool twin = false;
-            for (std::size_t j = 0; j < plans.size() && !twin; ++j)
-            {
-                twin = j != i && admit[j] && plans[j].actions != nullptr
-                    && (plans[j].land == nullptr || plans[j].land->empty())
-                    && EeSameActions(*plans[i].actions, *plans[j].actions);
-            }
-            if (twin) { admit[i] = 0; }
+            if (a.kind == Action::Kind::CastFromHand && eeprune::IsGrove(a.def)) { ++cast; }
+            else if (a.kind == Action::Kind::ActivatePermAbility
+                     && a.ability_mode == Action::AbilityMode::SacTutorTop && eeprune::IsGrove(a.def)) { ++sac; }
         }
+        if (cast > 0 && ours + cast - sac >= 2) { admit[i] = 0; }
     }
 }
 

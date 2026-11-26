@@ -5254,10 +5254,6 @@ public:
     //       (TutorNeedsCandidate).
     std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
     bool TutorNeedsCandidate(const GameState& s, int controller, const CardParams& pp) const override;
-    // The plan-list filter carries TWO restrictions (DecisionProviders.cpp): (A) above, and the DEAD-LAND FOLD (lock
-    // step 8b; a SOUND dominance fold, default ON, no flag): under Enchanted Evening + Opalescence with no mana left
-    // this turn and at most seven cards in hand, a plan that plays a land (which dies at once) is dropped for its
-    // no-land twin. The argument, incl. the cleanup-discard bound, is at EeDeadLandFoldLive.
     bool PlanListFilterLive(const GameState& s) const override;
     void PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans, std::vector<char>& admit) const override;
     // Parallax Wave own-target dominance (lock step 8b; design §4.4): our Exploration is withdrawn as a target while
