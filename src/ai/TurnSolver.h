@@ -3078,6 +3078,15 @@ public:
     // The viewer's one-line summary of a plan on `state` (LineSummaryOfPlan) -- the AccomplishedAlchemist
     // COMBO OFF route narrates each link it plays with it, so the history lists the actions, not a macro.
     static std::string PlanLineSummary(const Plan& plan, const GameState& state, bool swap_in_combat = false);
+    // DISPLAY ONLY (menus, summaries; never a key or a digest). Immaculate Magistrate's counter count for the
+    // activation `a` of `plan` (tap_target_counters_per_subtype): the subtype's permanents the active player
+    // controls on `state`, plus the plan's own casts of that subtype (each body and each squad copy) -- the
+    // activation runs in the trailing pass, after them. 0 for any other action.
+    static int TapTargetCountersProjected(const GameState& state, const Plan& plan, const Action& a);
+    // DISPLAY ONLY. " (kicked xK)" / " (squad xK)" for a multikicker / squad cast paid K times (Joraga Warcaller,
+    // Galadhrim Brigade), so the kick-count variants of one cast never share a summary; "" for every other action
+    // (a single-kicker card such as Saproling Migration keeps its summary exactly).
+    static std::string RepeatKickSummaryTag(const Action& a);
     // THE ORDER A PLAN'S TURN-FACE-UP FLIPS REALLY RUN IN, for DISPLAY (Morph; USER 2026-11-13: "It worked, but
     // the history still shows the other order for some reason."). Plan-vector indices: every LEAD flip
     // (TurnFaceUp -- ApplyFaceUpLeadActs, before every cast) first; a TRAIL flip (TurnFaceUpLate) right after the

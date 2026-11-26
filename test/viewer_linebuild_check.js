@@ -263,6 +263,8 @@ function checkDigPrompts() {
          examined: ex(['Cliffgate']) }, 'pick', 'win the game', "Don't activate");
   want({ source: 'Burgeoning (opponent played a land)', examined: ex(['Gond Gate']) }, 'pick', 'from your hand', 'Put nothing');
   want({ source: 'Emperor Mihail II (Merfolk cast pay {1})', examined: ex(['Merrow Reejerey']) }, 'yesno', 'Pay {1}', 'Merfolk creature token');
+  want({ source: 'Leaf-Crowned Visionary (Elf cast: pay {G} to draw a card)', examined: ex(['Llanowar Elves']) },
+       'yesno', 'Pay {G}', 'an Elf spell (Llanowar Elves)', 'draw a card', "Don't pay");
   want({ source: 'Sea Gate (pay {1} or sacrifice it)', examined: ex(['Sea Gate']) }, 'yesno', 'Pay {1}', 'Sacrifice Sea Gate');
   want({ source: "Herald's Horn (upkeep reveal)", examined: ex(['Goblin Guide']) }, 'yesno', 'Leave it on top', 'Goblin Guide');
   want({ source: 'Timeless Witness (return from graveyard)', examined: ex(['Living Wish']) }, 'pick', 'mandatory', "AI's pick");

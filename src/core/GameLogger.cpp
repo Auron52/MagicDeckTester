@@ -545,10 +545,11 @@ std::string RevealDisposition(int card_num,
 }
 
 void GameLogger::LogAbility(int source_card_num, const std::string& source_card_name,
-                             const std::string& ability, bool fold_digest)
+                             const std::string& ability, bool fold_digest,
+                             const std::string* digest_ability)
 {
     if (!m_in_phase) { return; }
-    if (fold_digest) { FoldStr("A"); FoldInt(source_card_num); FoldStr(ability); }
+    if (fold_digest) { FoldStr("A"); FoldInt(source_card_num); FoldStr(digest_ability ? *digest_ability : ability); }
     if (m_digest_only) { return; }
     Action a;
     a.type      = "ABILITY";

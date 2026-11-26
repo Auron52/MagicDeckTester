@@ -8655,8 +8655,13 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
                     {
                         const std::vector<Card> examined{cast_def.card};
                         const std::vector<int> legal{0};
+                        // The frame's SOURCE is its replay identity and the viewer's wording key
+                        // (tools/play/linebuild.js digPrompt: a yes/no "pay {G} to draw a card?", not a dig of
+                        // the examined card -- the examined card is the spell that was cast). Built from the
+                        // params, so it names the real subtype and cost (Visionary: "Elf", "{G}").
                         pay = (*g_play_dig_chooser)(state, active,
-                            def->card.m_name.str() + " (Elf cast: pay {G} to draw a card)",
+                            def->card.m_name.str() + " (" + def->params.cast_trigger_subtype + " cast: pay "
+                                + cost.ToString() + " to draw a card)",
                             examined, legal, pay ? 0 : -1) == 0;
                     }
                 }
@@ -42673,7 +42678,21 @@ inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinitio
              + (d->params.tutor_required_subtype.empty() ? std::string("") : d->params.tutor_required_subtype + " ")
              + "card and put it onto the battlefield";
     }
+    // Elvish Clancaller: the find is a card NAMED something (wish_requires_name), not a Merfolk -- the mode's bare
+    // label is Seahunter's. Only a named TapTutorPut carries the param, so Seahunter's label is unchanged.
+    if (mode == PermAbilityMode::TapTutorPut && d != nullptr && !d->params.wish_requires_name.empty())
+    { return "search for a card named " + d->params.wish_requires_name + " and put it onto the battlefield"; }
     return PermAbilityLabel(mode);
+}
+
+// The text the PLAY DIGEST folds for an ability PermAbilityLabelFor names (GameLogger::LogAbility's
+// digest_ability): the label it folded before a display-only relabel, so the relabel moves no fingerprint.
+inline std::string PermAbilityLabelForDigest(PermAbilityMode mode, const CardDefinition* d)
+{
+    if (mode == PermAbilityMode::TapTutorPut && d != nullptr && !d->params.wish_requires_name.empty()
+        && !d->params.tap_tutor_put_return_self)
+    { return PermAbilityLabel(mode); }
+    return PermAbilityLabelFor(mode, d);
 }
 
 // Resolve one ActivatePermAbility. The cost is already paid by the caller; this is the effect half

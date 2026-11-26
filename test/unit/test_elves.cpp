@@ -590,3 +590,61 @@ TEST_CASE("Elvish Clancaller: the tutor finds only a card named Elvish Clancalle
         CHECK(EPow(*g, 31) == 1 + 1);                     // pumped by the first Clancaller
     }
 }
+
+// ---- 9. DISPLAY LABELS + THE act= TOKEN (display only: no key, no digest) ------------------------------------
+
+TEST_CASE("Elves labels: Clancaller names its find, Magistrate its counter count, Warcaller its kick count")
+{
+    const CardDefinition& clan = ED("Elvish Clancaller");
+    CHECK(PermAbilityLabelFor(PermAbilityMode::TapTutorPut, &clan).find("named Elvish Clancaller") != std::string::npos);
+    CHECK(PermAbilityLabelFor(PermAbilityMode::TapTutorPut, &clan).find("Merfolk") == std::string::npos);
+    // The play digest keeps folding the pre-relabel text, so no fingerprint moves.
+    CHECK(PermAbilityLabelForDigest(PermAbilityMode::TapTutorPut, &clan) == PermAbilityLabel(PermAbilityMode::TapTutorPut));
+    const CardDefinition& sea = ED("Seahunter");
+    CHECK(PermAbilityLabelFor(PermAbilityMode::TapTutorPut, &sea) == PermAbilityLabel(PermAbilityMode::TapTutorPut));
+
+    // Magistrate: 1 (itself) + 1 Llanowar on the board + 1 Llanowar cast by the plan before the trailing activation.
+    GameState s = EBase();
+    EForests(s, 2);
+    EPut(s, "Immaculate Magistrate", 1);
+    EPut(s, "Llanowar Elves", 3);
+    EHand(s, "Llanowar Elves", 20);
+    TurnSolver::Plan p;
+    Action cast; cast.kind = Action::Kind::CastFromHand; cast.card_name = "Llanowar Elves"; cast.def = &ED("Llanowar Elves");
+    Action act; act.kind = Action::Kind::ActivatePermAbility; act.ability_mode = Action::AbilityMode::TapTargetPump;
+    act.card_name = "Immaculate Magistrate"; act.def = &ED("Immaculate Magistrate"); act.sac_source_id = 1; act.sac_victim_id = 3;
+    p.actions = { cast, act };
+    CHECK(TurnSolver::TapTargetCountersProjected(s, p, act) == 3);
+    CHECK(TurnSolver::TapTargetCountersProjected(s, p, cast) == 0);
+    const std::string sum = TurnSolver::PlanLineSummary(p, s);
+    CHECK(sum.find("3 +1/+1 counters") != std::string::npos);
+    CHECK(sum.find("X=0") == std::string::npos);
+
+    // Warcaller: the kicked variant's summary carries its count; the unkicked one is unchanged.
+    Action w; w.kind = Action::Kind::CastFromHand; w.card_name = "Joraga Warcaller"; w.def = &ED("Joraga Warcaller");
+    CHECK(TurnSolver::RepeatKickSummaryTag(w).empty());
+    w.kicked = true; w.kick_count = 2;
+    CHECK(TurnSolver::RepeatKickSummaryTag(w) == " (kicked x2)");
+    TurnSolver::Plan pk; pk.actions = { w };
+    TurnSolver::Plan pu = pk; pu.actions[0].kicked = false; pu.actions[0].kick_count = 0;
+    CHECK(TurnSolver::PlanLineSummary(pk, s) != TurnSolver::PlanLineSummary(pu, s));
+}
+
+TEST_CASE("CheckLine: act=<card> with the card only in hand is a board activation with no source, not a hand cast")
+{
+    using V = TurnSolver::LineCheck::Verdict;
+    GameState s = EBase();
+    EForests(s, 6);
+    EHand(s, "Elvish Clancaller", 20);
+    TurnSolver::LineSpec act;
+    act.casts.push_back("Elvish Clancaller");
+    act.board_acts.push_back("Elvish Clancaller");
+    const auto r = TurnSolver::CheckLine(s, true, act);
+    CHECK(r.verdict == V::Illegal);
+    CHECK(r.reason.find("act=Elvish Clancaller") != std::string::npos);
+    INFO(r.reason);
+    // The same name as cast= is the hand cast, and is legal.
+    TurnSolver::LineSpec cast;
+    cast.casts.push_back("Elvish Clancaller");
+    CHECK(TurnSolver::CheckLine(s, true, cast).verdict != V::Illegal);
+}

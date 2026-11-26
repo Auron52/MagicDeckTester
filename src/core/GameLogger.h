@@ -141,8 +141,11 @@ public:
     // fold_digest=false records the entry for the log reader only: the play digest stays put. For an
     // activation the engine always performed but used to leave unlogged (the positioned land-search
     // cracks, TurnSolver::ApplyLandSearchActs), so making it visible does not move any fingerprint.
+    // `digest_ability`, when set, is the text FOLDED in place of `ability`: a display-only relabel (Elvish
+    // Clancaller's named find, Immaculate Magistrate's counter count) keeps every play digest byte-identical.
     void LogAbility(int source_card_num, const std::string& source_card_name,
-                    const std::string& ability, bool fold_digest = true);
+                    const std::string& ability, bool fold_digest = true,
+                    const std::string* digest_ability = nullptr);
 
     // Captures board state snapshot at the end of the current phase. `opp_battlefield` is the
     // OPPONENT's side (Forbidden Orchard tokens, scheduled spawns) so targets are visible.
