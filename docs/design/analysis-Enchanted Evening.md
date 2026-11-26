@@ -631,6 +631,20 @@ log does not carry):**
   Presence draws); OFF 0. Turn ends with EE in hand, uncast, at exactly 4 mana (the 5th mana as the holdup): ON 134,
   OFF 119 (+13%), amendment 132. Presence fetched: OFF 11, ON 4.
 
+**Slower-game classification (2026-11-26, d3 b0 at de901bc9e; full write-up `logs/ee/prune-classify.md`,
+scratch `build/scratch/ee/pc/`).** Seed-8000 gi=4 recovers at b0 on both arms (ON 8, amendment 8 = OFF b10 8).
+Seed 10000: ON slower in 11 games, amendment in 8; at b0 all but two recover. The two that do not (both arms 7 vs
+OFF 6; OFF b0 also 6):
+* gi=50 -- PRUNE GAP B2, not clairvoyance. OFF: Opalescence from hand, a Grove tutors a SECOND Opalescence to the
+  top, the two animate each other as 4/4s beside the 2/2 Grove(s); every card used is in hand or the Grove's own
+  tutor. ON (rule A + B2) and the amendment (B2) cannot take the duplicate. The pre-lock Opalescence beatdown again;
+  proposed: inside `MTG_EE_GROVE_PRELOCK`, admit a second Opalescence as a tutor target while EE is not ours and an
+  Opalescence is ours.
+* gi=44 -- CLAIRVOYANCE. OFF Idyllic -> Presence (B5) instead of the missing Opalescence, and wins only because the
+  post-shuffle library delivers Opalescence and an extra Idyllic / Exploration on time (the b10 kill is exactly 20).
+Totals, ON (22 slower incl. sanity gi=23): 18 budget noise, 3 prune gap (8000 gi=19, 91 -- fixed by the amendment --
+and 10000 gi=50), 1 clairvoyance. Amendment (14 slower): 12 budget noise, 1 prune gap (gi=50), 1 clairvoyance.
+
 ## Lock-cluster step 6 (free-turn integration + the USER fairness check, §3.2-§3.4) -- 2026-11-25
 
 Code: 4a676a477 (WIP: trait, no reach certificate, `MTG_FREE_TURN_EE_FAIR` virtual board, key folds), ff0c0014a (test
