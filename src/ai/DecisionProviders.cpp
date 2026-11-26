@@ -1297,6 +1297,33 @@ void MerfolkTurnsProvider::TapTargetPumpTargets(const GameState& state, const Pe
     targets.resize(1);
 }
 
+// The SAME-PLAN half (a Merfolk in hand this plan casts first). The battlefield hook's premises, applied
+// to it, plus one sound fold:
+//   * Rogue's Passage: the whole activation is pruned above (same gate).
+//   * Silvergill Douser: only its OWN number survives above, and it is on the battlefield.
+//   * Rishadan Dockhand / Tidal Warrior target LANDS: the engine never asks.
+//   * An UNBLOCKABLE-ONLY grant (Merfolk Sovereign: tap_target_pump_grants_unblockable, no P/T change, no
+//     counters): the passive opponent never blocks, so WHICH Merfolk gets "can't be blocked" changes
+//     nothing on the board, and the source itself is always a legal battlefield Merfolk target -- a
+//     same-plan pin is the same board as that pin under a stricter subset. Folded away.
+void MerfolkTurnsProvider::TapTargetPumpSamePlanTargets(const GameState& state, const Permanent& source,
+                                                        bool, std::vector<int>& hand_targets) const
+{
+    if (hand_targets.empty() || HumanPlayActive()) { return; }
+    const std::string& name = source.card.m_name.str();
+    if (!DecisionUnpruned(UnprunedGate::XSpell) && name == "Rogue's Passage") { hand_targets.clear(); return; }
+    if (DecisionUnpruned()) { return; }
+    static const bool control_on = EnvOn("MTG_MERFOLK_CONTROL_ABILITY_PRUNE", true);
+    if (control_on && name == "Silvergill Douser") { hand_targets.clear(); return; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(source.card);
+    if (d != nullptr && d->params.tap_target_pump_grants_unblockable && d->params.tap_target_pump_power == 0
+        && d->params.tap_target_pump_tough == 0 && d->params.tap_target_pump_power_per_subtype.empty()
+        && d->params.tap_target_pump_per_subtype_both.empty()
+        && d->params.tap_target_counters_per_subtype.empty()
+        && TapTargetPumpTargetLegalFor(state, source, state.active_player_index, *d))   // the source's own pin
+    { hand_targets.clear(); }
+}
+
 bool KithkinProvider::ArchetypeCardValue(const GameState& state, const CardDefinition& def,
                                          int dmg_unit, int& out) const
 {
@@ -7806,6 +7833,31 @@ void LandfallProvider::TapTargetPumpTargets(const GameState& s, const Permanent&
             > s.battlefield[static_cast<std::size_t>(best)].EffectivePower()) { best = i; }
     }
     targets.assign(1, best);                                               // fold (b): one outcome
+}
+
+// The SAME-PLAN half (a creature in hand this plan casts first): fold (a) above, read off the card. With
+// power read by nothing but combat damage, a pump after damage, or on a creature that cannot attack this
+// turn (a fresh creature attacks only with haste -- TrickHandRecipientCanAttackThisTurn), changes no
+// outcome and only spends the {T} and the mana: dominated by not activating. Fold (b) is NOT applied: it
+// inspects the battlefield targets' double strike / lifelink / attachments, which a same-plan creature
+// (and what the same plan attaches to it) can differ in, so every attack-eligible hand creature stays.
+void LandfallProvider::TapTargetPumpSamePlanTargets(const GameState& s, const Permanent& source, bool is_pre_combat,
+                                                    std::vector<int>& hand_targets) const
+{
+    (void)source;
+    if (DecisionUnpruned(UnprunedGate::XSpell) || hand_targets.empty()) { return; }
+    const int me = s.active_player_index;
+    if (!WolfRunPowerUnread(s, me)) { return; }
+    if (!is_pre_combat) { hand_targets.clear(); return; }
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    std::vector<int> atk;
+    for (int i : hand_targets)
+    {
+        if (i < 0 || i >= static_cast<int>(ap.hand.size())) { continue; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(ap.hand[static_cast<std::size_t>(i)]);
+        if (hd != nullptr && TrickHandRecipientCanAttackThisTurn(s, *hd)) { atk.push_back(i); }
+    }
+    hand_targets = std::move(atk);
 }
 
 std::vector<int> LandfallProvider::TapTargetPumpXCandidates(const GameState& s, const Permanent& source,

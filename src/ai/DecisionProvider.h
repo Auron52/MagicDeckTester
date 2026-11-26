@@ -2438,6 +2438,15 @@ public:
     virtual void TapTargetPumpTargets(const GameState& s, const Permanent& source, bool is_pre_combat,
                                       std::vector<int>& targets) const
     { (void)s; (void)source; (void)is_pre_combat; (void)targets; }
+    // TapTargetPumpSamePlanTargets -- the SAME-PLAN half of that target set: creature cards in HAND that a
+    // plan may cast before the (trailing) activation resolves, as HAND indices of our active player, one
+    // per name (the copy the name's first cast lands; TurnSolver's TapTargetPumpSamePlanTargets). Each is
+    // offered only in subsets that also cast that name. The provider may RESTRICT (a stated sound fold or
+    // a USER rule) or ORDER the list; anything it adds is dropped. Base: unchanged -- every such creature.
+    // Not consulted under human play.
+    virtual void TapTargetPumpSamePlanTargets(const GameState& s, const Permanent& source, bool is_pre_combat,
+                                              std::vector<int>& hand_targets) const
+    { (void)s; (void)source; (void)is_pre_combat; (void)hand_targets; }
 
     // TapFightTargets -- the two SEARCHED targets of a "{cost}, {T}: target <subtype> creature you control
     // fights target creature an opponent controls" land (Contested Cliffs; PermAbilityMode::TapFight).
