@@ -88497,20 +88497,15 @@ static bool TapTutorPutTargetTagged(const Action& act)
     return d != nullptr && d->params.tap_tutor_put_return_self;
 }
 
-// GENESIS WAVE'S X IN THE AUTONOMOUS SIGNATURE (DecisionProvider::PlanSignatureKeysWaveX; ElvesProvider opts in,
-// 2026-11-26). Without the key the dedup keeps ONE Wave X per cast set -- the first enumerated -- so a provider that
-// offers several X (Elves: every X, then the USER's scaling rule keeps the max the plan's other casts leave plus the
-// hold-back counts) would have them collapsed before the rule sees them. Set for the duration of one EnumeratePlans
-// dedup (WaveXSigScope); false everywhere else, so every other deck's signature is byte-identical. The collapse it
-// leaves for those decks is the pre-existing one (one Wave X per cast set; Landfall / Selesnya Lifegain's XCandidates
-// offer at most the un-grown and the grown max), recorded in docs/design/analysis-Elves.md.
-static thread_local bool t_sig_wave_x = false;
-struct WaveXSigScope
-{
-    bool saved;
-    explicit WaveXSigScope(bool on) : saved(t_sig_wave_x) { t_sig_wave_x = on; }
-    ~WaveXSigScope() { t_sig_wave_x = saved; }
-};
+// EVERY {X} CAST KEYS ITS X IN THE SIGNATURE (#XV, both builders; 2026-11-26). The signature used to key an X only
+// behind a per-card tag (#Q, #BX, #DX, #DR, ...), so an X spell WITHOUT one kept ONE X per cast set -- the first
+// enumerated -- and every other X it was offered was deleted by the dedup, unfindable at any depth or budget. Genesis
+// Wave was the live case: its branch offers the un-grown and the grown max (DorkGrowthXPotential), and Selesnya
+// Lifegain's Elves make them differ; Elves had an opt-in key for it (DecisionProvider::PlanSignatureKeysWaveX, now
+// deleted). Under MTG_UNPRUNED=xspell the same collapse hid every Crackle with Power / Unexpectedly Absent X but one.
+// Keyed on the printed {X} (has_x), so a card whose X already rides a per-card tag gets a redundant token: the dedup
+// is an equality partition, so a redundant token splits no class and moves nothing. A completeness fix, no flag.
+static bool CastKeysX(const CardDefinition* d) { return d != nullptr && d->card.m_mana_cost.has_x; }
 
 static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_bestow_sig, bool host_sig,
                                      bool cre_host_sig, bool rep_sig)
@@ -88607,7 +88602,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (act.twobrid_colored > 0) { w.Put("#W"); w.Int(act.twobrid_colored); }
                 if (act.browbeat_flip != 0) { w.Put("#BB"); w.Int(act.browbeat_flip); }   // Browbeat pre-ping (set-gated)
                 if (d && d->params.x_damage_each_creature_and_player) { w.Put("#Q"); w.Int(act.chosen_x); }
-                if (t_sig_wave_x && d && d->params.reveal_x_put_permanents) { w.Put("#WX"); w.Int(act.chosen_x); }
+                if (CastKeysX(d)) { w.Put("#XV"); w.Int(act.chosen_x); }   // every {X} cast (see CastKeysX)
                 if (d && d->params.enters_with_x_plus_counters) { w.Put("#BX"); w.Int(act.chosen_x); }   // Walking Ballista's X
                 if (d && d->params.etb_modal_fight_opp_creature) { w.Put("#VM"); w.Put(act.tutor_target); }   // Voracious mode
                 if (d && d->params.modal_exile_target_artifact_enchantment) { w.Put("#AX"); w.Put(act.tutor_target); }   // Archdruid's Charm mode
@@ -93341,7 +93336,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // for human play (keyed below), and for the proof's CONTROL arm (MTG_AURA_HOST_BRANCH=1).
     const bool cre_host_sig = AuraHostBranchOn() || DecisionUnpruned();
     const bool rep_sig = ReplicateSigEnabled();   // the #R key below (MTG_REPLICATE_SIG)
-    const WaveXSigScope wave_x_sig(ResolveProvider(state).PlanSignatureKeysWaveX(state));   // the #WX key
     bool range_hosts = false;
     if (!host_sig && !s_human_play_sig && EdfAuraRangeHostsOn())
     {
@@ -94389,8 +94383,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         // Rolling Earthquake: X decides which of OUR creatures die and how much
                         // every player takes -- distinct X are DISTINCT plans (the #X precedent).
                         if (cd && cd->params.x_damage_each_creature_and_player) { k += "#Q"; k += std::to_string(act.chosen_x); }
-                        // Genesis Wave's X, for a provider that searches several (see t_sig_wave_x).
-                        if (t_sig_wave_x && cd && cd->params.reveal_x_put_permanents) { k += "#WX"; k += std::to_string(act.chosen_x); }
+                        // Every {X} cast keys its X (lockstep with PlanSignatureFast; see CastKeysX).
+                        if (CastKeysX(cd)) { k += "#XV"; k += std::to_string(act.chosen_x); }
                         // Walking Ballista: X is its body AND its reach -- distinct X are DISTINCT plans.
                         if (cd && cd->params.enters_with_x_plus_counters) { k += "#BX"; k += std::to_string(act.chosen_x); }
                         // Voracious Hydra: double vs fight <target> are DISTINCT plans (the #G precedent).
@@ -95071,17 +95065,30 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         if (s_sig_x_audit)
         {
             const TurnSolver::Plan& kept = deduped[sig_first[sig]];
+            // Compare each card's MULTISET of chosen X, not the first same-name pair: a plan casting two copies
+            // at different X (two Hydras, X 1 and 3) is the same multiset as its mirror, and pairing the dropped
+            // copy with the kept plan's FIRST copy reported a collision that deleted nothing (2026-11-26).
+            auto xs_of = [](const TurnSolver::Plan& pl, const std::string& name)
+            {
+                std::vector<int> xs;
+                for (const Action& a : pl.actions)
+                { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == name) { xs.push_back(a.chosen_x); } }
+                std::sort(xs.begin(), xs.end());
+                return xs;
+            };
+            std::vector<std::string> done;
             for (const Action& da : p.actions)
             {
                 if (da.kind != Action::Kind::CastFromHand) { continue; }
-                for (const Action& ka : kept.actions)
+                const std::string name = da.card_name.str();
+                if (std::find(done.begin(), done.end(), name) != done.end()) { continue; }
+                done.push_back(name);
+                const std::vector<int> dx = xs_of(p, name), kx = xs_of(kept, name);
+                if (dx.size() != kx.size() || dx == kx) { continue; }
+                for (std::size_t q = 0; q < dx.size(); ++q)
                 {
-                    // Either side may be the X-bearing one (a dropped X=0 variant carries -1),
-                    // so record whenever the pair disagrees and at least one side chose an X.
-                    if (ka.kind == Action::Kind::CastFromHand && ka.card_name == da.card_name
-                        && ka.chosen_x != da.chosen_x
-                        && (ka.chosen_x >= 0 || da.chosen_x >= 0))
-                    { sigxaudit::Record(da.card_name, ka.chosen_x, da.chosen_x); break; }
+                    // Either side may be the X-bearing one (a dropped X=0 variant carries -1).
+                    if (dx[q] != kx[q] && (dx[q] >= 0 || kx[q] >= 0)) { sigxaudit::Record(name, kx[q], dx[q]); break; }
                 }
             }
         }

@@ -5569,11 +5569,6 @@ public:
     virtual void PlanListAdmitAt(const GameState& s, bool /*is_pre_combat*/, const std::vector<PlanView>& plans,
                                  std::vector<char>& admit) const
     { PlanListAdmit(s, plans, admit); }
-
-    // PlanSignatureKeysWaveX -- key Genesis Wave's X in the AUTONOMOUS plan-dedup signature, so plans that differ only
-    // in that X stay distinct (TurnSolver.cpp t_sig_wave_x). Widening only (lossless). Default false: the signature is
-    // byte-identical and the dedup keeps the first-enumerated X per cast set. ElvesProvider: true (it offers every X).
-    virtual bool PlanSignatureKeysWaveX(const GameState&) const { return false; }
 };
 
 // ---------------------------------------------------------------------------------------------------
