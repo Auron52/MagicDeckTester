@@ -25,6 +25,7 @@
 #   bash test/regression.sh            # regression mode (default)
 #   bash test/regression.sh --smoke    # fast smoke gate
 #   bash test/regression.sh --overnight
+#   bash test/regression.sh --smoke --resume-batch  # resumable on an off-host log directory
 #   bash test/regression.sh --smoke --regression   # (or --both) BOTH tiers in ONE pooled batch; each
 #                                                  # tier still reports/records/fails on its own keys
 #
@@ -66,6 +67,7 @@ ACCEPT=0
 ACCEPT_ACK=""     # --accept-with-regressions=<note>: same as --accept (promote, no re-run/re-audit);
                   # the note is recorded in the GT provenance header to document an intended slowdown.
 DECK_ONLY=""      # --deck=<name>: restrict this run to one deck's cases (see regression_cases.sh)
+RESUME_BATCH=0     # opt in to per-game checkpoints when a queue lease may end mid-tier
 for arg in "$@"; do
   case "$arg" in
     --smoke)     MODES+=(smoke) ;;
@@ -75,6 +77,7 @@ for arg in "$@"; do
     --fast)      MODES+=(smoke) ;;      # back-compat alias
     --both)      MODES+=(smoke regression) ;;   # = --smoke --regression (one pooled batch)
     --accept)    ACCEPT=1 ;;
+    --resume-batch) RESUME_BATCH=1 ;;
     # The note is written as ONE '#' line of the GT header, so fold any newlines (a multi-line note
     # once left uncommented lines in regression_gt.txt, 2026-11-21).
     --accept-with-regressions=*) ACCEPT=1; ACCEPT_ACK="$(printf '%s' "${arg#*=}" | tr '\r\n' '  ')" ;;
@@ -86,6 +89,9 @@ done
 _m=(); for _x in "${MODES[@]}"; do [[ " ${_m[*]} " == *" $_x "* ]] || _m+=("$_x"); done; MODES=("${_m[@]}")
 [ ${#MODES[@]} -eq 0 ] && MODES=(regression)
 MODE=${MODES[0]}
+if [ "$RESUME_BATCH" = 1 ] && [ ${#MODES[@]} -ne 1 ]; then
+  echo "ERROR: --resume-batch requires a single tier" >&2; exit 2
+fi
 
 # COMBINED TIERS (USER 2026-11-14: "All things that can be should be combined into one batch. This even
 # includes the possibility to run smoke and regression full together when we intend to."). Several tier
@@ -615,9 +621,17 @@ if [ ${#MODES[@]} -gt 1 ]; then
   mkdir -p "$BDIR/wins"; find "$BDIR/wins" -maxdepth 1 -type f -delete
 fi
 BATCH_RESUME=()
-if [ ${#MODES[@]} -eq 1 ] && [ "${MODES[0]}" = overnight ]; then
+if [ ${#MODES[@]} -eq 1 ] && { [ "${MODES[0]}" = overnight ] || [ "$RESUME_BATCH" = 1 ]; }; then
   # Overnight rows can outlive a host or a memory-capped batch. Persist each
-  # completed game so a restart only recomputes the interrupted game.
+  # completed game so a restart only recomputes the interrupted game. Other
+  # tiers opt in only when scratch is off the 9p host mount.
+  if [ "$RESUME_BATCH" = 1 ]; then
+    case "$(stat -f -c %T "$BDIR")" in
+      9p|v9fs|drvfs|fuseblk)
+        echo "ERROR: --resume-batch needs $BDIR on an off-host volume (per-game writes)" >&2
+        exit 2 ;;
+    esac
+  fi
   BATCH_RESUME=(--resume)
 fi
 ( echo $BASHPID > "$SIDE_DIR/batch.pid"; MTG_JOBSERVER="$JS_FIFO" exec "$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$BDIR/wins" "${BATCH_RESUME[@]}" ) \
