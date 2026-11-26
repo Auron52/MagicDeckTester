@@ -34,6 +34,26 @@ cards. No implementation has been made yet:
 
 Integration, build, baseline profile, viewer verification, and all three
 regression tiers remain. No proposed Oracle deferrals have been approved.
+
+### Shared-path design notes
+
+* Blood Scrivener: `AttemptDrawIntoHand` is the shared draw entry point. Its
+  result currently holds one drawn card, but one Scrivener changes an empty-hand
+  draw into two draws then one life loss; two copies yield three draws and two
+  life loss in replacement order. Preserve every actual draw's hand-entry,
+  draw-cap, dredge, miracle, empty-library, trigger, and log behavior in both
+  executor and rollout. Direct callers, including draw steps and dig, must
+  consume all actual draw records; a later card may enable a land drop.
+* Gravecrawler: existing graveyard-cast action paths can carry a self-permission
+  with a reserved source ID, but the permission must recheck a controlled Zombie
+  before each payment. The search's activation-family and breakpoint logic
+  assumes Lurrus-style once-per-turn permission; it must reopen a same-copy
+  cast after Culling sacrifices Gravecrawler, while preventing infinite loops.
+  The viewer's graveyard cast labels must be generalized from Lurrus.
+* Fleshbag Marauder: opponent creatures can exist in the goldfish schedule.
+  Snapshot all legal sacrifice victims before changing either board; the own
+  victim is a searched and human-surfaced choice, including Fleshbag itself.
+  Shared death watchers must observe the simultaneous sacrifice correctly.
 The full overnight checkpoint is being pushed separately from the primary
 checkout before this deck analysis joins the shared branch.
 
