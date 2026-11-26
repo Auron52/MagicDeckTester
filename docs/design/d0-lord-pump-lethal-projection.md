@@ -94,3 +94,32 @@ plan's entering creatures; replicate copies' lord share.
 Tests: `test/unit/test_attack_projection.cpp` "F3c lord stack" (the lands-only lord stack reads exactly 14, the
 gi3558 board reads as lethal at 18 and the greedy plays it; kicked Warcaller x2 reads 4 / 6 with LORD_CAST off /
 on; a squadded Brigade reads 6).
+
+### Measurement (2026-11-26, commits 5b898e078 + 4718abc5f vs the wip/elves-int base 18cea4639)
+
+Unit suite 4235 / 4235. `test_attack_projection` under `MTG_UNPRUNED=1`: the same two failures as the base binary
+(Greedy lethal stop, F2 Cannons), none new; under `MTG_HUMAN_PLAY=1`: all pass. Smoke vs the base binary's smoke run
+(per game): goblins d0 -3 (2 faster, 0 slower); digest-only moves on elementals d0, goblins d3/d5, niv d5, pirates
+d3/d5, slivers d0/d3/d5; no slower game at any depth. Held-out paired A/B, seeds 9900001+gi, game_index gi, the same
+jobs under each binary (ONE pooled batch per binary; build/scratch/elves-lethal/ab/, report
+logs/elves/ab_lethal_report2.txt in the worktree), net = new - base in turns (loss = 11), ms/game is wall on a shared box:
+
+| deck | shape | games | net turns | faster / slower | ms/game base / new |
+|---|---|---|---|---|---|
+| Elves | d0 | 10000 | -6 | 8 / 2 | ~0 / ~0 |
+| Elves | d5 b20 (play) | 2000 | 0 | 0 / 0 | 1046 / 1060 |
+| Goblins | d0 | 5000 | -24 | 13 / 1 | 10 / 12 |
+| Goblins | d5 b60 (play) | 2000 | 0 | 0 / 0 | 536 / 487 |
+| Landfall Elementals | d0 | 5000 | 0 | 0 / 0 | 18 / 20 |
+| Landfall Elementals | d5 b20 (play) | 1000 | 0 | 0 / 0 | 1519 / 1310 |
+| NivMizzetCombo | d0 | 5000 | 0 | 0 / 0 | 2 / 5 |
+| NivMizzetCombo | d5 b20 (play) | 1000 | -2 | 2 / 0 | 1579 / 1773 |
+| Pirates | d0 | 5000 | 0 | 0 / 0 | 5 / 6 |
+| Pirates | d5 b20 (play) | 2000 | 0 | 0 / 0 | 230 / 225 |
+| Slivers | d0 | 5000 | -1 | 1 / 0 | 2 / 2 |
+| Slivers | d5 b20 (play) | 3000 | 0 | 0 / 0 | 51 / 52 |
+
+Every deck is net <= 0 and no searched game is slower, so there is nothing to recover at d8 b0. The three d0
+slower games (Elves gi8285 and gi8456, 4 -> 5; Goblins gi4759, 4 -> 5) are d0-policy games and are not
+d8-gated. The first round (the lord fix alone, before the sacrifice fix) was Goblins d0 +7 (gi275 3 -> 6, gi1895
+4 -> 8). Both games are the false lethal described above, and both now win T3.
