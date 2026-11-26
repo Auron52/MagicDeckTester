@@ -43,10 +43,9 @@ user sign-off remains pending under the analyze-deck workflow.
 | Cemetery Reaper | Existing other-Zombie lord and token activation extended with graveyard creature exile target | Exile is an effect; chosen target changes recursion options |
 | Fleshbag Marauder | New ETB each-player creature sacrifice | All victims chosen from pre-sacrifice state; own choice searched and surfaced |
 
-Build, baseline profile, viewer verification, and all three regression tiers
-remain. No proposed Oracle deferrals have been approved. The static viewer
-manifest check passes; Cemetery Reaper's target wording remains an advisory
-item to verify dynamically.
+No proposed Oracle deferrals have been approved. Cemetery Reaper's target
+wording is an advisory regex match; the dynamic viewer protocol exposes the
+graveyard card targets as distinct plans.
 
 ### Shared-path design notes
 
@@ -91,12 +90,25 @@ The smoke tier's Zombies rows passed all 677 shared scenarios and were
 accepted: d0 1,000 games avg 4.7780; d3 50 avg 4.4400; d5 100 avg 4.4500.
 Depth 3 and 5 had identical outcomes on the 50 paired seeds. The 2HG smoke
 batch played 25 games at avg 4.9200; its scenario gate passed and its new GT
-was accepted. Regression and overnight tier runs remain in progress.
+was accepted. The first main-deck regression pass checked 950 reference
+replays (364 exact, 585 repaired, one beaten) and found zero play drift,
+shuffle dead, board divergence, enum gaps, mulligan drift, or contract failures.
+Its six new keys await acceptance after a viewer-label correction. A pooled
+smoke/regression rerun for both main and 2HG Zombies is in progress.
 
-External Codex-play seeds 54001-54003 found no illegal or missing playable
-plans and no wrong state deltas. Seed 54001 exercised Gravecrawler's graveyard
-cast after Culling; seed 54003 showed tapped entries, Cemetery Reaper's bonus,
-and distinct Fleshbag victim proposals. Further seeds are running.
+External Codex-play seeds 54001-54017 found no illegal or missing playable
+plans and no wrong state deltas. They exercised Gravecrawler's graveyard cast
+after Culling, tapped entries, Cemetery Reaper's graveyard exile and token,
+Blood Scrivener's doubled empty-hand draw and life loss, Fleshbag's distinct
+sacrifice options, and lord effects. Seed 54008 found a viewer-label error:
+the Cemetery Reaper plan appended `(target: opponent)` even though its target
+was a graveyard card. `src/main.cpp` now omits that suffix for graveyard exile;
+seed 54005's targeted replay confirms the corrected label. Seed 54004 found a
+possible mulligan improvement: the baseline kept five lands and won turn 6,
+while an alternate opening won turn 4 when handed to the same play policy.
+That is a lead for the later mulligan-profile stage, not a play-search defect.
+Dread Wanderer's graveyard return needs a targeted replay, since the random
+sweep did not reach its trigger state.
 
 ### Implementation order
 

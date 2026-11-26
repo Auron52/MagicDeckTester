@@ -1589,7 +1589,10 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         // "Target player gains N life" aimed at the OPPONENT (Action::player_target 1). Human play never
         // carries the variant (the person picks the player at resolution), but an unpruned autonomous
         // menu does, and it must not read like the self cast.
-        if (a.player_target == 1) { tag += " (target: opponent)"; }
+        // Pharika/Cemetery Reaper use player_target to identify which graveyard holds
+        // the named creature card, not to target the opponent as a player.
+        if (a.player_target == 1 && a.kind != Action::Kind::PharikaExile)
+        { tag += " (target: opponent)"; }
         if (a.discard_lands)  { tag += " +discard" + std::to_string(a.discard_lands); }
         casts.push_back(tag);
         vial_tag.push_back(a.kind == Action::Kind::ActivateVial ? 1
