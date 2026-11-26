@@ -832,4 +832,56 @@ Not fixed here (a separate, play-moving change): `ContPins` (`TurnSolver.h`, `Co
 carries no `mihail_pay_choice`. So the Visionary pay variants `EnumeratePlans` emits for CONTINUATION plans are inert:
 a searched continuation's casts run under the OUTER plan's pin at the continued ordinal, which is always past its bits,
 so "pay `{G}` again for the drawn Elf" is unfindable in a searched continuation. The executor's unsearched re-solve
-(`adopt_resolve_post_apply`) does install the re-solve plan's pin at ordinal 0.
+(`adopt_resolve_post_apply`) does install the re-solve plan's pin at ordinal 0. (Fixed in #21.)
+
+
+## #21 -- a breakpoint continuation's own cast-trigger pay pin was never installed (found 2026-11-26 with #20, fixed 2026-11-26)
+
+Same class as #13 (a continuation's during-cast pins never installed), for the one pin that lives in `GameState`
+rather than in a thread-local scope: `Plan::mihail_pay_choice`, read as `scripted_mihail_pay_choice` plus the cursor
+`scripted_mihail_trigger_ordinal` by `FireOnCastTriggers` (Leaf-Crowned Visionary's pay `{G}` to draw, Emperor Mihail
+II's pay `{1}`). `EnumeratePlans` emits the Visionary pay variants in CONTINUATION lists too (`cont_axes_only`; the
+comment: "so a drawn Elf's own cast can pay again after the re-solve"), but `ContPins` had no field for them. A
+searched continuation's casts therefore ran under the OUTER plan's pin at the continued ordinal, which is always past
+its bits, and declined in both worlds. So every continuation pay variant was inert duplicate work, and "pay `{G}` again
+for the Elf drawn off Visionary" was unfindable inside a searched continuation at any budget (a completeness hole under
+the no-greedy rule: the continuation's trigger always took the decline).
+
+Fix: `ContPins::mihail` (`ContPinsOf` reads `Plan::mihail_pay_choice`; `Any()` counts it, so the continuation's first
+record is tagged). `ContPinScope` now takes the `GameState&` the casts resolve on and, when the field is pinned, writes
+it with the ordinal reset to 0: the continuation's own stream, bit i = the i-th optional trigger of ITS casts, exactly
+as the enumeration counted them. Installed at every site that installs a continuation's pins: the rollout's
+`ContPinFrame` (all twelve continuation sites), the executor's record replay (`a.cont_pins`), and its three index routes
+(`resolve_draw_breakpoint`'s `rdb_scope`, the pod and pe appliers). **Sticky by design, never restored at scope exit:**
+the ordinal is a cursor the casts advance, and the worlds bound a continuation differently (the rollout's frame closes
+after its block; the record replay's scope lasts to the next tagged record; the executor's unsearched re-solve has
+already written the SAME plan's pin at ordinal 0 via `adopt_resolve_post_apply`, which its scoring apply then advanced
+through the rest of the phase). One write at the start plus one advancing cursor gives the same stream in all of them;
+a restore would rewind it in some. Unpinned = nothing written, as for every other `ContPins` field, so an unpinned
+continuation reads the outer stream exactly as before. No lever: this makes a searched option real, it does not gate
+one.
+
+Scope: only continuations that carry a pay pin change. Merfolk Turns' Mihail variants are emitted for OUTER plans only
+(`!cont_axes_only`), so no Merfolk continuation is ever pinned, and the re-solve route's install is idempotent over
+`adopt_resolve_post_apply`'s: Merfolk Turns cannot move. Elves is the only deck whose play can.
+
+Pins: unit `Leaf-Crowned Visionary: a breakpoint continuation's own pay-{G} pin pays, in BOTH worlds`
+(`test/unit/test_elves.cpp`): a paid Llanowar draws Taunting Elf (site-10 breakpoint), and the continuation that casts
+Taunting Elf with its own bit set must draw Wirewood Lodge and tap the fourth Forest in the rollout (recording the line)
+AND the executor (replaying it); its unpinned twin must not. Fails on the pre-fix tree (7274bbc1e: `drew_lodge` false
+in both worlds), passes after. The #20 resume test keeps checking resumed == from-scratch for every rank.
+
+Measured (pre-fix `7274bbc1e` vs fixed, one pooled batch per binary, same manifest, `seed = base + off`,
+`game_index = off`, d5 b20, profile attached):
+- Elves fd sweep (200 games, seeds `7001 + off`, `MTG_FD_ORACLE=1 MTG_FLAG_NONCONV=1`): `[fd-diverge]` 0 -> **0**,
+  `[nonconv]` 0 -> **0** on both binaries; play changed in 4 games, 2 faster (fd@30 4 -> 3, fd@35 6 -> 5), **0
+  slower**, net **-2** win turns; units x0.988.
+- Elves held-out A/B (2000 games, seeds `9101 + off`): play changed in 6 games, 2 faster (elves@213 5 -> 4,
+  elves@1952 4 -> 3), 4 at the same win turn, **0 slower**, 0 unwon on either arm; sum of win turns 8756 -> 8754
+  (net **-2**); units x0.997. No slower game, so no `--depth 8 --budget-ms 0` recovery was owed.
+- Whole smoke tier 243/243 byte-identical (`merfolkturns*` included, as the scope argument predicts). Elves is not a
+  suite case, so the two Elves batches above are its only measurement.
+- Units: the default full suite 3968/3968 passes. `MTG_UNPRUNED=1` and `MTG_HUMAN_PLAY=1` were run on the touched
+  subset (`test_elves*`, the only unit file changed) on both binaries: the fixed binary passes 20/20 in each mode, and
+  the pre-fix binary fails only the new case under UNPRUNED. (The full suite in those modes is not a gate: UNPRUNED
+  runs 3 h+, and HUMAN_PLAY segfaults in `test_rfx_pipeline` with 414 failures on the pre-fix binary too.)

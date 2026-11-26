@@ -58,13 +58,18 @@ struct ContPins
     int put_bounce = -1;   // Plan::bounce_choice as the put-Karoo pin (a Genesis Wave the continuation
                            // casts; PutBouncePinOf -- -1 when its own drop is the Karoo)
     int putback    = -1;   // Plan::putback_choice (a Brainstorm the continuation casts)
+    // Plan::mihail_pay_choice: the continuation's OWN optional cast-trigger payments (Leaf-Crowned Visionary's
+    // pay {G} to draw, Emperor Mihail II's pay {1}), one bit per trigger of ITS casts in resolution order. Unlike
+    // the thread-local pins above it lives in GameState (scripted_mihail_pay_choice + its ordinal), so
+    // ContPinScope installs it on the state it is handed (LOCKSTEP #21, docs/design/rollout-executor-lockstep.md).
+    MihailPayChoices mihail;
     bool Any() const
     {
         return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
             || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty() || put_bounce >= 1
             || putback >= 0 || !look_top.empty() || !dredge.empty() || !incinerator_targets.empty()
             || !reflect_targets.empty()
-            || !champion.empty();
+            || !champion.empty() || mihail.IsPinned();
     }
 };
 

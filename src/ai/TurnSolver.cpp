@@ -75817,11 +75817,11 @@ struct ContPinFrame
     std::optional<ContPinScope> scope;
     std::vector<Action>*        sink;
     std::size_t                 before;
-    ContPinFrame(const TurnSolver::Plan& p, std::vector<Action>* s)
+    ContPinFrame(const TurnSolver::Plan& p, std::vector<Action>* s, GameState& st)
         : pins(ContPinsOf(p)), sink(s), before(s != nullptr ? s->size() : 0)
     {
         ++pbfan::t_cont_frames;
-        if (pins.Any()) { scope.emplace(&pins); }
+        if (pins.Any()) { scope.emplace(&pins, st); }
         // MTG_PB_EXACT_WIDTH_VERIFY (F2): a continuation variant's fan width, checked where its pin is consumed.
         if (PbExactWidthVerifyOn()) { pbx.emplace(p.putback_group, p.putback_choice, /*pin_base=*/false); }
     }
@@ -79387,7 +79387,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
                 TurnSolver::Plan extra;
                 bp_searched_plan(0, extra);   // resolves to the plan's continuation or EMPTY
-                ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
+                ContPinFrame _cpf(extra, my_bp_sink, state);   // the continuation's own during-cast pins (ContPins)
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_section = "cont0";   // route-apply trace only
@@ -80286,7 +80286,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // applying only extra.actions would silently discard the search's land choice.
                 TurnSolver::Plan extra;
                 bp_searched_plan(1, extra);   // resolves to the plan's continuation or EMPTY
-                ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
+                ContPinFrame _cpf(extra, my_bp_sink, state);   // the continuation's own during-cast pins (ContPins)
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_continuation_plan(extra);
@@ -80810,7 +80810,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
                 TurnSolver::Plan extra;
                 bp_searched_plan(2, extra);   // resolves to the plan's continuation or EMPTY
-                ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
+                ContPinFrame _cpf(extra, my_bp_sink, state);   // the continuation's own during-cast pins (ContPins)
                 bp_play_searched_land(extra, my_bp_sink);
                 // Lotus Bloom: the staged Dragonstorm/rituals grew this pre-pass first (the
                 // executor's breakpoint replay had the same gap) -- now the shared loop.
@@ -80895,7 +80895,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
                     TurnSolver::Plan extra;
                     bp_searched_plan(0, extra);   // resolves to the plan's continuation or EMPTY
-                    ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
+                    ContPinFrame _cpf(extra, my_bp_sink, state);   // the continuation's own during-cast pins (ContPins)
                     bp_play_searched_land(extra, my_bp_sink);
                     apply_continuation_precasts(extra);
                     apply_continuation_plan(extra);
@@ -81133,7 +81133,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                           BpNewOnlyActive(state), &pre_plan_acts);
                         TurnSolver::Plan extra;
                         bp_searched_plan(6, extra);   // resolves to the plan's continuation or EMPTY
-                        ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
+                        ContPinFrame _cpf(extra, my_bp_sink, state);   // the continuation's own during-cast pins (ContPins)
                         bp_play_searched_land(extra, my_bp_sink);
                         apply_continuation_precasts(extra);
                         apply_section = "cont6";   // route-apply trace only
@@ -81698,7 +81698,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         TurnSolver::Plan extra;
         bp_searched_plan(4, extra);
         {
-            ContPinFrame _cpf(extra, sink);
+            ContPinFrame _cpf(extra, sink, state);
             bp_play_searched_land(extra, sink);
             // Site 4 owns a new plan just as the deferred continuation does. Install its
             // context before precasts and retain it through its own cycle and activations;
@@ -83048,7 +83048,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     TurnSolver::Plan extra;
                     bp_searched_plan(7, extra);   // resolves to the plan's continuation or EMPTY
-                    ContPinFrame _cpf(extra, nullptr);   // the continuation's own during-cast pins (ContPins)
+                    ContPinFrame _cpf(extra, nullptr, state);   // the continuation's own during-cast pins (ContPins)
                     bp_play_searched_land(extra, nullptr);
                     apply_continuation_precasts(extra);
                     apply_continuation_plan(extra);
@@ -83429,7 +83429,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                     { _ct_before.push_back(q.card.m_number); }
                                 }
                             }
-                            ContPinFrame _cpf(extra, nullptr);   // the continuation's own during-cast pins (ContPins)
+                            ContPinFrame _cpf(extra, nullptr, state);   // the continuation's own during-cast pins (ContPins)
                             bp_play_searched_land(extra, nullptr);
                             apply_continuation_precasts(extra);
                             apply_continuation_plan(extra);
@@ -84502,7 +84502,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (!s9_applied) { break; }
             {
-                ContPinFrame _cpf(extra, nullptr);   // the continuation's own during-cast pins (ContPins)
+                ContPinFrame _cpf(extra, nullptr, state);   // the continuation's own during-cast pins (ContPins)
                 bp_play_searched_land(extra, nullptr);
                 apply_continuation_precasts(extra);
                 apply_continuation_plan(extra);
@@ -84797,7 +84797,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 std::cerr << line << "\n";
             }
         }
-        ContPinFrame _cpf(extra, out_breakpoint);   // the continuation's own during-cast pins (ContPins)
+        ContPinFrame _cpf(extra, out_breakpoint, state);   // the continuation's own during-cast pins (ContPins)
         bp_play_searched_land(extra, out_breakpoint);
         // CONTINUATION TRAITS (lockstep with the executor's breakpoint replay): the deferred
         // continuation is its own mini-plan, so price and pay it under PlanTraits computed from
@@ -84900,7 +84900,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     {
                         PlanTraitsScope  _t9_scope(PlanTraitsWanted() ? &t9 : nullptr);
                         TapKeepLastScope _t9_keep(PumpTargetHoldEnabled() ? t9.pump_target_card : 0);
-                        ContPinFrame _cpf9(s9x, out_breakpoint);
+                        ContPinFrame _cpf9(s9x, out_breakpoint, state);
                         bp_play_searched_land(s9x, out_breakpoint);
                         apply_continuation_precasts(s9x);
                         apply_continuation_plan(s9x);
@@ -85250,7 +85250,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     bp_searched_plan(4, extra);   // resolves to the plan's continuation or EMPTY
                     g_bp_hook_site_empty_default = saved_empty;
                 }
-                ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
+                ContPinFrame _cpf(extra, my_bp_sink, state);   // the continuation's own during-cast pins (ContPins)
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_continuation_plan(extra);
@@ -85304,7 +85304,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     bp_searched_plan(4, extra);   // the continuation the plan carries, or EMPTY
                     g_bp_hook_site_empty_default = saved_empty;
                 }
-                ContPinFrame _cpf(extra, end_sink);
+                ContPinFrame _cpf(extra, end_sink, state);
                 bp_play_searched_land(extra, end_sink);
                 apply_continuation_precasts(extra);
                 apply_continuation_plan(extra);
