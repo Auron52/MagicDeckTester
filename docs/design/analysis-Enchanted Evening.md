@@ -5,16 +5,30 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
 
 ## CHECKPOINT (orchestrator, updated 2026-11-26, pre-compaction #2) -- read this first after a compaction
 
-* **LOCK STEP 7 DONE (2026-11-26): a26942ea0 + c69cb9da9 + 1ad7ca2da (the pending fix) + the ledger commit.** NEXT =
+* **LOCK STEP 8a DONE (2026-11-26): e0e74e894 + 44303575e + the ledger commit** (section "Lock-cluster step 8a"). It holds the
+  free-turn standing pass (`MTG_FREE_TURN_STAND`, default ON, a re-price, inert at b0), the FoV own-target fold
+  (Presence withdrawn from it in review), and `MTG_EE_FOV_EOT_OPP_ONLY` + the nesting diagnostic DELETED. Units
+  4245/4245; smoke 247/0, play-changed=0 (no deck moves); A/B m8 vs step 7 net -1 turn / 224, units -12..-19%.
+  NEXT = **step 8b**, in this order:
+  * the land play under EE + Opalescence (a fold);
+  * the Parallax Wave own-target fold (design §4.4; `FadeExileCreatureTargets`, a different code path from FoV);
+  * the +27% units from step 4;
+  * root-cause gi=12 / gi=13 (steps 3+5 notes);
+  * the d3 b0 intractability of ho1 gi=3 and hb1 gi=16 (> 2 h, and still > 30 min with `MTG_FREE_TURNS=0`, so not the
+    free-turn rule); ho1 gi=70 at b0 IS the free-turn chain (0.5 s with free turns off; a possible USER question);
+  * also: hb1 gi=90 (d3 b0 T6 vs step 6 T5, the T5 main-1 FoV over Grove -> Opalescence; unchanged by 8a); the
+    tie-indifferent own-target FoV casts (ho1 gi=16 / 73 destroy our own Presence at round 3); the slower games' b0
+    verdicts in the step-8a section.
+  Then step 9 (viewer `eot_cast` + ruling 14 + DECISIONS.md).
+* (superseded by step 8a) **LOCK STEP 7 DONE (2026-11-26): a26942ea0 + c69cb9da9 + 1ad7ca2da (the pending fix) + the ledger commit.** NEXT =
   **step 8**: folds (a) the land play under EE + Opalescence, (b) Wave own-target dominance. Also, in this order:
   * the end-step FoV own-target dominance fold (the full menu's slower games ho1 gi 3 / 40 / 44 / 84 / 9 are
     own-target casts);
   * the free-turn x end-step-fan cost blowup (step-7 section, "Pending fix + re-measure"): price the fan in the
     budget, or a sound fold under a locked opponent;
   * root-cause hb1 gi=90 (d3 b0: step 7 T6 vs step 6 T5) and gi=12 / gi=13 (steps 3+5 notes).
-  Then step 9 (viewer `eot_cast` + ruling 14 + DECISIONS.md). OPEN USER question: delete the temporary
-  `MTG_EE_FOV_EOT_OPP_ONLY` (recommended: quality neutral, cost pathological) or adopt it (numbers in the step-7
-  section). It stays in the tree, default OFF, until the answer.
+  Then step 9 (viewer `eot_cast` + ruling 14 + DECISIONS.md). (The temporary `MTG_EE_FOV_EOT_OPP_ONLY` was DELETED
+  in step 8a, on the orchestrator's brief: "delete, don't lever". That USER question is withdrawn.)
 * Done: Stage 1 coverage; lock-cluster DESIGN 84a576461 (with the orchestrator's Grove correction below); four simple
   cards DONE (f986f6e19, 61e5bc848, b5b8dd3cb, d7885c7fe: units, smoke 247/0 play-changed=0, coverage full); lock
   steps 1, 2, 3+5 DONE (entries below).
@@ -830,7 +844,7 @@ are won / avg / units vs step 6; faster and slower are paired per game against s
   * hb1: opp 5.7474 vs full 5.7263 (2 faster: gi 32, 90; 3 slower: gi 31, 52, 79).
   * Over the 191 games together the net is about -1 turn in total, i.e. neutral. Opp-arm casts: 20, all mana-paid
     (20 opponent targets, 2 virtual).
-  * Verdict: no better in aggregate, and pathological in cost. **Recommendation: delete `MTG_EE_FOV_EOT_OPP_ONLY`**
+  * Verdict: no better in aggregate, and pathological in cost. (**DELETED in step 8a.**) **Recommendation: delete `MTG_EE_FOV_EOT_OPP_ONLY`**
     ("delete, don't lever") and treat the own-target curse in step 8 (own-target dominance fold). The default (full
     menu) stays. The lever is still in the tree, default OFF, until the USER answers.
 * d3 b0 repros on the fixed binary `build/Release/mtg-b7f` (= 1ad7ca2da), written to `l7/b0f-*`. The b0 step-6
@@ -847,6 +861,7 @@ are won / avg / units vs step 6; faster and slower are paired per game against s
       Root-cause in step 8.
   * Earlier verdicts (pre-fix binary; the fix does not move the full menu's play): gi=9 T4, gi=44 T5, hb1 gi=32 T6 --
     all recover. Pre-fix gi=3: **b0 unfinished** (4 h 57 m, killed).
+  * (CLOSED in step 8a: ho1 gi=3 b0-unfinished at the 2-h cap; ho1 gi=84 re-run on the 8a tree, T6, recovers. See the step-8a section.)
   * **b0 PENDING at close (left running, owned by this step; the step-8 agent reads them).** Each has a 2-h cap
     (`l7/cap2h.sh`); a cap writes "b0-unfinished" to `l7/b0cap.progress`.
     * ho1 gi=3 on `mtg-b7f`: mtg PID 1994870, out `l7/b0f-ho-3.{out,err}` + `l7/b0f-ho-3/`. Marker: a
@@ -857,6 +872,157 @@ are won / avg / units vs step 6; faster and slower are paired per game against s
       `l7/b06.progress`, then `l7/b06.DONE`; `s6-ho-84 ...` in `l7/b0cap.progress`. It had run > 15 min at close.
     * Verdict rule: gi=84 recovers if step 7 at b0 <= step 6's b10 T6, or <= step 6's own b0. gi=3: step 6's b10 T7.
     * Remove `.claude/worktrees/ee-s6` with `scripts/safe_worktree_remove.sh` once the step-6 repro has finished.
+
+## Lock-cluster step 8a (the free-turn standing pass; the Force of Vigor own-target fold; the opp-only lever deleted) -- 2026-11-26
+
+Code: e0e74e894 (WIP: the standing pass, the fold, the tests) + 44303575e (the temporary nesting
+diagnostic `MTG_DIAG_NEST` removed, the lever `MTG_EE_FOV_EOT_OPP_ONLY` DELETED, the fold review below, this section).
+Scratch: `build/scratch/ee/l8/`.
+
+**Root cause of the step-7 opp-only hang (ho1o gi=9, > 3.3 h at d3 b10).** Every iterative-deepening host assumes its
+PASS 0 is cheap: it is the ranking that always stands and that no ceiling may cut. `SolveWithLookahead` arms
+`PassCeiling` only for `sub_depth > 0`, and the ten executor crossing nodes (`ChooseRealCrossing*`,
+`CrossingPassCeiling`) never armed pass 0. A FREE turn gets the depth give-back at two sites (`SimulateToEndImpl`'s
+entry give-back `roll_entry_extra`, and `DepthAcrossTurn`). Along a projected lock the round never advances, so pass
+0's depth-0 rollouts become a depth-1 SEARCH at every free turn, and that search's own pass-0 rollouts enter the next
+free turn at depth 1 again. Only the game's end or `TurnSeqCapped` bounds the nesting, and each level multiplies by
+its candidates and the end-step FoV fan. The budget IS charged, but nothing polls it (nested solves run
+`enforce_budget=false`; `Overrun()` is armed only for passes >= 1). Evidence: a temporary diagnostic on ho1o gi=9
+(seed 8009) put the escaping host at the executor's real crossing node, pass 0, no overrun limit; rollout nest 6 -> 15
+at T4 (seq 10 -> 19, every entry a free turn at depth 0); 709k units against a 9k limit (78x) and climbing.
+`MTG_FREE_TURNS=0` finished the same game in 0.7 s.
+
+**The fix: the free-turn standing pass (`MTG_FREE_TURN_STAND`, DEFAULT ON, a re-price).** Under a FINITE budget, on a
+deck with free turns, pass 0 of `SolveWithLookahead` (gate root) and of every crossing node is armed at the
+proportional ceiling (`kOverrunBudgetMult` = 25 x the budget, FullSearchLine's constant). A pass 0 that trips it (with
+no proven win to rescue) is re-run once as the STANDING pass: inside `FreeTurnTrueD0Scope` a free turn takes no
+give-back (it counts as a ply, like any other turn), and that ranking stands. The scope is folded into every rollout
+memo key, so the standing pass never reads a give-back answer. The gi=9 check (fix + fold, opp-only lever still in):
+**T4 (= step 6 b10 T4), 13.8 s, 233k units**, was > 3.3 h.
+
+**Review against the CLAUDE.md rules (step 8a, done by reading the code).**
+* **Inert at budget 0: YES, by construction.** `FreeTurnStandArms` requires `budget != nullptr && !Unlimited()`. The
+  scope is set only by a re-run, and a re-run happens only after an armed pass 0 trips. With the scope unset,
+  `GivesRoundBack(s)` is exactly the old `InSameRoundTurn()` (`in_extra_turn || in_free_turn`), and the memo-key fold is
+  skipped. So b0 play is byte-identical, and the b0 hours below are untouched by it.
+* **Only re-prices work under a finite budget: YES.** A pass 0 that stays under its ceiling is unchanged unit for unit
+  (`Overrun()` never fires below the limit, and `StandTripped()` is false). The ceiling grows with the budget, so a
+  larger budget completes the round-complete pass 0 that a smaller one cut. Measured: on all 224 games of the A/B below
+  the arm `MTG_FREE_TURN_STAND=0` is **unit-for-unit identical** to the default (no game's pass 0 ever reached 25x). The
+  only things the rule moved are the degenerate shapes (ho1o gi=9; the new unit case, where `=0` did not finish in
+  116 s and was killed, against 1 s with it on).
+* **The fallback re-run only ranks; it never removes an option: YES.** The standing pass walks the SAME candidate list
+  (SWL: the full `candidates` vector; crossings: the same `BoundaryFan`). Only the rollout's depth accounting differs.
+  Nothing it computes filters a candidate out of a later pass: `best_plan` / `committed_*` are overwritten by any
+  completed deeper pass, and passes >= 1 run outside the scope (`ft_stand == 2`, `stand == 2`) with the normal
+  give-back, over all candidates. In practice a later pass rarely runs after a trip, because the 25x first try has
+  spent the budget. That is the price of the ceiling, and it shrinks as the budget grows. NO-GREEDY: the standing pass
+  is still a search over every candidate, with greedy only beyond the horizon (remaining depth <= 0), as before. It is
+  not a pick from a provider's top candidate.
+* **No unbudgeted-only change: YES.** It exists only under a finite budget, and that is the point: at b0 the same
+  nesting IS the USER-accepted depth-in-rounds rule (free turn = no ply, 2026-11-21) and is exhaustive by design (see
+  the b0 note below).
+* Residual (not a defect today, recorded for 8b): the condemnation escalation's honest re-score runs outside the pass
+  loop, unarmed. It runs only when `CondemnsPassedMainPhase()`, which the EE provider does not set.
+
+**The Force of Vigor own-target fold (`EnchantedEveningProvider::FovOwnTargetInert`, a SOUND fold, no flag).** Every
+option holding a folded own permanent is dominated by the same option without it, which the "up to two" menu also
+lists. The fold applies to both windows (`DestroyUpToArtEnchSearchPins`). `EotFovMayOffer` skips folded own permanents,
+so they do not make the crossing pending. It is not applied in human play. The premise holds for this list: nothing in
+it reads our graveyard, our permanents dying or leaving, our land count, or our permanent count. **Review per class
+(mtg-rules skill + `cards.json`, step 8a):**
+* FOLDED, a mana land (`produces`: Forest, Plains, Temple Garden, Sunpetal Grove). It only adds mana. The one reader of
+  "an untapped land you control" is Calming Verse's clause 2 ("Then if you control an untapped land, destroy all
+  enchantments you control"). Its KEEP variant taps every mana land into the float first, so a destroyed mana land
+  never reaches a Verse result that the kept land cannot. Under EE + Opalescence our lands are 0/0 and gone anyway.
+  Proven.
+* FOLDED, a fetchland (Windswept Heath, Wooded Foothills), only while no Calming Verse is in our hand or library. With
+  no Verse, nothing reads it as an untapped land. Its activation is optional, so keeping it is never forced. The deck
+  has no recursion, so a Verse in the graveyard cannot return. With a Verse live it is KEPT. Proven.
+* FOLDED, a mana Aura (Wild Growth, Utopia Sprawl), **now only while it enchants a land WE control** (tightened in this
+  review). Both enchant ANY land ("its controller adds"), so our Aura on an opponent's land feeds THEIR mana, a
+  downside that destroying it removes. The AI's host narrowing keeps them on our lands today, but `DecisionUnpruned`
+  can lift that. On our own land it only adds mana. Proven.
+* FOLDED, Exploration ("You may play an additional land", a "may"). It has no downside. Under Opalescence it is a 1/1
+  attacker. Proven.
+* **WITHDRAWN from the fold in this review: Enchantress's Presence.** Its draw is MANDATORY ("Whenever you cast an
+  enchantment spell, draw a card"). On a short library every enchantment spell we cast draws toward decking (CR 704.5b;
+  the engine models it, `player_lost_on_draw`). Destroying the Presence first is then the one line that lets the lock
+  piece be cast safely. That is rare, but it is not dominated, so Presence stays a target. (The m8 arm shows the
+  OTHER side of this: ho1 gi=16 and gi=73 cast a mana-paid FoV on our own Presence at round 3 and win on the same turn
+  as step 7. Step 7's gi=73 hit our Wild Growth instead, which is now folded. This is a tie-indifferent own-target
+  cast, the curse step 8b looks at.)
+* KEPT, as the WIP had them: Sterling Grove (its shroud blocks the Wave self-exile loop, ruling 17; the second-Grove
+  prune counts it), Parallax Wave and Oblivion Ring (leave triggers return the exiled cards), Enchanted Evening (its
+  static makes our lands enchantments, for Verse clause 2 and Opalescence), Opalescence (its static kills our lands
+  under EE), and every card the list does not name.
+* Test updated: `EE lock step 8a: Force of Vigor own-target fold` now asserts that Presence is KEPT and that our Wild
+  Growth on an opponent land is KEPT.
+
+**Units: 4245/4245** (3,679,528 assertions). The 5 `EE lock step 8a*` cases RAN (`-tc`: 5 passed, 604 assertions). The
+7 `EE lock step 7*` cases RAN, including the edited pending case (own Exploration NOT pending, own Grove pending). The
+two bound constants of the endless-lock cases (crossing `>= 25x` and `< 40x` the limit; root `< 60x`) passed as
+written. No tuning was needed.
+
+**Smoke (Release, `MTG_PGO=0`, the step-8a tree): 247 passed / 0 failed / 0 new; play-changed=0, searched AND d0;
+configs changed 0 / 247. NO deck moves.** That includes the three free-turn decks in the suite (Worldfire, Cyclone,
+Shadowborn): no smoke game's pass 0 reached the 25x ceiling, and the fold is EE-provider-only (EE is not a suite deck
+yet). GT not accepted (nothing to accept).
+
+**A/B: ONE pooled batch `l8/m8`** (san1 7000 x 24, ho1 8000 x 100, hb1 10000 x 100; d3 b10, user prune ON, Grove
+prelock OFF, fairness ON; binary `mtg-f8a2`; 224 games, batch wall 4.5 min), paired per game against step 7's full
+menu `l7/m7b` and step 6's `l6/m6b`. Plus a decomposition arm `l8/m8s0` (`MTG_FREE_TURN_STAND=0`, the same batch):
+**identical to m8 per game AND per unit**, so every move below is the fold's.
+
+| family | n | won 8a / 7 / 6 | avg 8a | avg 7 | avg 6 | sum(8a-7) | units 8a vs 7 | vs 6 | game-s 8a / 7 / 6 |
+|---|---|---|---|---|---|---|---|---|---|
+| san1 | 24 | 24 / 24 / 24 | 5.5833 | 5.6250 | 5.7083 | -1 | -12.6% | -4.9% | 532 / 687 / 546 |
+| ho1 | 100 | 95 / 95 / 95 | 5.8900 | 5.8900 | 5.8600 | 0 | -12.4% | +2.9% | 2501 / 2971 / 2076 |
+| hb1 | 100 | 98 / 98 / 97 | 5.7600 | 5.7600 | 5.8500 | 0 | -18.7% | +0.1% | 1818 / 2637 / 2166 |
+
+(avg counts a non-win as 9; the losses are the same games in all three steps: ho1 23 / 30 / 60 / 72 / 89, hb1 69 / 95.)
+* vs step 7 (the full menu): 5 faster (san1 gi=1 7->6; ho1 gi=9 5->4, gi=44 6->5; hb1 gi=13 7->6, gi=32 8->7) and
+  4 slower (ho1 gi=70 7->8, gi=76 6->7; hb1 gi=16 6->7, gi=79 6->7). Net -1 turn over 224 games. None of the 9 moved
+  games casts a FoV in either arm, so the moves are the narrower FoV menu changing how the b10 budget is spent
+  (budget churn), not a different FoV line.
+* hb1 gi=90 at b10: still T6 (step 6: T5), the same as step 7.
+* Slowest game per family: 168 s (ho1 gi=62), 158 s (san1 gi=14), 143 s (hb1 gi=25), against step 7's 183 / 183 / 273 s.
+  No hung game. The heartbeat never showed a starved pool (the batch was done before the first 10-min heartbeat).
+
+**d3 b0 repros (ONE pooled batch `l8/b0p`, binary `mtg-f8a2`, 7 games, per-game wall cap 2 h via
+`MTG_MAX_GAME_WALL_SEC=7200`).** The lane was full (the other agent held all 4 slots), so the repros ran as the one
+big process under the box flock instead of seven 1-slot lane jobs. The bar for each slower game is the faster arm's
+b10.
+| game | 8a b10 | bar | 8a d3 b0 | wall | units | verdict |
+|---|---|---|---|---|---|---|
+| ho1 gi=76 | T7 | step 7 b10 T6 | **T6** | 222 s | 4.40M | RECOVERS |
+| hb1 gi=79 | T7 | step 7 b10 T6 | **T6** | 178 s | 2.94M | RECOVERS |
+| ho1 gi=70 | T8 | step 7 b10 T7 | unfinished (still deciding T1) | > 2 h | 84.8M | **b0-UNFINISHED** |
+| hb1 gi=16 | T7 | step 7 b10 T6 | unfinished (reached T3) | > 2 h | 37.4M | **b0-UNFINISHED** |
+| hb1 gi=90 | T6 | step 6 b10 T5 / b0 T5 | **T6** | 10 s | 0.21M | does NOT recover (same as step 7) |
+| ho1 gi=84 | T6 | step 6 b10 T6 / b0 T6 | **T6** | 547 s | 6.15M | RECOVERS (the step-7 pending repro, on the 8a tree) |
+| ho1 gi=3 | T8 | step 6 b10 T7 | unfinished (still deciding T1) | > 2 h | 157.3M | **b0-UNFINISHED** |
+* hb1 gi=90 mechanism, unchanged by 8a. T1-T4 are identical to step 6 (Wild Growth, Grove, Wave, Sprawl + EE). At T5
+  step 6 casts Opalescence (via the Grove) and wins T5. Step 8a hard-casts Force of Vigor in main 1 and casts
+  Opalescence at T6. The FoV targets are opponent lands, which the fold does not touch. This is at b0 (exhaustive),
+  so it is not budget noise: the projection rates the FoV line at least as fast as the Opalescence kill. Root-cause it
+  in step 8b.
+* Step-7 pending repros, closed:
+  * ho1 gi=3 on `mtg-b7f`: **b0-unfinished**, killed by its 2-h cap at 01:29:32. The pre-fix run was also unfinished
+    (4 h 57 m).
+  * ho1 gi=84 on `mtg-b7f`: never admitted (the lane stayed full). Its lane waiter was killed (own experiment) and the
+    game re-run on the 8a tree in `l8/b0p`: T6, recovers.
+  * ho1 gi=84 on step 6 (`mtg-b6`): T6 (00:18, in step 7).
+* **The b0 tractability point (a possible USER question; the rule is NOT changed).** A locked round is exhaustive at
+  b0, because a free turn costs no ply. Own-experiment probe `l8/b0nf`: the three unfinished games at d3 b0 with
+  `MTG_FREE_TURNS=0`, 30-min cap.
+  * ho1 gi=70 **finishes in 0.5 s** (18k units), against > 2 h / 84.8M with free turns. Its b0 cost IS the free-turn
+    lock chain. (The T8 is not comparable: with free turns off, locked opponent turns count as rounds.)
+  * ho1 gi=3 and hb1 gi=16 are **still unfinished at 30 min** (19.3M / 16.0M units, both still on T1 or T2). Their b0
+    cost is something else on this deck at d3 b0, not the free-turn rule. Root-cause it in step 8b, beside the +27%
+    units from step 4.
+  * So the free-turn rule explains one of the three unfinished b0 games. The USER-accepted 2026-11-21 default (free
+    turn = no ply) is unchanged. Counting free turns as plies at b0 would be the USER's call, with these numbers.
 
 ## Done items (formerly provisional Q1 / Q2 -- settled by standing CLAUDE.md rules, not USER questions)
 
