@@ -102,6 +102,7 @@ declare -A DECK_FILE=(
   [sea]="decks/Sea Creatures/Sea Creatures.cod"
   [mazesend]="decks/Maze's End/Maze's End.cod"
   [worldfire]=decks/Worldfire/Worldfire.cod
+  [elves]=decks/Elves/Elves.cod
   [stuffy]="decks/Stuffy Doll/Stuffy Doll.cod"
 )
 declare -A DECK_PROF=(
@@ -167,6 +168,7 @@ declare -A DECK_PROF=(
   [sea]="decks/Sea Creatures/Sea Creatures.profile.json"
   [mazesend]="decks/Maze's End/Maze's End.profile.json"
   [worldfire]=decks/Worldfire/Worldfire.profile.json
+  [elves]=decks/Elves/Elves.profile.json
   [stuffy]="decks/Stuffy Doll/Stuffy Doll.profile.json"
 )
 
@@ -221,6 +223,14 @@ SMOKE_CASES=(
   "worldfire    3 1001   10 10"
   "worldfire    5 1001   40 20"
   "worldfire2hg 5 1001   20 20"
+  # elves (Elves, mono-G): ADDED 2026-11-26 by the analysis (docs/design/analysis-Elves.md), all three tiers at
+  # once, pre-keep-table ENTRY set, P5 shape (d5 b20 play rows, one small d3 b10 sanity row). ElvesProvider (derives
+  # SelesnyaLifegainProvider), no value_play block -> play rows are d5 b20. No keep table / value leaf yet, so GT WILL
+  # move when they land. elves2hg: small searched 2HG canary (Galadhrim Brigade squad / Wave lethal vs 30 team life).
+  "elves        0 1001 1000 0"
+  "elves        3 1001   10 10"
+  "elves        5 1001   40 20"
+  "elves2hg     5 1001   20 20"
   # Mill: provisional entry rows for the same-run suite cost gate; resize after measurement.
   "mill 0 1001 100 0"
   "mill 3 1001   5 10"
@@ -858,6 +868,18 @@ REGRESSION_CASES=(
   "worldfire    5 2002   60 20"
   "worldfire    5 3003   60 20"
   "worldfire2hg 5 2002   30 20"
+  # elves: see the SMOKE block (2026-11-26 entry set).
+  "elves        0 2002 1000 0"
+  "elves        3 2002   15 10"
+  "elves        5 2002   60 20"
+  "elves        5 3003   60 20"
+  "elves2hg     5 2002   30 20"
+  # Elves unbudgeted backstop (2026-11-26): budget-0 play is CHEAP on this deck -- screened 28 blocks (30001..30541
+  # step 20, 3 games each, d3+d5, abandon_units 2000000, MTG_SLOW_GAME_MS=5000, 32 workers): every game finished,
+  # 0 SLOW-GAME, slowest 3-game job 4.9 s. 20-game confirmation: 30081 d3 4.9 s / d5 2.8 s here; 30381 (d3 6.2 s /
+  # d5 4.5 s) in OVERNIGHT. 0 slow games in either.
+  "elves        3 30081   20 0"
+  "elves        5 30081   20 0"
   # Worldfire unlimited backstop (2026-11-21): budget-0 play is DEGENERATE on this deck -- screened 28 blocks
   # (30001..30541 step 20, 3 games each, d3+d5, abandon_units 2000000, MTG_SLOW_GAME_MS=5000, 32 workers): most
   # games hit the 2M-unit cap (50-360 s each). Only 30401 and 30521 have a first game under 5 s at BOTH depths, so
@@ -1457,6 +1479,20 @@ OVERNIGHT_CASES=(
   "worldfire    5  5005  300 20"
   "worldfire    5  6006  300 20"
   "worldfire    5  7007  300 20"
+  # elves: overnight ENTRY set (2026-11-26; Hinata's pre-keep-table shape, P5: one d3 sanity row). No elves2hg
+  # overnight rows (the smoke/regression canary covers the 2HG path).
+  "elves        0  4004 2000 0"
+  "elves        0  6006 2000 0"
+  "elves        0  8008 2000 0"
+  "elves        0 10010 2000 0"
+  "elves        3  4004   25 10"
+  "elves        5  4004  300 20"
+  "elves        5  5005  300 20"
+  "elves        5  6006  300 20"
+  "elves        5  7007  300 20"
+  # Elves unlimited backstop: see the REGRESSION block (screen 2026-11-26).
+  "elves        3 30381   20 0"
+  "elves        5 30381   20 0"
   # Worldfire unlimited backstop: see the REGRESSION block (screen 2026-11-21); 30521 gi0 under 5 s at both depths.
   "worldfire    3 30521    1 0"
   "worldfire    5 30521    1 0"
