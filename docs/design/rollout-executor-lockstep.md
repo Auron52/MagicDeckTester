@@ -790,3 +790,46 @@ arm: s160001 d5 x1000, held-out s190001 d5 x1000 + d3 x500): 4 of 2,500 games fa
 `[fd-diverge]`, and `=1` has none. Whole smoke tier 140/140 byte-identical (every deck), alchemist regression 5/5.
 Details in the AccomplishedAlchemist ledger, "Combo Off "win", then the attack lost: s160426 gi425".
 
+## #20 -- a breakpoint-node resume re-zeroed the cast-trigger ordinal (found + fixed 2026-11-26)
+
+Same class as #17: a resume (`bp_resume`, the breakpoint-node children and the prefix-cache wave variants) not
+carrying state the skipped prefix had consumed. `ApplyPlanDirect`'s preamble runs
+`TurnSolver::WritePostApplyStatePins`, which writes `scripted_mihail_pay_choice = plan.mihail_pay_choice` and
+**resets `scripted_mihail_trigger_ordinal` to 0**. That ordinal is the cursor the main-phase casts' optional cast
+triggers consume (`FireOnCastTriggers`: Emperor Mihail II's `{1}`, Leaf-Crowned Visionary's `{G}` pay-to-draw; one
+pin bit per trigger, in resolution order). A full apply resets it and then fires the prefix casts. A resume starts
+from the snapshot, AFTER those casts, so the reset handed the continuation's casts the bits of triggers that had
+already resolved. A node child is the captured base plan with only its bp fields changed, so every other pin the
+function writes is rewritten idempotently. The ordinal is the only thing it broke.
+
+Elves seed 7036 gi 5, d5 b20 (`--seed 7036 --game-index 5 --depth 5 --budget-ms 20`, profile attached;
+`[fd-diverge] realized_win=6 predicted_win=5 proven_at_turn=3`, and the same with every cache off). T4 base plan
+`[Genesis Wave, Llanowar Elves]`, Visionary pin bits `[1]`: Llanowar's trigger pays and draws Taunting Elf, which arms
+the site-10 put-in-hand breakpoint. Continuation k0 casts Taunting Elf. From scratch (the executor, and the `[fd-pred]`
+re-apply) its trigger is ordinal 1, past the pin, so it declines, and the T4 hand ends `[Forest, Genesis Wave]`. The
+node child resumed at ordinal 0, read bit 0 (paid) again and drew Wirewood Lodge:
+`[fsw-skip] T4 ... Genesis Wave,Llanowar Elves, node-child bp=0@0 cont=[k0:Taunting Elf,] ... hand=[Forest,Genesis
+Wave,Wirewood Lodge,]` (`MTG_FSW_TRACE=1 MTG_FSW_TURN=4 MTG_FSW_BOARD=1`). That is one card ahead, with the library
+shifted for T5's Genesis Wave X=3: a T5 kill the game cannot reach. (The phantom win came from a this-turn kill in
+the T5 plan loop, which returns before any `[fsw]` print, which is why no traced T5 node showed it.)
+
+Fix: `ApplyPlanDirect` saves the ordinal before `WritePostApplyStatePins` and restores it when `bp_resume != nullptr`.
+No lever, because it is a soundness fix: the resumed child now reaches exactly the board the same child reaches from
+scratch. Only decks with a `cast_subtype_pay_*` trigger can see it (Elves, Merfolk Turns). Every other deck's ordinal is 0
+at a resume, so the restore is a no-op there. Mechanism pin: unit `Leaf-Crowned Visionary: a breakpoint child resumed
+from the node snapshot draws what a full apply draws` (`test/unit/test_elves.cpp`; `TurnSolver::BpResumeLineHoldForTest`
+gains a `child_choice` so it can resume a non-EMPTY continuation). For k in {0..3, EMPTY} it checks resumed ==
+from-scratch on hand, library size, tapped lands and the Taunting Elf. Under human play no pay pin is emitted, so the
+case checks only that.
+
+Measured (Elves, 200 games, seeds `7001 + off`, `game_index = off`, d5 b20, profile attached, `MTG_FD_ORACLE=1
+MTG_FLAG_NONCONV=1`, one pooled batch per binary, pre-fix vs fixed): `[fd-diverge]` 1 -> **0** (the s7036 game),
+`[nonconv]` 0 -> 0; play changed in 2 games (fd@35, fd@45), **both at the same win turn** (6 -> 6, 4 -> 4), so the
+sum of win turns is unchanged (868 -> 868); units x1.018. Whole smoke tier 243/243 byte-identical, `merfolkturns*` included (no smoke game's play depended on the re-zeroed ordinal). Elves is not yet a suite case, so the sweep above is its only measurement. The s7036 game's LINE predictions are honest now (T1-T4 all
+predict T6, and the phantom T5 is gone); it realises T6 as before, so the search simply stops claiming a kill it cannot reach.
+
+Not fixed here (a separate, play-moving change): `ContPins` (`TurnSolver.h`, `ContPinsOf` in `src/ai/ContPinScope.h`)
+carries no `mihail_pay_choice`. So the Visionary pay variants `EnumeratePlans` emits for CONTINUATION plans are inert:
+a searched continuation's casts run under the OUTER plan's pin at the continued ordinal, which is always past its bits,
+so "pay `{G}` again for the drawn Elf" is unfindable in a searched continuation. The executor's unsearched re-solve
+(`adopt_resolve_post_apply`) does install the re-solve plan's pin at ordinal 0.
