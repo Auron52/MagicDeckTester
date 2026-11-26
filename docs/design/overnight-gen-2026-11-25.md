@@ -70,3 +70,20 @@ still cut down the numbers somewhat."*
   ability to produce treasures"*); Basilisk Gate + The Black Gate merge (*"lands that do nothing in this deck except
   come in untapped and produce colourless"*). Committed on wip/maze-gen-claude before the queued run started.
 - **Revised again ~22:00 UTC by the USER: K=20** (*"it is possible we should consider your extra grouping as well to make it 20"*): Heap Gate + Planar Nexus + Talon Gates of Madara merge as well. 471,964 size-7 hands, floor ~3.8 h. Committed before the queued run started.
+
+## Status 2026-11-26 02:00 UTC -- chain CLOSED (USER stop); next steps
+
+- **Worldfire value leaf DONE** (`valueleaf.sh finish`, 21:26 -> 01:52 UTC, rc 0). Phase E adopted **nlesc** (escalation
+  ladder + leafless probe, leaf none): -0.054 turns (t=-14.8, 8/8 seeds better, 8000 games) at 0.92x units. E.7 play
+  setting **d6b20** (over the d5b20 default; delta -0.00025, 1.00x). E.6: no escalation-skip allowance (headroom 1.8%).
+  Trades not taken (USER's call, recommend none): staged leaf -0.062 at 1.007x; emul_d6b40 -0.044 at 2.31x.
+  Sidecar committed on **wip/worldfire-mullperf e11578299** (pushed). Queue: worldfire-mullperf `logs/vlq_worldfire/`.
+- **OWED for Worldfire:** rebase onto the shared branch, accept Worldfire smoke + regression GT with the sidecar present,
+  `test/check_gt_logs.py`, land via `push_queue.py` together with valueleaf.sh fix 3ddd5026d. (Overnight rows sized at
+  the keep-table adoption, if not already.)
+- **Maze's End mullgen STOPPED BY THE USER** 01:57 UTC during equivalence discovery (started 01:53, HEAD c0acd9741 = the
+  K=20 ruling). No journal was written yet, so nothing to resume; restart with
+  `cd .claude/worktrees/maze-gen && MTG_RSS_CAP_GB=20 flock build/heavy.lock bash scripts/mullgen.sh run "decks/Maze's End"`
+  (USER plans it for an overnight), confirm discovery reports K=20, then `valueleaf.sh run "decks/Maze's End"`.
+  Needs a 2-hourly session-only status cron. The K=33 artifacts stay in `logs/maze_journal_stop-20261125T212636Z/`.
+- Status cron 241e2fa5 deleted.
