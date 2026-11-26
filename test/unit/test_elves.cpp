@@ -15,6 +15,7 @@
 #include <doctest/doctest.h>
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
+#include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/EffectHandler.h"
@@ -967,4 +968,50 @@ TEST_CASE("Elves mana: a Cavern-class float unit pays a noncreature cost only as
     CHECK(s.floating_mana.green == 0);
     CHECK(s.floating_mana.wild == 1);
     CHECK(CcoFloatWild(s) == 1);
+}
+
+// The SIDE PATHS that spend the float without the shared payer: PayCostFromFloat (an optional trigger's cost, an
+// activation's feed) and the manual tap of a hybrid filter (its {U/R} feed is an activation cost). Each must see
+// the prepay's Cavern-class unit as {C} only: never a coloured pip, always a generic one, and the mark survives a
+// refusal (CR 106.6: "Spend this mana only to cast a creature spell").
+TEST_CASE("Elves mana: a Cavern-class float unit is {C} on every float-only path (trigger cost, filter feed)")
+{
+    SUBCASE("PayCostFromFloat / PayOptionalTriggerCost: {G} refused, {1} paid")
+    {
+        GameState s = EBase();
+        s.floating_mana.wild = 1;
+        SetCcoFloatWild(s, 1);
+        ManaCost g; g.green = 1;
+        GameState a = s;
+        CHECK_FALSE(PayCostFromFloat(a, g));
+        CHECK(a.floating_mana.wild == 1);
+        CHECK(a.floating_mana.colorless == 0);
+        CHECK(CcoFloatWild(a) == 1);                 // the mark survives the refusal
+        GameState b = s;
+        CHECK_FALSE(PayOptionalTriggerCost(b, g));   // Leaf-Crowned Visionary-class "you may pay {G}"
+        CHECK(CcoFloatWild(b) == 1);
+        ManaCost one; one.generic = 1;
+        GameState c = s;
+        CHECK(PayCostFromFloat(c, one));
+        CHECK(c.floating_mana.Total() == 0);
+        CHECK(CcoFloatWild(c) == 0);
+        // An unmarked any-colour unit still pays the {G} (the scope is inert without the mark).
+        GameState d = EBase();
+        d.floating_mana.wild = 1;
+        CHECK(PayCostFromFloat(d, g));
+    }
+    SUBCASE("manual tap of a hybrid filter: the Cavern unit cannot feed {U/R} (the feed reads produced colours only)")
+    {
+        GameState s = EBase();
+        EPut(s, "Cascade Bluffs", 40);
+        s.floating_mana.wild = 1;
+        SetCcoFloatWild(s, 1);
+        TurnSolver::PreTap t;
+        REQUIRE(ParseHumanPreTapToken("tap=Cascade Bluffs#40:UU", t));
+        GameState a = s;
+        CHECK_FALSE(ApplyHumanPreTap(a, t).empty());   // refused: the only float is a Cavern unit
+        CHECK(a.floating_mana.wild == 1);
+        CHECK(CcoFloatWild(a) == 1);
+        CHECK_FALSE(EN(a, 40)->tapped);
+    }
 }
