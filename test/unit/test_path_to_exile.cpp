@@ -150,8 +150,10 @@ std::vector<const TurnSolver::Plan*> SolePathPlans(const std::vector<TurnSolver:
     std::vector<const TurnSolver::Plan*> out;
     for (const TurnSolver::Plan& p : plans)
     {
+        // BASE plans only (bp_choice -1): a self-target Path puts a basic onto our battlefield, so the cast is
+        // breakpoint-marked (site 10's battlefield-put half) and its continuation variants ride beside it.
         if (p.actions.size() == 1 && IsPathCast(p.actions[0]) && p.actions[0].enchant_target == target
-            && p.land_to_play.empty())
+            && p.land_to_play.empty() && p.bp_choice == -1)
         { out.push_back(&p); }
     }
     return out;

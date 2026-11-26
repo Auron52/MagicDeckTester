@@ -517,12 +517,17 @@ TEST_CASE("Genesis Wave: the put opens site 10 -- a continuation spends the hast
     { return ECountCasts(q) == 1 && q.actions.size() == 1 && IsCast(q.actions[0], "Genesis Wave")
           && q.actions[0].chosen_x == 2; });
     REQUIRE(wave != nullptr);
-    // No base plan casts both: the Mystic is payable only off the mana the Wave puts.
+    // No base plan casts the X=2 Wave AND the Mystic: the Mystic is payable only off the mana that Wave puts. (A
+    // smaller X leaves {G} for it, and the unpruned / human menus offer X=1, so the check names X=2.)
     CHECK(EFind(plans, [](const TurnSolver::Plan& q)
-    { return std::any_of(q.actions.begin(), q.actions.end(), [](const Action& a) { return IsCast(a, "Genesis Wave"); })
+    { return std::any_of(q.actions.begin(), q.actions.end(), [](const Action& a)
+                         { return IsCast(a, "Genesis Wave") && a.chosen_x == 2; })
           && std::any_of(q.actions.begin(), q.actions.end(), [](const Action& a) { return IsCast(a, "Elvish Mystic"); }); })
           == nullptr);
     CHECK((TurnSolver::PlanOpensBreakpointForTest(initial, *wave) & (1 << 10)) != 0);
+    // Human play arms no deferred re-solve (both worlds stand down; the human gets the segment re-prompt instead),
+    // so the continuation half below is the searched engine's only. HumanPlayActive() is process-static.
+    if (HumanPlayActive()) { return; }
 
     // The board right after the put (no continuation).
     TurnSolver::Plan prefix = *wave;
