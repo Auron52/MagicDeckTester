@@ -254,5 +254,7 @@ TEST_CASE("Elves scaling rule: not live with no sink in hand (the lazy layout is
     PHand(s, "Elvish Clancaller", 5);
     CHECK_FALSE(Prov().PlanListFilterLive(s));
     PHand(s, "Joraga Warcaller", 6);
-    CHECK(Prov().PlanListFilterLive(s) == RuleLive());
+    // Human play is gated at TurnSolver's call sites (ApplyProviderPlanListFilter), not in the provider, so the
+    // provider-level liveness ignores HumanPlayActive(); only the unpruned gates lift it here.
+    CHECK(Prov().PlanListFilterLive(s) == (!DecisionUnpruned(UnprunedGate::Replicate) && !DecisionUnpruned(UnprunedGate::XSpell)));
 }
