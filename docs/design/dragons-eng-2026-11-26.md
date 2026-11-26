@@ -39,9 +39,17 @@ inert bit). A sound collapse (the dropped plans are ones the engine can never ex
 
 ## 3. The 10 newly visible continuation rebuy drops
 
-(to be filled from the gate)
+Same mechanism as 2, inside a breakpoint continuation (continuations enumerate through EnumeratePlansWithLand, so the
+debit covers them with no further change). s30137584 T6 `{land=Mountain + Lathliss x2 (+ equip Greaves)}`: two Urza's
+Incubators make each Lathliss {R}{R}; Gruul Turf's {R} + three Mountains are the only red, so both Lathliss take all
+four, the Turf's {G} floats, and the legend rule's graveyard copy is offered back by a continuation rebuy whose {2} only
+the float {G} and the Haven itself could pay. s30128278 T5 the same with one Lathliss beside the one in play. Single-game
+oracle check (MTG_MANA_ORACLE=2, both levers per job): levers off reproduces all 12 APPLY-DROP lines of the three repro
+games (s30096713 T3/T4, s30128278 T5, s30137584 T6); levers on, none. Units 2656 -> 2299, 4061 -> 3924, 928 -> 859.
 
 ## Status
 
-- Code for 1 and 2 written, unit tests in `test/unit/test_dragons_eng.cpp`; build queued.
+- d88f2e1d8: code for 1 and 2 + `test/unit/test_dragons_eng.cpp` (2 cases, 36 assertions, pass). Full unit suite
+  4,210 / 4,213 under both the default and the levers-off env; the 3 failures (Windswept Heath / Boars card checks,
+  bottom-pref bucket) fail identically on the dragons-ogap base binary, so they are environmental, not this change.
 - Next: unit tests on/off, Dragons gate base (both levers off) vs new, held-out play A/B (`logs/dragons-eng/mk_ab.py`).
