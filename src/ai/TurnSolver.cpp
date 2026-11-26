@@ -13058,6 +13058,20 @@ void NoteGraveyardDamageDrop(const GameState& state, const Action& a)
     }
     NoteActDrop(why, a.card_name.str().c_str(), state.turn_number, 1);
 }
+// Haven of the Spirit Dragon / Cid / Haunted Fengraf (GraveyardReturnAbility): the twin of NoteGraveyardDamageDrop for
+// a graveyard return that did not activate (TurnSolver.h). Reason: 0 source gone, 1 source tapped, 3 unpaid / no target.
+void NoteGraveyardReturnDrop(const GameState& state, const Action& a)
+{
+    if (g_act_drop_sink == nullptr && !ActDropAuditOn()) { return; }
+    int why = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number != a.sac_source_id || p.controller_index != state.active_player_index) { continue; }
+        why = p.tapped ? 1 : 3;
+        break;
+    }
+    NoteActDrop(why, a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue());
+}
 // MTG_FIREBLAST_COPY_PINS (heurarm FIREBLAST_COPY_PINS; DEFAULT ON, =0 -> off): see the slot note in HeuristicArm.h.
 static bool FireblastCopyPinsOn()
 {
@@ -83242,13 +83256,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // by an earlier cast in this very plan, or the target may already be gone).
             // MTG_RESTRICTED_MANA_RANK: the Haven itself never pays its own {2} (it ranks FIRST
             // now); lockstep with the executor's mirror in AIEngine.
-            dmgev::PayHoldScope _self_hold(dmgev::t_pay_hold
-                | (RestrictedManaRankOn() ? SelfTapSourceHoldBit(state, a.sac_source_id) : 0ull));
-            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
-            {
-                ApplyGraveyardReturnAbility(state, state.active_player_index, a.sac_source_id,
-                                            a.tutor_target);
-            }
+            // The held source is also named for the mana oracle's table (SelfTapSrcScope; play never reads it), and a
+            // gy-return that does not activate -- unpaid, its source already tapped or gone, no target left -- is named
+            // to the act-drop sink (NoteGraveyardReturnDrop; reporting only).
+            const std::uint64_t self_bit = RestrictedManaRankOn() ? SelfTapSourceHoldBit(state, a.sac_source_id) : 0ull;
+            dmgev::PayHoldScope _self_hold(dmgev::t_pay_hold | self_bit);
+            const SelfTapSrcScope _self_src(self_bit != 0 ? a.sac_source_id : 0);
+            if (!TapForCostDirect(state, a.cost, /*for_creature=*/false)
+                || !ApplyGraveyardReturnAbility(state, state.active_player_index, a.sac_source_id, a.tutor_target))
+            { NoteGraveyardReturnDrop(state, a); }
         }
         else if (a.kind == Action::Kind::CompanionToHand)
         {
