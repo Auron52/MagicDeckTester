@@ -5,7 +5,28 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
 
 ## CHECKPOINT (orchestrator, updated 2026-11-26, pre-compaction #2) -- read this first after a compaction
 
-* **LOCK STEP 8b DONE (2026-11-26): fd439c7af (WIP) + e51f75196 + the ledger commit** (section "Lock-cluster step
+* **USER RULINGS 18-21 BUILT + PRUNE RE-MEASURED (2026-11-26): code 2df2cebb1 + the ledger commit** (section "USER
+  rulings 18-21 + prune re-measure"). Units 4251/4251; smoke 247/0, play-changed=0 (no deck moves); GT not accepted.
+  Three-arm A/B (224 games, d3 b10, fairness ON): OFF 5.848, ON 5.799 (net -11, units -59.7%), ON + amendment
+  5.799 (net -11, units -57.8%). Every slower game recovers at d3 b0 except ho gi=84 and hb gi=24 (both arms),
+  both clairvoyance. No prune gap remains. Rulings 19-21 vs step 8b: one game moved (ho gi=31 6 -> 5, the ruling-20
+  O-Ring on a virtual Kumena's Speaker). Clause 4 and FoV-vs-evasion-Aura never fired in a real game. Open USER
+  decisions: `MTG_EE_USER_PRUNE` OFF / ON / ON + `MTG_EE_GROVE_PRELOCK` (numbers in the section); ruling 21's
+  power >= 1 default (no data); ruling 20's "board lock already stands" precondition.
+  NEXT = **step 8c**, in this order:
+  * hb1 gi=90 (d3 b0 T6 vs step 6 T5: the T5 main-1 Force of Vigor on opponent lands instead of Grove -> Opalescence);
+  * the d3 b0 intractability of ho1 gi=3 (not the free-turn rule) and ho1 gi=70 (the free-turn chain);
+  * the hb1 gi=31 Calming Verse that "does nothing" -- FIRST check whether it was clearing a VIRTUAL board (ruling 8
+    credits removal we actually cast; a Verse under EE clears virtual permanents too), which would make it a real
+    play, not a dominated cast;
+  * root-cause gi=12 / gi=13 (steps 3+5 notes);
+  * (low priority, prune-OFF arm only) ho gi=84 at d3 b0 with the prune OFF: 2.64M units in 2 h, unfinished at T1 --
+    wall outside the unit counter.
+  Then the discard buckets: build `docs/design/enchanted-evening-discard-buckets.md` (c08f9b1d8, the AI-drafted
+  design with the USER amendments) behind a default-OFF flag and A/B it, with the withdrawn dead-land fold returning
+  under it. Then step 9 (viewer `eot_cast` + ruling 14 + DECISIONS.md; also: virtual O-Ring targets in human play, the
+  upkeep Grove activation missing from the trace).
+* (superseded by the rulings 18-21 entry) **LOCK STEP 8b DONE (2026-11-26): fd439c7af (WIP) + e51f75196 + the ledger commit** (section "Lock-cluster step
   8b"). Shipped: Utopia Sprawl's colour axis held to {G, W} and the Parallax Wave Exploration fold (both proven, default
   ON, no flag). The dead-land fold was WITHDRAWN (deleted): the held land can cost a nonland at a later cleanup,
   because the deck's discard is the ranked pick. The census diagnostic was removed. Units 4248/4248; smoke 247/0,
@@ -1187,6 +1208,177 @@ fell inside it), paired per game against step 8a's `l8/m8`.
   step 8c).
 * The batch ran 6 workers on a 24-core box for 2 h: the tail was the two capped games, and nothing else of this step
   was waiting to run.
+
+## USER rulings 18-21 + prune re-measure -- 2026-11-26
+
+Code: **2df2cebb1** (everything below; rulings verbatim in the rulings list above, moved there in d51f51508). Scratch:
+`build/scratch/ee1821/` (`m21.*` the three-arm batch, `b0*.{json,sh,err,out}` + `*-traces` the d3 b0 repros, `an21.py`,
+`an_b0.py`, `fir21.py`, `dg.py`, `brief.py`). Handoff of the build agent: `logs/ee/rulings1821-handoff.md`.
+
+**What is built.**
+* Ruling 18 (the 4-mana breakpoint): no change; ruling 16's breakpoint stands as built.
+* Ruling 19: `eefair::Veto` clause 3 (a hexproof non-threat with no able Wave loop) is DELETED. A hexproof
+  non-threat never vetoes, loop or no loop. Clause 2 (trample + power >= 5) applies without the loop too.
+  `WaveLoopAble` is no longer read by the veto; Oblivion Ring's `AtCheck` reads it.
+* Ruling 21: new clause **4** (`kHexproofEvasive`, the log prints `veto=4`): a hexproof virtual creature our creatures
+  cannot block, power >= 1 (ReachPower, virtual Auras counted as in clause 2). `eefair::Unblockable` covers protection
+  from creatures (new param `aura_grants_protection_from_creatures`: Spirit Mantle), a colour-conditional unblockable
+  `aura_color_bonuses` grant, flying (own keyword or new param `aura_grants_flying`: Gryff's Boon, Arcanum Wings) with
+  no flyer / reach of ours, fear, and menace with fewer than 2 creatures of ours. A creature with no evasion is NOT
+  unblockable even when we control no creature (that would bring clause 3 back). `ThreatOnHead` (ruling 13's FoV
+  window over virtual Auras) opens for clause 4 too, so Force of Vigor can destroy the evasion Aura.
+* Ruling 20: an Oblivion Ring we cast may target the opponent's virtual board (`eefair::OringVirtualTargets`), offered
+  only when `AtCheck(s)` vetoes and the same board without that card does not, i.e. only when exiling it is what
+  makes the lock hold. Never a hexproof creature (O-Ring targets); its Aura can be offered. TurnSolver's O-Ring
+  post-pass adds the precondition `freeturn::LockHoldsOnBoard(state)` and emits one pinned `OR<n>` variant per such
+  card after the real targets; the unpinned base keeps the real pick, so a virtual target is never forced. The
+  resolver marks the card spent and records `GameState::opp_virtual_oring_link` (source, head, bit; in the 4-byte
+  hole after `noncombat_trigger_depth`, sizeof(GameState) unchanged at 1776), folded into BuildSimKey,
+  dominance::Build and the route signature; `ReturnExiledUntilLeaves` puts the card back on the virtual board when
+  that O-Ring leaves. One link at a time.
+* Amendment `MTG_EE_GROVE_PRELOCK` (default OFF; adoption is the USER's) extended: `eeprune::SecondOpalExtension`.
+  With EE not on our battlefield, an Opalescence ON our battlefield and none in hand, the enchantment tutors (Grove
+  sacrifice, Idyllic Tutor) offer a second Opalescence, right after the missing lock pieces (before the mana Aura /
+  Presence; the amendment's Sterling Grove stays last). This targets the seed-10000 gi=50 B2 gap of the
+  de901bc9e classification.
+* Units **4251/4251**; `-tc='EE fairness*,EE prune amendment*'` 10/10 (new: evasion, O-Ring virtual target, second
+  Opalescence; the lock6 clause-3 expectations changed to kNone / clause 2).
+
+**Smoke (Release, `MTG_PGO=0`, 2df2cebb1): 247 passed / 0 failed / 0 new; configs changed 0 / 247; play-changed=0,
+searched AND d0; scenarios 677/677. NO deck moves** (the new params and the link are read only by the fairness
+check). GT not accepted (nothing to accept).
+
+**Three-arm A/B: ONE pooled batch `m21`** (binary `mtg-2df` = 2df2cebb1; 672 games: san 7000 x24, ho 8000 x100, hb
+10000 x100, each x {OFF = `MTG_EE_USER_PRUNE` off, ON = prune on, AMD = prune on + `MTG_EE_GROVE_PRELOCK` with the
+extension}; d3 b10, fairness ON, no profile). Wall 11 min; the 10-min heartbeat read 9/24 (the tail: the slowest game
+was 0.12 h, ho_off gi=31); no hung game. Paired per game; avg counts a non-win as 9.
+
+| family | arm | won | avg | units | game-s | vs OFF: net / faster / slower |
+|---|---|---|---|---|---|---|
+| san 7000 (24) | OFF | 24 | 5.6250 | 10.23M | 844 | |
+| | ON | 24 | 5.5833 | 3.14M | 250 | -1 / 2 / 1 |
+| | AMD | 24 | 5.5417 | 3.85M | 326 | -2 / 2 / 0 |
+| ho 8000 (100) | OFF | 95 | 5.9100 | 29.55M | 3086 | |
+| | ON | 95 | 5.8900 | 13.77M | 1515 | -2 / 10 / 7 |
+| | AMD | 95 | 5.8600 | 14.14M | 1560 | -5 / 10 / 5 |
+| hb 10000 (100) | OFF | 98 | 5.8400 | 30.53M | 3923 | |
+| | ON | 98 | 5.7600 | 11.45M | 1432 | -8 / 12 / 5 |
+| | AMD | 98 | 5.8000 | 11.68M | 1244 | -4 / 10 / 7 |
+| **all 224** | OFF / ON / AMD | 217 / 217 / 217 | 5.848 / 5.799 / 5.799 | 70.31M / 28.36M (-59.7%) / 29.66M (-57.8%) | 7853 / 3197 / 3130 | ON -11 (24 / 13), AMD -11 (22 / 12) |
+| held-out 200 | OFF / ON / AMD | 193 / 193 / 193 | 5.875 / 5.825 / 5.830 | | | ON -10, AMD -9 |
+
+* **Both prune arms now meet "net <= 0" against OFF on every family** (the de901bc9e measurement, before the
+  fairness check and steps 7-8b, had ON +10 and AMD +4 on the held-out 200). Same games lost in every arm.
+* AMD vs ON, paired: san -1 (gi=1), ho -3 (gi=8, 76, 92 faster), hb +4 (gi=83 faster; gi=6, 12, 60, 79, 85 slower):
+  **net 0 over 224**, at +4.6% units. Every AMD-slower-than-ON game recovers at d3 b0 to ON's b10 (gi=6 / 60 / 79 in
+  the b0 table below; gi=12 b0 T6 and gi=85 b0 T4 in the lane run `b0amd2`).
+* Second-Opalescence extension, real tutor picks of an Opalescence while one is ours and EE is not (from the traces):
+  AMD 6 (hb gi=12, 25, 26, 51; ho gi=54; san gi=2), ON 0 (refused), OFF 3. The extension's target game (seed-10000
+  gi=50) and the other prior verdict games (10000 gi=44; 8000 gi=19, 91) now TIE in every arm at b10 (6 / 6 / 5 / 6),
+  so none of them is a slower game here.
+
+**Rulings 19-21 on the shipped default (ON arm vs step 8b's `l8b/m8b`, the same jobs / seeds / flags):** san1
+identical (play digest 6eb2aaf31332bca5 in both; units 3,142,816 vs 3,142,693), hb1 identical (digest
+6cf8ea0af4623774, units equal), ho1 **net -1**: one game moved, ho gi=31 6 -> 5, the ruling-20 O-Ring (below);
+units 13.77M vs 14.10M (-2.4%, that game). So the rulings change one game of 224, faster.
+
+**Firing counts, REAL games only** (`[ee-fair]` / `[ee-fov]` lines with `real=1`; mulligan bottom-trial playouts
+excluded; `fir21.py`). "Under a board lock" = the line's `board_lock=1`, i.e. the veto actually withheld credit.
+| count | OFF | ON | AMD |
+|---|---|---|---|
+| clause 1 vetoes under a board lock (turns / games) | 9 / 7 | 13 / 11 | 13 / 11 |
+| clause 2 (trample >= 5) under a board lock | 0 | 0 | 0 |
+| clause 2, any line (no board lock) | 2 turns, san gi=3 Gladecover Scout | 1, same | 1, same |
+| **clause 4 (ruling 21)** under a board lock | 0 | 0 | 0 |
+| clause 4, any line (no board lock) | 1 (ho gi=3 round 7, Slippery Bogle) | 0 | 0 |
+| **O-Ring holding a virtual card (ruling 20)**, games (rounds) | 0 | **1** (ho gi=31, 5) | **2** (ho gi=11, 31; 7) |
+| FoV end-step casts / on a virtual target | 34 / 1 | 28 / 1 | 29 / 1 (each: san gi=3 round 6, `virtual|virtual`, Gladecover Scout's Auras, clause 2) |
+| **FoV vs a virtual EVASION Aura** | 0 | 0 | 0 |
+* Ruling 20 in ho gi=31 (ON): the lock formed at round 4, then the opponent's could-cast Kumena's Speaker vetoed it
+  (round 4, raw 7); at round 5 an O-Ring exiled the virtual Speaker and the lock was credited from there on
+  (`oring=1`, spent 3 -> 4). The game is T5 in ON / AMD vs T6 in OFF and in step 8b.
+* FoV vs a virtual evasion Aura cannot fire while clause 4 never vetoes a board lock (the FoV window opens only while a
+  threat is on a head). A main-phase FoV's targets are not in the trace; the inference ("a veto=4 round followed by a
+  non-4 round with a FoV cast between") found 0. The ruling-21 power >= 1 default therefore has no measured game.
+
+**d3 b0 repros: ONE pooled batch `b0`** (binary `mtg-2df`, 25 games: every game slower than OFF in AMD (12) and in ON
+(13), each in the arm that was slower; per-game wall cap 2 h, `MTG_MAX_GAME_WALL_SEC=7200`; under the box flock; wall
+5 min, no game near the cap). The bar is OFF's b10.
+| game | OFF b10 (bar) | ON b10 / b0 | AMD b10 / b0 | verdict |
+|---|---|---|---|---|
+| san gi=1 | 5 | 6 / **5** | (5 at b10) | recovers |
+| ho gi=4 | 6 | 7 / **6** | 7 / **6** | recovers |
+| ho gi=8 | 6 | 7 / **6** | (6) | recovers |
+| ho gi=32 | 4 | 5 / **4** | 5 / **4** | recovers |
+| ho gi=40 | 6 | 7 / **6** | 7 / **6** | recovers |
+| ho gi=76 | 6 | 7 / **6** | (6) | recovers |
+| **ho gi=84** | 5 | 7 / **6** | 7 / **6** | **NOT recovered** -- clairvoyance (below); OFF b0: unfinished at 2 h |
+| ho gi=92 | 6 | 8 / **5** | 7 / **5** | recovers (beats the bar) |
+| hb gi=6 | 6 | (6) | 7 / **6** | recovers |
+| **hb gi=24** | 6 | 7 / **7** | 7 / **7** | **NOT recovered** -- clairvoyance (below); OFF b0: T6 (316 s, 9.84M units) |
+| hb gi=32 | 7 | 8 / **6** | 8 / **6** | recovers (beats the bar) |
+| hb gi=47 | 4 | 6 / **4** | 6 / **4** | recovers |
+| hb gi=60 | 6 | (6) | 7 / **5** | recovers (beats the bar) |
+| hb gi=67 | 5 | 6 / **5** | 6 / **5** | recovers |
+| hb gi=79 | 6 | (6) | 7 / **6** | recovers |
+| hb gi=83 | 6 | 7 / **6** | (6) | recovers |
+(A value in parentheses = that arm was not slower; not re-run. In san gi=1, ho gi=76 and hb gi=67 the b0 game kept a
+different card at the London-mulligan bottom: same deal, but bottoming plays out the candidates at the job's own
+settings, so b0 can bottom differently.)
+* ON: 11 of 13 slower games recover; AMD: 10 of 12. The same two do not recover in either arm.
+* OFF-arm d3 b0 of the two non-recoverers, in the small-job lane beside the batch (`b0off`, 2 slots; hb gi=32 also
+  finished there, T6 = the ON / AMD b0; a fourth game, san gi=1, was not needed and was stopped).
+* **ho gi=84 (OFF b10 T5; ON/AMD b0 T6).** First divergence of ON b10 from OFF b10: T3 main 1. OFF (lands Temple
+  Garden, Plains, Forest + a Wild Growth = exactly 4 mana, 2 white; EE in hand, Opalescence and Wave missing) casts
+  Presence and sacrifices the Grove for a SECOND Wild Growth. Ruling 16 follow-up 3 prunes that (exactly 4 with 2
+  white, a lock piece missing -> no mana option; it is also a copy of a Wild Growth ours). OFF's T4 then needs a
+  post-shuffle draw: casting the tutored Wild Growth, Presence draws Temple Garden, which is the land that makes
+  Enchanted Evening castable that turn (without it, 3 lands + 2 Wild Growth leave 4 after the Wild Growth cast). The
+  Grove's search shuffled the library, so that land is a specific future draw not in hand or on board. **Clairvoyance**
+  (USER 2026-10-13 test; the tutor-to-top is the Wild Growth, which does not by itself make EE castable). Relevant to
+  ruling 18 ("unless you are finding issues with the rule"): this is the 4-band prune refusing a line, but the line's
+  gain is a lucky Presence draw, so it is not an issue with the rule.
+  OFF at d3 b0 did NOT finish: abandoned by the 2-h wall cap at T1 with only 2.64M units, far below the usual
+  units per second (ON b0 of the same game: 1.83M units in 163 s), so the wall went somewhere the unit counter does
+  not price. Prune OFF only (not the shipped arm); not root-caused, listed for step 8c.
+* **hb gi=24 (OFF b10 T6; ON/AMD b0 T7).** First divergence: our T2 upkeep. OFF sacrifices its Sterling Grove for
+  Utopia Sprawl (shuffling the library); ON keeps it and draws Wild Growth. That decision is IN ON's menu (2 mana, 1
+  white: the mana option is offered, Sprawl as the short-of-white pick). OFF later casts two Groves at once at T3
+  (rule A refuses; the amendment does not admit it either: no Opalescence ours or in hand), but the T6 kill does not
+  need them (Enchanted Evening + Wave swing 9, then 13 with Opalescence on the credited turn). What OFF's T6 does need
+  is its post-shuffle draws: Wooded Foothills at T3 and T4 (EE castable at T4), Wave at T5, Opalescence at T6, none of
+  them tutored. ON's library (unshuffled, then shuffled by its own T3 / T4 Grove tutors) gives no land from T2 until
+  T5. **Clairvoyance.** (The ON b0 line also wastes a tutor: T3 Grove -> Opalescence to the top, then the T4 upkeep
+  Grove -> Utopia Sprawl reshuffles that Opalescence away. Both picks are in the menu; a search choice, not a gap.)
+  OFF at d3 b0 also wins T6, by ANOTHER line: T2 Grove -> Enchantress's Presence (offered under ON too: mana is
+  missing), then at T4 it casts a second Sterling Grove while the first is still out, with no {1} left to sacrifice
+  either (rule A refuses this: the "lost Presence draw" case of ruling 15 follow-up 2). That cast's Presence draw
+  is Opalescence, cast at T6; the lands it needs are post-shuffle draws too (Foothills x3, Windswept Heath). Both OFF
+  lines win on specific post-shuffle draws, so the verdict stays clairvoyance; the b0 line is one more data point
+  for the USER's pre-combo Grove exception (ruling 15 follow-ups 1-2).
+* Totals: ON 13 slower = 11 budget noise + 2 clairvoyance; AMD 12 slower = 10 budget noise + 2 clairvoyance. **No
+  prune gap remains** in this sample (de901bc9e: ON 3 gaps, AMD 1).
+
+**Disclosed gaps (unchanged by the measurement):**
+* Ruling 21 evasion not modelled: landwalk, shadow, a printed "can't be blocked", Geist of Saint Traft's attack-made
+  4/4 flying Angel token (Spirits list); Alpha Authority's granted hexproof (an old gap).
+* Ruling 20: an O-Ring cast BEFORE the lock pieces in the same turn is not offered the virtual target (the
+  precondition is checked at emission); one O-Ring link at a time; viewer / human play does not offer virtual targets
+  (step 9).
+* Trace gap (found here): an upkeep-window Sterling Grove activation writes no `REVEAL` / `ABILITY` to the game trace
+  (hb gi=24: OFF's T2 Grove vanishes and the tutored Sprawl is drawn; ON b0's T4 likewise). The game is right; the
+  trace omits the window. Step 9 (viewer) should check that a human sees it.
+* Main-phase Force of Vigor targets are not in the trace (only the end-step pitch logs them), so the "FoV vs virtual
+  Aura" count above is exact for the pitch and inferred for the hard cast.
+
+**USER decisions (data in; the current settings stand until the USER answers):**
+1. `MTG_EE_USER_PRUNE` adoption: OFF / ON (as shipped) / ON + `MTG_EE_GROVE_PRELOCK` (with the extension). 224 games:
+   OFF 5.848, ON 5.799 (net -11, units -59.7%), AMD 5.799 (net -11, units -57.8%); every slower game recovers at d3 b0
+   or is clairvoyance (2 per arm, the same two). AMD vs ON net 0 at +4.6% units. Agent recommendation: ON as shipped
+   (the amendment buys nothing net on this sample).
+2. Ruling 21's power >= 1 default: no real game reached clause 4 under a board lock, so there is no data either way.
+3. Ruling 20's "the board lock already stands" precondition (no virtual O-Ring target for an O-Ring cast before the
+   lock pieces): fired in 1 real ON game (ho gi=31, one turn faster); the excluded ordering was never measured.
 
 ## Done items (formerly provisional Q1 / Q2 -- settled by standing CLAUDE.md rules, not USER questions)
 
