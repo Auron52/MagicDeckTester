@@ -107,8 +107,13 @@ seed 54005's targeted replay confirms the corrected label. Seed 54004 found a
 possible mulligan improvement: the baseline kept five lands and won turn 6,
 while an alternate opening won turn 4 when handed to the same play policy.
 That is a lead for the later mulligan-profile stage, not a play-search defect.
-Dread Wanderer's graveyard return needs a targeted replay, since the random
-sweep did not reach its trigger state.
+Dread Wanderer's graveyard return passed a targeted Codex-play replay on a
+60-card Zombies-mechanics fixture at seed 54020 (20 each Dread Wanderer,
+Culling the Weak, Swamp). After Culling sacrificed Dread with one card in hand,
+the viewer offered its graveyard return; paying {2}{B} left one black floating
+mana and put Dread onto the battlefield tapped and sick. It remained there and
+untapped normally on the next turn. Choices through return:
+`0,0,0,0,1,6,5,4,3,1,0,0,1,1`.
 
 ### Implementation order
 

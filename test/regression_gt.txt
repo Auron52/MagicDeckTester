@@ -267,6 +267,13 @@ merfolkturns_smoke_d5_s1001=5.5300/ba0fe25beb7fb28b
 merfolkturns2hg_smoke_d3_s1001=5.6000/328239bb41524a66
 
 # --- regression ---
+zombies_regression_d3_s30281=4.4000/69681e79ecf3fd55
+zombies_regression_d5_s30281=4.4000/69681e79ecf3fd55
+zombies_regression_d0_s2002=4.8210/c8a6d3d33c80d1ba
+zombies_regression_d3_s2002=4.5000/ded0a5192a785940
+zombies_regression_d5_s2002=4.4267/de22390e7fecdc62
+zombies_regression_d5_s3003=4.3733/abe31ab8c4825814
+zombies2hg_regression_d5_s2002=4.9600/ee86a8e11afba24f
 mazesend_regression_d0_s2002=6.7190/c086fa276a467f35
 mazesend_regression_d3_s2002=5.6667/6f086962daca7877
 mazesend_regression_d5_s2002=5.4728/5a78b97bbe8d1e96
