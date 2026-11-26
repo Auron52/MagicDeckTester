@@ -3927,6 +3927,58 @@ public:
     bool CleanupDiscardShedStable() const override;
 };
 
+// ELVES (mono-green Elf ramp into stacked lords + scaling mana sinks; onboarded 2026-11-26,
+// docs/design/analysis-Elves.md). Its OWN provider (Stage 4a). Before this branch the deck rode
+// SelesnyaLifegainProvider: Genesis Wave's reveal_x_put_permanents is a term of the `selesnya`
+// signature. So it DERIVES FROM SelesnyaLifegainProvider -- what it routed to -- and inherits every
+// judgement hook byte-for-byte, INCLUDING SelesnyaLifegain's USER-settled cleanup-discard buckets
+// (Elves as primary mana, Genesis Wave as a payoff); disclosed in the ledger, kept until this deck's own
+// discard rule is settled.
+//
+// Signature (DetectDecisionProvider, `elves`): params of SEVEN different cards, each carried by no
+// other card in cards.json (checked 2026-11-26): Joraga Warcaller's lord_per_own_plus_counter,
+// Immaculate Magistrate's tap_target_counters_per_subtype "Elf", Allosaurus Shepherd's team_base_pt
+// (subtype Elf), Leaf-Crowned Visionary's cast_subtype_pay_draw_cost, Marwyn's mana_per_own_power, and
+// multikicker_cost / squad_cost ONLY on an Elf card (the bare mechanic params would capture any deck that
+// adds Everflowing Chalice, a colourless multikicker staple).
+//
+// THE USER'S SCALING-SINK RULE (2026-11-26, verbatim): "There are multiple scaling effects like Genesis
+// Wave's X and Joraga Warcaller, but generally you want to pick just one of those and scale it up fully,
+// minus perhaps a few 1-mana producing attackers. So there might be a couple different relevant options,
+// (i.e. do I tap this Llanowar Elves to scale it further or keep it as an attacker, which can either be
+// searched or heuristically pruned depending on the situation) but we shouldn't try every possibility."
+// Built as a PLAN-LIST restriction (PlanListAdmitAt) plus Genesis Wave's X menu widened to every X
+// (XCandidates) so "Wave for the rest after the plan's other casts" exists to be kept; the rule, the
+// hold-back count and the lines it can miss are at ElvesScalingAdmit in the .cpp. MTG_ELVES_SCALING_PRUNE
+// (heurarm ELVES_SCALING_PRUNE, default ON; =0 -> every count and split searched); MTG_UNPRUNED, and
+// MTG_UNPRUNE=replicate (the multikick count gate) or =xspell, lift it; human play never sees it.
+bool ElvesScalingPruneOn();
+// The rule itself, a free function so a unit test can drive it with an explicit phase.
+void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
+                       const std::vector<DecisionProvider::PlanView>& plans, std::vector<char>& admit);
+// k: the hold-back attackers -- untapped 1-mana producer creatures of ours that can attack this turn.
+int ElvesHoldBackAttackers(const GameState& s, bool is_pre_combat);
+class ElvesProvider : public SelesnyaLifegainProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Damage reaches the opponent through combat only (no "
+               "burn, no drain), but a winless-this-turn bound must price the same-turn haste of Concordant "
+               "Crossroads (every Elf cast this turn attacks), the lord stack read live (Clancaller / Visionary "
+               "/ squad-copy lords, Joraga Warcaller's per-counter lord), Allosaurus Shepherd's 5/5 base set, "
+               "Ezuri's repeatable +3/+3 at combat from leftover mana, Wirewood Lodge's untap and Genesis "
+               "Wave's X-deep put of a whole board (with Crossroads, all of it attacks)." }; }
+    const char* Name() const override { return "Elves"; }
+    // Genesis Wave: every X 1..max (the base gives max only, which leaves no Wave in a plan that also casts
+    // something). The plan-list rule below keeps, per plan, the X the rest of the plan leaves.
+    std::vector<int> XCandidates(const GameState& s, const CardDefinition& def, int max_affordable) const override;
+    // Every Wave X stays its own plan through the dedup (the rule above needs them; lossless widening).
+    bool PlanSignatureKeysWaveX(const GameState&) const override { return true; }
+    bool PlanListFilterLive(const GameState& s) const override;
+    void PlanListAdmitAt(const GameState& s, bool is_pre_combat, const std::vector<PlanView>& plans,
+                         std::vector<char>& admit) const override;
+};
+
 // AccomplishedAlchemist (mono-green lifegain -> Accomplished Alchemist mana -> untappers -> Stroke of
 // Genius at the opponent; Living Wish sideboard; onboarded 2026-10-18). Its OWN provider (Stage 4a).
 // Before this branch the deck rode SelesnyaLifegainProvider: Accomplished Alchemist's

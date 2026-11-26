@@ -1145,6 +1145,7 @@ enum Slot : int
     LINE_KEEP_SUSPEND,        // MTG_LINE_KEEP_SUSPEND  LineKeepBound counts a PAID suspend (Keldon Halberdier / Rift Bolt {R}, Profane Tutor {1}{B}) as a held payment of the line, so {suspend + one cast} binds the rung (Worldfire: Halberdier's {R} off Steam Vents, Ponder left with no {U}); LineNoncreatureMv counts its cost. DEFAULT ON; =0 -> suspends unbound, byte-identical
     LINE_KEEP_RITUAL,         // MTG_LINE_KEEP_RITUAL  the line-keep rung judges the rest of the line with the float of the RITUAL this payment is for (ritual_floating_mana, at no splice) on the board, as MTG_LINE_KEEP_ROCK puts the rock there (Worldfire {Song, Song, Personal Tutor}: the second Song is the first's float). DEFAULT ON; =0 -> the float-blind rest, byte-identical
     LINE_KEEP_RITUAL_TIGHT,   // MTG_LINE_KEEP_RITUAL_TIGHT  with MTG_LINE_KEEP_RITUAL: the crit gate counts the ritual's float as the REST's supply, and the joint test asks the board alone for this bill plus the rest net of the float (a necessary condition of every repair). Worldfire / Dragonstorm probe: rung trials 355k -> 126k, strand-nofire 20,365 -> 403, the 112 games digest-identical. DEFAULT ON; =0 -> the loose ritual rung (A/B / identity arm)
+    ELVES_SCALING_PRUNE,      // MTG_ELVES_SCALING_PRUNE   ElvesProvider (USER 2026-11-26 scaling-sink ruling): of the plans that differ only in their scaling counts (Genesis Wave X, Joraga Warcaller multikick, Galadhrim Brigade squad, Ezuri's main-phase pump count), keep ONE sink at the group's max plus hold-back counts for the 1-mana attackers; no partial splits across two sinks. A USER-directed provider prune. Default ON; =0 -> every count and every split searched
     COUNT
 };
 
@@ -2234,6 +2235,7 @@ inline const char* Name(int slot)
         "MTG_LINE_KEEP_SUSPEND",
         "MTG_LINE_KEEP_RITUAL",
         "MTG_LINE_KEEP_RITUAL_TIGHT",
+        "MTG_ELVES_SCALING_PRUNE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

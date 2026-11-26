@@ -229,7 +229,7 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         {"Gods", "Gods"},
         {"Eldrazi Displacer Flicker", "EldraziFlicker"}, {"Five Colour", "FiveColour"},
         {"Fluctuator", "Fluctuator"},         {"Fungus", "Fungus"},
-        {"Elves", "SelesnyaLifegain"},   // Elves Stage 2 (2026-11-26): the CURRENT routing; an ElvesProvider (USER scaling-sink ruling) replaces it
+        {"Elves", "Elves"},   // Stage 4a (2026-11-26): ElvesProvider (derives from SelesnyaLifegainProvider, which it rode through Genesis Wave's reveal_x_put_permanents), routed above selesnya
         {"Giants", "Giants"},                 {"Goblins", "Goblins"},
         {"Hinata", "Hinata"},                {"Kitty Equipment", "Equipment"},
         {"Knights", "Knights"},               {"Melira Pod", "MeliraPod"},

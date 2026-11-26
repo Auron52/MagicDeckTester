@@ -138,6 +138,83 @@ USER's OK, collected, not blocking).
 clean (the Clancaller "search" advisory closed by teaching the cross-check that `tap_tutor_put_cost` models a
 search -- also true for Seahunter / Maze's End). The live 5h sweep is Stage 5.
 
+## Stage 4a -- provider routing (2026-11-26)
+
+Elves rode `SelesnyaLifegainProvider` (Genesis Wave's `reveal_x_put_permanents` sets the `selesnya` signature).
+It now owns **`ElvesProvider : SelesnyaLifegainProvider`** (derived from what it routed to, so every inherited
+judgement hook is byte-for-byte the same, INCLUDING SelesnyaLifegain's USER-settled cleanup-discard buckets --
+an inherited narrowing settled for another deck, kept until this deck's own discard rule is settled).
+Routed ABOVE `selesnya` in `DetectDecisionProvider` by the `elves` signature, params of seven different cards,
+each carried by no other card in cards.json (checked 2026-11-26): Joraga Warcaller `lord_per_own_plus_counter`,
+Immaculate Magistrate `tap_target_counters_per_subtype "Elf"`, Allosaurus Shepherd `team_base_pt_cost` (subtype
+Elf), Leaf-Crowned Visionary `cast_subtype_pay_draw_cost`, Marwyn `mana_per_own_power`, and
+`multikicker_cost` / `squad_cost` on an ELF card only (the bare mechanic params would capture any deck adding
+Everflowing Chalice). Every other deck routes as before (`test_pirates_provider.cpp`'s every-deck table; the
+Elves row now pins `Elves`).
+
+Certificate: **NotAssessed**. What would need checking: combat is the only route to the opponent's life, but a
+winless-this-turn bound must price Concordant Crossroads' same-turn haste, the live lord stack (Clancaller,
+Visionary, squad-copy lords, Warcaller's per-counter lord), Shepherd's 5/5 base set, Ezuri's repeatable +3/+3 at
+combat from leftover mana, Wirewood Lodge's untap and a Genesis Wave putting a whole hasted board.
+
+`provider_audit.py`: Elves has no `.profile.json` yet, so the audit lists it as NOT AUDITED (routing read from
+the unit table instead). `--check` FAILS on the base tree already, for a pre-existing reason this change does not
+touch: the RED FLAG for Genesis Wave's `GenesisWavePut` decision (no deck policy) on Landfall and Selesnya
+Lifegain (`docs/design/provider-heuristic-required.md`, "Owed" item 1). Elves holds Genesis Wave too, so once it
+has a profile it will carry the same RED FLAG: ElvesProvider does NOT implement the put-subset policy (the
+scaling rule below is about X, not about which revealed permanents are put). OWED.
+
+## Provider heuristics
+
+### The scaling-sink rule (USER-directed provider prune, 2026-11-26)
+
+USER, verbatim: *"There are multiple scaling effects like Genesis Wave's X and Joraga Warcaller, but generally
+you want to pick just one of those and scale it up fully, minus perhaps a few 1-mana producing attackers. So
+there might be a couple different relevant options, (i.e. do I tap this Llanowar Elves to scale it further or
+keep it as an attacker, which can either be searched or heuristically pruned depending on the situation) but we
+shouldn't try every possibility."*
+
+Where: `ElvesProvider::PlanListAdmitAt` -> `ElvesScalingAdmit` (DecisionProviders.cpp), a plan-list
+restriction applied to every enumeration (root and continuation, main 1 and main 2) through the existing
+`ApplyProviderPlanListFilter` host; the new `DecisionProvider::PlanListAdmitAt` hook only adds the
+enumeration's phase (default forwards to `PlanListAdmit`, Maze's End byte-identical), and `PlanView` gained an
+opaque `plan` pointer for the group key. Nothing in generic enumeration changed.
+
+* **Sinks:** Genesis Wave's X; Joraga Warcaller's multikick count and Galadhrim Brigade's squad count
+  (`Action::kick_count`); Ezuri's MAIN-PHASE team pump count (ActivatePump mode 2, emitted only with floating
+  mana). Ezuri's ordinary pump is NOT a plan count: the combat converter (`ApplyFirebreathing`) spends leftover
+  mana on it at combat (the standing exemption). Clancaller's and Shepherd's activations and Magistrate's {T} are
+  single activations, not counts.
+* **Candidate rule:** (1) a plan scaling two or more sinks (count > 0; Wave always counts) is removed -- no
+  partial splits. (2) The remaining one-sink plans are grouped by everything except the counts (the whole
+  `TurnSolver::Plan` with the sinks' counts, their cost/eval and the plan value blanked, compared with
+  `Plan::operator==`); per group and sink card, the top count is the largest enumerated one -- every member is a
+  payable enumerated plan, so the top is exactly "max affordable after the plan's other casts" (the
+  `ReplicateTopCountOnly` shape). Kept: counts >= top - h. (3) Plans with no scaled sink, including a minimal
+  Warcaller K = 0 / Brigade K = 0 cast beside another sink, are never touched; the idle pass is not in this list
+  (the hosts append it).
+* **Genesis Wave's X menu** is widened to every X (`ElvesProvider::XCandidates`, largest first) so "Wave for what
+  the rest of the plan leaves" exists to be kept; before, the base gave only the whole-pool max, so no plan cast
+  Wave beside anything else.
+* **Hold-back rule:** k = our untapped mana_dork creatures with a static one-mana tap (Llanowar Elves, Elvish
+  Mystic; not Priest / Archdruid / Marwyn) that can attack this turn (`CanAttackFull`: not summoning-sick, or
+  hasted by Concordant Crossroads), capped at 2; h = ceil(k / mana per count step) (Wave 1, a kick or squad copy
+  2, Ezuri's pump 5). **Pruned when attacking cannot matter:** k = 0 in the post-combat main, and with no such
+  attacker on the board.
+* **Lift switches:** `MTG_ELVES_SCALING_PRUNE=0` (heurarm `ELVES_SCALING_PRUNE`, per job; default ON) -> every
+  count and split. `MTG_UNPRUNED`, and `MTG_UNPRUNE=replicate` (the gate the multikick fan already shares -- the
+  64-gate mask is full) or `=xspell` (Wave's X), lift it. Human play never sees it (the host skips it under
+  `HumanPlayActive()`), and the engine still offers the human every K and X.
+* **Lines it can miss:** two sinks scaled together (Warcaller x2 + Brigade x1, Wave + a kicked Warcaller); a
+  count below the band that frees mana for something that is not a plan action -- Visionary's {G} draws (paid at
+  trigger time), Ezuri's combat pump from leftover mana (only the no-sink / K = 0 plan keeps "Ezuri fully
+  scaled"), a post-combat activation; holding back a scaled dork (Priest / Archdruid / Marwyn) or a third 1-mana
+  dork to attack; a smaller Wave chosen to keep the other Waves in the library. The hold-back variants only help
+  if the mana payer then leaves the attacker untapped (they at least leave the mana for Ezuri's combat pump).
+* **Measurement:** NOT YET RUN (handoff `logs/elves/provider-handoff.md`). Manifest: `logs/elves/scaling_probe_manifest.py`.
+* **Signature key:** the autonomous plan-dedup signature did not key Genesis Wave's X, so the dedup kept ONE X per cast set (the first enumerated). ElvesProvider opts in to a `#WX` key (`DecisionProvider::PlanSignatureKeysWaveX`, `t_sig_wave_x` in TurnSolver.cpp), so the rule sees every X; every other deck's signature is byte-identical. OWED, for the USER: the same collapse is still live for Landfall and Selesnya Lifegain (their XCandidates offer the un-grown and the grown max, and first-enumerated wins, i.e. the un-grown one), a generic limiter by the core invariant; fixing it moves their play.
+* The definitive with/without A/B (Stage 5e/5f) is the coordinator's.
+
 ## Stage 5 verification verdicts
 
 (pending)

@@ -540,6 +540,7 @@ add_executable(mtg-test
     test/unit/test_eldrazi_flicker_discard.cpp
     test/unit/test_midrange_burn_spells.cpp
     test/unit/test_elves.cpp
+    test/unit/test_elves_provider.cpp
     test/unit/test_worldfire.cpp
     test/unit/test_worldfire_ltb.cpp
     test/unit/test_burn_discard.cpp
