@@ -39537,7 +39537,7 @@ bool TurnSolver::HandGainedACard(const std::vector<int>& before, const GameState
     return false;
 }
 
-// SITE 10's BATTLEFIELD-PUT HALF (MTG_BP_PUT_BATTLEFIELD; header note on CastPutACardPermanent).
+// SITE 10's BATTLEFIELD-PUT HALF (header note on CastPutACardPermanent).
 //
 // THE HOLE (Elves seed 9500006 T4). Genesis Wave X=4 reveals Elvish Mystic, Elvish Archdruid,
 // Concordant Crossroads and Galadhrim Brigade and puts all four. Crossroads gives every creature
@@ -78282,7 +78282,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // ...and the BATTLEFIELD-PUT twin (Genesis Wave): our hand + card permanents before this cast, for
         // CastPutACardPermanent at the same arming site. Executor twin: cast_by_name's rdb_bfput.
         std::vector<int> bfput_at_cast;
-        if (BpPutInHandEnabled() && BpPutBattlefieldEnabled() && !s_human_play)
+        if (BpPutInHandEnabled() && !s_human_play)
         { bfput_at_cast = TurnSolver::PutWindowNumbers(state); }
         // MTG_HAND_ENTRY_CENSUS only: mark the window inside which today's arming can SEE a hand
         // entry, so the census can report what happens outside it. Inert (and untouched) otherwise.
@@ -81547,7 +81547,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 || TurnSolver::EquipmentReturnedFromGraveyard(gyeq_at_cast, state)
                 // ...and a card permanent PUT onto the battlefield (Genesis Wave; see
                 // CastPutACardPermanent): new mana / haste / targets the plan was priced without.
-                || (BpPutBattlefieldEnabled() && !bfput_at_cast.empty()
+                || (!bfput_at_cast.empty()
                     && TurnSolver::CastPutACardPermanent(bfput_at_cast, state, name))))
         {
             deferred_cantrip_resolve = true;
@@ -96453,6 +96453,47 @@ static bool PlanActionMayGainLife(const Action& a, bool enter_watch)
     }
 }
 
+// THE DECLINED-SEARCH FOLD of the battlefield-put mark (PlanOpensBreakpoint's land-search clause). True iff every
+// land-search ordinal this plan can resolve during its apply takes the searched DECLINE pin (kLandSearchPinMask), so an
+// OPTIONAL search in it ("you may search": Primeval Titan's ETB, a self-target Path) puts nothing. EXACT, not a
+// heuristic: (1) every entry is the decline, and (2) the pins cover at least as many ordinals as the plan holds
+// land-search consumers (an over-count -- an opponent-target Path, which holds no ordinal -- only makes the fold
+// rarer). A consumer past the list's end would take the provider's FRONT (a real search), which (2) rules out. The
+// consumers whose ordinals are not one-per-action stand the fold down outright: a Karametra trigger (one per creature
+// cast while it is out), a Replenish that can return one, and any put whose put card may bring its own land-search
+// ETB (a Vial / Pod put, a Wave or a tutor putting Primeval Titan). Reads the plan's own pins only, so it is the
+// same in the rollout and the executor.
+static bool PlanDeclinesEveryLandSearch(const GameState& state, const TurnSolver::Plan& p)
+{
+    if (p.land_search_pins.empty()) { return false; }
+    for (int pin : p.land_search_pins) { if (pin != kLandSearchPinMask) { return false; } }
+    const int me = state.active_player_index;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd && qd->params.karametra_cast_land_search) { return false; }
+    }
+    std::size_t consumers = 0;
+    for (const Action& a : p.actions)
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        if (d->params.karametra_cast_land_search || a.card_name == "Replenish") { return false; }
+        // A put whose put card may carry its own land-search ETB (a Vial / Pod put, a Wave, a tutor, a look-top or
+        // ETB put, a reanimation) holds an ordinal this count cannot see: stand down (each marks through its own
+        // clause or is a put the count does not model, so standing down only keeps the old conservative mark).
+        if (a.kind == Action::Kind::ActivateVial || a.kind == Action::Kind::ActivatePod
+            || d->params.reveal_x_put_permanents || d->params.look_top_put_creature_count > 0
+            || !d->params.etb_reveal_put_subtypes.empty() || d->params.tutor_to_battlefield
+            || d->params.tutor_to_battlefield_single || d->params.reanimate_creature_max_mv > 0)
+        { return false; }
+        if (d->params.land_search_count > 0 || d->params.etb_exile_library_lands_set_base_pt
+            || d->params.etb_destroy_nonbasic_land_optional) { ++consumers; }
+    }
+    return consumers <= p.land_search_pins.size();
+}
+
 static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p, bool look_top_route)
 {
     int mask = 0;
@@ -96990,7 +97031,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             // the battlefield or cast by this plan -- a creature, so the cast order resolves it ahead
             // of the noncreature spells). Deck-gated by the param's own presence (deck_has_draw_ping).
             if (parun_watcher && (d->card.IsInstant() || d->card.IsSorcery())) { mask |= 1 << 10; }
-            // THE BATTLEFIELD-PUT HALF (MTG_BP_PUT_BATTLEFIELD; TurnSolver::CastPutACardPermanent). The
+            // THE BATTLEFIELD-PUT HALF (TurnSolver::CastPutACardPermanent). The
             // arming is OUTCOME-keyed (a card permanent arrived from outside the hand), so this clause
             // only has to name the cast families that CAN put one, or the continuation it arms would be
             // an unchallengeable canon default (the gi428 shape): the Wave's reveal-and-put, a look-top
@@ -97012,11 +97053,18 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             //     picked at resolution (enchant_target 0 for every cast), so it stays marked there.
             // Exact by the same argument as the arming's no-op test: none of the three can put a card
             // permanent onto our battlefield during THIS cast.
+            //
+            // A FOURTH, plan-keyed: an OPTIONAL search ("you may search": Primeval Titan's ETB, a self-target
+            // Path) on a plan whose land-search pins DECLINE every search it resolves
+            // (PlanDeclinesEveryLandSearch). PerformLandSearch returns before searching on a declined optional
+            // pin, in every world (human play included), so this cast puts no land, the arming cannot fire
+            // for it, and its breakpoint variants would only repeat the base plan. A non-optional search
+            // ignores the decline pin, which is why the fold reads the spec's own `optional`.
             const bool land_put_by_cast = d->params.land_search_count > d->params.land_search_to_hand
                 && !d->params.land_search_activation_cost && !d->params.karametra_cast_land_search
-                && !(RemovalSearchesForController(*d) && a.enchant_target <= 0 && !HumanPlayActive());
-            if (BpPutBattlefieldEnabled()
-                && (d->params.reveal_x_put_permanents || d->params.look_top_put_creature_count > 0
+                && !(RemovalSearchesForController(*d) && a.enchant_target <= 0 && !HumanPlayActive())
+                && !(d->params.land_search_optional && PlanDeclinesEveryLandSearch(state, p));
+            if ((d->params.reveal_x_put_permanents || d->params.look_top_put_creature_count > 0
                     || !d->params.etb_reveal_put_subtypes.empty() || d->params.tutor_to_battlefield
                     || d->params.tutor_to_battlefield_single || d->params.reanimate_creature_max_mv > 0
                     || d->params.tutor_land_to_battlefield || d->params.scry_reveal_land_to_battlefield

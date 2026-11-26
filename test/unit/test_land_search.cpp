@@ -1122,3 +1122,38 @@ TEST_CASE("Walk supply bound: the Hydras list is audited, unpriced mana sources 
     for (const char* n : { "Llanowar Elves", "Sol Ring", "Ancient Tomb", "Wild Growth", "Rampant Growth" })
     { CHECK_FALSE_MESSAGE(D(n).walk_bound_audited, n); }
 }
+
+// THE DECLINED-SEARCH FOLD of site 10's battlefield-put mark (TurnSolver.cpp PlanDeclinesEveryLandSearch, 2026-11-26).
+// Primeval Titan's ETB search is OPTIONAL, and the land-search pin fan offers its searched decline. A Titan plan whose
+// pins decline every search puts no land (PerformLandSearch returns before searching), so the battlefield-put half can
+// never arm for it and the plan is NOT marked; the same cast with a real pick, or unpinned (the provider's front), is.
+TEST_CASE("Land search: a Primeval Titan plan that DECLINES its search does not mark site 10; a searching one does")
+{
+    LoadCards();
+    GameState s = Fresh();
+    for (int i = 0; i < 6; ++i) { Put(s, "Forest", 20 + i, false); }
+    Card titan = D("Primeval Titan").card; titan.m_number = 1;
+    s.players[0].hand.push_back(titan);
+    Lib(s, "Forest", 50); Lib(s, "Mountain", 51); Lib(s, "Gruul Turf", 52);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* cast = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.actions.size() == 1 && p.actions[0].kind == Action::Kind::CastFromHand
+            && p.actions[0].card_name.str() == "Primeval Titan" && p.land_search_pins.empty()) { cast = &p; break; }
+    }
+    REQUIRE(cast != nullptr);
+    CHECK((TurnSolver::PlanOpensBreakpointForTest(s, *cast) & (1 << 10)) != 0);       // unpinned: the front searches
+    TurnSolver::Plan pick = *cast;
+    pick.land_search_pins = { 0 };
+    CHECK((TurnSolver::PlanOpensBreakpointForTest(s, pick) & (1 << 10)) != 0);        // a real pick puts lands
+    TurnSolver::Plan decline = *cast;
+    decline.land_search_pins = { kLandSearchPinMask };
+    CHECK((TurnSolver::PlanOpensBreakpointForTest(s, decline) & (1 << 10)) == 0);     // declined: nothing is put
+    // ...and the decline really puts nothing (the premise of the fold), in the resolution every world shares.
+    GameState r = s;
+    const std::size_t before = r.battlefield.size();
+    PerformLandSearch(r, 0, LandSearchSpecOf(D("Primeval Titan").params), "Primeval Titan", kLandSearchPinMask);
+    CHECK(r.battlefield.size() == before);
+    CHECK(r.players[0].library.size() == 3u);
+}
