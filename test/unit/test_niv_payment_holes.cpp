@@ -222,11 +222,13 @@ TEST_CASE("Niv payment hole 1: a floated Generator Servant no longer disables th
     }
 
     // Lever OFF: the PP_FLOAT_NZ decline, and the per-cast greedy strands Curiosity's {U} (the hole). The line-keep
-    // rung's multi-source gate (MTG_LINE_KEEP_CRIT_MULTI) catches this strand on its own (block below), so it is
-    // pinned off here too: this block shows the hole the prepay lever closes.
+    // rung's multi-source gate (MTG_LINE_KEEP_CRIT_MULTI) catches this strand on its own (block below), and so does
+    // its filter-land test (MTG_LINE_KEEP_CRIT_FILTER: the Bluffs' colours need a feed), so both are pinned off here
+    // too: this block shows the hole the prepay lever closes.
     {
         ArmNp off(heurarm::PREPAY_FLOAT_POOL, false);
         ArmNp multi_off(heurarm::LINE_KEEP_CRIT_MULTI, false);
+        ArmNp filter_off(heurarm::LINE_KEEP_CRIT_FILTER, false);
         GameState r0 = s;
         TurnSolver::ApplyPlan(r0, *p, true);
         const GameState e0 = RunExecutorNp(s, *p);
@@ -250,6 +252,24 @@ TEST_CASE("Niv payment hole 1: a floated Generator Servant no longer disables th
         for (const GameState* g : { static_cast<const GameState*>(&r1), &e1 })
         {
             INFO("prepay OFF, multi ON, world: " << WorldNp(g, &r1));
+            CHECK(FindNp(*g, 33) != nullptr);
+            CHECK(FindNp(*g, 8) != nullptr);
+            CHECK_FALSE(InHandNp(*g, 8));
+        }
+    }
+    // Prepay lever OFF, MULTI OFF, MTG_LINE_KEEP_CRIT_FILTER ON: without the Bluffs (whose colours need a feed) the
+    // unconditional {U} are Skerry's two, the Canal and the Island, and Niv's four non-{U} pips can take all four, so the
+    // filter test passes the payment to the exact judge on its own, which keeps Curiosity's {U}. Both worlds cast both.
+    {
+        ArmNp off(heurarm::PREPAY_FLOAT_POOL, false);
+        ArmNp multi_off(heurarm::LINE_KEEP_CRIT_MULTI, false);
+        ArmNp filter_on(heurarm::LINE_KEEP_CRIT_FILTER, true);
+        GameState r2 = s;
+        TurnSolver::ApplyPlan(r2, *p, true);
+        const GameState e2 = RunExecutorNp(s, *p);
+        for (const GameState* g : { static_cast<const GameState*>(&r2), &e2 })
+        {
+            INFO("prepay OFF, multi OFF, filter ON, world: " << WorldNp(g, &r2));
             CHECK(FindNp(*g, 33) != nullptr);
             CHECK(FindNp(*g, 8) != nullptr);
             CHECK_FALSE(InHandNp(*g, 8));
