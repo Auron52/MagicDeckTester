@@ -58,15 +58,15 @@ hand has room for the lower buckets. Buckets in KEEP priority, highest first:
 | 3 | DRAW | Enchantress's Presence | **a slot filler, like a tutor** (USER 2026-11-26: *"for Enchantress's Presence I would keep it above mana if we cannot fill our lock piece quota."* / *"Essentially, it moves to fill one of the spots."*): ONE Presence fills ONE empty slot, after the tutors have filled what they can, LOCK slots first, then MANA. It sheds with the slot it fills. Filling nothing, it is kept just above EXPLORATION (below ANSWER) |
 
 | 4 | ANSWER | Calming Verse, Force of Vigor | **1 in total, Calming Verse preferred** (USER 2026-11-26: *"I would only keep 1 of Calming Verse or Force of Vigor, probably priortizing Calming Verse?"*) |
-| 5 | EXPLORATION | Exploration | 1 when land-heavy (lands in hand beyond the MANA quota, at least 1, that Exploration would let us play); otherwise 0 |
+| 5 | EXPLORATION | Exploration | USER 2026-11-26: *"Exploration should remain below anything not crucial except maybe if we have 3-4 lands we are keeping. Exploration replaces no other cards, so it might have to go in a pinch."* -> it fills no slot. Default: the FIRST non-dead card shed (below Oblivion Ring). When 3+ lands in hand are being kept (MANA quota + land-heavy): kept just below MANA, above every non-crucial bucket; still shed before LOCK / MANA |
 | 6 | BEATDOWN | 2nd Opalescence, 2nd Grove while EE is not ours and an Opalescence is ours (the amendment's lines) | 1 each |
-| 7 | LOW | Oblivion Ring, Exploration when not land-heavy | 0 |
+| 7 | LOW | Oblivion Ring | 0 |
 | 8 | DEAD | copies beyond the quotas; tutors that fill no slot (Idyllic before Grove) | 0 |
 
 **Shed order, most expendable first** (the reverse of the keep priority; within one bucket the overflow goes first):
-DEAD -> LOW -> BEATDOWN overflow -> lands beyond the MANA quota once Exploration's need is met (basics that fix no
+DEAD -> EXPLORATION (unless 3+ kept lands in hand) -> LOW (Oblivion Ring) -> BEATDOWN overflow -> lands beyond the MANA quota once Exploration's need is met (basics that fix no
 missing colour first, then the fetches) -> mana Auras beyond the quota -> a 2nd Presence -> ANSWER overflow (every
-Force of Vigor while a Verse is kept, then extra Verses) -> EXPLORATION -> DRAW filling no slot -> ANSWER -> MANA within the quota (a
+Force of Vigor while a Verse is kept, then extra Verses) -> DRAW filling no slot -> ANSWER -> EXPLORATION (with 3+ kept lands) -> MANA within the quota (a
 Presence filling a MANA slot sheds just before the real mana card would) -> LOCK (a Presence or tutor filling a
 LOCK slot sheds just before the real piece would) (Parallax Wave, then Opalescence, then Enchanted Evening
 last). A tutor standing in for an empty slot sheds with that slot's bucket, just before the real card would.
@@ -100,7 +100,7 @@ are shed in step 2 (orchestrator default; they are also not green, so they are n
 
 ## Open points for the USER
 
-1. PRE-LOCK: where ANSWER (the one Verse / FoV) sits relative to DRAW and EXPLORATION (drafted: below DRAW while a
-   slot is empty, above EXPLORATION), and where the BEATDOWN extras sit (drafted: shed early, after Oblivion Ring).
+1. PRE-LOCK: where the BEATDOWN extras sit (drafted: shed early, after Exploration and Oblivion Ring). Exploration's
+   place is settled (USER 2026-11-26).
 2. LOCKED: spare EE / Opalescence are drafted as dead (the lock only ends by our own choice). Under the lock FoV
    (not Verse) is the kept answer, because Verse needs mana and FoV can be pitched.
