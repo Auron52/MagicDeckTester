@@ -296,6 +296,18 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**04:38 UTC 11-26:** status check.
+- **worldfire-ad A/B:** 7178 of 9480 jobs done, 32/32 busy (DONE marker: build/scratch/worldfire-ad/ab_out/DONE; my waiter is on it).
+- **Queued on the box lock behind it:** the maze2hg-perf successor's A/B, and the mill-k A/B (relaunched by me; marker build/scratch/mill-k/ab/DONE, my waiter is on it).
+- **mill-k (agent handed off at 283K):** K's Mill loss is a SOUNDNESS hole. An opponent-turn win (a held Archive Trap for {0} after the opponent's fetch) was skipped because KillOnlyBoundaryEndsGame only crossed the boundary for crossing-land decks.
+  - Fix: MTG_KO_BOUNDARY_SIM, default OFF. It recovers 19 of the 20 Mill slower games; the last one is budget re-spend.
+  - K's VERIFY mode is broken: it perturbs play and reports armed_turns=0 under per-job K. The k-fleet "0 of 22,084" soundness figure therefore came from a blind instrument.
+  - The A/B rows, slower.py and the VERIFY repair are owed. See logs/mill-k/mill-k-handoff.md (6212fc005).
+- **NEXT:**
+  - When the worldfire-ad A/B is DONE, start a fresh agent from logs/worldfire-ad/handoff2.md.
+  - When the mill-k A/B is DONE, start a fresh agent from mill-k-handoff.md to summarize it, run the slower-game checks and repair VERIFY.
+  - Then the gate-1125 queue.
+
 **03:36 UTC 11-26:** results in.
 - **k-fleet done:** report at logs/k-fleet/report.md on wip/k-fleet (f8f4f8525); the rebased beam is wip/beam-staged2 0c2465c8a.
   - K fleet-wide vs today: -71 std / -38 2HG = -109 net, mostly Maze's End (-77/-36, units x0.77/x0.74). Mill is +12/+2, and all 22 of its slower games recover at d8 b0. Of the 45 K slower games, 40 recover and 5 Gods games are NC-equal (clairvoyant).
