@@ -1,0 +1,7 @@
+dragons_2hg    jobs=40 identical=40 missing=0
+dragons_std    jobs=80 identical=80 missing=0
+kitty_2hg      jobs=10 identical=10 missing=0
+kitty_std      jobs=20 identical=20 missing=0
+landfall_2hg   jobs=10 identical=10 missing=0
+landfall_std   jobs=20 identical=20 missing=0
+IDENTICAL
