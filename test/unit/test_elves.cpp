@@ -379,6 +379,51 @@ TEST_CASE("Leaf-Crowned Visionary: the {G} pay-to-draw is a searched pin -- paid
     }
 }
 
+// A paid Visionary trigger draws, the draw arms the site-10 breakpoint, and the search scores that breakpoint's
+// continuations by RESUMING from the node snapshot. A resumed child must reach exactly the board the same child
+// reaches from scratch (the executor's and the fd-pred replay's apply): the resume used to re-zero the cast-
+// trigger ordinal, so a continuation Elf read the base plan's spent bit 0, paid again and drew one card more
+// (Elves seed 7036 gi5 d5 b20: Wirewood Lodge drawn, a T5 kill scored that realised T6).
+TEST_CASE("Leaf-Crowned Visionary: a breakpoint child resumed from the node snapshot draws what a full apply draws")
+{
+    GameState s = EBase();
+    s.players[0].library = Library{};
+    ELib(s, "Taunting Elf", 30);    // the paid trigger's draw: an Elf, castable in the continuation
+    ELib(s, "Wirewood Lodge", 31);  // a second paid trigger would draw this
+    for (int i = 0; i < 6; ++i) { ELib(s, "Forest", 900 + i); }
+    EForests(s, 4);                 // Llanowar 1 + pay 1 + Taunting Elf 1, with {G} spare for a phantom second pay
+    EPut(s, "Leaf-Crowned Visionary", 1);
+    EHand(s, "Llanowar Elves", 20);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* paid = EFind(plans, [](const TurnSolver::Plan& q)
+    { return ECountCasts(q) == 1 && IsCast(q.actions[0], "Llanowar Elves") && q.mihail_pay_choice.Paid(0); });
+    REQUIRE(paid != nullptr);
+    bool saw_taunting_cast = false;
+    for (const int k : { 0, 1, 2, 3, TurnSolver::kBpEmptyChoice })
+    {
+        CAPTURE(k);
+        ManaCost cap, res;
+        GameState complete, resumed;
+        REQUIRE(TurnSolver::BpResumeLineHoldForTest(s, *paid, /*is_pre_combat=*/true, cap, res,
+                                                    &complete, &resumed, k));
+        std::vector<int> ch, rh;
+        for (const Card& c : complete.players[0].hand) { ch.push_back(c.m_number); }
+        for (const Card& c : resumed.players[0].hand)  { rh.push_back(c.m_number); }
+        CHECK(ch == rh);
+        CHECK(complete.players[0].library.size() == resumed.players[0].library.size());
+        CHECK(ETapped(complete) == ETapped(resumed));
+        CHECK((EN(complete, 30) != nullptr) == (EN(resumed, 30) != nullptr));
+        if (EN(complete, 30) != nullptr)
+        {
+            saw_taunting_cast = true;
+            // The continuation's Taunting Elf cast is past the base plan's one pinned trigger: declined.
+            CHECK(std::none_of(resumed.players[0].hand.begin(), resumed.players[0].hand.end(),
+                               [](const Card& c) { return c.m_number == 31; }));
+        }
+    }
+    CHECK(saw_taunting_cast);   // some continuation rank casts the drawn Elf, so the case is exercised
+}
+
 // ---- 7. CONCORDANT CROSSROADS: THE WORLD RULE ----------------------------------------------------------------
 
 TEST_CASE("Concordant Crossroads: a second copy puts the older one into the graveyard (CR 704.5m), both worlds")

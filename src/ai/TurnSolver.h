@@ -3382,9 +3382,12 @@ public:
     // MTG_BP_RESUME_LINE_HOLD test hook: apply `plan` with a breakpoint-node capture; if it pends, resume its
     // EMPTY child from the snapshot. Returns false when the apply did not pend. `at_capture` is the line's
     // unpaid-cost hold where the full apply stopped; `at_resume` the hold the resumed apply ran under.
+    // `child_choice` picks a non-EMPTY child (continuation rank k) instead; `complete_state` is that same
+    // child applied from scratch, which a resumed child must reproduce exactly.
     static bool BpResumeLineHoldForTest(const GameState& state, const Plan& plan, bool is_pre_combat,
                                         ManaCost& at_capture, ManaCost& at_resume,
-                                        GameState* complete_state = nullptr, GameState* resumed_state = nullptr);
+                                        GameState* complete_state = nullptr, GameState* resumed_state = nullptr,
+                                        int child_choice = kBpEmptyChoice);
     // Prefix-resume RECORDING test hook (Maze's End F7-3): apply the breakpoint variant `plan` (bp_choice >= 0)
     // recording the committed line with a wave-loop prefix capture into `full`; when the apply captured, resume the
     // same plan from that snapshot into `resumed`. Returns false when nothing was captured. A resumed apply must
