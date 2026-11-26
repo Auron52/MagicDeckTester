@@ -247,14 +247,15 @@ seed 26112601; discard evidence 3 sheds / 400 games, STATUS_QUO_OK); first `veri
 
 Uncommitted at checkpoint: `ElvesProvider::GenesisWavePutPicks` = put every legal reveal (+
 `ImplementsRequiredHeuristic(GenesisWavePut)`), a dominance fold argued in the header comment (byte-identical to the
-engine default on this pool). Build done; re-run `provider_audit.py --check` to confirm the Elves red flag clears,
+engine default on this pool). REBUILD FAILED rc=1 (log `build/scratch-elves-build-coord.log`: check for a real compile error vs the 9p alloc flake; retry). Then re-run `provider_audit.py --check` to confirm the Elves red flag clears,
 then commit.
 
 verify_deck gates open, in order:
 1. **mismatch FAIL**: `[fd-diverge] seed=7036 job=s7001d5 gi=35 realized_win=6 predicted_win=5 proven_at_turn=3`.
    Repro: `MTG_FD_ORACLE=1 build/Release/mtg decks/Elves/Elves.cod --profile decks/Elves/Elves.profile.json --games 1
    --seed 7036 --game-index 5 --depth 5 --budget-ms 20 --threads 1 --log-dir build/scratch/elves-fd` (launched;
-   output `build/scratch/elves-fd/{out,err}.txt`). Root-cause: rollout vs executor disagreement on a new mechanic
+   output `build/scratch/elves-fd/{out,err}.txt`). REPRODUCED as a single game (realized 6 vs predicted 5, proven at T3;
+   per-game log `build/scratch/elves-fd/20261126_063031_7036_game_0.json`), on the binary BEFORE the Wave policy. Root-cause: rollout vs executor disagreement on a new mechanic
    (suspects: Visionary pay/draw, multikick/squad faces, Marwyn power mana, Shepherd 5/5, Magistrate counters).
 2. **provider_policy FAIL**: should clear with the uncommitted Wave policy.
 3. **regression_tiers / suite FAIL**: add Elves to SMOKE / REGRESSION / OVERNIGHT (copy the worldfire entry-set
