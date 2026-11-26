@@ -35,7 +35,7 @@ for line in open(out + '/batch.out', errors='ignore'):
 cls = ['AD-decl', 'AD-undecl', 'APPLY-DROP-ORDER', 'ENUM-GAP', 'ORACLE-GAP', 'CAPPED', 'CAPPED-DECISION']
 clsh = ['ADdecl', 'ADundc', 'ADordr', 'ENUM', 'ORGAP', 'CAP', 'CAPdec']
 print('%-32s %-4s %7s %8s %8s %6s %6s %6s %6s %6s %6s %6s | %6s %6s | %s' % ('arm', 'gi', 'games', 'turns', 'cpu_s', *clsh, 'ev_d', 'ev_u', 'games_d/u'))
-for arm in ['off', 'on', 'no_leftover_swap_wide', 'no_ondemand_visible_lump_exact']:
+for arm in ['off', 'on', 'on2', 'no_leftover_swap_wide', 'no_ondemand_visible_lump_exact']:
     for sl in ('all', 'loo'):
         if (arm, sl) not in tot or (sl == 'all' and arm.startswith('no_')):
             continue
@@ -44,5 +44,5 @@ for arm in ['off', 'on', 'no_leftover_swap_wide', 'no_ondemand_visible_lump_exac
               *[cnt[(arm, sl)][c] for c in cls], len(ev[(arm, sl, 'AD-decl')]), len(ev[(arm, sl, 'AD-undecl')]),
               len(gm[(arm, sl, 'AD-decl')]), len(gm[(arm, sl, 'AD-undecl')])))
 if '--drops' in sys.argv:
-    for arm in ('off', 'on'):
+    for arm in ('off', 'on', 'on2'):
         print(arm, ', '.join('%s %s=%d' % (k[0][3:], k[1], v) for k, v in drop[arm].most_common(10)))

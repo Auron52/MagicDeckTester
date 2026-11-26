@@ -95,3 +95,21 @@ boards pay, the early crack keeps the Needle`.
 The no-strand control unit test asserted identical taps in both arms; the wide swap legitimately re-attributes which
 unit floats (one more land untapped with the levers on). It now asserts both arms pay and leave the same mana, the
 levers never tapping more.
+
+### Narrowed lump lever (e07c7849c): gate and held-out A/B
+
+Gate, same slice, the narrowed `on` arm (`on2`) against the first gate's `off` (the `=0` path is unchanged; three
+`off` blocks re-run on the new binary are digest-identical):
+
+| arm | AD-decl flags | AD-undecl flags | events decl | events undecl | ENUM-GAP | turns |
+|---|---:|---:|---:|---:|---:|---:|
+| off | 415 | 299 | 105 | 47 | 33 | 313,645 |
+| on (893647990) | 288 | 363 | 62 | 56 | 41 | 313,643 |
+| on2 (e07c7849c) | 296 | 304 | 64 | 48 | 33 | 313,643 |
+
+Declared events 105 -> 64 (42 fixed, 1 new); need-later 47 -> 48 (0 fixed, 1 new); ENUM-GAP back to 33.
+
+Held-out play A/B, Dragonstorm only (the lump rule is Dragonstorm-only and the swap's other-deck effect measured nil
+above), seed base 5160000, 3000 std + 3000 2HG per arm: net 0, 0 slower, 0 faster in both formats; units -0.00% /
++0.00%. The first A/B's slower game (2HG s5131993) is byte-identical to the off arm at play settings and d8 b0. Full
+units on e07c7849c: 4205 / 4205.
