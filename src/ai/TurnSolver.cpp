@@ -10902,7 +10902,8 @@ inline std::uint64_t ActSig(const Action& a)
     MixA(h, static_cast<std::uint64_t>(a.free_cast) | (static_cast<std::uint64_t>(a.alt_cost) << 1)
             | (static_cast<std::uint64_t>(a.evoke) << 2) | (static_cast<std::uint64_t>(a.kicked) << 3)
             | (static_cast<std::uint64_t>(a.sacrifice_land) << 4)
-            | (static_cast<std::uint64_t>(a.face_down) << 5));   // morph face-down cast (0 elsewhere)
+            | (static_cast<std::uint64_t>(a.face_down) << 5)    // morph face-down cast (0 elsewhere)
+            | (static_cast<std::uint64_t>(a.kick_count) << 8)); // multikicker / squad count (0 elsewhere)
     MixA(h, static_cast<std::uint64_t>(a.rock_mana.Total()) * 7 + static_cast<std::uint64_t>(a.splice_count));
     if (a.player_target != 0) { MixA(h, 0x9A7Eull + static_cast<std::uint64_t>(a.player_target)); }   // set -> folded
     if (a.emerge) { MixA(h, 0xE3E6ull + static_cast<std::uint64_t>(a.soulfire_own_targets)); }   // emerge + its victim (set-gated)
@@ -11926,7 +11927,7 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
         // adventure and the hard cast of one Brightcap Badger read as one plan listed twice
         // (fungus-v2-fd-diverge-7021.md).
         if (a.adventure) { s += "[adv]"; }
-        if (a.kicked)    { s += "[kick]"; }
+        if (a.kicked)    { s += a.kick_count > 0 ? "[kick x" + std::to_string(a.kick_count) + "]" : std::string("[kick]"); }
         if (a.cast_from_top) { s += "[library top]"; }
         if (a.face_down != 0) { s += a.face_down == 2 ? "[facedown+up]" : "[facedown]"; }
         if (a.awaken)    { s += "[awaken]"; }
@@ -12064,11 +12065,11 @@ static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state,
 //
 // THE TWO ACTUAL CAST SITES DO NOT CALL THIS: apply_one and CastSpellFromHand swap the def ONCE, up
 // front, so everything below them -- cost, resolution, tokens -- already reads the kicked face.
-static const CardDefinition* KickedFaceOr(const CardDefinition* d, bool kicked)
+static const CardDefinition* KickedFaceOr(const CardDefinition* d, bool kicked, int kick_count = 0)
 {
-    if (d == nullptr || !kicked || !d->params.kicker_cost.has_value()) { return d; }
-    const CardDefinition* k =
-        CardDatabase::Instance().Lookup(d->card.m_name.str() + " (Kicked)");
+    if (d == nullptr || !kicked) { return d; }
+    // KickedFaceFor: the single "(Kicked)" face, or the multikicker / squad "(Kicked xK)" face (Elves).
+    const CardDefinition* k = KickedFaceFor(*d, kicked, kick_count);
     return k != nullptr ? k : d;
 }
 
@@ -12094,7 +12095,7 @@ static const CardDefinition* PrepayCastFace(const Action& a)
         const CardDefinition* f = CardDatabase::Instance().Lookup(d->card.m_name.str() + " (Bestowed)");
         if (f != nullptr) { d = f; }
     }
-    return KickedFaceOr(d, a.kicked);
+    return KickedFaceOr(d, a.kicked, a.kick_count);
 }
 
 // MANA-UNLOCK EQUIPS IN THE SEQUENTIAL WALK (MTG_SEQ_UNLOCK_EQUIP, default ON; =0 refuses them as before).
@@ -12576,7 +12577,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         // KICKER: price the "(Kicked)" face when this action paid the kicker, BEFORE EffectiveCost,
         // so the reduction applies to the summed cost (CR 601.2f order). Identity for every other
         // card and for an unkicked cast.
-        const CardDefinition& def = *KickedFaceOr(a.def, a.kicked);
+        const CardDefinition& def = *KickedFaceOr(a.def, a.kicked, a.kick_count);
         // MTG_PO_DAMAGE_ORDER: a Needle Drop with no target dealt damage this turn cannot be cast (the apply's
         // DamagedTargetCastLegal refuses it before paying), so this order fails here.
         if (t_seq_walk_damage && def.params.target_dealt_damage_this_turn
@@ -19928,13 +19929,23 @@ static std::vector<DorkGrowthGroup> ScanDorkGrowthGroups(const GameState& state)
         if (!d || !IsScaledManaDork(*d)) { continue; }
         if (!CanTapNow(p, state.battlefield)) { continue; }   // summoning-sick: taps no earlier than next turn
         if (d->params.produces.size() != 1) { continue; }     // the credit is single-colour by construction
+        // Marwyn, the Nurturer (mana_per_own_power): each matching Elf entering puts a counter on it, so it
+        // grows by own_creature_enters_self_counters per feeder -- grouped under its WATCHED subtype (a lord
+        // entering adds one more through the lord bonus, not credited here: an under-credit, the safe side).
+        const std::string* gsub = &d->params.mana_per_creature_subtype;
+        if (d->params.mana_per_own_power)
+        {
+            if (d->params.own_creature_enters_self_counters != 1 || d->params.enters_watch_subtypes.empty())
+            { continue; }
+            gsub = &d->params.enters_watch_subtypes[0];
+        }
         bool found = false;
         for (DorkGrowthGroup& g : out)
         {
-            if (*g.sub == d->params.mana_per_creature_subtype && g.col == d->params.produces[0])
+            if (*g.sub == *gsub && g.col == d->params.produces[0])
             { ++g.live; found = true; break; }
         }
-        if (!found) { out.push_back({ &d->params.mana_per_creature_subtype, d->params.produces[0], 1, 0 }); }
+        if (!found) { out.push_back({ gsub, d->params.produces[0], 1, 0 }); }
     }
     if (out.empty() || !UntapBurstGrowthEnabled()) { return out; }
     for (const Permanent& p : state.battlefield)
@@ -21616,6 +21627,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, a.bestow ? 1u : 0u);
     FoldMix(h, a.adventure ? 1u : 0u);
     FoldMix(h, a.kicked ? 1u : 0u);
+    if (a.kick_count != 0) { FoldMix(h, 0x6B1C0000ull + static_cast<std::uint64_t>(a.kick_count)); }   // multikick: set-gated
     if (a.face_down != 0) { FoldMix(h, 0xFD0Dull + static_cast<std::uint64_t>(a.face_down)); }   // morph face-down cast: set-gated (else unchanged)
     if (a.emerge) { FoldMix(h, 0xE3E6ull); }   // emerge cast (Decimator): set-gated (else unchanged)
     if (a.dies_tuck != 0) { FoldMix(h, 0xD1E5ull + static_cast<std::uint64_t>(a.dies_tuck)); }   // Ilharg's death may (I5b)
@@ -31468,6 +31480,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (static_cast<long long>(x.kicked) != static_cast<long long>(y.kicked))
     { add("kicked", std::to_string(static_cast<long long>(x.kicked)),
            std::to_string(static_cast<long long>(y.kicked))); }
+    if (x.kick_count != y.kick_count)
+    { add("kick_count", std::to_string(static_cast<int>(x.kick_count)), std::to_string(static_cast<int>(y.kick_count))); }
     if (x.face_down != y.face_down)
     { add("face_down", std::to_string(static_cast<int>(x.face_down)), std::to_string(static_cast<int>(y.face_down))); }
     if (static_cast<long long>(x.ponder_keep) != static_cast<long long>(y.ponder_keep))
@@ -38524,7 +38538,7 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                             pa.def ? pa.def : CardDatabase::Instance().LookupInterned(pa.card_name);
                         // KICKER: the summed cost lives on the "(Kicked)" face, so swap the def
                         // before EffectiveCost rather than overriding the cost after it.
-                        pd = KickedFaceOr(pd, pa.kicked);
+                        pd = KickedFaceOr(pd, pa.kicked, pa.kick_count);
                         if (pd != nullptr) { ec = EffectiveCost(*pd, state); }
                         if (pa.evoke && pd != nullptr && pd->params.evoke_cost.has_value())
                         { ec = *pd->params.evoke_cost; }
@@ -42522,6 +42536,7 @@ static std::string SerializeChandraNestedCast(const Action& a)
     out << ' ' << a.evoke;
     out << ' ' << a.adventure;
     out << ' ' << a.kicked;
+    out << ' ' << static_cast<int>(a.kick_count);
     out << ' ' << static_cast<int>(a.face_down);
     out << ' ' << a.twobrid_colored;
     out << ' ' << a.devour_count;
@@ -42560,6 +42575,7 @@ Action TurnSolver::ChandraNestedCastOption(const std::string& option)
     in >> a.evoke;
     in >> a.adventure;
     in >> a.kicked;
+    { int kc = 0; in >> kc; a.kick_count = static_cast<std::int8_t>(kc); }
     { int fd = 0; in >> fd; a.face_down = static_cast<std::int8_t>(fd); }
     in >> a.twobrid_colored;
     in >> a.devour_count;
@@ -44904,6 +44920,61 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     }
                 }
                 else { actions.push_back(std::move(a)); }
+            }
+        }
+
+        // MULTIKICKER / SQUAD (CR 702.33c / 702.157 -- Joraga Warcaller, Galadhrim Brigade): the kick COUNT is
+        // a SEARCHED cast axis, one variant per K = 1..kmax sharing hand_index (mutually exclusive with each
+        // other and with the plain cast emitted below, which is K = 0). Each variant casts the DB's
+        // "<name> (Kicked xK)" face, whose cost is printed + K x the repeat cost, so the subset solve prices
+        // it like any cast and drops an unaffordable K there. kmax is an ENUMERATION bound only: what the
+        // turn's whole pool could conceivably pay (the line's pool, plus a pending land drop, plus same-plan
+        // scaled-dork growth -- the Genesis Wave X sizing), clamped to the synthesized faces. No heuristic
+        // picks K: the provider may only order/restrict (MultikickCounts), and human play / MTG_UNPRUNED
+        // always get every K.
+        if (HasRepeatKicker(def.params) && !ap.hand[i].m_is_staged)
+        {
+            const ManaCost& rep = *RepeatKickerCost(def.params);
+            const int rep_mv = rep.ManaValue();
+            const ManaCost base = EffectiveCost(def, state);
+            int pool = turn_pool().Total() + state.floating_mana.Total() + DorkGrowthXPotential(state, i);
+            if (ap.lands_played_this_turn < ap.LandDropsAvailable())
+            {
+                for (const Card& h : ap.hand)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+                    if ((hd ? hd->card.IsLand() : h.IsLand()) && !h.m_is_staged) { ++pool; break; }
+                }
+            }
+            int kmax = rep_mv > 0 ? std::max(0, (pool - base.ManaValue()) / rep_mv) : 0;
+            kmax = std::min(kmax, kMaxMultikick);
+            std::vector<int> ks;
+            // The UnprunedGate mask is full (64 gates, static-asserted), so the kick-count fan shares the
+            // REPLICATE gate -- the same shape (a count of an additional cost paid at cast):
+            // MTG_UNPRUNED=replicate reopens both.
+            if (kmax >= 1 && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::Replicate))
+            { ks = ResolveProvider(state).MultikickCounts(state, def, kmax); }
+            if (ks.empty()) { for (int k = 1; k <= kmax; ++k) { ks.push_back(k); } }
+            for (int k : ks)
+            {
+                if (k < 1 || k > kmax) { continue; }
+                const CardDefinition* kdef =
+                    CardDatabase::Instance().Lookup(MultikickFaceName(def.card.m_name.str(), k));
+                if (kdef == nullptr) { continue; }
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = EffectiveCost(*kdef, state);
+                // Ordering hint only (the rollout decides): the face's own score plus K bodies' worth for a
+                // squad, K counters for a Warcaller -- monotone in K so the list reads high-to-low.
+                a.eval           = EvalCard(*kdef, state)
+                                 + k * (def.params.squad_cost.has_value() ? EvalCard(def, state) : 1);
+                a.is_noncreature = !kdef->card.IsCreature();
+                a.card_mv        = def.card.m_mana_cost.ManaValue();   // CR 202.3: kicking never changes MV
+                a.kicked         = true;
+                a.kick_count     = static_cast<std::int8_t>(k);
+                actions.push_back(std::move(a));
             }
         }
 
@@ -55649,7 +55720,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                      + "|" + std::to_string(b.convoke_other) + "|" + std::to_string(b.splice_count)
                      + "|" + std::to_string(b.soulfire_own_targets)
                      + "|" + std::to_string(b.crackle_targets)
-                     + (b.evoke ? "|e" : "") + (b.kicked ? "|k" : "") + (b.bestow ? "|b" : "")
+                     + (b.evoke ? "|e" : "") + (b.kicked ? (b.kick_count > 0 ? "|k" + std::to_string(b.kick_count) : std::string("|k")) : std::string()) + (b.bestow ? "|b" : "")
                      + (b.face_down != 0 ? "|fd" + std::to_string(b.face_down) : std::string())
                      + (b.adventure ? "|a" : "")
                      + (b.pitch_name.empty() ? std::string() : "|p" + b.pitch_name.str());
@@ -72162,6 +72233,7 @@ struct HumanStepToken
     int  src = 0, target = 0, count = 0;   // 0 = not stated
     bool kicked = false, adventure = false;
     std::int8_t face_down = 0;   // `+facedown` (1) / `+facedownup` (2): the morph face-down cast
+    std::int8_t kick_count = 0;  // `+kickedx<K>`: a multikicker / squad cast kicked K times (Elves)
 };
 static HumanStepToken ParseHumanStepToken(const std::string& tok)
 {
@@ -72180,6 +72252,18 @@ static HumanStepToken ParseHumanStepToken(const std::string& tok)
     {
         more = false;
         if (strip("+kicked"))    { t.kicked = true;    more = true; }
+        // `+kickedx<K>` (multikicker / squad): the kick count rides the same tail.
+        {
+            const std::size_t kp = v.rfind("+kickedx");
+            if (kp != std::string::npos && kp + 8 < v.size()
+                && v.find_first_not_of("0123456789", kp + 8) == std::string::npos)
+            {
+                t.kicked = true;
+                t.kick_count = static_cast<std::int8_t>(std::min(127, std::atoi(v.c_str() + kp + 8)));
+                v.resize(kp);
+                more = true;
+            }
+        }
         if (strip("+adventure")) { t.adventure = true; more = true; }
         if (strip("+facedownup")) { t.face_down = 2; more = true; }
         if (strip("+facedown"))  { t.face_down = 1; more = true; }
@@ -72324,7 +72408,8 @@ static bool HumanStepMatches(const HumanStepToken& st, const Action& a, const Ga
     if (a.kind == Action::Kind::CastFromHand
         && ((st.verb == "casttop") != a.cast_from_top)) { return false; }
     if (a.kind == Action::Kind::CastFromHand
-        && (a.kicked != st.kicked || a.adventure != st.adventure || a.face_down != st.face_down))
+        && (a.kicked != st.kicked || a.adventure != st.adventure || a.face_down != st.face_down
+            || a.kick_count != st.kick_count))
     { return false; }
     auto same = [&](int stated, int have) { return have == stated || (twins && HumanTwinPermanents(state, stated, have)); };
     if (st.src > 0 && !same(st.src, a.sac_source_id)) { return false; }
@@ -74732,7 +74817,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         ? &state.battlefield[entrant_slot] : nullptr;
                 PerformEtbDig(state, state.active_player_index, entered_def->params, self_p);
             }
-            if (perm.card.HasSupertype(Supertype::Legendary))
+            if (perm.card.HasSupertype(Supertype::Legendary) || perm.card.HasSupertype(Supertype::World))
             {
                 EnforceLegendRule(state, state.active_player_index);
             }
@@ -75897,12 +75982,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // count, so the cost paid below, the text that resolves and the tokens created all read it
         // with no further kicker awareness anywhere -- SpellEffects, EffectHandler and the token
         // cascade are untouched by this change. Executor twin: AIEngine's CastSpellFromHand.
-        if (kicked && opt->params.kicker_cost.has_value())
-        {
-            const CardDefinition* kopt =
-                CardDatabase::Instance().Lookup(opt->card.m_name.str() + " (Kicked)");
-            if (kopt != nullptr) { opt = kopt; }
-        }
+        // Multikicker / squad (Elves): the "(Kicked xK)" face, K = riders.kick_count (KickedFaceFor).
+        if (const CardDefinition* kopt = KickedFaceFor(*opt, kicked, riders.kick_count)) { opt = kopt; }
         // MORPH (CR 702.37a): the FACE-DOWN cast -- the same one-place def swap, onto the synthesized
         // "<name> (Face-down)" vanilla 2/2. Everything downstream (the permanent that enters, its
         // abilities -- none -- its MV 0) reads the face. An alternative cost: never combined with the
@@ -77552,6 +77633,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Neverwinter Hydra rolls X d6 instead (EntersWithXCounterCount -- the one shared count).
             if (def.params.enters_with_x_plus_counters && chosen_x > 0)
             { PutPlusCounters(state, perm, EntersWithXCounterCount(state, state.active_player_index, def, chosen_x)); }
+            // MULTIKICKER (Joraga Warcaller): K +1/+1 counters off the face's kick_times -- lockstep twin of
+            // EffectHandler::EnterBattlefield.
+            if (def.params.kick_times > 0 && def.params.multikick_enter_counters)
+            { PutPlusCounters(state, perm, def.params.kick_times); }
             std::vector<DevourDeath> devoured;
             if (def.params.devour > 0 && cast_devour > 0)
             {
@@ -77604,6 +77689,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // late to be devoured itself. No-op for every non-devour cast. Lockstep with
             // EffectHandler::EnterBattlefield.
             FireDeferredDevourDeaths(state, state.active_player_index, devoured);
+            // SQUAD (Galadhrim Brigade): K token copies -- lockstep twin of EffectHandler::EnterBattlefield.
+            ResolveSquadCopies(state, state.active_player_index, cast_number, def);
 
             // ETB TUTOR-TO-HAND (Ranger-Captain of Eos / Goblin Matron / Ranger of Eos): the fetched
             // card competes for this turn's remaining mana exactly like a tutor SPELL's fetch, but
@@ -77664,7 +77751,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // casting it). No-op for non-legendary creatures. The copy-entrant param is gated
             // too: a Sakashima's Protege may have ENTERED as a legendary (Maelstrom Wanderer)
             // even though def.card is not -- mirror of the executor's Resolve() gate.
-            if (def.card.HasSupertype(Supertype::Legendary)
+            if (def.card.HasSupertype(Supertype::Legendary) || def.card.HasSupertype(Supertype::World)
                 || def.params.enter_as_copy_of_entrant || def.params.enter_as_copy_of_creature)
             {
                 EnforceLegendRule(state, state.active_player_index);
@@ -78827,7 +78914,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // post-dispatch site (EffectHandler::Resolve). No legendary non-creature permanent
             // exists in any deck today, so this is inert -- it is here so the two sides cannot
             // silently disagree the day one is added.
-            if (def.card.HasSupertype(Supertype::Legendary))
+            if (def.card.HasSupertype(Supertype::Legendary) || def.card.HasSupertype(Supertype::World))
             {
                 EnforceLegendRule(state, state.active_player_index);
             }
@@ -85588,6 +85675,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.bestow_cost.has_value() && !legacy_bestow_sig) { w.Put(act.bestow ? "#B1" : "#B0"); }
                 if (d && !d->params.adventure_face_name.empty()) { w.Put(act.adventure ? "#A1" : "#A0"); }
                 if (d && d->params.kicker_cost.has_value()) { w.Put(act.kicked ? "#KI1" : "#KI0"); }
+                if (d && HasRepeatKicker(d->params)) { w.Put("#MK"); w.Int(act.kicked ? act.kick_count : 0); }   // multikick count
                 if (d && (d->params.morph_cost || d->params.megamorph_cost)) { w.Put(act.face_down == 2 ? "#FD2" : act.face_down == 1 ? "#FD1" : "#FD0"); }
                 if (act.trick_redirect != 0) { w.Put("#RD"); w.Int(act.trick_redirect); }   // Spellskite
                 if (act.scry_pin >= 0) { w.Put("#SC"); w.Int(act.scry_pin); }   // a trick's own scry (9d)
@@ -91170,6 +91258,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         // Gated on the param -- the #S/#V/#K/#B/#A precedent -- so no deck without
                         // a kicker card moves a signature.
                         if (cd && cd->params.kicker_cost.has_value()) { k += (act.kicked ? "#KI1" : "#KI0"); }
+                        if (cd && HasRepeatKicker(cd->params)) { k += "#MK"; k += std::to_string(act.kicked ? act.kick_count : 0); }
                         // Morph: face-down vs hard cast of a morph card (lockstep with PlanSignatureFast).
                         if (cd && (cd->params.morph_cost || cd->params.megamorph_cost)) { k += (act.face_down == 2 ? "#FD2" : act.face_down == 1 ? "#FD1" : "#FD0"); }
                         // Spellskite's redirect of a trick: the same cast redirected is another line.
@@ -92370,7 +92459,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                 {
                     t = a.face_down == 1 ? "FD " : a.face_down == 2 ? "FD+up " : a.enchant_target == kTrickBestOwnTarget ? "trick " : "cast ";
                     t += a.card_name.str();
-                    if (a.kicked) { t += " [kicked]"; }
+                    if (a.kicked) { t += a.kick_count > 0 ? " [kicked x" + std::to_string(a.kick_count) + "]" : std::string(" [kicked]"); }
                     if (a.trick_redirect != 0) { t += " [redirect]"; }
                 }
                 else if (a.kind == Action::Kind::ActivatePermAbility)
@@ -92397,7 +92486,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                     {
                         const std::string nm = a.card_name.str();
                         ++casts_by_name[nm];
-                        var_by_name[nm].insert(a.face_down * 100 + (a.kicked ? 10 : 0) + (a.trick_redirect != 0 ? 1 : 0));
+                        var_by_name[nm].insert(a.face_down * 100 + (a.kicked ? 10 : 0) + (a.trick_redirect != 0 ? 1 : 0) + a.kick_count * 1000);
                     }
                     else if (a.kind == Action::Kind::ActivatePermAbility
                              && (a.ability_mode == Action::AbilityMode::TurnFaceUp || a.ability_mode == Action::AbilityMode::TurnFaceUpLate)
@@ -93792,6 +93881,11 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     {
         auto absorb = [&](const CardDefinition* w)
         {
+            // Leaf-Crowned Visionary's optional-pay draw on an Elf cast: the same watcher route (Elves).
+            if (w && w->params.cast_subtype_pay_draw_cost.has_value() && !w->params.cast_trigger_subtype.empty()
+                && std::find(watched_cast_subtypes.begin(), watched_cast_subtypes.end(),
+                             w->params.cast_trigger_subtype) == watched_cast_subtypes.end())
+            { watched_cast_subtypes.push_back(w->params.cast_trigger_subtype); }
             if (!w || w->params.draw_on_cast_subtypes.empty()) { return; }
             for (const std::string& t : w->params.draw_on_cast_subtypes)
             {
@@ -101782,6 +101876,91 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             }
             all.insert(all.end(), std::make_move_iterator(extra.begin()),
                                   std::make_move_iterator(extra.end()));
+        }
+    }
+
+    // LEAF-CROWNED VISIONARY (cast_subtype_pay_draw_cost; Elves 2026-11-26): "Whenever you cast an Elf spell, you
+    // may pay {G}. If you do, draw a card." The SAME searched pin as Mihail's above (Plan::mihail_pay_choice: one
+    // bit per optional cast trigger, in resolution order; unpinned = decline every one), with a FOLD that is sound
+    // only because a paid trigger DRAWS: the drawn card arms the site-10 put-in-hand breakpoint (MTG_BP_PUT_IN_HAND,
+    // default on), which truncates the plan after that cast and re-solves the rest of the phase -- so every bit
+    // AFTER the first paid cast's group is never read. What remains distinct is WHERE the first payment falls and
+    // HOW MANY of that cast's triggers pay (identical sources, so the first m): 1 + sum_j s_j variants instead of
+    // 2^bound. With the breakpoint off the full fan is emitted. Run in continuation enumerations too
+    // (cont_axes_only), so a drawn Elf's own cast can pay again after the re-solve. Skipped when a Mihail-type
+    // source is present (the two would share one ordinal stream; no list runs both -- disclosed).
+    if (!HumanPlayActive())
+    {
+        const int me = state.active_player_index;
+        auto is_pay_draw = [](const CardDefinition* d)
+        { return d != nullptr && d->params.cast_subtype_pay_draw_cost.has_value() && !d->params.cast_trigger_subtype.empty(); };
+        std::vector<const CardDefinition*> live;
+        bool mihail_type = false;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != me) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            if (d && d->params.cast_subtype_pay_token_cost) { mihail_type = true; }
+            if (is_pay_draw(d)) { live.push_back(d); }
+        }
+        bool plan_casts_source = false;
+        if (live.empty())
+        {
+            for (const TurnSolver::Plan& p : all)
+            {
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind == Action::Kind::CastFromHand && is_pay_draw(ActionCastDef(a))) { plan_casts_source = true; break; }
+                }
+                if (plan_casts_source) { break; }
+            }
+        }
+        if (!mihail_type && (!live.empty() || plan_casts_source))
+        {
+            const bool fold = BpPutInHandEnabled();
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                if (p.mihail_pay_choice.IsPinned()) { continue; }
+                std::vector<const CardDefinition*> srcs = live;
+                std::vector<std::size_t> groups;   // per matching cast: the number of triggers it fires
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+                    const CardDefinition* d = ActionCastDef(a);
+                    if (!d) { continue; }
+                    std::size_t n = 0;
+                    for (const CardDefinition* sdf : srcs)
+                    { if (CardHasSubtype(d->card, sdf->params.cast_trigger_subtype)) { ++n; } }
+                    if (n > 0) { groups.push_back(n); }
+                    if (is_pay_draw(d) && d->card.IsCreature()) { srcs.push_back(d); }
+                }
+                std::size_t bound = 0;
+                for (std::size_t g : groups) { bound += g; }
+                if (bound == 0) { continue; }
+                if (!fold)
+                {
+                    MihailPayChoices choice;
+                    choice.Pin(bound);
+                    while (choice.Next()) { TurnSolver::Plan v = p; v.mihail_pay_choice = choice; extra.push_back(std::move(v)); }
+                    continue;
+                }
+                std::size_t off = 0;
+                for (std::size_t g : groups)
+                {
+                    for (std::size_t m = 1; m <= g; ++m)
+                    {
+                        MihailPayChoices choice;
+                        choice.Pin(bound);
+                        for (std::size_t b = 0; b < m; ++b) { choice.bits[off + b] = 1; }
+                        TurnSolver::Plan v = p;
+                        v.mihail_pay_choice = choice;
+                        extra.push_back(std::move(v));
+                    }
+                    off += g;
+                }
+            }
+            all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
         }
     }
 
@@ -138205,7 +138384,13 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             // NO `continue`, same as adventure: a kicked cast IS a hand cast and still belongs in
             // the cast multiset, so the human declares `cast=Saproling Migration` either way and
             // `kicked=` only picks the MODE.
-            if (a.kicked) { kickedNames.push_back(a.card_name); }
+            // Multikicker / squad: the kick count rides the name (`kicked=Joraga Warcaller x3`), so each K
+            // is its own declared mode; a single-kicker card keeps the bare name (kick_count 0).
+            if (a.kicked)
+            {
+                kickedNames.push_back(a.kick_count > 0 ? a.card_name.str() + " x" + std::to_string(a.kick_count)
+                                                       : a.card_name.str());
+            }
             // NO `continue` either: a face-down cast IS a hand cast of the card (same name in the multiset);
             // facedown= / facedownup= only pick the MODE.
             if (a.kind == Action::Kind::CastFromHand && a.face_down == 1) { faceDownNames.push_back(a.card_name.str()); }

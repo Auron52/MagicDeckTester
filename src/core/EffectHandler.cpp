@@ -162,6 +162,11 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // Neverwinter Hydra rolls X d6 instead (EntersWithXCounterCount -- the one shared count).
     if (edef->params.enters_with_x_plus_counters && entry.chosen_x.value_or(0) > 0)
     { PutPlusCounters(state, perm, EntersWithXCounterCount(state, entry.controller_index, *edef, *entry.chosen_x)); }
+    // MULTIKICKER (Joraga Warcaller, CR 702.33c): "enters with a +1/+1 counter on it for each time it was
+    // kicked" -- the as-enters replacement off the "(Kicked xK)" face's kick_times (the printed card's
+    // multikick_enter_counters names the payload). Lockstep twin: apply_one.
+    if (def.params.kick_times > 0 && def.params.multikick_enter_counters)
+    { PutPlusCounters(state, perm, def.params.kick_times); }
     std::vector<DevourDeath> devoured;
     if (edef->params.devour > 0 && entry.devour_count.value_or(0) > 0)
     {
@@ -202,6 +207,8 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // Tukatongue Thallid's replacement Saproling arrives too late to be devoured itself. No-op for
     // every non-devour cast. Lockstep with TurnSolver's apply_one.
     FireDeferredDevourDeaths(state, entry.controller_index, devoured);
+    // SQUAD (Galadhrim Brigade): the entrant's "create that many token copies" trigger. Lockstep twin: apply_one.
+    ResolveSquadCopies(state, entry.controller_index, entry.source.m_number, def);
 
     // EVOKE (Reveillark, CR 702.75): the evoke-cost cast self-sacrifices once its enter cascade
     // has fired -- through the SHARED cascade, so the LTB (return two power<=2 creatures) fires
@@ -338,6 +345,8 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
     // before, so an ETB dig's `battlefield.back()` self-pointer is never invalidated underneath it.
     // No-op for every deck with no legendary permanent.
     if (def.card.HasSupertype(Supertype::Legendary)
+        // ...or a WORLD permanent (Concordant Crossroads, CR 704.5m: run by EnforceLegendRule's world pass)
+        || def.card.HasSupertype(Supertype::World)
         // ...or the spell may have ENTERED as a legendary (Sakashima's Protege copying
         // Maelstrom Wanderer): the entering card is the copy's, not def's, so gate on the
         // param too. EnforceLegendRule is a no-op without a duplicate.

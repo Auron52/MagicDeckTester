@@ -5004,6 +5004,49 @@ inline Card UnkickedSpellCard(const CardDefinition& def, const Card& resolved)
     return c;
 }
 
+// SQUAD (CR 702.157a -- Galadhrim Brigade): "When this creature enters, create that many tokens that are
+// copies of it." The entrant's own enter trigger, resolved after its enter cascade in BOTH creature-enter
+// sites (EffectHandler::EnterBattlefield / TurnSolver apply_one -- lockstep by sharing this function). `face`
+// is the "(Kicked xK)" face the cast resolved (kick_times = K); the permanent itself is the PRINTED card by
+// now (UnkickedSpellCard), and its copiable values (CR 707.2) are what each copy takes -- the squad payment
+// is not copiable, so a copy makes no copies. Each copy enters through the universal cascade
+// (CreateTokenCopyOfCard: Doubling Season, Marwyn's watcher). Re-found by m_number: the cascade may have
+// moved the vector. No-op for every card that is not a squad face.
+inline void CreateTokenCopyOfCard(GameState& state, int controller, const Card& src);   // defined below
+inline void ResolveSquadCopies(GameState& state, int controller, int entrant_number, const CardDefinition& face)
+{
+    if (face.params.kick_times <= 0 || face.params.kicked_base_name.empty()) { return; }
+    const CardDefinition* base = CardDatabase::Instance().Lookup(face.params.kicked_base_name);
+    if (base == nullptr || !base->params.squad_cost.has_value()) { return; }
+    const Card* src = nullptr;
+    for (const Permanent& q : state.battlefield)
+    { if (q.card.m_number == entrant_number) { src = &q.card; break; } }
+    if (src == nullptr) { return; }   // it left before its trigger resolved: CR 707.4 -- last known info
+    const Card copy = *src;           // by value: the put reallocates the battlefield
+    for (int k = 0; k < face.params.kick_times; ++k) { CreateTokenCopyOfCard(state, controller, copy); }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger", copy.m_name.str() + " (squad x"
+                      + std::to_string(face.params.kick_times) + "): create "
+                      + std::to_string(face.params.kick_times) + " token cop"
+                      + (face.params.kick_times == 1 ? "y" : "ies"));
+    }
+}
+
+// THE KICKED FACE a kicked cast resolves (both cast sites, the prepay, the enumeration): "<name> (Kicked)" for a
+// single kicker, "<name> (Kicked xK)" for a multikicker / squad card with kick_count K. nullptr when the cast is
+// not kicked, the card has no kicker of either kind, or K is out of the synthesized range -- every caller then
+// keeps the printed def, which is the pre-multikicker behaviour exactly.
+inline const CardDefinition* KickedFaceFor(const CardDefinition& d, bool kicked, int kick_count)
+{
+    if (!kicked) { return nullptr; }
+    if (d.params.kicker_cost.has_value())
+    { return CardDatabase::Instance().Lookup(d.card.m_name.str() + " (Kicked)"); }
+    if (HasRepeatKicker(d.params) && kick_count >= 1 && kick_count <= kMaxMultikick)
+    { return CardDatabase::Instance().Lookup(MultikickFaceName(d.card.m_name.str(), kick_count)); }
+    return nullptr;
+}
+
 // MORPH (CR 708.9): a face-down permanent that leaves the battlefield is REVEALED and arrives in its
 // new zone as the real card. A face-down permanent's Card IS the DB-synthesized "<name> (Face-down)"
 // face, and zone cards are name-only (resolved through LookupCached by name), so pushing that Card
@@ -5362,6 +5405,9 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         // Shadowborn Apostle's "Demon creature card" (tutor_required_subtype; empty = no filter).
         if (!pp.tutor_required_subtype.empty() && !CardHasSubtype(card, pp.tutor_required_subtype))
         { return false; }
+        // Elvish Clancaller: "a card NAMED Elvish Clancaller" (wish_requires_name as a library name filter,
+        // the Squadron Hawk reuse). Empty = no filter.
+        if (!pp.wish_requires_name.empty() && card.m_name.str() != pp.wish_requires_name) { return false; }
         for (const std::string& t : pp.tutor_types)
         { if (CardMatchesTypeName(card, t)) { return true; } }
         return false;
@@ -7919,6 +7965,56 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
             }
         }
 
+        // LEAF-CROWNED VISIONARY: "Whenever you cast an Elf spell, you may pay {G}. If you do, draw a card."
+        // Mihail's optional-payment shape directly above with a DRAW payload, on the SAME ordinal stream and
+        // pin (GameState::scripted_mihail_pay_choice, Plan::mihail_pay_choice; unpinned = decline). "You cast"
+        // only. The drawn card is an ordinary draw (DrawIntoHand), so the site-10 put-in-hand breakpoint arms
+        // off the hand growing and a drawn Elf is castable this phase. Human play: the dig-chooser yes/no
+        // (Mihail's prompt), offered only when the {G} is payable. Every cast site calls this function, so the
+        // executor and the rollout are lockstep. Param-gated -> byte-identical for every other card.
+        if (def->params.cast_subtype_pay_draw_cost && !def->params.cast_trigger_subtype.empty()
+            && p.controller_index == active)
+        {
+            bool hit = false;
+            for (const std::string& cs : cast_def.card.m_subtypes)
+            { if (cs == def->params.cast_trigger_subtype) { hit = true; break; } }
+            if (hit)
+            {
+                const ManaCost& cost = *def->params.cast_subtype_pay_draw_cost;
+                const std::size_t ordinal = state.scripted_mihail_trigger_ordinal++;
+                bool pay = state.scripted_mihail_pay_choice.Paid(ordinal);
+                if (g_play_dig_chooser != nullptr && !g_tap_speculating)
+                {
+                    GameState probe = state;
+                    if (!TapForCostDirect(probe, cost, false)) { pay = false; }
+                    else
+                    {
+                        const std::vector<Card> examined{cast_def.card};
+                        const std::vector<int> legal{0};
+                        pay = (*g_play_dig_chooser)(state, active,
+                            def->card.m_name.str() + " (Elf cast: pay {G} to draw a card)",
+                            examined, legal, pay ? 0 : -1) == 0;
+                    }
+                }
+                Player& vp = state.players[active];
+                if (pay && !vp.library.empty() && TapForCostDirect(state, cost, false))
+                {
+                    const std::size_t before = vp.hand.size();
+                    vp.cards_drawn_this_turn += DrawIntoHand(state, active, 1, HandEntryReason::Draw);
+                    if (g_play_draw_sink)
+                    {
+                        for (std::size_t hi = before; hi < vp.hand.size(); ++hi)
+                        { g_play_draw_sink->push_back({ state.turn_number, vp.hand[hi].m_name.str() }); }
+                    }
+                    if (g_play_event_sink && !g_tap_speculating)
+                    {
+                        EmitPlayEvent(state.turn_number, "trigger", def->card.m_name.str() + " ("
+                                      + cast_def.card.m_name.str() + "): paid {G}, drew a card");
+                    }
+                }
+            }
+        }
+
         // Young Pyromancer: "Whenever you cast an instant or sorcery spell, create a 1/1 red
         // Elemental creature token." Same collection pass as Worthy Knight above, keyed on the
         // cast spell's TYPE instead of a creature subtype. Aria of Flame (a few lines up) already
@@ -8376,6 +8472,15 @@ inline std::pair<int,int> ComputeLordBonus(
             int scale = std::max(0, matching_count - 1);
             pb += ldef->params.power_bonus * scale;
             tb += ldef->params.tough_bonus * scale;
+        }
+        else if (ldef->params.lord_per_own_plus_counter)
+        {
+            // Joraga Warcaller: "+1/+1 for each +1/+1 counter on this creature" -- the LORD's live
+            // counters (CR 613.4c applies the total in layer 7c), so a counter added later (Immaculate
+            // Magistrate) raises every other Elf at once. 0 counters = no bonus.
+            const int c = PlusCountersOn(lord);
+            pb += ldef->params.power_bonus * c;
+            tb += ldef->params.tough_bonus * c;
         }
         else
         {
@@ -31347,8 +31452,46 @@ inline bool LegendSameHead(int controller, const Permanent& a, const Permanent& 
         || opponentdeck::HeadOfNumber(a.card.m_number) == opponentdeck::HeadOfNumber(b.card.m_number);
 }
 
+// THE WORLD RULE (CR 704.5m; Concordant Crossroads, Elves 2026-11-26): "If two or more permanents have the
+// supertype world, all except the one that has had the world supertype for the shortest amount of time are put
+// into their owners' graveyards." GLOBAL (any controller), unlike the legend rule. Timestamp order is battlefield
+// order (a later index entered later -- the AuraBonusFor base-set convention), so the NEWEST survives. A TIE
+// (two World permanents entering simultaneously, e.g. one Genesis Wave putting both Crossroads) should put ALL of
+// them in the graveyard; it is not modelled: the Wave's put set is a choice and "put one, mill the other" reaches
+// exactly the state this keeps, so in this pool the tie only removes a dominated put. Run at the top of
+// EnforceLegendRule, so every legend-rule SBA site applies it; the enter sites that gate that call on Legendary
+// also take World. No world permanent leaves a death cascade (none is a creature in any pool) -- an enchantment
+// put into the graveyard by an SBA, plus the orphaned-Aura sweep for completeness. Byte-identical without two
+// World permanents (one scan with an early return).
+inline void EnforceWorldRule(GameState& state)
+{
+    int newest = -1, count = 0;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        if (state.battlefield[static_cast<std::size_t>(i)].card.HasSupertype(Supertype::World)) { newest = i; ++count; }
+    }
+    if (count < 2) { return; }
+    for (int i = newest - 1; i >= 0; --i)   // descending: the indices below stay valid
+    {
+        const Permanent& wp = state.battlefield[static_cast<std::size_t>(i)];
+        if (!wp.card.HasSupertype(Supertype::World)) { continue; }
+        EmitPlayEvent(state.turn_number, "legend", "\xE2\x9A\x96 world rule: " + wp.card.m_name.str()
+                      + " is put into the graveyard -- a newer World permanent entered");
+        const int num = wp.card.m_number;
+        state.players[wp.owner_index].graveyard.push_back(RevealedCard(wp.card));
+        state.battlefield.erase(state.battlefield.begin() + i);
+        for (Permanent& e : state.battlefield)
+        {
+            if (e.aura_attached_to == num) { e.aura_attached_to = 0; }
+            if (e.equipped_to == num)      { e.equipped_to = 0; }
+        }
+    }
+    SweepOrphanedAuras(state);
+}
+
 inline void EnforceLegendRule(GameState& state, int controller_index)
 {
+    EnforceWorldRule(state);   // CR 704.5m -- see above (a no-op without two World permanents)
     // WHICH copy survives is the controller's choice (CR 704.5j) and is provider-owned
     // (LegendKeepIndex); the base rule keeps the OLDEST (lowest battlefield index), which is what
     // the previous erase-as-you-scan loop did, so this is byte-identical.
@@ -33379,6 +33522,8 @@ inline bool IsScaledManaDork(const CardDefinition& def)
     // mid-turn-mutable count -- with life gained this turn in place of a subtype count. Widening
     // this ONE predicate is what teaches every downstream mana-accounting site the new source.
     if (def.params.mana_per_life_gained) { return true; }
+    // Marwyn, the Nurturer: the same shape again -- one tap yields this permanent's LIVE power.
+    if (def.params.mana_per_own_power) { return true; }
     return !def.params.mana_per_creature_subtype.empty()
         && def.params.mana_per_creature_feeder_generic == 0;
 }
@@ -33401,6 +33546,20 @@ inline int ScaledDorkCount(const GameState& state, int controller, const CardDef
     // unlike a Priest of Titania at zero Elves.
     if (def.params.mana_per_life_gained)
     { return std::max(1, state.players[controller].life_gained_this_turn); }
+    // Marwyn, the Nurturer: "Add an amount of {G} equal to Marwyn's power" -- the permanent's live power as
+    // combat sums it (printed + counters + lords + temp pumps; CombatPowerOf), read at the tap. Legendary,
+    // so one per controller (the legend rule); the max over copies is a transient-safe read. Negative
+    // power adds nothing (CR 107.1b).
+    if (def.params.mana_per_own_power)
+    {
+        int best = 0;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller || q.card.m_name != def.card.m_name) { continue; }
+            best = std::max(best, CombatPowerOf(q, state));
+        }
+        return best;
+    }
     const std::string& sub = def.params.mana_per_creature_subtype;
     int n = 0;
     for (const Permanent& q : state.battlefield)
@@ -37700,6 +37859,8 @@ inline bool TapTutorPutLibraryCandidate(const CardParams& pp, const Card& card)
 {
     if (!pp.tutor_required_subtype.empty() && !CardHasSubtype(card, pp.tutor_required_subtype))
     { return false; }
+    // Elvish Clancaller's name filter (wish_requires_name), as PerformTutorToBattlefield applies it.
+    if (!pp.wish_requires_name.empty() && card.m_name.str() != pp.wish_requires_name) { return false; }
     for (const std::string& t : pp.tutor_types)
     {
         if (t == "Planeswalker") { if (card.HasType(CardType::Planeswalker)) { return true; } continue; }
@@ -40002,6 +40163,9 @@ inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinitio
         { return d->params.tap_target_pump_requires_subtype.empty()
               ? "target creature can't be blocked this turn"
               : "target Merfolk creature can't be blocked this turn"; }
+        if (!d->params.tap_target_counters_per_subtype.empty())
+        { return "put a +1/+1 counter on target creature for each " + d->params.tap_target_counters_per_subtype
+                 + " you control"; }
         if (!d->params.tap_target_pump_power_per_subtype.empty())
         { return "target creature gets -X/-0 until end of turn (X = your Merfolk and Faeries)"; }
         const bool per_x = mode == PermAbilityMode::TapTargetPump
@@ -41120,6 +41284,22 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 break;
             }
             Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
+            // IMMACULATE MAGISTRATE: "Put a +1/+1 counter on target creature for each Elf you control" --
+            // COUNTERS, not an until-EOT pump, N = the subtype's permanents we control AT RESOLUTION (CR
+            // 608.2h; the source counts itself), through PutPlusCounters (a put, CR 122.6 -- a doubler
+            // doubles it). Shared by both worlds (this resolver). Param-gated: every other card skips it.
+            if (mode == PermAbilityMode::TapTargetPump && !d->params.tap_target_counters_per_subtype.empty())
+            {
+                const int n = CountOtherControlledWithSubtype(state, controller,
+                                                              d->params.tap_target_counters_per_subtype, INT_MIN);
+                if (n > 0) { PutPlusCounters(state, t, n); }
+                if (g_play_event_sink && !g_tap_speculating)
+                {
+                    EmitPlayEvent(state.turn_number, "ability", src_name + ": " + std::to_string(n)
+                                  + " +1/+1 counter" + (n == 1 ? "" : "s") + " on " + t.card.m_name.str());
+                }
+                break;
+            }
             const int x  = (pin.x == kTapTargetPumpXAll) ? 0 : std::max(0, pin.x);
             int pp = TapTargetPumpPowerAt(*d, x);
             if (!d->params.tap_target_pump_power_per_subtype.empty())

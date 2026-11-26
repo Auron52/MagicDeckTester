@@ -4762,6 +4762,48 @@ struct CardParams
     std::optional<ManaCost> kicker_cost;
     bool kicked_etb_target_land_island = false;
 
+    // ---- MULTIKICKER / SQUAD (Elves, 2026-11-26; CR 702.33c / 702.157) ----------------------------------
+    // "You may pay an additional <cost> any number of times as you cast this spell." The SAME face trick
+    // as kicker_cost above, once per kick count: CardDatabase synthesizes "<name> (Kicked xK)" for
+    // K = 1..kMaxMultikick, each costing printed + K x <cost> (ADDED, CR 601.2b) and carrying
+    // kick_times = K, so every cost reader (enumeration, prepay, both cast sites) sees an ordinary flat
+    // cost. The cast carries Action::kicked + Action::kick_count = K (CastRiders::kick_count), and the
+    // two cast sites swap in the face (KickedFaceFor). The payload differs per card:
+    //   multikick_enter_counters (Joraga Warcaller): the face enters with K +1/+1 counters (an as-enters
+    //     replacement in the pre-push window of BOTH creature-enter sites, through PutPlusCounters);
+    //   squad_cost (Galadhrim Brigade): the face's enter trigger creates K token copies of the PRINTED
+    //     card (CreateTokenCopyOfCard), after the face became the printed card (UnkickedSpellCard).
+    // A card carries at most one of kicker_cost / multikicker_cost / squad_cost (THROWN at load). Must
+    // be FLAT. nullopt = none -> byte-identical for every other card.
+    std::optional<ManaCost> multikicker_cost;
+    std::optional<ManaCost> squad_cost;
+    bool multikick_enter_counters = false;
+    // INTERNAL -- set ONLY on a synthesized "(Kicked xK)" face (never read from JSON): K. 0 elsewhere.
+    int  kick_times = 0;
+    // "Other Elf creatures you control get +1/+1 for each +1/+1 counter on this creature" (Joraga
+    // Warcaller): the lord's power_bonus/tough_bonus are multiplied by the +1/+1 counters on the LORD
+    // permanent, read live in ComputeLordBonus. false -> every other lord byte-identical.
+    bool lord_per_own_plus_counter = false;
+    // Immaculate Magistrate: "{T}: Put a +1/+1 counter on target creature for each Elf you control." A
+    // TapTargetPump (tap_target_pump_cost) whose payload is N +1/+1 COUNTERS on the target instead of an
+    // until-EOT pump, N = permanents of this subtype the controller controls at resolution. Empty = off.
+    std::string tap_target_counters_per_subtype;
+    // Allosaurus Shepherd: "{cost}: Until end of turn, each <subtype> creature you control has base power
+    // and toughness P/T" (PermAbilityMode::TeamBasePT; layer 7b, CR 613.4b; affected set locked at
+    // resolution, CR 611.2c). No {T}, repeatable. nullopt = off.
+    std::optional<ManaCost> team_base_pt_cost;
+    int         team_base_pt_power = 0;
+    int         team_base_pt_tough = 0;
+    std::string team_base_pt_subtype;
+    // Leaf-Crowned Visionary: "Whenever you cast a <cast_trigger_subtype> spell, you may pay {cost}. If you
+    // do, draw a card." The Emperor Mihail II optional-payment trigger (cast_subtype_pay_token_cost) with a
+    // DRAW payload; the pay decision is the same searched pin (Plan::mihail_pay_choice). nullopt = off.
+    std::optional<ManaCost> cast_subtype_pay_draw_cost;
+    // Marwyn, the Nurturer: "{T}: Add an amount of {G} equal to Marwyn's power." A scaled mana dork whose
+    // one-tap yield is THIS permanent's live effective power (printed + counters + lords + temp pumps),
+    // read in ScaledDorkCount. false -> byte-identical.
+    bool mana_per_own_power = false;
+
     // Set ONLY on a synthesized "<name> (Kicked)" face, naming the printed card it came from. The
     // face exists so the cost and payload resolve without any kicker awareness downstream, but it
     // must not leak into a ZONE: the card put into the graveyard is the spell card itself, ONE card
@@ -5592,6 +5634,16 @@ inline const std::vector<Color>& EtbColorMenu(const CardParams& p)
 }
 
 // A fully resolved card definition: base Card data plus template + parameters.
+// MULTIKICKER / SQUAD faces (CardParams::multikicker_cost / squad_cost): the DB synthesizes one face per kick
+// count 1..kMaxMultikick. ONE naming function, used by the synthesis and by every lookup.
+inline constexpr int kMaxMultikick = 16;
+inline std::string MultikickFaceName(const std::string& base, int k)
+{ return base + " (Kicked x" + std::to_string(k) + ")"; }
+inline bool HasRepeatKicker(const CardParams& p)
+{ return p.multikicker_cost.has_value() || p.squad_cost.has_value(); }
+inline const std::optional<ManaCost>& RepeatKickerCost(const CardParams& p)
+{ return p.multikicker_cost.has_value() ? p.multikicker_cost : p.squad_cost; }
+
 struct CardDefinition
 {
     Card card;

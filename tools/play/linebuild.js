@@ -672,7 +672,7 @@
          + (srcNum ? '#' + srcNum : '')
          + (target ? '@' + target : '')
          + (v === 'blink' && p.blinkCount > 0 ? '*' + p.blinkCount : '')
-         + (p.kicked ? '+kicked' : '')
+         + (p.kicked ? (p.kickCount > 0 ? '+kickedx' + p.kickCount : '+kicked') : '')
          + (p.adventure ? '+adventure' : '')
          // MORPH: the face-down cast (1) / face-down then turned up at once (2) -- the engine's
          // HumanStepMatches compares Action::face_down exactly, so a hard cast says nothing.
@@ -754,7 +754,7 @@
     // kicking IS a cast of that hand card, just a dearer one, so the cast loop has already emitted
     // `cast=<name>` and this token only says WHICH MODE. Compared unconditionally by the engine, so
     // omitting it means "do not kick".
-    for (const p of plan) if (p.kicked) parts.push('kicked=' + p.name);
+    for (const p of plan) if (p.kicked) parts.push('kicked=' + p.name + (p.kickCount > 0 ? ' x' + p.kickCount : ''));
     // MORPH (CR 702.37a) -- the kicked= shape again: a face-down cast IS a cast of that hand card
     // (the cast loop already wrote `cast=<name>`), so this only names the MODE. Compared
     // unconditionally by the engine; omitting it means the HARD (face-up) cast.
@@ -800,10 +800,21 @@
   // count is therefore the gesture -- 0 -> 1 -> 2 -> 0 over n queued casts -- which is this GUI's
   // standing idiom for a repeated click on one affordance, and reads off the badge's "xN".
   // Returns { plan, action }, action being 'kicked' | 'unkicked' | 'queued' for the GUI's hint.
-  function toggleKicker(plan, name, kind) {
+  // MULTIKICKER / SQUAD (Joraga Warcaller, Galadhrim Brigade; kmax > 0): the badge CYCLES the kick count of
+  // the last queued cast, 0 -> 1 -> ... -> kmax -> 0 (kickCount; encodeLine writes `kicked=<name> xK` and
+  // `+kickedx<K>`). kmax is the largest K the engine enumerated this decision (index.html kickerMaxK).
+  function toggleKicker(plan, name, kind, kmax) {
     const idxs = plan.map((p, i) => ({ p, i }))
                      .filter(x => x.p.name === name && isSpecCast(x.p) && lineVerb(x.p) === 'cast')
                      .map(x => x.i);
+    if (kmax > 0) {
+      if (!idxs.length) { plan.push({ name, kind, kicked: true, kickCount: 1 }); return { plan, action: 'queued' }; }
+      const last = plan[idxs[idxs.length - 1]];
+      const k = last.kicked ? (last.kickCount || 1) : 0;
+      if (k < kmax) { last.kicked = true; last.kickCount = k + 1; return { plan, action: 'kicked' }; }
+      delete last.kicked; delete last.kickCount;
+      return { plan, action: 'unkicked' };
+    }
     if (!idxs.length) { plan.push({ name, kind, kicked: true }); return { plan, action: 'queued' }; }
     const un = idxs.filter(i => !plan[i].kicked);
     if (un.length) { plan[un[un.length - 1]].kicked = true; return { plan, action: 'kicked' }; }

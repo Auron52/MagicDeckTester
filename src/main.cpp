@@ -3539,6 +3539,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                                                   : CardDatabase::Instance().Lookup(ac.card_name);
                 if (kd && kd->params.kicker_cost.has_value())
                 { os << ", \"kicked_cost_mv\": " << kd->params.kicker_cost->ManaValue(); }
+                // Multikicker / squad (Elves): the kick count K and the K kicks' total mana value.
+                if (kd && HasRepeatKicker(kd->params) && ac.kick_count > 0)
+                {
+                    os << ", \"kick_count\": " << static_cast<int>(ac.kick_count)
+                       << ", \"kicked_cost_mv\": " << ac.kick_count * RepeatKickerCost(kd->params)->ManaValue();
+                }
             }
             //  * SPELLSKITE REDIRECT of a solo-target trick (Action::trick_redirect): the same cast,
             //    same target, plus {U/P} to redirect it onto the Spellskite (whose target watchers
