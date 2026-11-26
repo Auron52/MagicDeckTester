@@ -20109,7 +20109,9 @@ inline int GyReturnRandomPick(const GameState& state, const std::vector<Card>& g
 // searched/human pick; an empty or now-illegal name resolves to the first legal target so a
 // replayed line never strands. No-op if the source was tapped for mana by an earlier cast in the
 // same plan, or if the fuel left the graveyard meanwhile -- stranded-outlet safe, like Deathrite.
-inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int source_id,
+// Returns true when the ability was ACTIVATED (its {T} / sacrifice paid), false for that no-op: the
+// apply sites name a false to the act-drop sink (NoteGraveyardReturnDrop; reporting only).
+inline bool ApplyGraveyardReturnAbility(GameState& state, int controller, int source_id,
                                         const std::string& target_name)
 {
     int src = -1;
@@ -20125,7 +20127,7 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
         src = i; d = pd;
         break;
     }
-    if (src < 0 || !d) { return; }
+    if (src < 0 || !d) { return false; }
 
     // HAUNTED FENGRAF: "Return a creature card AT RANDOM from your graveyard to your hand." Not
     // targeted and not chosen, so `target_name` is ignored (it is kGyReturnRandom). The costs are
@@ -20136,7 +20138,7 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
     // fuel, so that end is a stale-plan guard.
     if (d->params.gy_return_at_random)
     {
-        if (!GyReturnHasFuel(state, controller, *d)) { return; }   // stale plan: never activated
+        if (!GyReturnHasFuel(state, controller, *d)) { return false; }   // stale plan: never activated
         const Card sacrificed = state.battlefield[static_cast<std::size_t>(src)].card;
         const int  sac_owner  = state.battlefield[static_cast<std::size_t>(src)].owner_index;
         const std::string src_label = sacrificed.m_name.str();
@@ -20160,7 +20162,7 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
         for (int i = 0; i < static_cast<int>(gyr.size()); ++i)
         { if (GyReturnTargetLegal(*d, ZoneCard(gyr[static_cast<std::size_t>(i)]))) { elig.push_back(i); } }
         const int pick_r = GyReturnRandomPick(state, gyr, elig);
-        if (pick_r < 0) { return; }
+        if (pick_r < 0) { return true; }   // activated; nothing eligible at resolution
         const Card returned = gyr[static_cast<std::size_t>(pick_r)];
         gyr.erase(gyr.begin() + pick_r);
         TRACE("gyrandom", "T%d seed=%llu eligible=%zu -> %s", state.turn_number,
@@ -20172,7 +20174,7 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
                           src_label + ": returned " + returned.m_name.str()
                           + " from the graveyard to hand (at random)");
         }
-        return;
+        return true;
     }
 
     std::vector<Card>& gy = state.players[controller].graveyard;
@@ -20183,7 +20185,7 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
         if (pick < 0) { pick = static_cast<int>(i); }                 // fallback: first legal
         if (!target_name.empty() && gy[i].m_name == target_name) { pick = static_cast<int>(i); break; }
     }
-    if (pick < 0) { return; }   // no legal target: the ability would not have been activated
+    if (pick < 0) { return false; }   // no legal target: the ability would not have been activated
 
     // Costs are paid on activation (CR 601.2h/602.1): tap, then -- for a source whose printed cost
     // says so -- sacrifice it to the graveyard, and only then resolve the return.
@@ -20221,6 +20223,7 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
                       src_label + ": returned " + returned.m_name.str()
                       + " from the graveyard to hand");
     }
+    return true;
 }
 
 // ---- Lurrus of the Dream-Den -- "Once during each of your turns, you may cast a permanent ------

@@ -116,6 +116,9 @@ namespace manaoracle
         // frontier identity and payment table must retain this payment context.
         int                    f_sac_spare_source = 0;
         int                    f_sac_spare_victim = 0;
+        // The source the payment must leave untapped because its ability's cost taps it (t_pay_self_tap_src, ManaPayment.h:
+        // Haven of the Spirit Dragon's "{2}, {T}, sacrifice"); 0 = none. The payment table leaves it out, as the payer does.
+        int                    f_self_tap_src = 0;
         // Every breakpoint CONTINUATION plan applied on `target` so far, in order, as one signature
         // (NoteContinuation; 0 = none). A continuation is re-solved on the board its breakpoint saw, so two
         // payment histories can reach the same visible board and bill while holding different pending
