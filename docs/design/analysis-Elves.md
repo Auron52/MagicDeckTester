@@ -270,10 +270,14 @@ All on the integrated tree `wip/elves-int` (origin 9e566000b + every Elves fix),
   Lodge alone (colourless) and cast nothing until T7; a mulligan-profile question (no keep table yet), not play.
 * **5c budget:** every slower game in the smoke/regression audits of this landing recovers at d8 b0 (19 Genesis
   Wave games, 5 Elves d0 mana games at d5 b20 / d8 b0, 9 smoke + 10 regression games on the integrated binary).
-* **5c2 horizon-honest tie-break:** UN-RUN so far -- `leaf_tiebreak_check.py` (24 x 1000-game pooled batch) was
-  killed twice by memory: a global OOM at 20.6 GB, then the engine's own `MTG_RSS_CAP_GB=20` guard at 20.18 GB
-  with the budgeted pools under 1 GB. Unbounded per-process growth in long Elves batches; under investigation on
-  `wip/elves-mem`. Re-run after that fix.
+* **5c2 horizon-honest tie-break: KEEP THE DEFAULT (neutral).** The first two runs were killed by memory (a
+  single-step plan-list blow-up in rare Elves positions: 241K Brigade squad-count plans x the Visionary pay fan,
+  ~9 GB, filtered only afterwards). Fixed on `wip/elves-mem` ddc45ce91 (the Elves scaling filter also runs
+  BEFORE the subdecision-axis fan via `DecisionProvider::PlanListFilterBeforeAxes`; play byte-identical, smoke
+  0 changed); the full `leaf_tiebreak_check` batch then ran to completion (24 x 1000 games, RSS 2.1-6.8 GB).
+  Result: all 12 paired seed blocks have IDENTICAL avg win turns leaf on vs off (12,000 paired games); digests
+  differ in 8 of 12 blocks, so the tie-break fires but never moves a win turn here. Not "never fired"; neutral.
+  `GradesNoWinLeaf()` stays default ON. (Measured on the pre-lethal integration binary + the memory fix.)
 * **5d claude-play sweep:** 18 games, Claude faster 1 / equal 17 / slower 0; 5 flags, all fixed (above).
 * **5e/5f scaling-sink prune (USER rule) held-out A/B** (seeds 9700001+gi, d5 b20 with profile): std 2000 g prune
   4.3415 vs full 4.3385 (net +0.0030, 0 faster / 6 slower), 2HG 1000 g 4.6540 vs 4.6510 (+0.0030, 0 / 3); units
