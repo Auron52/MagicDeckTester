@@ -296,6 +296,16 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**08:11 UTC 11-26:**
+- Worldfire re-measure on 9ca7deb5e passed: net +1 over 6000 games, t=+0.38. All 3 slower games recover at d8 b0 (83cded842, `logs/worldfire-ad/ab_verdict_remeasure.md`).
+- The Maze ab2 fold is byte-identical on all 12 shapes. The price on top of it is still worse on Gods (+19 / +24), and Maze is 0 / 0 (619248137 on wip/maze2hg-perf). A successor agent is scoping the price to fans the fold cannot collapse.
+- The mill-k agent repaired VERIFY (fork-based, inert) and added MTG_KO_CROSS_ROUND_STOP; its report is 024c914cf on wip/mill-k.
+- I joined the push queue and became head at 08:10. I stopped my own queued kverify and ident runners to free the box; kverify was about 5 minutes into its run. Validation is running under hold via `build/scratch/land-1126/validate.sh`, log `validate.log`, markers TIERS.DONE and UNIT.DONE.
+- NEXT:
+  - If tiers report regressions, accept them with `--accept-with-regressions`, then run check_gt_logs, then `land`.
+  - Then relaunch the two runners: `setsid nohup bash build/scratch/mill-k/kverify/run.sh build/scratch/mill-k/kverify &` and the same for `ident/run.sh build/scratch/mill-k/ident`.
+  - Analyse both per `logs/mill-k/mill-k-handoff2.md`.
+
 **06:43 UTC 11-26:**
 - Mill-K A/B finished at 06:39 (rc=0). KF vs today: Mill -12 standard / -6 2HG, 0 slower, units x0.93, CPU x0.91. KF is byte-identical to K on the other 30 decks. KF vs K on Mill: -31 / -12 at CPU x1.017 / x1.025.
 - Because it is a soundness fix, MTG_KO_BOUNDARY_SIM is now default ON: c599d121f on wip/land-1126, together with cherry-picks of 3fc84b086, 1f1da869c and 6212fc005. That branch is rebuilding, then rerunning unit tests (`build/scratch/land-1126/bu2.txt`).
