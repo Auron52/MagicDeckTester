@@ -404,6 +404,15 @@ enum class PermAbilityMode
     // SEARCHED (Action::sac_victim_id = ours, Action::enchant_target = theirs), emitted out of band (never a
     // K block); the shared resolver reads both off TapFightPinScope. Appended LAST.
     TapFight,
+    // {4}{G}{G}: Until end of turn, each Elf creature you control has base power and toughness 5/5
+    // (Allosaurus Shepherd; CardParams::team_base_pt_cost / _power / _tough / _subtype). A LAYER 7b
+    // base set (CR 613.4b) on every matching creature the controller has AT RESOLUTION (CR 611.2c),
+    // stored as an until-end-of-turn delta in temp_power_bonus / temp_tough_bonus so every 7c effect
+    // (lords, pumps, +1/+1 counters -- CR 613.4c) still applies on top; Permanent::temp_base_set marks a
+    // creature already set so a second activation does not stack (re-setting 5/5 is a no-op). NO {T}:
+    // repeatable, legal while summoning-sick, so in PermAbilityTaps' exclusion list. A single emission
+    // (never a K block: a second activation only reaches Elves that entered since). Appended LAST.
+    TeamBasePT,
 };
 // Is `m` one of the two morph turn-face-up modes?
 inline bool IsTurnFaceUpMode(PermAbilityMode m)
@@ -440,6 +449,7 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::FigureTwo
         && m != PermAbilityMode::FigureFour
         && m != PermAbilityMode::FigureEight
+        && m != PermAbilityMode::TeamBasePT           // Allosaurus Shepherd: "{4}{G}{G}:" -- no {T}
         && m != PermAbilityMode::TurnFaceUp           // morph: a special action, no {T} (CR 702.37e)
         && m != PermAbilityMode::TurnFaceUpLate;
     // SacLandSearch (Evolving Wilds / Myriad Landscape) is deliberately ABSENT: its cost has {T}.
@@ -748,6 +758,13 @@ struct Permanent
     // (sizeof unchanged). FLIPS MID-TURN: folded wherever sac_at_end_step is. Never set for any other
     // card -> byte-identical elsewhere.
     bool      unearthed            : 1 = false;
+    // Allosaurus Shepherd's team base P/T set (PermAbilityMode::TeamBasePT): this creature's base P/T is
+    // already SET until end of turn (layer 7b), and the set is carried as a delta inside temp_power_bonus /
+    // temp_tough_bonus. Read ONLY by that resolver, so a second activation skips it instead of adding the
+    // delta twice. Reset with the until-EOT bonuses at every cleanup site (lockstep). Another bit of this
+    // second byte (sizeof unchanged). FLIPS MID-TURN: folded wherever unearthed is. Never set for any other
+    // card -> byte-identical elsewhere.
+    bool      temp_base_set        : 1 = false;
     // "As this permanent enters, choose a color" (Coldsteel Heart), CardParams::etb_choose_color.
     // The colour is LOCKED FOR THE PERMANENT'S LIFETIME -- it is a per-OBJECT property, which is
     // exactly why it cannot live on the CardDefinition like every other `produces`: four Coldsteel

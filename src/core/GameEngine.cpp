@@ -1600,6 +1600,7 @@ void GameEngine::CleanupStep(GameState& state)
         p.pending_death_trigger = 0;   // delayed Searing Blood trigger expires with the damage marks
         p.temp_power_bonus      = 0;
         p.temp_tough_bonus      = 0;
+        p.temp_base_set         = false;   // Allosaurus Shepherd's until-EOT base P/T set expires with them
         p.temp_haste            = false;   // "gains haste until end of turn" (Expedite) expires
         p.temp_lifelink         = false;   // Heliod's "gains lifelink until end of turn" expires
         p.temp_double_strike    = false;   // Valiant Knight's team "gain double strike until EOT"
