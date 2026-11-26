@@ -1,0 +1,14 @@
+box_lane: 07:46 running on 1 slot(s), MTG_RSS_CAP_GB=6: env MTG_PGO=0 MTG_KOB_TIMING=1 MTG_KO_CROSS_ROUND_STOP=1 build/Release/mtg --batch /workspaces/MagicDeckTester/build/scratch/mill-k/kob/kf.json --threads 1
+[flags] WARNING: MTG_LANE_SLOTS is set but is not a flag this binary reads -- a typo or a deleted flag? It will have NO effect (`mtg --list-flags` prints the known set).
+[play] KF depth=5 budget=20ms source=default provider=Mill
+[batch] workers=1 (hw_concurrency=32, affinity=32, requested=1)
+[batch] mem: total=48171MB budget=24085MB workers=32 -> tt_cap=2745173/table fsl_pool=6434MB fsl_cap=2000000 plan_cache=3200MB rss_cap=6.00G (MTG_MEM_BUDGET_MB / MTG_RSS_CAP_GB; each pool's own env var overrides)
+[batch] heartbeat: 0/1 workers busy (0%)  rss=0.0G fsl=0M/0M(of 6434M) plan=0M/12M(of 3200M)  -> logs/batch/heartbeat.txt
+[inwin-cache] win_hits=0 nowin_hits=2 win_stores=20 nowin_stores=518 widened=47 full_refusals=0
+[game-line-cache] win_hits=17 nowin_hits=167 stores=634 full_refusals=0 leafless_reads=0
+[id-hint-game] lookups=170 cur_hits=129 prev_hits=0
+[rollout-game-cache] lookups=4362 hits=884 win_hits=168 stores=8433 full_refusals=0
+[enum-memo] hits=0 misses=718 clears=0
+[kob-timing] crossings=42918 copy_ms=70.6 pre_advance_ms=126.8 post_advance_ms=4.2 no_advance=6 ends_game=6 dup_in_decision=8592 dup_disagree=0
+[solve-memo] hits=10944 misses=91629 clears=0
+[leaf-eval] published=7409 ties=5752 flips=17 life-equal-ties=5614
