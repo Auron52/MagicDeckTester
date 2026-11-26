@@ -71111,6 +71111,11 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 }
                 if (!held_fed)
                 {
+                    // A FAILED held attempt zeroes `produced` (held_attempt's restore) and may move won_hold: put the
+                    // solve's back, or the comparison below reads an empty pool (solve_left < 0, so even a walk that
+                    // FAILED looked better -- SelesnyaLifegain d0 s1001 gi496 / gi980 declined, the per-cast payer
+                    // tapped an Elf the solve kept for the swing, T5 -> T6) and a standing solve pre-loads nothing.
+                    won_hold = won_hold_prev; produced = produced_prev;
                     // (2) the per-cast walk, on a copy of the rolled-back board.
                     int walk_left = -1;
                     {
@@ -71160,7 +71165,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                      state.turn_number, names.c_str(), combined.ManaValue(), fm_solved.Total(),
                                      walk_left, solve_left);
                     }
-                    if (walk_left > solve_left) { return Pp(PP_SCALER_GROWN); }
+                    if (walk_left >= 0 && walk_left > solve_left) { return Pp(PP_SCALER_GROWN); }
                 }
             }
             if (!held_fed)
