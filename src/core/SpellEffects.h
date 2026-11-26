@@ -1747,7 +1747,7 @@ inline void SetCcoFloatWild(GameState& s, int n)
     s.floating_cco_wild       = static_cast<std::uint8_t>(n);
     s.floating_cco_wild_stamp = n > 0 ? PrepayCStampNow(s) : std::uint8_t{0xFF};
 }
-// CAVERN-CLASS FLOAT (GameState::floating_cco_wild, MTG_CCO_FLOAT_WILD). For a NONCREATURE payment the marked
+// CAVERN-CLASS FLOAT (GameState::floating_cco_wild). For a NONCREATURE payment the marked
 // `wild` units are {C} (Cavern of Souls' coloured mana pays only creature spells, CR 106.6), so they are presented
 // to the whole payment as colourless and handed back afterwards; a unit still left is restored to `wild` only as
 // far as the {C} count proves it unspent (the converted units are taken to have been spent first -- a leftover
@@ -51397,9 +51397,8 @@ inline bool AnyUntappedFilterSource(const GameState& state)
         // {G} on the bill first, the first backtracker then runs with an empty float, and the burst it offered
         // (AvailableManaPool credits it) could not be fed: Elves claude-play seed 9500005 T3, Clancaller ->
         // Brigade -> Brigade dropped the second Brigade with the Lodge untapped (one floating {G}, a tapped Priest
-        // at 4). MTG_UNTAP_FLOAT_FEED_RETRY=0 -> the plain filters only.
-        static const bool s_untap_retry = EnvOn("MTG_UNTAP_FLOAT_FEED_RETRY", true);
-        if (heurarm::Flag(heurarm::UNTAP_FLOAT_FEED_RETRY, s_untap_retry) && d && d->params.untap_creature_cost.has_value()
+        // at 4).
+        if (d && d->params.untap_creature_cost.has_value()
             && UntapBurstBestYield(state, active, *d, /*require_tapped=*/true) >= 2) { return true; }
     }
     return false;

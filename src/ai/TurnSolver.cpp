@@ -11054,13 +11054,6 @@ static bool HasteDorkCastCreditOn()
     static const bool on = EnvOn("MTG_HASTE_DORK_CAST_CREDIT", true);
     return heurarm::Flag(heurarm::HASTE_DORK_CAST_CREDIT, on);
 }
-// MTG_HASTE_SCALED_YIELD (DEFAULT ON; =0 -> a hasted scaled dork is credited one mana, as before): a hasted
-// scaled dork's cast credit is its entry yield (ScaledDorkEntryYield), not ManaProducedPerTap.
-static bool HasteScaledYieldOn()
-{
-    static const bool on = EnvOn("MTG_HASTE_SCALED_YIELD", true);
-    return heurarm::Flag(heurarm::HASTE_SCALED_YIELD, on);
-}
 // MTG_DOMAIN_WIDEN_PARTIAL (DEFAULT ON; =0 -> the all-widener credit only). See the PARTIAL DOMAIN
 // WIDEN rescue at EnumeratePlans' flat mana test.
 static bool DomainWidenPartialOn()
@@ -48166,7 +48159,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         {
             // A SCALED dork (Priest of Titania, Elvish Archdruid, Marwyn) taps for its live count, not one
             // (ScaledDorkEntryYield: the board's count plus itself -- a lower bound, so never a phantom).
-            const int y = (HasteScaledYieldOn() && IsScaledManaDork(def))
+            const int y = IsScaledManaDork(def)
                         ? ScaledDorkEntryYield(state, state.active_player_index, def) : -1;
             AddSourceToPool(a.rock_mana, state, def, y);
         }
@@ -72907,8 +72900,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // option is added or removed); the same function serves both apply worlds -> lockstep. Judged here, after the
     // solve, so a batch that taps no flat creature pays one battlefield scan for the check.
     //
-    // A FED SCALED DORK TAPPED BY THE SOLVE (MTG_PREPAY_SCALER_FED_TAPPED, DEFAULT ON; =0 -> only a tapped flat body
-    // arms the check, as before). With no flat body tapped the solve stood even when it tapped a dork the batch
+    // A FED SCALED DORK TAPPED BY THE SOLVE (a payer correctness fix, 2026-11-26; it used to be that only a tapped
+    // flat body armed the check). With no flat body tapped the solve stood even when it tapped a dork the batch
     // grows -- at its plan-start count, so the batch floated less than it makes: Elves claude-play seed 9500015 T3,
     // {Leaf-Crowned Visionary, Ezuri} off two Priests at 3 floated {G} where casting the Visionary first taps the
     // second Priest for 4 ({G}{G}), and the lost {G} is a Visionary draw or a post-draw cast. Such a solve is now
@@ -72917,10 +72910,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // power) -- the guard used to read mana_per_creature_subtype only, so Marwyn was never fed and the prepay
     // tapped it at power 2 under {Taunting Elf, Immaculate Magistrate} (seed 9500008 T6). Payment order only.
     static const bool s_scaler_grown = EnvOn("MTG_PREPAY_SCALER_GROWN", true);
-    static const bool s_fed_tapped_env = EnvOn("MTG_PREPAY_SCALER_FED_TAPPED", true);
     if (!aura_staged && heurarm::Flag(heurarm::PREPAY_SCALER_GROWN, s_scaler_grown))
     {
-        const bool s_fed_tapped = heurarm::Flag(heurarm::PREPAY_SCALER_FED_TAPPED, s_fed_tapped_env);
         auto batch_feeds = [&](const Permanent& p, const CardDefinition& pd) -> bool
         {
             for (const Action& a : acts)
@@ -72928,9 +72919,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
                 const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d == nullptr) { continue; }
-                if (s_fed_tapped ? CastGrowsScaledDork(pd, p, *d)
-                                 : (d->card.IsCreature() && CardHasSubtype(d->card, pd.params.mana_per_creature_subtype)))
-                { return true; }
+                if (CastGrowsScaledDork(pd, p, *d)) { return true; }
             }
             return false;
         };
@@ -72948,11 +72937,11 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             // again later at the grown count, so it is not a dork spent at its plan-start count.
             if (!b.card.IsCreature())
             {
-                if (s_fed_tapped && bd != nullptr && UntapBurstFeedColor(*bd).has_value()) { ++burst_tapped_n; }
+                if (bd != nullptr && UntapBurstFeedColor(*bd).has_value()) { ++burst_tapped_n; }
                 continue;
             }
             if (bd == nullptr || !IsScaledManaDork(*bd)) { flat_tapped = true; continue; }
-            if (s_fed_tapped && !bd->params.mana_per_life_gained && batch_feeds(b, *bd)) { ++fed_tapped_n; }
+            if (!bd->params.mana_per_life_gained && batch_feeds(b, *bd)) { ++fed_tapped_n; }
         }
         fed_tapped = fed_tapped_n > burst_tapped_n;
         if (flat_tapped || fed_tapped)
@@ -72998,7 +72987,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             // A FLAT body tapped and the fed dorks needed: decline, as before (the per-cast payer taps the dork when a cast
             // needs it, at the count by then).
             if (fed_any && flat_tapped && !rest.CanPay(combined)) { return Pp(PP_SCALER_GROWN); }
-            // A FED DORK tapped by the solve (MTG_PREPAY_SCALER_FED_TAPPED): it paid at its plan-start count. Two ways out,
+            // A FED DORK tapped by the solve: it paid at its plan-start count. Two ways out,
             // each taken only when it loses nothing the solve kept:
             //  (1) the board without the fed dorks pays the batch -> re-solve HOLDING them (on top of the ladder's holds),
             //      so they stay up and tap later at the grown count; refused if it taps a creature the solve left up (an
@@ -73616,18 +73605,15 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // The kept {C} rides into the float as a subset count, for a {C}-pip deck's payer (GameState::floating_prepay_c).
     if (state.deck_spends_c_pip && (prepay_c_kept > 0 || prepay_c_prior > 0))
     { SetPrepayKeptC(state, prepay_c_prior + prepay_c_kept); }
-    // THE CAVERN-CLASS UNITS (MTG_CCO_FLOAT_WILD, DEFAULT ON; =0 -> they float as unrestricted `wild`, as before;
-    // GameState::floating_cco_wild). Every unit this solve tapped out of a colored_creature_only source and left
+    // THE CAVERN-CLASS UNITS (CR 106.6; GameState::floating_cco_wild; they used to float as unrestricted `wild`). Every unit this solve tapped out of a colored_creature_only source and left
     // in the general float's `wild` -- an every-colour unit, so PrepayWildTrue does not record it -- is marked:
     // a noncreature spend (a Leaf-Crowned Visionary trigger, a post-draw noncreature cast) may take it as {C} only.
     // The units attributed are the general float's UNRECORDED wild, the most a Cavern can own (an any-colour
     // Birds unit may be counted with them: a {C}-for-noncreature reading of it is under-credit, never a laundering).
     {
-        static const bool s_cco_env = EnvOn("MTG_CCO_FLOAT_WILD", true);
-        const bool s_cco_float = heurarm::Flag(heurarm::CCO_FLOAT_WILD, s_cco_env);
         int cco_new = 0;
         const int nb = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
-        for (int bi = 0; s_cco_float && bi < nb; ++bi)
+        for (int bi = 0; bi < nb; ++bi)
         {
             const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
             if (!bp.tapped || bf_snap[static_cast<std::size_t>(bi)].tapped || bp.def_absent) { continue; }
@@ -111718,7 +111704,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         }
         // The prepay's kept {C} (EDF only): value-gated, so every other deck's key is unchanged.
         if (const int pk = PrepayKeptC(state); pk != 0) { mix(0xC0F1u + static_cast<std::uint64_t>(pk)); }
-        // The prepay's Cavern-class `wild` (MTG_CCO_FLOAT_WILD): value-gated, so every other deck's key is unchanged.
+        // The prepay's Cavern-class `wild` (GameState::floating_cco_wild): value-gated, so every other deck's key is unchanged.
         if (const int cw = CcoFloatWild(state); cw != 0) { mix(0xCC0F1A00ull + static_cast<std::uint64_t>(cw)); }
         // The prepay's colour-restricted `wild` (MTG_PREPAY_WILD_TRUE): which colour pips the float can still pay.
         if (const std::uint64_t pw = PrepayWildTrueKey(state); pw != 0) { mix(0x9A7D1E5Bull); mix(pw); }

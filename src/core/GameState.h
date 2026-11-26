@@ -764,7 +764,7 @@ struct GameState
     // through min(colorless). FUTURE-DETERMINING: mixed value-gated into the main-phase key (TurnSolver).
     std::uint8_t             floating_prepay_c = 0;
     std::uint8_t             floating_prepay_c_stamp = 0xFF;   // (TurnSeq*5 + phase) & 0xFF; 0xFF = never
-    // THE PREPAY'S CAVERN-CLASS `wild` (MTG_CCO_FLOAT_WILD, CR 106.6; Elves claude-play seed 9500008 T6). A SUBSET
+    // THE PREPAY'S CAVERN-CLASS `wild` (CR 106.6; Elves claude-play seed 9500008 T6). A SUBSET
     // COUNT of floating_mana.wild: units an all-creature whole-turn prepay tapped out of a colored_creature_only
     // source (Cavern of Souls: "{T}: Add {C}" / "{T}: Add one mana of any color. Spend this mana only to cast a
     // creature spell of the chosen type"). The prepay books such a unit `wild` (any colour -- right for the bill,
