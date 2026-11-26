@@ -234,20 +234,29 @@ commit: `948933d6c` (benchmark d5 b200). seeds: 9500001..9500018 (disjoint from 
 Result: Claude faster 1 (s9500006, 4 vs 5), equal 17, slower 0. Rules / card-data violations: 0.
 Full per-seed tally, notes and repro CSVs: `logs/elves/sweep-tally.md`.
 
-Flags (each verified against cards.json + the rules skill; each became a fix branch -- see the coordinator checkpoints):
-1. fd-diverge s7036 (breakpoint resume reset the Visionary cast-trigger ordinal): FIXED `wip/elves-fd` bac7df0a2.
-2. Continuation casts' Visionary pay-{G} choice not pinned (ContPins): `wip/elves-contpin`.
-3. Genesis Wave puts open no re-solve, s9500006 misses T4 at every budget incl. d3 b0: `wip/elves-wavebp`.
-4. Immaculate Magistrate targets only the pre-cast battlefield (fixture mag4.json, lethal unfindable at b0):
-   `wip/elves-tapt`.
-5. Mana cluster (hasted scaled-dork credit 1; in-plan scaled yield; Marwyn prepay power; Lodge untap burst unused by
-   the payer; Cavern `wild` paid a non-creature cost): `wip/elves-mana`.
-6. Cosmetic labels (Clancaller "Merfolk", Visionary dig frame, Magistrate "X=0" / "+0/+0") and validate_line `act=`
-   for a card in hand: in `wip/elves-contpin`.
+Flags (each verified against cards.json + the rules skill; each became a fix branch, all now merged on `wip/elves-int`):
+1. fd-diverge s7036 (breakpoint resume reset the Visionary cast-trigger ordinal): FIXED 430997dae (lockstep #20).
+2. Continuation casts' Visionary pay-{G} choice not pinned (ContPins): FIXED 5dd44269d, a74aa0754, d57236f5f
+   (lockstep #21). A/B 2000 g net -2, 0 slower; smoke identical.
+3. Genesis Wave puts open no re-solve, s9500006 misses T4 at every budget incl. d3 b0: FIXED 43e680701, 50bb7a692,
+   bc0a580b1 (hatch MTG_BP_PUT_BATTLEFIELD deleted; declined-search mark folded). s9500006 now T4 at d5 b200/b0, d3 b0.
+   Held-out A/B (seed 9600001, d5): creature_giving -0.020, cg2hg -0.015, melira -0.010, elves -0.010, landfall /
+   selesnyav2 0, elementals +0.0025, pd +0.0025, pd2hg +0.005 (net >0 = 1-2 games each); ALL 19 slower games (10 A/B
+   + 9 smoke) recover at d8 b0 (budget, not a hole). Completeness fix => adopted as a play change. Cost: units/game
+   1.455x creature_giving, 1.415x cg2hg, 1.33x melira, 1.29x landfall, 1.19x hydras (ramp spells now open site 10).
+4. Immaculate Magistrate targets only the pre-cast battlefield (fixture mag4.json): FIXED 022db4183; smoke identical;
+   A/B Elves/Maze/Merfolk 0 change.
+5. Mana cluster (hasted scaled-dork credit; grown-scaler prepay; Lodge float feed; Cavern `wild` as {C} on non-creature
+   payments; failed held re-solve restores `produced`): FIXED 7ce20cec3, 974493650 (lockstep #23 multikick/squad count
+   in the bp record), cbe68653f, 6cc44b7e0, 1fe903e91, 9045dcb4e (four levers deleted), lockstep #22 doc. A/B 41,200 g:
+   every deck net <= 0 (Elves d5 -16/1000, d0 -75/4000; Stompy d0 -4; Selesnya d0 -2, d3 -1, d6 -2); 0 slower at any
+   searched depth; 5 Elves d0 slower all from #22a and all recover at d5 b20 and d8 b0 (d0 policy: summed-value ranking
+   does not see the scaling-sink rule; lethal projection under-reads a lord stack -> follow-up `wip/elves-lethal`).
+   Deletion identity: 3900/3900 digests equal the lever-ON arm.
+6. Cosmetic labels + validate_line `act=`: FIXED in the contpin picks.
 Payer over-taps in human play (s9500002, s9500007, s9500014) are the standing mana-payment exemption, not flags.
 
-flags: 5 unresolved
-(2-6 open until their branches are merged onto wip/elves-analysis; this line is updated at the merge.)
+flags: 0 unresolved
 
 ## Stage 5 verification verdicts
 
