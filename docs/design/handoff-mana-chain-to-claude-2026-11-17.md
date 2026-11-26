@@ -296,6 +296,13 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**00:38 UTC 11-26:** status check.
+- k-fleet first A/B finished at 23:05 (build/scratch/k-fleet/ab/summary.md). K on all decks is quality-neutral except Maze's End, which gains (-18 play, -8 2HG). Units drop on almost every deck (x0.74-0.99). SG50+K vs today: CG -11/-14, AL -6/+2, DS 0/-5, at about x1.00 units. 57 slower games are listed in slower.json. The ab2 follow-up batch is at 32/32, and the d8 b0 and NC replays come after it. Once those report, put K fleet-wide and SG50+K to the USER.
+- maze2hg-perf is at about 346K context, so I asked it to hand off. Its g1380 before/after lane jobs keep running.
+- worldfire-ad successor is still working.
+- USER asked whether the latest search matches all Accomplished Alchemist references. On e430cc585 at play settings it falls short on 0 of 11 and is faster on 3 (s4 6->4, s7 5->4, s8 6->5); average 4.545 vs human 4.909. Output: build/scratch/claude_refbench_aa/.
+- Push queue is empty.
+
 **22:38 UTC 11-25:** status check. All three agents are still working. The k-fleet A/B is at 32/32 workers: arm O has finished 698 of 864 jobs, and arm S runs after it (about 1.5 h left). maze2hg-perf and worldfire-ad each have a 2-slot lane job running. Push queue is empty and nothing of mine is gated yet. NEXT is unchanged from the 21:xx entry.
 
 **21:48 UTC 11-25:** Interim before compaction. Origin = e430cc585 (my landing). Push queue: not joined, nothing ready.
