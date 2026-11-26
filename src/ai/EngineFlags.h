@@ -755,6 +755,20 @@ inline bool OnDemandVisibleLumpExactOn()
     return heurarm::Flag(heurarm::ONDEMAND_VISIBLE_LUMP_EXACT, env_on);
 }
 
+// MTG_LINE_FLOAT_RITUAL_NET (DEFAULT ON; =0 restores the float-blind spare test byte for byte) -- the line-aware float
+// rung (MTG_LINE_FLOAT_TAP_FIRST, LineFloatTapFirstPlan in ManaPayment.cpp) holds generic pips off the reserve so a
+// floating colour the named line owes survives, and pays them from SPARE sources: ones that make no colour a later
+// pip owes. When this payment is for a ritual, the ritual's own output (LineKeepRockFor(state).ritual) pays later
+// pips of its colours, so those pips do not make a source of that colour non-spare. Dragonstorm s30096957 T4 and
+// s30103583 T5 {Ruby Medallion, Seething Song, Karrthus} off two Mountains and two Lotus Blooms: Song's {1} drained the
+// floating {B} because the untapped Mountain read as Karrthus's {R}, which Song's {R}x5 pays; Karrthus lost its {B}.
+// A payment choice in the shared payer (executor, rollout and payability walks alike), at every budget.
+inline bool LineFloatRitualNetOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_FLOAT_RITUAL_NET", true);
+    return heurarm::Flag(heurarm::LINE_FLOAT_RITUAL_NET, env_on);
+}
+
 // MTG_LINE_SPARE_FILTER_FEED (DEFAULT ON; =0 restores the plain over-count) -- LineSpareSourceMask's SHORT test
 // also reads the supply LEFT AFTER the generic pip eats a one-unit float that is the only feed of an untapped
 // filter land (the filter's credit goes with it). mana-clean item 6, treasure_hunt {Cascade Bluffs + Land's Edge +

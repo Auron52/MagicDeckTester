@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # mk_ab.py (2026-11-26, from logs/worldfire-ad/mk_ab.py): held-out paired PLAY-SETTING A/B of the ds-apply levers
-# (MTG_LEFTOVER_SWAP_WIDE, MTG_ONDEMAND_VISIBLE_LUMP_EXACT), both off vs both on, ONE pooled `mtg --batch` manifest.
+# (MTG_LEFTOVER_SWAP_WIDE, MTG_ONDEMAND_VISIBLE_LUMP_EXACT, MTG_LINE_FLOAT_RITUAL_NET), all off vs all on, ONE pooled `mtg --batch` manifest.
 #   usage: python3 logs/ds-apply/mk_ab.py <out.json> [--base N] [--n N] [--wf N] [--hg N] [--decks k1,k2,...]
 # --wf is the Dragonstorm game count (standard and 2HG).
 # Paired: game gi -> seed BASE + gi, game_index gi on both arms (arms interleaved per chunk). Depth AND budget OMITTED
@@ -15,7 +15,7 @@ ap.add_argument('--hg', type=int, default=0, help='games per arm in 2HG, every d
 ap.add_argument('--decks', default='', help='comma list (default: every suite deck)')
 ap.add_argument('--chunk', type=int, default=25)
 o = ap.parse_args()
-L = ['MTG_LEFTOVER_SWAP_WIDE', 'MTG_ONDEMAND_VISIBLE_LUMP_EXACT']
+L = ['MTG_LEFTOVER_SWAP_WIDE', 'MTG_ONDEMAND_VISIBLE_LUMP_EXACT', 'MTG_LINE_FLOAT_RITUAL_NET']
 ARMS = {'off': {k: False for k in L}, 'on': {k: True for k in L}}
 HG = {"starting_life": 30, "opponent_heads": 2}
 src = open('test/regression_cases.sh').read()
