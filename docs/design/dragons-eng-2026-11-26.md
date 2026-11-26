@@ -47,6 +47,25 @@ the float {G} and the Haven itself could pay. s30128278 T5 the same with one Lat
 oracle check (MTG_MANA_ORACLE=2, both levers per job): levers off reproduces all 12 APPLY-DROP lines of the three repro
 games (s30096713 T3/T4, s30128278 T5, s30137584 T6); levers on, none. Units 2656 -> 2299, 4061 -> 3924, 928 -> 859.
 
+## Gate (Dragons gi 96000-195999, 100,000 games, MTG_MANA_ORACLE=2; base = both levers off, same binary)
+
+| | base | new |
+|---|---|---|
+| APPLY-DROP | 1,136 | **804** |
+| of which the dig-float shape (`pay1[<src>:C keep-floating {R}] ; pay2[(float only)]`) | 301 | 1 |
+| of which T3 m1 `{land=Gruul Turf}` dropped Bolt | 262 | 0 |
+| of which a Haven rebuy (`act Haven ... unpaid`, item 3) | 10 | 0 |
+| APPLY-DROP decisions (seed, turn) | 609 | 288 (323 gone, 2 new) |
+| PHANTOM (quiet) | 103,802 | 99,560 |
+| ORACLE-GAP | 0 | 0 |
+| DROP-COVERED | 3,970 | 3,760 |
+
+Base reproduces the dragons-ogap gate's fix column exactly (APPLY-DROP 1,136, PHANTOM 103,802), so the levers-off arm
+is byte-identical to the pre-change engine on this slice. The 2 new decisions (s30174699 T4, s30122890 T4) are
+two-Mind-Stone dig chains `{land=Gruul Turf}` beside Sol Ring, where a dropped creature (Dragonspeaker Shaman, Atsushi)
+would need the oracle's order of two digs; the 1 remaining dig-float line (s30155709 T3) is a two-dig chain too
+(ROLLBACK depth2). Not chased: 3 lines against 323 decisions gone.
+
 ## Status
 
 - d88f2e1d8: code for 1 and 2 + `test/unit/test_dragons_eng.cpp` (2 cases, 36 assertions, pass). Full unit suite

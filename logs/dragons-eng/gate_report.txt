@@ -1,0 +1,33 @@
+== /workspaces/MagicDeckTester/build/scratch/dragons-eng/gate_base
+  classes: {'APPLY-DROP': 1136, 'DOMINATED-LAND': 158050, 'PHANTOM': 103802}
+  ORACLE-GAP by family: {}
+  === MANA ORACLE: decisions=1008545 plans=7174498 skipped=0 applies=386919744 frontiers=342967738 pruned=41605334 options=205377780 engine_drops=109079 gate_rejects=18408834(checked 18397938, skipped 10896) MISS=1136 ORACLE-GAP=0 UNMODELED=0 CAPPED=0 ms=13008974 ===
+  === MANA ORACLE classes: APPLY-DROP=1136 PHANTOM=103802 DOMINATED-LAND=158050 CONTINUATION-DIFFERS=187 DROP-COVERED=3970 ===
+     262 T3 m1 {land} dropped [cast Lightning Bolt]
+      35 T5 m1 {no land} dropped [cast Scourge of Valkas]
+      33 T5 m1 {land} dropped [cast Scourge of Valkas]
+      26 T4 m1 {land} dropped [cast Lightning Bolt]
+      22 T5 m1 {no land + cast:Lathliss, Dragon Queen} dropped [cast Dragon Tempest]
+      20 T6 m1 {no land + cast:Lathliss, Dragon Queen} dropped [cast Dragon Tempest]
+      19 T4 m1 {no land} dropped [cast Lightning Bolt]
+      18 T3 m1 {land} dropped [cast Dragon Tempest]
+== /workspaces/MagicDeckTester/build/scratch/dragons-eng/gate_new
+  classes: {'APPLY-DROP': 804, 'DOMINATED-LAND': 161075, 'PHANTOM': 99560}
+  ORACLE-GAP by family: {}
+  === MANA ORACLE: decisions=1008549 plans=7170225 skipped=0 applies=386797972 frontiers=342916510 pruned=41550062 options=205154815 engine_drops=104295 gate_rejects=18415040(checked 18403677, skipped 11363) MISS=804 ORACLE-GAP=0 UNMODELED=0 CAPPED=0 ms=12627542 ===
+  === MANA ORACLE classes: APPLY-DROP=804 PHANTOM=99560 DOMINATED-LAND=161075 CONTINUATION-DIFFERS=187 DROP-COVERED=3760 ===
+      35 T5 m1 {no land} dropped [cast Scourge of Valkas]
+      35 T5 m1 {land} dropped [cast Scourge of Valkas]
+      22 T5 m1 {no land + cast:Lathliss, Dragon Queen} dropped [cast Dragon Tempest]
+      20 T6 m1 {no land + cast:Lathliss, Dragon Queen} dropped [cast Dragon Tempest]
+      19 T4 m1 {no land} dropped [cast Lightning Bolt]
+      17 T4 m1 {land+ cast:Urza's Incubator + cast:Scourge of Valkas + cast:Sol Ring} dropped [cast Scourge of Valkas]
+      16 T4 m1 {land+ cast:Dragon Tempest + cast:Atsushi, the Blazing Sky + cast:Mind Stone} dropped [cast Atsushi, the Blazing Sky]
+      16 T4 m1 {no land + cast:Urza's Incubator + cast:Atsushi, the Blazing Sky + cast:Sol Ring} dropped [cast Atsushi, the Blazing Sky]
+
+base: === MANA ORACLE classes: APPLY-DROP=1136 PHANTOM=103802 DOMINATED-LAND=158050 CONTINUATION-DIFFERS=187 DROP-COVERED=3970 ===
+new:  === MANA ORACLE classes: APPLY-DROP=804 PHANTOM=99560 DOMINATED-LAND=161075 CONTINUATION-DIFFERS=187 DROP-COVERED=3760 ===
+  APPLY-DROP dig-float  base    301  new      1
+  APPLY-DROP rebuy      base     10  new      0
+  APPLY-DROP other      base    825  new    803
+  APPLY-DROP (seed,turn) decisions: base 609 new 288; gone 323, new 2
