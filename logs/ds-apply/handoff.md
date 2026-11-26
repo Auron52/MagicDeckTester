@@ -1,99 +1,70 @@
-# Dragonstorm APPLY-DROP handoff 1 (2026-11-26 ~14:15 UTC)
+# Dragonstorm APPLY-DROP handoff 2 (2026-11-26 ~21:05 UTC)
 
-Worktree `.claude/worktrees/ds-apply`, branch `wip/ds-apply` (from origin/phase-1-2-deck-analyzer 9e566000b). Push ONLY
-wip/ds-apply. Never push / accept GT on phase-1-2-deck-analyzer (the parent lands through the push queue). Never touch
-references/. Treasure Hunt APPLY-DROP is another agent's (wip/th-apply): do not touch it. Scratch:
-`/workspaces/MagicDeckTester/build/scratch/ds-apply/` ($S below).
+Worktree `.claude/worktrees/ds-apply`, branch `wip/ds-apply`. Push ONLY wip/ds-apply; the parent lands through the push
+queue. Never touch references/. Scratch `/workspaces/MagicDeckTester/build/scratch/ds-apply/` ($S). Design doc with all
+measurements: `docs/design/dragonstorm-apply-drop-2026-11-26.md`.
 
-## Done (commits)
-- 893647990: two levers, DEFAULT ON, `=0` byte-identical, heurarm slots LEFTOVER_SWAP_WIDE / ONDEMAND_VISIBLE_LUMP_EXACT,
-  readers in src/ai/EngineFlags.h; code in src/ai/ManaPayment.cpp; unit test test/unit/test_dragonstorm_line_keep.cpp
-  (added to CMakeLists; NOT YET BUILT/RUN -- see Remaining 1); design doc docs/design/dragonstorm-apply-drop-2026-11-26.md.
-  * MTG_ONDEMAND_VISIBLE_LUMP_EXACT: the visible-closer lump rule (MTG_ONDEMAND_VISIBLE_LUMP, Dragonstorm provider only)
-    cracks a Bloom early only if the ordinary payment leaves the later bill unpayable and the early board pays it
-    (new helper `LumpAwareBillPayable`: every crack of the lumps left x complete backtracker, + ritual float). Repro
-    s30152662 T5 {Song, Irencrag, Karrthus}.
-  * MTG_LEFTOVER_SWAP_WIDE: SwapLeftoverForLine may move any leftover unit (not only produced) and its strand test
-    credits the paying ritual's float (LineKeepRockFor(state).ritual). Repro s30087280 T4 {Desperate, Scourge, Irencrag,
-    Kolaghan}.
-- Mechanism census (gate claude-queue-20261125a, 728 flags = 146 (seed,turn) events in 144 games): every event has Lotus
-  Bloom or Unclaimed Territory on board; dropped casts are Karrthus {4}{B}{R}{G} (77 events) / Kolaghan {4}{B}{R} (48).
-  112 declared, 34 need-later (past an Apex opener). The crit line-keep rung never reaches them: LineKeepCritGate counts
-  only lands/rocks/dorks (a Bloom, a Territory, a float unit are invisible) and the complete backtracker does not model
-  an on-demand Bloom crack (it only knows pay-sac amount==1, i.e. Treasure).
-- Event mini-gate (only the event games, oracle on the event turn only; `$S/miniT<t>.json`, `logs/ds-apply/run_turns.sh`,
-  compare `logs/ds-apply/cmp.py tn_new`), FINAL: on the 123 games common to the base full-oracle run: base 119 events /
-  586 flags -> new 85 events / 500 flags; fixed Karrthus-D 29, Kolaghan-D 5; NO new events. Left: Karrthus-NL 21,
-  Kolaghan-D 21, Karrthus-D 17, Scourge-D 8, Kolaghan-NL 8, Apex-D 4, others 1-2. ($S/mini_base = base binary, all
-  turns, 123 of 144 games, killed when superseded; $S/tn_new = new binary, all 146 events done.)
+## Commits
+- 893647990: MTG_ONDEMAND_VISIBLE_LUMP_EXACT + MTG_LEFTOVER_SWAP_WIDE (first version).
+- e07c7849c: LUMP_EXACT narrowed. It refuses the early Bloom crack only when the crack STRANDS the later bill (the
+  ordinary board pays and the early one does not). The first version also refused it when both paid. That cost 2HG
+  s5131993 gi1993 its T5 kill (5 -> 6, persisted at d8 b0): the crack keeps Sandstone Needle's {R}{R} for Scourge's
+  firebreathing, which a leftover {B} cannot pay. The no-strand control test now asserts equal mana left (the swap
+  re-attributes which unit floats). New both-pay unit test.
+- 20cd98179: docs only (gate2 + ab2 tables).
+- ca4ee7d53: MTG_LINE_FLOAT_RITUAL_NET (handoff-1 item 4b; heurarm slot at the END of both lists). The line-float
+  rung's spare test nets the paying ritual's float out of later[]. Unit test on/off. UNVALIDATED: its play A/B is
+  running.
 
-## Running jobs (all mine)
-- GATE A/B (Dragonstorm slice of the gate, 180,218 games, arms off / on / no_leftover_swap_wide / no_ondemand_visible_lump_exact
-  (LOO on the first 18k games)), under the box lock: pid 293649 (flock), binary $S/bin_new/mtg (= 893647990),
-  manifest $S/gate.json (logs/ds-apply/mk_gate.py), out $S/gate_out/{batch.out,flags.err}, DONE marker
-  $S/gate_out/DONE. Heartbeat was 32/32. ~1 h from 14:00.
-  Report: adapt logs/worldfire-ad/gate_report.py (job= prefix is `<arm>__dragonstorm__g...`, deck name dragonstorm,
-  gi from seed-30000000; arms off,on,no_leftover_swap_wide,no_ondemand_visible_lump_exact; LOO slice = gi < 105000).
-- PLAY A/B chained after the gate: pid 296958 ($S/chain_ab.sh) waits on the gate pid, then
-  `flock claude_box.lock ... logs/ds-apply/run_ab.sh $S/bin_new/mtg $S/ab.json $S/ab_out`. Manifest from
-  `logs/ds-apply/mk_ab.py --n 400 --hg 200 --wf 3000` (seed base 5130000, seed = base + off, game_index = off; all 63
-  suite decks std 400/arm + 2HG 200/arm; Dragonstorm std + 2HG 3000/arm; 86,400 games, ~3 h). DONE: $S/ab_out/DONE.
-  Check `heartbeat` in $S/ab_out/wins.err in its first 10 min. Report: `python3 logs/ds-apply/ab_report.py $S/ab_out
-  --list-slower`. If the gate shows a regression, kill 296958 (it is my own run) before it starts.
-- Unit-test build (lane, -j2): `./build.sh release -- --target mtg-test`, log $S/build2.log, DONE $S/build2.DONE.
-  Then run `build/Release/mtg-test -tc="Dragonstorm line keep*"` and the full suite (lane). The three tests are
-  UNVERIFIED (expected: repro tests pass on / fail off; the no-strand control equal). Fix the test (not the levers)
-  if it is the fixture that is wrong -- e.g. the s30087280 board's float / Bazaar counters.
+**LANDABLE: 20cd98179** (= e07c7849c + docs). Units 4205/4205. Both levers are covered by A/Bs:
+- First A/B (893647990, base 5130000, all 63 decks 400 std + 200 2HG/arm, Dragonstorm 3000 + 3000): every
+  non-Dragonstorm deck net 0, 0 slower / 0 faster (units move only in Niv and Sea, <0.01%, from the swap). The
+  narrowing touched only the Dragonstorm-only lump rule, so this covers SWAP_WIDE for other decks.
+- Held-out A/B (e07c7849c, Dragonstorm, base 5160000, 3000 std + 3000 2HG/arm): net 0, 0 slower, 0 faster; units
+  -0.00% std / +0.00% 2HG; cpu +0.06% / -0.56% (wall, noisy).
+- The only slower game (first version) is byte-identical to off at play settings and d8 b0 on e07c7849c.
+
+## Running (mine; the coordinator may stop it for its landing tiers and relaunch after TIERS.DONE)
+- chain3 ($S/chain3.sh, pid 567832; flock child 599172) under claude_box.lock, now in its last stage: the all-deck
+  held-out play A/B of ALL THREE levers off vs on, `$S/bin_new3/mtg` (= ca4ee7d53), manifest $S/ab3.json
+  (`mk_ab.py --n 400 --hg 200 --wf 3000 --base 5190000`, 86,400 games, about 1 h), out $S/ab3_out, DONE marker
+  $S/ab3_out/DONE (chain marker $S/chain3.DONE). Report: `python3 logs/ds-apply/ab_report.py $S/ab3_out --list-slower`.
+  Relaunch if stopped: `flock /workspaces/MagicDeckTester/build/scratch/claude_box.lock env MTG_RSS_CAP_GB=40
+  MTG_PGO=0 bash logs/ds-apply/run_ab.sh $S/bin_new3/mtg $S/ab3.json $S/ab3_out`.
 
 ## Remaining, in order
-1. Unit tests (above); full unit suite on the new binary.
-2. Gate report (off vs on, LOO) -> design doc Measurements.
-3. Play A/B report; every slower game replayed at `--depth 8 --budget-ms 0 --ignore-play-profile` (abandon_units 30M;
-   2HG adds starting_life 30, opponent_heads 2), both arms (flags via env MTG_LEFTOVER_SWAP_WIDE=0
-   MTG_ONDEMAND_VISIBLE_LUMP_EXACT=0 for off), lane <= 2 slots; a non-recovering one -> MTG_NC_SEARCH=1 at play
-   settings. Units and CPU per deck (perf instructions:u for CPU if the wall cpu is noisy).
-4. Next mechanisms (the 75 events left, new binary; list with
-   `grep "APPLY-DROP seed" $S/tn_new/flags.err | grep -v "not declared" | awk '!seen[$3 $7]++'`):
-   a. TWO UNCLAIMED TERRITORIES (5 of 15 Karrthus-D): Karrthus's {B}{G} need both Territories' creature colours; an
-      earlier ritual's generic takes a Territory's {C} (s30096797 T5, s30112157 T6, s30142602 T6, s30155973 T5,
-      s30089733 T5). The crit rung cannot judge it: its rest is ONE bill with one creature flag, and a rest mixing a
-      noncreature ritual with Karrthus reads the Territory as {C}. Idea: sequential witness (noncreature part, then the
-      creature part) or a split judge.
-   b. RITUAL FLOAT NOT CREDITED BY THE LINE-FLOAT RUNG (s30096957 T4 / s30103583 T5 {Ruby, Song, Karrthus}, Mountain
-      x2 + two Blooms): Song's {1} drains the floating {B}; Mountain30 is not "spare" because it makes {R}, which
-      Karrthus owes, though Song's {R}x5 covers it. In LineFloatTapFirstPlan, net `later[]` of the paying ritual's
-      float (LineKeepRockFor(state).ritual) -> the Mountain is spare -> the {B} is held.
-   c. Exact swap test: SwapLeftoverForLine's short test uses AvailableManaPool, which counts a Territory as wild for
-      every colour (s30129376 T4: B short is "covered" by the Territory that must also make G). Under a lever, judge
-      short / not-short with LumpAwareBillPayable (add a for_creature parameter; rest_creature as in
-      LineReducerKeepHold) behind a cheap prefilter (an owed colour x went to generic AND some leftover y floats).
-   d. Apex-line Kolaghan-D (keep-floating {B} through Apex's generic): the opener line keeps the WUBRG drain; several
-      are overkill-only differences (opponent life -113 vs -114) and do not matter for play.
-   e. Need-later (Karrthus past Apex; ~20 events): Apex's / Song's generic takes the Territory's {C} or a Bloom; unseen
-      demand -- lowest priority.
-   Each new mechanism: its own lever (default ON if sound), unit test, rerun `run_turns.sh` on the event games, then
-   the gate + play A/B again (one pooled batch each, under the box lock).
-5. Commit + push wip/ds-apply; final report to the parent.
+1. ab3 report. Replay every slower game at d8 b0 (template $S/slower.json: depth 8, budget_ms 0,
+   ignore_play_profile true, abandon_units 30000000; 2HG starting_life 30, opponent_heads 2). If any persists, find
+   the lever by leave-one-out and root-cause it (method that worked: `--claude-play --choices ... --choices-then-auto`
+   to force the off arm's early choices, then diff game logs from `--log-dir`; 2HG CLI = env MTG_START_LIFE=30
+   MTG_OPPONENT_HEADS=2). ca4ee7d53 is landable only once that is clean.
+2. Next mechanisms (handoff 1 item 4): a (two Unclaimed Territories: an earlier ritual's generic takes a Territory's
+   {C}), c (exact swap shortage test via LumpAwareBillPayable), d and e (low priority).
+
+## Gate (Dragonstorm slice of claude-queue-20261125a, 72,000 games, MTG_MANA_ORACLE=2; logs/ds-apply/gate_report.py
+on $S/gate_m, which merges gate_out off/on, gate2 on as on2, gate3 on as on3)
+| arm | events decl | events need-later | AD flags decl/undecl | ENUM-GAP | turns |
+|---|---:|---:|---|---:|---:|
+| off | 105 | 47 | 415 / 299 | 33 | 313,645 |
+| on (893647990) | 62 | 56 | 288 / 363 | 41 | 313,643 |
+| on2 (e07c7849c) | 64 | 48 | 296 / 304 | 33 | 313,643 |
+| on3 (ca4ee7d53) | 62 | 48 | 291 / 306 | 33 | 313,647 |
+LOO (first version, 18k games): lump 12 of 16 fixed events, swap 4. New need-later events in the first version came
+from earlier-turn search divergence (new boards), not worse payments of a shared board.
 
 ## USER rulings (verbatim from the brief)
-- "spend the counters if they are required for the line" (Dragonstorm storm/counter resources).
+- "spend the counters if they are required for the line" (Dragonstorm).
+- Adoption bar: judge the average at play settings. Adopt if many decks gain, mitigate the few that get worse
+  afterwards, ignore seed noise and clairvoyant losses; d0 barely counts.
 - "cut CPU"; "suite headroom never justifies a fix's CPU cost".
-- Adoption bar: judge the average at play settings; adopt if many decks gain, mitigate the few that get worse
-  afterwards; ignore seed noise and clairvoyant losses; d0 barely counts. Play setting > other searched shapes >> d0.
-- Every slower game must recover at depth 8 budget 0 (`depth 8, budget_ms 0, ignore_play_profile true, abandon_units
-  30000000`; 2HG adds starting_life 30, opponent_heads 2) or be shown clairvoyant with MTG_NC_SEARCH=1 at play settings.
-- Box: ONE big engine process at a time, every big batch under `flock /workspaces/MagicDeckTester/build/scratch/claude_box.lock
-  env MTG_RSS_CAP_GB=40 MTG_PGO=0 ...`; small jobs via `bash scripts/box_lane.sh --slots N -- <cmd>`, N <= 2. Builds:
-  `flock build/scratch/claude_build.lock ./build.sh` (coordinator 2026-11-26: while its landing tiers ran, builds as
-  `MTG_BUILD_JOBS=2 bash scripts/box_lane.sh --slots 2 -- flock ... ./build.sh`; build/scratch/land-1126b/TIERS.DONE now
-  exists, so that restriction has lifted, but a full-core build is a big process -> box lock). NEVER `timeout`; wait on
-  a PID (kill -0) or a DONE marker, never pgrep -f / pkill -f. Wait ~200 s after a src edit before building (9p lag).
-- No greedy pick inside the search window; a budget may re-price but never make a line unfindable; no unbudgeted-only
-  changes; "do nothing more" stays at every root. Rebase, never merge. Commit messages end with
-  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Past ~250K context: hand off (this file).
+- A sound collapse defaults ON; a lossy narrowing needs its A/B; everything must stay findable at unlimited budget.
+- USER-owned decisions are surfaced in the report, never settled.
+- Box: ONE big engine process at a time under claude_box.lock with MTG_RSS_CAP_GB=40 MTG_PGO=0; small jobs via
+  box_lane.sh, at most 2 slots; no `timeout`; rebase, never merge; HeuristicArm.h slots at the END of both lists.
 
-## Traps
-- `./build.sh -- --target X` fails ("unknown mode '--'"): use `./build.sh release -- --target mtg`. The mtg target alone
-  is 15 steps (fast); mtg-test is 367 objects.
-- A binary copied under $S/<x>/ needs `src` / `decks` symlinks beside it (done for bin_base / bin_new).
-- logs/ is gitignored: commit logs/ds-apply with `git add -f`.
+## Traps found this round
+- The lane can be blocked for hours by other agents' builds holding slots while they wait on the build lock. When
+  the box lock is free, run small jobs under it instead.
+- `pgrep -f <pattern>` inside a waiter matches the waiter itself: wait on a DONE file or `kill -0 <pid>`.
+- Changing HeuristicArm.h / EngineFlags.h recompiles about 386 objects. Build under the box lock at full width when
+  the box is free.
