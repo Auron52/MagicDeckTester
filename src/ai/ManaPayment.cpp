@@ -13639,6 +13639,50 @@ static bool OnDemandTrial(const GameState& state, const std::vector<OnDemandCrac
 }
 } // namespace
 
+// Is `bill` payable on `board` plus `extra` floating, counting every way to crack the board's untapped on-demand LUMPS
+// (Lotus Bloom: N mana of ONE colour; not a land crack)? The complete backtracker does not model a lump, so each lump is
+// tried uncracked and cracked for each colour the bill has a pip of (a crack for a colour the bill has no pip of pays
+// only its generic, which a pip colour's crack pays as well; any colour when the bill has no coloured pip). At most
+// three lumps (4^3 boards); more, and the answer is "payable" (the caller then keeps its own judgement). Scratch only.
+static bool LumpAwareBillPayable(const GameState& board, const ManaCost& bill, const ManaPool& extra)
+{
+    std::vector<OnDemandCrack> lands, lumps;
+    CollectOnDemandCracks(board, lands, lumps);
+    if (lumps.size() > 3) { return true; }
+    static const char* kCol[5] = { "W", "U", "B", "R", "G" };
+    const int pip[5] = { bill.white, bill.blue, bill.black, bill.red, bill.green };
+    std::vector<int> cols;
+    for (int c = 0; c < 5; ++c) { if (pip[c] > 0) { cols.push_back(c); } }
+    if (cols.empty()) { cols.push_back(3); }
+    const int k = static_cast<int>(cols.size()) + 1;   // + uncracked
+    int combos = 1;
+    for (std::size_t i = 0; i < lumps.size(); ++i) { combos *= k; }
+    const RevealLogPause quiet;
+    const std::unique_ptr<GameState> c = std::make_unique<GameState>();
+    for (int m = 0; m < combos; ++m)
+    {
+        *c = board;
+        c->floating_mana.AddPool(extra);
+        int r = m;
+        bool ok = true;
+        for (const OnDemandCrack& l : lumps)
+        {
+            const int pick = r % k;
+            r /= k;
+            if (pick == 0) { continue; }
+            OnDemandCrack kk = l;
+            kk.color = kCol[cols[static_cast<std::size_t>(pick - 1)]];
+            if (!ApplyOnDemandCrack(*c, kk)) { ok = false; break; }
+        }
+        if (!ok) { continue; }
+        if (!PaymentManaCovers(*c, /*for_creature=*/true, bill.ManaValue() - static_cast<int>(c->floating_mana.Total())))
+        { continue; }
+        const ManaPool start = c->floating_mana;
+        if (TapForCostBacktrack(*c, bill, /*for_creature=*/true, start)) { return true; }
+    }
+    return false;
+}
+
 static thread_local int t_pilgrimage_pay_depth = 0;
 
 // MTG_UNSEEN_KEEP_SCARCE (reader: SpendFloatingTowardCost, SpellEffects.h). A colour qualifies when it floats, the
@@ -13701,9 +13745,20 @@ static void SwapLeftoverForLine(GameState& state, const ManaCost& cost_in, const
     const int b[5] = { before.white, before.blue, before.black, before.red, before.green };
     const int a[5] = { after.white, after.blue, after.black, after.red, after.green };
     const int pip[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+    // MTG_LEFTOVER_SWAP_WIDE (EngineFlags.h): the RITUAL this payment is for resolves before the rest of the line, so its
+    // fixed float is supply of the rest (LineKeepRockFor: Irencrag Feat's seven {R}, Seething Song's five), and ANY
+    // leftover unit of y -- one that floated before this payment as well as one it produced -- can stand in for x on the
+    // generic pip: both were in the pool the payment spent from. Dragonstorm s30087280 T4 {..., Irencrag Feat, Dragonlord
+    // Kolaghan}: {B}{R}{R} floating, Irencrag's {1}{R}{R}{R} drained the {R}{R} into its red pips and the {B} into the
+    // {1}, then tapped Sandstone Needle for {R}{R} and floated one; the {R} that floats was not "produced" net of the
+    // float (2 -> 1), and without Irencrag's seven {R} Kolaghan's {R} read short as well, so no swap was made.
+    const bool wide = LeftoverSwapWideOn();
+    ManaPool ritual;
+    if (wide) { ritual = LineKeepRockFor(state).ritual; }
     auto short_by = [&](const GameState& s) -> int
     {
-        const ManaPool pool = AvailableManaPool(s);
+        ManaPool pool = AvailableManaPool(s);
+        if (wide) { pool.AddPool(ritual); }
         const int have[5] = { pool.white, pool.blue, pool.black, pool.red, pool.green };
         int units = 0;
         for (int c = 0; c < 5; ++c) { units += std::max(0, later[c] - have[c]); }
@@ -13711,9 +13766,10 @@ static void SwapLeftoverForLine(GameState& state, const ManaCost& cost_in, const
     };
     if (short_by(state) <= 0) { return; }
     static const Color kCol[5] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
-    // Units of y this payment produced and left floating: the swap's only sources.
+    // Units of y this payment produced and left floating: the swap's only sources (MTG_LEFTOVER_SWAP_WIDE: every
+    // leftover unit of y).
     int gain[5];
-    for (int y = 0; y < 5; ++y) { gain[y] = std::max(0, a[y] - b[y]); }
+    for (int y = 0; y < 5; ++y) { gain[y] = wide ? a[y] : std::max(0, a[y] - b[y]); }
     GameState trial = state;
     int moved[5][5] = {};
     for (int x = 0; x < 5; ++x)
@@ -13883,6 +13939,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         // contributor is the only later need.
         const bool s_visible_contrib = OnDemandVisibleContribOn();   // per call: the heurarm arm is per job
         const int rest_mv = LineRestAfter(cost_in, later_pips);
+        const int rest_pip_sum = later_pips[0] + later_pips[1] + later_pips[2] + later_pips[3] + later_pips[4];
         const ManaCost& lu_now = g_line_unpaid_cost;    // a zero rest counts only when the hold IS this cost
         const bool holds_last = lu_now.ManaValue() > 0 && lu_now.ManaValue() == cost_in.ManaValue()
             && lu_now.white == cost_in.white && lu_now.blue == cost_in.blue && lu_now.black == cost_in.black
@@ -13987,6 +14044,24 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
                         if (d != c && later_pips[d] > 0
                             && new_col[d] + new_wild > old_col[d] + old_wild)
                         { saves_later_source = true; }
+                    }
+                    // MTG_ONDEMAND_VISIBLE_LUMP_EXACT (EngineFlags.h): the colour comparison above reads an uncracked
+                    // lump as no supply at all, so trading the lump for one unit of another colour reads as a gain.
+                    // The early crack is made only when the ordinary payment leaves the later bill (the named rest's
+                    // pips, any visible closer's, the rest's generic) unpayable and the early one does not, both
+                    // judged with every way of cracking the lumps left (LumpAwareBillPayable) and the float of the
+                    // ritual this payment is for. When neither board pays it, the comparison above stands.
+                    if (saves_later_source && OnDemandVisibleLumpExactOn())
+                    {
+                        ManaCost later_bill;
+                        later_bill.white = later_pips[0]; later_bill.blue = later_pips[1];
+                        later_bill.black = later_pips[2]; later_bill.red = later_pips[3];
+                        later_bill.green = later_pips[4];
+                        later_bill.generic = std::max(0, rest_mv - rest_pip_sum);
+                        const ManaPool ritual = LineKeepRockFor(state).ritual;
+                        const bool ord_pays = LumpAwareBillPayable(*ordinary, later_bill, ritual);
+                        if (ord_pays) { saves_later_source = false; }
+                        else if (!LumpAwareBillPayable(*early, later_bill, ritual)) { /* neither: as before */ }
                     }
                     if (saves_later_source)
                     { return OnDemandPayWith(state, { k }, true, cost_in, for_creature, available, honor_legacy_cco); }
