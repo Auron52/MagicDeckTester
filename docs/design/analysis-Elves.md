@@ -236,3 +236,40 @@ opaque `plan` pointer for the group key. Nothing in generic enumeration changed.
 * **Taunting Elf -- lure ("All creatures able to block this creature do so")**: inert in goldfish; the
   opponent's spawn bodies never block (`GoldFishRunner::PopulateOpponentSpawns`; no blocker path in
   Combat.cpp). USER, 2026-11-26: *"Yes, Taunting Elf's ability does nothing in goldfish."*
+
+## Coordinator checkpoint (2026-11-26 ~07:00 UTC) -- RESUME HERE
+
+Work tree `.claude/worktrees/elves`, branch `wip/elves-analysis` (local commits only; nothing on the shared branch).
+Done: Stage 1; Stage 2 (all 18 cards full; units 3964/3964; smoke 243/243, play-changed 0); ElvesProvider +
+USER scaling rule (probe: 0/300 moved, units x0.948); Stage 4 baseline profile (`decks/Elves/Elves.profile.json`,
+seed 26112601; discard evidence 3 sheds / 400 games, STATUS_QUO_OK); first `verify_deck.py` run
+(`logs/elves/verify1.out`).
+
+Uncommitted at checkpoint: `ElvesProvider::GenesisWavePutPicks` = put every legal reveal (+
+`ImplementsRequiredHeuristic(GenesisWavePut)`), a dominance fold argued in the header comment (byte-identical to the
+engine default on this pool). Build done; re-run `provider_audit.py --check` to confirm the Elves red flag clears,
+then commit.
+
+verify_deck gates open, in order:
+1. **mismatch FAIL**: `[fd-diverge] seed=7036 job=s7001d5 gi=35 realized_win=6 predicted_win=5 proven_at_turn=3`.
+   Repro: `MTG_FD_ORACLE=1 build/Release/mtg decks/Elves/Elves.cod --profile decks/Elves/Elves.profile.json --games 1
+   --seed 7036 --game-index 5 --depth 5 --budget-ms 20 --threads 1 --log-dir build/scratch/elves-fd` (launched;
+   output `build/scratch/elves-fd/{out,err}.txt`). Root-cause: rollout vs executor disagreement on a new mechanic
+   (suspects: Visionary pay/draw, multikick/squad faces, Marwyn power mana, Shepherd 5/5, Magistrate counters).
+2. **provider_policy FAIL**: should clear with the uncommitted Wave policy.
+3. **regression_tiers / suite FAIL**: add Elves to SMOKE / REGRESSION / OVERNIGHT (copy the worldfire entry-set
+   shape: smoke d0 1000, d3 10 b10, d5 ~40 b20, elves2hg d5 20 b20; regression d0 1000, d3 15, d5 60 x2 seeds, 2hg
+   30; overnight entry set d0 4x2000, d3 25 b10, d5 4x300 b20), screen budget-0 backstop blocks (30001..30541 step
+   20, d3+d5, abandon_units 2000000, MTG_SLOW_GAME_MS=5000, ONE pooled batch; one block for REGRESSION, another for
+   OVERNIGHT), `suite_gate.py --cost decks/Elves` (3x Hinata ~15,000 ms/game; probe says ~715 ms/game), run each tier
+   `--deck=elves,elves2hg`, accept with the same filter, `test/check_gt_logs.py`.
+4. **claude_sweep SKIP**: ~18 Sonnet player agents (Agent tool), seed base disjoint from the suite; verify flags
+   on the main model; record `## Claude-play sweep` (commit / seeds / games / flags: N unresolved).
+Then: 5b depth sweep d0/d3/d5, 5c2 `leaf_tiebreak_check.py`, the scaling-rule with/without A/B (held-out,
+pooled), discard bucket policy draft (report only), Stage 6 report. Then land via `scripts/push_queue.py`.
+
+Open items for the USER (non-blocking): Shepherd uncounterable/Dinosaur inert (PROVISIONAL); six inert-param
+classifications in `audit_viewer_decisions.py`; Magistrate/Kessig/Merfolk tap-target can't hit a creature cast
+earlier in the same plan (completeness gap, recommend a general fix); the k=2 hold-back cap and other provider
+PROVISIONALs (ledger "Provider heuristics"); inherited SelesnyaLifegain judgement hooks incl. its discard buckets;
+the Wave-X dedup collapse still live for Landfall / SelesnyaLifegain (fixing it moves their play).
