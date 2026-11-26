@@ -73306,3 +73306,264 @@ void ElvesProvider::PlanListAdmitAt(const GameState& s, bool is_pre_combat, cons
 {
     ElvesScalingAdmit(s, is_pre_combat, plans, admit);
 }
+
+// ---- ElvesProvider::CleanupDiscardCandidates -- the DRAFTED 5i bucket policy (2026-11-26) ----------------------
+//
+// STATUS: AN AGENT DRAFT, NOT USER-APPROVED. MTG_ELVES_BUCKET_DISCARD (heurarm ELVES_BUCKET_DISCARD) DEFAULTS OFF,
+// so play is the INHERITED SelesnyaLifegain buckets until the USER approves this rule (docs: logs/elves/
+// discard-bucket-draft.md on wip/elves-discard; analyze-deck 5i). Why the inherited rule is the wrong shape for this
+// list: it partitions the hand into lands / Elf mana / LIFEGAIN / its PAYOFFS, and sends EVERY other card -- here
+// the lords (Clancaller, Visionary, Brigade), Joraga Warcaller, Ezuri, Allosaurus Shepherd, Magistrate, Concordant
+// Crossroads, Taunting Elf -- to the FRONT of the shed order, ahead of a surplus land.
+//
+// THE RULE, every role keyed on PARAMS (a hand card is a name-only placeholder):
+//   DEAD      a legend already ours on the battlefield or earlier in hand (Ezuri, Marwyn), a Concordant Crossroads
+//             while one is ours on the battlefield (the world rule keeps one), and a 2nd Crossroads in hand.
+//   LANDS     quota clamp(4 - board lands, 1, 3) -- the next drops ("two early"), +1 (cap 3) when the hand holds no
+//             castable mana Elf and the board none (sub-quotas fungible upward). Keep order Forest (unrestricted G)
+//             > Cavern of Souls (G for creatures only) > Wirewood Lodge ({C}).
+//   SCALED    the scaled mana Elves (mana_per_creature_subtype / mana_per_own_power): Priest > Archdruid > Marwyn.
+//   SINK      THE ONE scaling sink (the USER's 2026-11-26 rule: "pick just one of those and scale it up fully"):
+//             Genesis Wave, Ezuri (team pump), Joraga Warcaller (per-counter lord), Allosaurus Shepherd (team 5/5;
+//             a 2nd Shepherd while one is ours on the battlefield is only a 1-drop BODY). Ranked by distance, then
+//             Wave (only when the two-turn projection reaches 8, X = 5) > Ezuri > Warcaller > Wave (short) > Shepherd.
+//   LORDS     Leaf-Crowned Visionary > Elvish Clancaller > Galadhrim Brigade (Archdruid is SCALED).
+//   DORKS     the flat 1-mana Elves (Llanowar, Mystic) -- acceleration AND an Elf body.
+//   ENABLER   Concordant Crossroads, 1, kept after the threat floor (one sink + one lord).
+//   BODIES    every other Elf (Immaculate Magistrate, Taunting Elf -- its lure is inert in goldfish, USER).
+// KEEP LADDER (most kept first): land 1 > scaled 1 > sink 1 > land 2 > lord 1 > dork 1 > land 3 > enabler 1 >
+// THE REST (every other spell, nearest first, then the value rank Priest > Archdruid > Visionary > Clancaller >
+// Brigade > Marwyn > Ezuri > Warcaller > Llanowar = Mystic > Wave > Shepherd > Magistrate > Taunting Elf).
+// SHED (overflow only): dead -> a spell of the rest NOT castable within two turns (farthest, then worst) ->
+// surplus lands (worst land first) -> the rest of the rest (worst first) -> the ladder backwards.
+//
+// DISTANCE: an effective cost vs a two-turn projection. Cost = mana value, except Genesis Wave 6 (X = 3, the least
+// worth casting), Allosaurus Shepherd 7 (cast + its {4}{G}{G}), Joraga Warcaller 3 (one kick). M1 = board lands +
+// the live board dork yield (ScaledDorkCount; summoning sickness ends by then) + 1 for a kept land. M2 = board lands
+// + up to two kept land drops + the board dorks re-counted over the hand mana Elves deployed next turn within M1
+// (cheapest first, a greedy deployment) + those Elves' own yields. Distance 0 = castable off M1, 1 = off M2, else 2.
+// Not modelled (agent readings): draws, Visionary's draw, Wirewood Lodge's untap, colour (all G but the Lodge).
+static bool ElvesBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_ELVES_BUCKET_DISCARD");   // DEFAULT OFF (USER has not approved); =1 -> this rule
+    return heurarm::Flag(heurarm::ELVES_BUCKET_DISCARD, on);
+}
+
+// The full shed order (most expendable first), every non-staged hand index exactly once. Not prefix-stable: the land
+// quota reads whether a castable mana Elf is held, so the engine re-asks after every shed.
+static std::vector<int> ElvesBucketShedOrder(const GameState& s)
+{
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    std::vector<int> shed;
+    if (n <= 0) { return shed; }
+    auto at = [](int i) { return static_cast<std::size_t>(i); };
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto is_crossroads = [](const CardDefinition& d) { return d.params.grants_haste && d.params.affects_all_creatures; };
+    auto is_scaled = [](const CardDefinition& d)
+    { return d.card.IsCreature() && (!d.params.mana_per_creature_subtype.empty() || d.params.mana_per_own_power); };
+    auto is_dork = [](const CardDefinition& d) { return d.card.IsCreature() && !d.params.produces.empty(); };
+
+    // ---- board census -----------------------------------------------------------------------------------------
+    int board_lands = 0, board_flat = 0, board_yield = 0, elves_own = 0, elves_all = 0;
+    bool board_crossroads = false, board_shepherd = false;
+    std::vector<const CardDefinition*> board_scaled;   // re-counted over deployed hand Elves for M2
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.card.IsCreature() && CardHasSubtype(p.card, "Elf")) { ++elves_all; if (p.controller_index == me) { ++elves_own; } }
+        if (p.controller_index != me) { continue; }
+        if (p.card.IsLand()) { ++board_lands; continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (d == nullptr) { continue; }
+        if (is_crossroads(*d)) { board_crossroads = true; }
+        if (d->params.team_base_pt_cost.has_value()) { board_shepherd = true; }
+        if (!is_dork(*d)) { continue; }
+        if (IsScaledManaDork(*d)) { board_scaled.push_back(d); board_yield += ScaledDorkCount(s, me, *d); }
+        else { board_flat += ManaProducedPerTap(*d); board_yield += ManaProducedPerTap(*d); }
+    }
+
+    // ---- partition the hand -----------------------------------------------------------------------------------
+    enum Cls : int { C_DEAD, C_LAND, C_SCALED, C_SINK, C_LORD, C_DORK, C_ENABLER, C_BODY };
+    std::vector<int> cls(at(n), C_BODY), rank(at(n), 0), cost(at(n), 0);
+    std::vector<const CardDefinition*> defs(at(n), nullptr);
+    bool seen_crossroads = false;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[at(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(hc);
+        defs[at(i)] = d;
+        if (CleanupDiscardIsLand(hc))
+        {
+            cls[at(i)] = C_LAND;
+            // Forest (unrestricted G) > Cavern (G for creatures only) > Lodge ({C}).
+            const bool g = d != nullptr && std::find(d->params.produces.begin(), d->params.produces.end(), Color::Green)
+                                               != d->params.produces.end();
+            rank[at(i)] = !g ? 2 : (d->params.colored_creature_only ? 1 : 0);
+            continue;
+        }
+        if (d == nullptr) { continue; }
+        const CardParams& p = d->params;
+        cost[at(i)] = d->card.m_mana_cost.ManaValue();
+        bool dead = false;
+        if (d->card.HasSupertype(Supertype::Legendary))
+        {
+            for (const Permanent& q : s.battlefield)
+            { if (q.controller_index == me && q.card.m_name == hc.m_name) { dead = true; } }
+            for (int j = 0; j < i && !dead; ++j)
+            { if (!ap.hand[at(j)].m_is_staged && ap.hand[at(j)].m_name == hc.m_name) { dead = true; } }
+        }
+        if (is_crossroads(*d))
+        {
+            if (board_crossroads || seen_crossroads) { dead = true; }
+            seen_crossroads = true;
+        }
+        if (dead) { cls[at(i)] = C_DEAD; continue; }
+        // The value rank (lower = kept first), one scale across every class -- the tie-break of THE REST.
+        if (is_scaled(*d))
+        {
+            cls[at(i)] = C_SCALED;
+            rank[at(i)] = p.mana_per_own_power ? 5 : (p.mana_per_creature_count_all ? 0 : 1);
+        }
+        else if (p.reveal_x_put_permanents)          { cls[at(i)] = C_SINK; rank[at(i)] = 9; cost[at(i)] = 6; }
+        else if (p.team_pump_cost.has_value())       { cls[at(i)] = C_SINK; rank[at(i)] = 6; }
+        else if (p.lord_per_own_plus_counter)        { cls[at(i)] = C_SINK; rank[at(i)] = 7; cost[at(i)] = 3; }
+        else if (p.team_base_pt_cost.has_value())
+        {
+            if (board_shepherd) { cls[at(i)] = C_BODY; rank[at(i)] = 12; }
+            else { cls[at(i)] = C_SINK; rank[at(i)] = 10; cost[at(i)] = 7; }
+        }
+        else if (is_dork(*d))                        { cls[at(i)] = C_DORK; rank[at(i)] = 8; }
+        else if (!p.subtypes_affected.empty() && p.power_bonus > 0 && d->card.IsCreature())
+        {
+            cls[at(i)] = C_LORD;
+            rank[at(i)] = p.cast_subtype_pay_draw_cost.has_value() ? 2 : (p.squad_cost.has_value() ? 4 : 3);
+        }
+        else if (is_crossroads(*d))                  { cls[at(i)] = C_ENABLER; rank[at(i)] = 13; }
+        else                                         { cls[at(i)] = C_BODY; rank[at(i)] = !p.tap_target_counters_per_subtype.empty() ? 11 : 12; }
+    }
+
+    // ---- lands: quota and keep order --------------------------------------------------------------------------
+    std::vector<int> lands;
+    for (int i = 0; i < n; ++i) { if (!ap.hand[at(i)].m_is_staged && cls[at(i)] == C_LAND) { lands.push_back(i); } }
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b) { return rank[at(a)] < rank[at(b)]; });
+
+    // ---- the two-turn projection ------------------------------------------------------------------------------
+    const int land1 = lands.empty() ? 0 : 1;
+    const int m1 = board_lands + board_yield + land1;
+    std::vector<int> mana_elves;   // hand mana Elves, cheapest first (the greedy next-turn deployment)
+    for (int i = 0; i < n; ++i)
+    { if (!ap.hand[at(i)].m_is_staged && (cls[at(i)] == C_SCALED || cls[at(i)] == C_DORK)) { mana_elves.push_back(i); } }
+    std::stable_sort(mana_elves.begin(), mana_elves.end(), [&](int a, int b)
+    { if (cost[at(a)] != cost[at(b)]) { return cost[at(a)] < cost[at(b)]; } return rank[at(a)] < rank[at(b)]; });
+    bool castable_mana_elf = board_yield > 0;
+    int spent = 0;
+    std::vector<const CardDefinition*> deployed;
+    for (int i : mana_elves)
+    {
+        if (cost[at(i)] <= m1) { castable_mana_elf = true; }
+        if (spent + cost[at(i)] > m1) { continue; }
+        spent += cost[at(i)];
+        deployed.push_back(defs[at(i)]);
+    }
+    const int nd = static_cast<int>(deployed.size());
+    int deployed_elves = 0;
+    for (const CardDefinition* e : deployed) { if (CardHasSubtype(e->card, "Elf")) { ++deployed_elves; } }
+    // One tap of a scaled Elf once the deployed Elves are in play. Marwyn grows a counter per Elf entering; a hand
+    // Marwyn is read as 1 (agent reading: the order of the deployment is not modelled).
+    auto yield_after = [&](const CardDefinition& d, bool on_board) -> int
+    {
+        if (d.params.mana_per_own_power) { return on_board ? ScaledDorkCount(s, me, d) + deployed_elves : 1; }
+        if (d.params.mana_per_creature_subtype.empty()) { return ManaProducedPerTap(d); }
+        int k = d.params.mana_per_creature_count_all ? elves_all : elves_own;
+        if (d.params.mana_per_creature_subtype != "Elf") { k = 0; }
+        for (const CardDefinition* e : deployed) { if (CardHasSubtype(e->card, d.params.mana_per_creature_subtype)) { ++k; } }
+        return k;
+    };
+    int land_quota = std::clamp(4 - board_lands, 1, 3);
+    if (!castable_mana_elf) { land_quota = std::min(3, land_quota + 1); }
+    const int drops2 = std::min<int>({ 2, land_quota, static_cast<int>(lands.size()) });
+    int m2 = board_lands + drops2 + board_flat;
+    for (const CardDefinition* d : board_scaled) { m2 += yield_after(*d, true); }
+    for (int k = 0; k < nd; ++k) { m2 += yield_after(*deployed[at(k)], false); }
+    auto dist = [&](int i) { return cost[at(i)] <= m1 ? 0 : (cost[at(i)] <= m2 ? 1 : 2); };
+    // Genesis Wave is the sink of choice only when the projection reaches 8 (X = 5); short of it, it ranks after
+    // Warcaller.
+    if (m2 >= 8)
+    { for (int i = 0; i < n; ++i) { if (cls[at(i)] == C_SINK && defs[at(i)]->params.reveal_x_put_permanents) { rank[at(i)] = 5; } } }
+
+    // ---- the keep ladder ----------------------------------------------------------------------------------------
+    std::vector<char> kept(at(n), 0);
+    std::vector<int> ladder;
+    auto take = [&](int i) { if (i >= 0 && !kept[at(i)]) { kept[at(i)] = 1; ladder.push_back(i); } };
+    auto best_of = [&](int c) -> int   // nearest, then the value rank, then hand order
+    {
+        int best = -1;
+        for (int i = 0; i < n; ++i)
+        {
+            if (ap.hand[at(i)].m_is_staged || kept[at(i)] || cls[at(i)] != c) { continue; }
+            if (best < 0 || dist(i) < dist(best) || (dist(i) == dist(best) && rank[at(i)] < rank[at(best)])) { best = i; }
+        }
+        return best;
+    };
+    auto land_k = [&](int k) { return k < static_cast<int>(lands.size()) && k < land_quota ? lands[at(k)] : -1; };
+    take(land_k(0));
+    take(best_of(C_SCALED));
+    take(best_of(C_SINK));
+    take(land_k(1));
+    take(best_of(C_LORD));
+    take(best_of(C_DORK));
+    take(land_k(2));
+    take(best_of(C_ENABLER));
+    std::vector<int> rest;
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[at(i)].m_is_staged || kept[at(i)]) { continue; }
+        if (cls[at(i)] == C_DEAD || cls[at(i)] == C_LAND) { continue; }
+        rest.push_back(i);
+    }
+    std::stable_sort(rest.begin(), rest.end(), [&](int a, int b)   // kept first
+    { if (dist(a) != dist(b)) { return dist(a) < dist(b); } return rank[at(a)] < rank[at(b)]; });
+
+    // ---- the shed order ---------------------------------------------------------------------------------------
+    shed.reserve(at(n));
+    std::vector<char> listed(at(n), 0);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[at(i)] || ap.hand[at(i)].m_is_staged) { return; }
+        listed[at(i)] = 1;
+        shed.push_back(i);
+    };
+    for (int i = 0; i < n; ++i) { if (!ap.hand[at(i)].m_is_staged && cls[at(i)] == C_DEAD) { put(i); } }
+    for (auto it = rest.rbegin(); it != rest.rend(); ++it) { if (dist(*it) >= 2) { put(*it); } }
+    for (auto it = lands.rbegin(); it != lands.rend(); ++it) { if (!kept[at(*it)]) { put(*it); } }
+    for (auto it = rest.rbegin(); it != rest.rend(); ++it) { put(*it); }
+    for (auto it = ladder.rbegin(); it != ladder.rend(); ++it) { put(*it); }
+    for (int i = 0; i < n; ++i) { put(i); }   // defensive: every non-staged card is named
+    return shed;
+}
+
+std::vector<int> ElvesProvider::CleanupDiscardShedOrder(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!ElvesBucketDiscardEnabled()) { return SelesnyaLifegainProvider::CleanupDiscardShedOrder(s, required_pieces); }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, ElvesBucketShedOrder(s));
+}
+
+std::vector<int> ElvesProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!ElvesBucketDiscardEnabled()) { return SelesnyaLifegainProvider::CleanupDiscardCandidates(s, required_pieces); }
+    std::vector<int> ranked = CleanupDiscardRankingCounted(s, required_pieces, ElvesBucketShedOrder(s));
+    // ONE index (5i rule 5: the rule IS the decision; it also skips the executor's trial fan). TESTING ONLY:
+    // MTG_ELVES_DISCARD_FAN=1 returns the whole order so the rule-vs-searched trace can grade the pick.
+    static const bool s_fan = EnvOn("MTG_ELVES_DISCARD_FAN");
+    if (!s_fan && ranked.size() > 1) { ranked.resize(1); }
+    return ranked;
+}
+
+bool ElvesProvider::CleanupDiscardShedStable() const
+{
+    return ElvesBucketDiscardEnabled() ? false : SelesnyaLifegainProvider::CleanupDiscardShedStable();
+}

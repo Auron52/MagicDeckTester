@@ -1096,6 +1096,7 @@ enum Slot : int
     FREE_TURN_ANNIHILATOR_FAIR, // MTG_FREE_TURN_ANNIHILATOR_FAIR  a land-play turn's annihilator wipe is vetoed when castable nonland permanents would have kept one. Default ON
     FREE_TURN_REACH,          // MTG_FREE_TURN_REACH       the turn-edge prunes stand down for a lock-trait deck only where a free turn is REACHABLE (freeturn::FreeTurnMayFollow, a sound certificate). Default ON; =0 -> stand down at every node of a trait deck
     ELVES_SCALING_PRUNE,      // MTG_ELVES_SCALING_PRUNE   ElvesProvider (USER 2026-11-26 scaling-sink ruling): of the plans that differ only in their scaling counts (Genesis Wave X, Joraga Warcaller multikick, Galadhrim Brigade squad, Ezuri's main-phase pump count), keep ONE sink at the group's max plus hold-back counts for the 1-mana attackers; no partial splits across two sinks. A USER-directed provider prune. Default ON; =0 -> every count and every split searched
+    ELVES_BUCKET_DISCARD,     // MTG_ELVES_BUCKET_DISCARD  ElvesProvider: the AGENT-DRAFTED 5i cleanup-discard buckets (2026-11-26, pending the USER). Default OFF; =1 -> the rule, =0 -> the inherited SelesnyaLifegain buckets
     COUNT
 };
 
@@ -2136,6 +2137,7 @@ inline const char* Name(int slot)
         "MTG_FREE_TURN_ANNIHILATOR_FAIR",
         "MTG_FREE_TURN_REACH",
         "MTG_ELVES_SCALING_PRUNE",
+        "MTG_ELVES_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

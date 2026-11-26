@@ -3925,6 +3925,15 @@ public:
     // prices a thinner library or punishes an own creature entering or dying. So no subset beats "all", and this
     // equals the engine's disclosed default on this pool (no etb_destroy_* creature) -- byte-identical play.
     // Re-derive if the list gains a permanent with a drawback on entry. Human play still picks freely.
+    // Cleanup discard: an AGENT-DRAFTED 5i bucket policy (2026-11-26; lands / scaled mana / ONE scaling sink / lords /
+    // dorks / Crossroads / bodies, distance-to-castable on a two-turn projection), ONE index. NOT USER-APPROVED:
+    // MTG_ELVES_BUCKET_DISCARD (heurarm ELVES_BUCKET_DISCARD) DEFAULTS OFF, and off every hook below is the inherited
+    // SelesnyaLifegain buckets byte-for-byte. The rule and its readings are at ElvesBucketShedOrder in the .cpp.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    std::vector<int> CleanupDiscardShedOrder(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
     bool ImplementsRequiredHeuristic(RequiredHeuristic h) const override
     { return h == RequiredHeuristic::GenesisWavePut; }
     std::vector<int> GenesisWavePutPicks(const GameState&, int, const std::vector<Card>& candidates, int) const override

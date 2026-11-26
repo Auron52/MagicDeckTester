@@ -258,3 +258,83 @@ TEST_CASE("Elves scaling rule: not live with no sink in hand (the lazy layout is
     // provider-level liveness ignores HumanPlayActive(); only the unpruned gates lift it here.
     CHECK(Prov().PlanListFilterLive(s) == (!DecisionUnpruned(UnprunedGate::Replicate) && !DecisionUnpruned(UnprunedGate::XSpell)));
 }
+
+// ---- 4. THE DRAFTED 5i DISCARD BUCKETS (MTG_ELVES_BUCKET_DISCARD, default OFF pending the USER) ------------------
+namespace {
+struct BucketArm
+{
+    std::int8_t saved;
+    explicit BucketArm(int v) : saved(heurarm::t_arm[heurarm::ELVES_BUCKET_DISCARD])
+    { heurarm::t_arm[heurarm::ELVES_BUCKET_DISCARD] = static_cast<std::int8_t>(v); }
+    ~BucketArm() { heurarm::t_arm[heurarm::ELVES_BUCKET_DISCARD] = saved; }
+};
+GameState CleanupState(int board_forests, const std::vector<std::string>& hand)
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 3; s.game_seed = 4243;
+    s.players[0].life = 20; s.players[1].life = 20;
+    for (int i = 0; i < board_forests; ++i) { PPut(s, "Forest", 100 + i); }
+    int id = 1;
+    for (const std::string& n : hand) { PHand(s, n, id++); }
+    s.m_provider = &Prov();
+    return s;
+}
+std::string Shed(const GameState& s)
+{
+    const std::vector<int> c = Prov().CleanupDiscardCandidates(s, nullptr);
+    REQUIRE(c.size() == 1);   // ONE index (5i rule 5)
+    return s.players[0].hand[static_cast<std::size_t>(c[0])].m_name;
+}
+}   // namespace
+
+TEST_CASE("Elves discard buckets: off (the default) is the inherited SelesnyaLifegain rule exactly")
+{
+    const BucketArm arm(0);
+    const SelesnyaLifegainProvider selesnya;
+    const GameState s = CleanupState(2, { "Forest", "Forest", "Forest", "Priest of Titania", "Genesis Wave",
+                                          "Elvish Clancaller", "Llanowar Elves", "Taunting Elf" });
+    CHECK(Prov().CleanupDiscardCandidates(s, nullptr) == selesnya.CleanupDiscardCandidates(s, nullptr));
+    CHECK(Prov().CleanupDiscardShedOrder(s, nullptr) == selesnya.CleanupDiscardShedOrder(s, nullptr));
+    CHECK(Prov().CleanupDiscardShedStable() == selesnya.CleanupDiscardShedStable());
+}
+
+TEST_CASE("Elves discard buckets: a surplus land beyond the drops sheds before any castable spell")
+{
+    const BucketArm arm(1);
+    // Board 2 Forests: land quota 2. M1 = 3 (Llanowar + Priest deploy), M2 = 7 -- every spell is within two turns.
+    const GameState s = CleanupState(2, { "Forest", "Forest", "Forest", "Priest of Titania", "Genesis Wave",
+                                          "Elvish Clancaller", "Llanowar Elves", "Taunting Elf" });
+    CHECK(Shed(s) == "Forest");
+    CHECK_FALSE(Prov().CleanupDiscardShedStable());
+    // The full order names every card once; the cheap Elf body is the first spell to go after the land.
+    const std::vector<int> order = Prov().CleanupDiscardShedOrder(s, nullptr);
+    REQUIRE(order.size() == 8);
+    CHECK(s.players[0].hand[static_cast<std::size_t>(order[1])].m_name == "Taunting Elf");
+}
+
+TEST_CASE("Elves discard buckets: a spell not castable within two turns sheds first; one sink is kept")
+{
+    const BucketArm arm(1);
+    // Board 1 Forest, no mana Elf: land quota 3 (fungible upward), M1 = 2, M2 = 3. Ezuri (3) is the kept sink; both
+    // Waves (6) and the Magistrate (4) are out of reach, the Magistrate the least valuable of them.
+    const GameState s = CleanupState(1, { "Forest", "Forest", "Genesis Wave", "Genesis Wave", "Ezuri, Renegade Leader",
+                                          "Immaculate Magistrate", "Elvish Clancaller", "Leaf-Crowned Visionary" });
+    CHECK(Shed(s) == "Immaculate Magistrate");
+    const std::vector<int> order = Prov().CleanupDiscardShedOrder(s, nullptr);
+    REQUIRE(order.size() == 8);
+    CHECK(s.players[0].hand[static_cast<std::size_t>(order[1])].m_name == "Genesis Wave");
+    CHECK(s.players[0].hand[static_cast<std::size_t>(order[2])].m_name == "Genesis Wave");
+    CHECK(s.players[0].hand[static_cast<std::size_t>(order.back())].m_name == "Forest");
+}
+
+TEST_CASE("Elves discard buckets: a legend we already control and a second Crossroads are dead")
+{
+    const BucketArm arm(1);
+    GameState s = CleanupState(3, { "Forest", "Ezuri, Renegade Leader", "Priest of Titania", "Llanowar Elves",
+                                    "Elvish Clancaller", "Joraga Warcaller", "Galadhrim Brigade", "Elvish Mystic" });
+    PPut(s, "Ezuri, Renegade Leader", 300);
+    CHECK(Shed(s) == "Ezuri, Renegade Leader");
+    GameState t = CleanupState(3, { "Forest", "Concordant Crossroads", "Priest of Titania", "Llanowar Elves",
+                                    "Elvish Clancaller", "Joraga Warcaller", "Galadhrim Brigade", "Elvish Mystic" });
+    PPut(t, "Concordant Crossroads", 301);
+    CHECK(Shed(t) == "Concordant Crossroads");
+}
