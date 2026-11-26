@@ -58,6 +58,14 @@
 #include <map>
 #include <set>
 #include <mutex>
+#include <cerrno>
+#if !defined(_WIN32)
+#include <csignal>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <poll.h>
+#include <unistd.h>   // fork / pipe (MTG_LEAF_KILL_ONLY_VERIFY's reference child)
+#endif
 #include <optional>
 #include <semaphore>
 #include <cmath>
@@ -85379,6 +85387,30 @@ static void NoteDothUncoveredSearch(const GameState& s, int ordinal, int pin)
                      t_rollout_narrow ? 1 : 0, t_echo_rollout_turn_depth);
     }
 }
+// MTG_KOB_TIMING (diagnostic, prints only): where KillOnlyBoundaryEndsGame's crossing spends its time -- the copy,
+// the crossing up to the round advance, and the rest of the crossing (our next untap / upkeep / draw).
+namespace kobtime
+{
+    inline thread_local bool t_on = false, t_hit = false;
+    inline thread_local std::chrono::steady_clock::time_point t_adv;
+    inline std::atomic<long long> g_n{0}, g_copy_ns{0}, g_pre_ns{0}, g_post_ns{0}, g_noadv{0}, g_true{0}, g_dup{0}, g_dup_dis{0};
+    inline bool On() { static const bool v = EnvOn("MTG_KOB_TIMING"); return v; }
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (g_n.load() == 0) { return; }
+            std::fprintf(stderr, "[kob-timing] crossings=%lld copy_ms=%.1f pre_advance_ms=%.1f post_advance_ms=%.1f"
+                                 " no_advance=%lld ends_game=%lld dup_in_decision=%lld dup_disagree=%lld\n", g_n.load(),
+                         g_copy_ns.load() / 1e6, g_pre_ns.load() / 1e6, g_post_ns.load() / 1e6, g_noadv.load(),
+                         g_true.load(), g_dup.load(), g_dup_dis.load());
+        }
+    };
+    inline Dumper g_dumper;
+}
+// MTG_KO_CROSS_ROUND_STOP: the GameState whose crossing may stop at the round advance (KillOnlyBoundaryEndsGame's copy;
+// a pointer, not a flag, so a crossing nested inside that one -- an opponent-turn search's rollout -- runs in full).
+static thread_local const GameState* t_cross_stop_at_round = nullptr;
 static thread_local int* t_upkeep_tutor_width_probe = nullptr;
 static bool SimulateUpkeepAfterArrivals(GameState& state);   // its second half (below)
 static bool SimulateEndAndStartNextTurn(GameState& state)
@@ -85667,7 +85699,14 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
 
     // Start of next turn: ++turn_number, or a pending EXTRA turn (the round stays; GameState::
     // AdvanceTurnCounter, shared with GameEngine::RunTurnFrom). ++turn_number for every other deck.
+    if (kobtime::t_on) { kobtime::t_adv = std::chrono::steady_clock::now(); kobtime::t_hit = true; }
+    const int round_before_advance = state.turn_number;
     state.AdvanceTurnCounter();
+    // MTG_KO_CROSS_ROUND_STOP (KillOnlyBoundaryEndsGame's crossing only, keyed on its copy): the caller's answer is
+    // "the opponent lost AND turn_number is still this turn"; the counter has just moved on and never moves back, so
+    // the rest of this function cannot change that answer (false). Stop here. An extra or free turn keeps the round,
+    // and the crossing runs on exactly as before.
+    if (t_cross_stop_at_round == &state && state.turn_number != round_before_advance) { return true; }
     if (state.deck_has_extra_combat) { state.phase = Phase::Beginning; }   // Moraug (see the head of this function)
     state.opponent_lost_life_this_turn = false;
     state.opponent_searched_library_this_turn = false;
@@ -113563,17 +113602,18 @@ static std::atomic<long long> g_round_stop_breaks{0}, g_round_stop_skipped{0};
 // BUDGET. Exact at any budget in what each leaf returns; a budget only re-spends the units it frees
 // (the skipped rollouts consumed units) -- a play change under a finite budget, tested as one, and
 // inert in what the search can find at an unlimited budget. MTG_LEAF_KILL_ONLY_VERIFY=1 recomputes
-// every armed rollout with the scope suppressed and counts result mismatches (must be 0 at an
-// unlimited budget; under a finite budget the two runs see different budget states).
+// every armed rollout with the scope suppressed, in a forked child that starts from the same state and
+// budget, and counts result mismatches between uncut pairs (must be 0 at any budget; see namespace kov).
 inline bool LeafKillOnlyOn()
 {
     static const bool v = EnvOn("MTG_LEAF_KILL_ONLY", true);
     return heurarm::Flag(heurarm::LEAF_KILL_ONLY, v);   // per-job arm (pooled A/B) over the env default
 }
+inline thread_local bool t_ko_verify_force = false;   // test hook (TurnSolver::SetKillOnlyVerifyForTest)
 inline bool LeafKillOnlyVerifyOn()
 {
     static const bool v = EnvOn("MTG_LEAF_KILL_ONLY_VERIFY");
-    return v;
+    return v || t_ko_verify_force;
 }
 // MTG_LEAF_KILL_ONLY_EXTRA -- DEFAULT ON; =0 keeps the kill-only turn OFF for an extra-turn deck (the Q13 default).
 //
@@ -113756,6 +113796,7 @@ static std::atomic<long long> g_ko_turns{0}, g_ko_skipped{0}, g_ko_memo_ns{0};
 inline thread_local long long t_ko_armed_n = 0, t_ko_skipped_n = 0;   // test hook (SimulateToEndForTest)
 static std::atomic<long long> g_ko_verified{0}, g_ko_mismatch{0};
 static std::atomic<long long> g_ko_m2_cands{0}, g_ko_m2_empty{0}, g_ko_m1_cands{0};   // diagnostic (MTG_ROLLOUT_STATS)
+namespace kov { inline std::atomic<long long> g_bound_diff{0}, g_bound_same{0}, g_lost{0}; }   // VERIFY (below)
 struct KillOnlyDumper
 {
     ~KillOnlyDumper()
@@ -113769,12 +113810,218 @@ struct KillOnlyDumper
                          g_ko_m2_noreach.load());
             std::fprintf(stderr, " fsl_edge_no_reach=%lld", g_fsl_edge_noreach.load());
             if (LeafKillOnlyVerifyOn())
-            { std::fprintf(stderr, " verified=%lld MISMATCHES=%lld", g_ko_verified.load(), g_ko_mismatch.load()); }
+            { std::fprintf(stderr, " verified=%lld MISMATCHES=%lld bound_diff=%lld bound_same=%lld lost=%lld",
+                           g_ko_verified.load(), g_ko_mismatch.load(), kov::g_bound_diff.load(),
+                           kov::g_bound_same.load(), kov::g_lost.load()); }
             std::fprintf(stderr, "\n");
         }
     }
 };
 static KillOnlyDumper g_ko_dumper;
+
+// MTG_LEAF_KILL_ONLY_VERIFY -- the kill-only identity's checker, INERT TO PLAY BY CONSTRUCTION (2026-11-26).
+//
+// WHAT IT CHECKS. At the moment a rollout arms its kill-only turn (the KillOnlyScope site in SimulateToEndImplBody),
+// the process FORKS. The child carries on with the scope suppressed (t_ko_suppress: this rollout and everything
+// below it run the full solve) and pipes back the win turn that SimulateToEndImpl invocation returns; the parent
+// carries on armed. At that invocation's return the parent compares the two. The child starts from the parent's
+// exact state at the arming point -- the game state, the SAME budget state, the same memos and leaf table -- so the
+// reference is precisely what the full solve would have returned there.
+//
+// WHY A FORK (the defects it replaces). The old reference ran in the parent, after the kill-only run, on the shared
+// budget: (1) it spent the parent's units, so play changed (Mill 58077083 gi83: K's game 28,633 -> 5,263 units and
+// KF lost its fix); (2) every memo it stored was then served to later play (units again); (3) it saw the budget the
+// kill-only run had left, not the one it started with; (4) it ran for every depth>0 rollout whether or not the scope
+// ever armed (it ran on decks where kill-only cannot arm at all). A forked child shares nothing writable with the
+// parent, so with VERIFY on the parent's digest and units equal VERIFY off exactly (checked: test/unit and the
+// verify2 manifest). Each rollout forks at most once (its first armed turn; an extra turn's re-arm is already in the
+// child's run). POSIX only; on Windows VERIFY prints that it is unsupported and checks nothing.
+//
+// WHAT A MISMATCH MEANS. Under a finite budget the two runs spend differently (the kill-only run skips charged
+// rollouts), so a run that a budget test CUT may legitimately differ. Each side records whether it met a cut after
+// the fork (LandTwinMark: truncation, bind, condemnation drop, sibling defer, cut-win read, decision/game ceiling).
+// MISMATCHES counts pairs where NEITHER side was cut -- both answers are exact, so they must agree; any one is a
+// soundness defect. bound_diff / bound_same count pairs where a cut happened (diagnostic). lost = a child that
+// died or never answered (counted, never compared).
+//
+// REPORTING. [leaf-kill-only] at exit carries the totals; [ko-verify] job=<name> lines carry per-job counts (a pooled
+// A/B's arms are separate jobs); a MISMATCH line names job, game index, turn, depth, cutoff, both results and the
+// board at the arming point.
+namespace kov
+{
+    struct Counts { long long forks = 0, verified = 0, mismatch = 0, bound_diff = 0, bound_same = 0, lost = 0; };
+    inline std::mutex& Mu() { static std::mutex* m = new std::mutex; return *m; }
+    inline std::map<std::string, Counts>& PerJob() { static auto* m = new std::map<std::string, Counts>; return *m; }
+    struct Frame
+    {
+        Frame* prev = nullptr;
+        bool child = false;          // this process is the reference forked at this frame
+        long long pid = -1;          // parent: the child's pid (-1 = not forked)
+        int fd = -1;                 // parent: read end; child: write end
+        LandTwinMark mark;           // cut watermark taken at the fork (each side checks its own)
+        int turn = 0, depth = 0, cutoff = 0, gi = -1;
+        std::string board;
+        bool finite = false;
+    };
+    inline thread_local Frame* t_top = nullptr;
+    inline thread_local long long t_verified = 0, t_mismatch = 0, t_bound = 0;   // test hook (KillOnlyTally)
+    struct Reply { int result; int clean; };
+    inline Counts& JobCounts()   // caller holds Mu()
+    { return PerJob()[heurarm::t_job_name != nullptr ? heurarm::t_job_name : "-"]; }
+#if !defined(_WIN32)
+    // At the arming site: fork once per rollout frame. Returns true in the CHILD (which must not arm).
+    inline bool ForkAtArm(const GameState& state, int depth, int cutoff, const SearchBudget* budget)
+    {
+        Frame* f = t_top;
+        if (f == nullptr || f->child || f->pid >= 0) { return false; }
+        int p[2];
+        if (::pipe(p) != 0) { g_lost.fetch_add(1, std::memory_order_relaxed); return false; }
+        f->turn = state.turn_number; f->depth = depth; f->cutoff = cutoff; f->gi = escstats::t_gi;
+        f->finite = budget != nullptr && !budget->Unlimited();
+        f->board = FsSimBoardText(state);
+        f->mark.Take();
+        std::fflush(nullptr);   // nothing buffered is duplicated into the child's (never-flushed) copy
+        const pid_t pid = ::fork();
+        if (pid < 0)
+        {
+            ::close(p[0]); ::close(p[1]);
+            g_lost.fetch_add(1, std::memory_order_relaxed);
+            std::lock_guard<std::mutex> lk(Mu()); ++JobCounts().lost;
+            return false;
+        }
+        if (pid == 0)
+        {
+            ::close(p[0]);
+            f->child = true; f->fd = p[1];
+            t_ko_suppress = true;   // the reference: this rollout and everything beneath it run the full solve
+            return true;
+        }
+        ::close(p[1]);
+        f->pid = pid; f->fd = p[0];
+        { std::lock_guard<std::mutex> lk(Mu()); ++JobCounts().forks; }
+        return false;
+    }
+    // CHILD: deliver this frame's result and leave without running a destructor or flushing a stream.
+    [[noreturn]] inline void ChildExit(Frame& f, int result)
+    {
+        Reply r{ result, f.mark.Clean() ? 1 : 0 };
+        const char* b = reinterpret_cast<const char*>(&r);
+        std::size_t n = 0;
+        while (n < sizeof r)
+        {
+            const ssize_t w = ::write(f.fd, b + n, sizeof r - n);
+            if (w <= 0) { break; }
+            n += static_cast<std::size_t>(w);
+        }
+        ::_exit(n == sizeof r ? 0 : 3);
+    }
+    // PARENT: collect the child (compare when `compare`; a frame left by an exception only reaps).
+    inline void Reap(Frame& f, bool compare, int result)
+    {
+        if (f.pid < 0) { return; }
+        Reply r{};
+        bool got = false;
+        if (compare)
+        {
+            char* b = reinterpret_cast<char*>(&r);
+            std::size_t n = 0;
+            while (n < sizeof r)
+            {
+                // A child that never answers (it inherited a lock another thread held at the fork, say) is killed
+                // after 30 min and counted LOST, so a diagnostic cannot hang the batch. Not a measurement cut: the
+                // pair is reported as unverified, never compared.
+                pollfd pf{ f.fd, POLLIN, 0 };
+                const int pr = ::poll(&pf, 1, 30 * 60 * 1000);
+                if (pr < 0 && errno == EINTR) { continue; }
+                if (pr <= 0)
+                {
+                    std::fprintf(stderr, "[ko-verify] LOST (no answer in 30 min) job=%s gi=%d t%d depth=%d cutoff=%d\n",
+                                 heurarm::t_job_name != nullptr ? heurarm::t_job_name : "-", f.gi, f.turn, f.depth,
+                                 f.cutoff);
+                    ::kill(static_cast<pid_t>(f.pid), SIGKILL);
+                    break;
+                }
+                const ssize_t k = ::read(f.fd, b + n, sizeof r - n);
+                if (k < 0 && errno == EINTR) { continue; }
+                if (k <= 0) { break; }
+                n += static_cast<std::size_t>(k);
+            }
+            got = n == sizeof r;
+        }
+        else { ::kill(static_cast<pid_t>(f.pid), SIGKILL); }
+        ::close(f.fd);
+        int st = 0;
+        while (::waitpid(static_cast<pid_t>(f.pid), &st, 0) < 0 && errno == EINTR) {}
+        f.pid = -1; f.fd = -1;
+        if (!compare) { return; }
+        got = got && WIFEXITED(st) && WEXITSTATUS(st) == 0;
+        std::lock_guard<std::mutex> lk(Mu());
+        Counts& c = JobCounts();
+        if (!got) { ++c.lost; g_lost.fetch_add(1, std::memory_order_relaxed); return; }
+        ++c.verified; ++t_verified; g_ko_verified.fetch_add(1, std::memory_order_relaxed);
+        const bool clean = r.clean != 0 && f.mark.Clean();
+        if (!clean) { ++t_bound; }
+        if (r.result == result)
+        {
+            if (!clean) { ++c.bound_same; g_bound_same.fetch_add(1, std::memory_order_relaxed); }
+            return;
+        }
+        if (!clean) { ++c.bound_diff; g_bound_diff.fetch_add(1, std::memory_order_relaxed); return; }
+        ++c.mismatch; ++t_mismatch;
+        const long long n = g_ko_mismatch.fetch_add(1, std::memory_order_relaxed);
+        if (n < 40)
+        {
+            std::fprintf(stderr, "[leaf-kill-only] MISMATCH job=%s gi=%d t%d depth=%d cutoff=%d kill_only=%d full=%d"
+                                 " budget=%s %s\n", heurarm::t_job_name != nullptr ? heurarm::t_job_name : "-", f.gi,
+                         f.turn, f.depth, f.cutoff, result, r.result, f.finite ? "finite" : "none", f.board.c_str());
+        }
+    }
+#else
+    inline bool ForkAtArm(const GameState&, int, int, const SearchBudget*) { return false; }
+    [[noreturn]] inline void ChildExit(Frame&, int) { std::abort(); }
+    inline void Reap(Frame&, bool, int) {}
+#endif
+    // One per SimulateToEndImpl invocation while VERIFY is on.
+    struct FrameGuard
+    {
+        Frame f;
+        FrameGuard() { f.prev = t_top; t_top = &f; }
+        int Finish(int result)
+        {
+            t_top = f.prev;
+            if (f.child) { ChildExit(f, result); }
+            Reap(f, true, result);
+            return result;
+        }
+        ~FrameGuard()
+        {
+            if (t_top == &f) { t_top = f.prev; }
+            if (f.child) { ::_exit(4); }   // the reference unwound by an exception: no answer
+            Reap(f, false, 0);
+        }
+        FrameGuard(const FrameGuard&) = delete;
+        FrameGuard& operator=(const FrameGuard&) = delete;
+    };
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!LeafKillOnlyVerifyOn()) { return; }
+#if defined(_WIN32)
+            std::fprintf(stderr, "[ko-verify] MTG_LEAF_KILL_ONLY_VERIFY is POSIX-only (fork); nothing was checked\n");
+#else
+            std::lock_guard<std::mutex> lk(Mu());
+            for (const auto& [job, c] : PerJob())
+            {
+                std::fprintf(stderr, "[ko-verify] job=%s forks=%lld verified=%lld MISMATCHES=%lld bound_diff=%lld"
+                                     " bound_same=%lld lost=%lld\n", job.c_str(), c.forks, c.verified, c.mismatch,
+                             c.bound_diff, c.bound_same, c.lost);
+            }
+#endif
+        }
+    };
+    inline Dumper g_dumper;
+}
 struct LaTiePruneDumper
 {
     ~LaTiePruneDumper()
@@ -114096,10 +114343,27 @@ static void RolloutSuffixProbeClear() { sfxprobe::Clear(); rgc::t_map.clear(); }
 // it had spent at the head of each simulated turn, so the sampled-gate price can re-cost that rollout under a tighter
 // cutoff (an incumbent found earlier in the pass's visit order) without running it again. Print/price only.
 namespace p18 { inline thread_local std::vector<std::pair<int, long long>>* t_prof = nullptr; }
+static int SimulateToEndImplBody(GameState& state, int depth, int max_turns,
+                                 SearchBudget* budget, int cutoff_turn,
+                                 bool second_main, TranspositionTable* tt,
+                                 std::vector<EtChainStep>* chain_steps, bool chain_only);
+// The rollout. With MTG_LEAF_KILL_ONLY_VERIFY on, each invocation is a kov frame: the kill-only arming site inside
+// it may fork the reference, which this frame collects at its return (namespace kov). Off: a plain forward.
 static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                              SearchBudget* budget, int cutoff_turn,
                              bool second_main, TranspositionTable* tt,
                              std::vector<EtChainStep>* chain_steps = nullptr, bool chain_only = false)
+{
+    if (!LeafKillOnlyVerifyOn())
+    { return SimulateToEndImplBody(state, depth, max_turns, budget, cutoff_turn, second_main, tt, chain_steps, chain_only); }
+    kov::FrameGuard g;
+    return g.Finish(SimulateToEndImplBody(state, depth, max_turns, budget, cutoff_turn, second_main, tt, chain_steps,
+                                          chain_only));
+}
+static int SimulateToEndImplBody(GameState& state, int depth, int max_turns,
+                                 SearchBudget* budget, int cutoff_turn,
+                                 bool second_main, TranspositionTable* tt,
+                                 std::vector<EtChainStep>* chain_steps, bool chain_only)
 {
     routetape::Suspend _rts;   // a rollout inside a route link's apply is not the link's own resolution
     // TRUNCATED ROLLOUT (MTG_ROLLOUT_HORIZON=K, default -1 = unlimited/off): after K simulated turns with
@@ -114260,7 +114524,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // inside this turn's solve never inherits the scope.
         // Not for an EXTRA-TURN deck (Q13): a cast this turn can grant an extra turn of this same round,
         // where a kill still scores cutoff_turn -- "only a this-turn kill matters" is false there.
-        const bool ko_turn = LeafKillOnlyOn() && !t_ko_suppress && depth > 0
+        bool ko_turn = LeafKillOnlyOn() && !t_ko_suppress && depth > 0
                           && (!state.deck_has_extra_turn || LeafKillOnlyExtraOn())
                           // a FREE turn of this round may follow (MTG_FREE_TURNS) -- unless the reachable-lock
                           // certificate says none can follow this turn (freeturn::FreeTurnMayFollow, MTG_FREE_TURN_REACH;
@@ -114269,8 +114533,14 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                           && state.turn_number == cutoff_turn && cutoff_turn < max_turns
                           && (second_main || KillOnlyNoM2Parity(state, second_main)) && !g_honest_teacher
                           && M2FixModeFor(state) == 0 && !HumanPlayActive();
+        // MTG_LEAF_KILL_ONLY_VERIFY (namespace kov): fork here; the child is the reference and does not arm.
+        if (ko_turn && LeafKillOnlyVerifyOn() && kov::ForkAtArm(state, depth, cutoff_turn, budget)) { ko_turn = false; }
         KillOnlyScope _ko_scope(ko_turn ? state.TurnSeq() : -1);
-        if (ko_turn) { ++t_ko_armed_n; if (s_rollout_stats) { g_ko_turns.fetch_add(1, std::memory_order_relaxed); } }
+        if (ko_turn)
+        {
+            ++t_ko_armed_n;
+            if (s_rollout_stats || LeafKillOnlyVerifyOn()) { g_ko_turns.fetch_add(1, std::memory_order_relaxed); }
+        }
         // MTG_ROLLOUT_STATS (diagnostic): units spent on a rollout's SLACK-0 turn (turn == its cutoff, before the
         // horizon), the kill-only identity's domain, split by what keeps the identity off; outermost such turn only.
         struct Slack0Scope
@@ -115204,12 +115474,6 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     std::unique_ptr<GameState> leaf_vcopy;    // MTG_LEAF_VERIFY's store-time check only (RC-1)
     if (tt != nullptr && LeafVerifyOn() && !t_nowin_verifying)
     { leaf_vcopy = std::make_unique<GameState>(state); }
-    // MTG_LEAF_KILL_ONLY_VERIFY (see LeafKillOnlyOn): the reference run, on a copy, with the scope
-    // suppressed. Only where a kill-only turn can occur (depth > 0, a cutoff before the horizon).
-    std::unique_ptr<GameState> ko_vcopy;
-    if (LeafKillOnlyVerifyOn() && LeafKillOnlyOn() && !t_ko_suppress && depth > 0
-        && cutoff_turn < max_turns)
-    { ko_vcopy = std::make_unique<GameState>(state); }
     const bool sfx_on = sfxprobe::On() && tt != nullptr && g_rollout_nest == 0 && !sfxprobe::t_collect;
     // E3 (see namespace rgc): outermost rollouts with no first-turn depth override only.
     const bool rgc_on = tt != nullptr && g_rollout_nest == 0 && !sfxprobe::t_collect && RolloutGameCacheOn()
@@ -115320,31 +115584,6 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             { sfxprobe::t_map.emplace(sfxprobe::t_pending[i], sfxprobe::E{ result, std::min(cutoff_turn, max_turns + 1), g_decision_epoch, i == 0, sfx_ctx }); }
         }
         sfxprobe::t_pending.clear();
-    }
-    if (ko_vcopy)
-    {
-        const std::string ko_board = FsSimBoardText(*ko_vcopy);   // named in a MISMATCH line (the entry board)
-        t_ko_suppress = true;
-        const unsigned long long ts = g_fs_trunc_events, ds = g_condemn_drops, bs = budgetbind::t_binds;
-        // A FRESH leaf table for the reference (MTG_LEAF_KILL_ONLY_VERIFY only): on the shared one the reference's
-        // own first lookup is the entry the kill-only run just stored for this very state, so it echoed that answer
-        // back and a missed boundary win (Mill's Archive Trap in the opponent's turn, 2026-11-26) verified clean.
-        TranspositionTable ko_ref_tt;
-        const int ref = SimulateToEndImpl(*ko_vcopy, depth, max_turns, budget, cutoff_turn, second_main,
-                                          tt != nullptr ? &ko_ref_tt : nullptr);
-        g_fs_trunc_events = ts; g_condemn_drops = ds; budgetbind::t_binds = bs;
-        t_ko_suppress = false;
-        g_ko_verified.fetch_add(1, std::memory_order_relaxed);
-        if (ref != result)
-        {
-            const long long n = g_ko_mismatch.fetch_add(1, std::memory_order_relaxed);
-            if (n < 10)
-            {
-                std::fprintf(stderr, "[leaf-kill-only] MISMATCH t%d depth=%d cutoff=%d kill_only=%d full=%d budget=%s %s\n",
-                             state_turn_at_entry, depth, cutoff_turn, result, ref,
-                             (budget == nullptr || budget->Unlimited()) ? "none" : "finite", ko_board.c_str());
-            }
-        }
     }
     if (g_fs_sim_trace > 0) { std::fprintf(stderr, "[fs-sim] << win=%d\n", result); }
     if (ttprobe::On() && tt != nullptr)
@@ -132226,21 +132465,63 @@ inline bool KoBoundarySimOn()
     static const bool v = EnvOn("MTG_KO_BOUNDARY_SIM", true);
     return heurarm::Flag(heurarm::KO_BOUNDARY_SIM, v);
 }
+inline bool KoCrossRoundStopOn()
+{
+    static const bool v = EnvOn("MTG_KO_CROSS_ROUND_STOP", true);
+    return heurarm::Flag(heurarm::KO_CROSS_ROUND_STOP, v);
+}
+// One unfanned crossing of a copy: does the game end in the boundary, credited to this turn?
+static bool CrossEndsThisTurn(const GameState& after_turn)
+{
+    const int t = after_turn.turn_number;
+    struct StopScope
+    {
+        const GameState* prev;
+        StopScope(const GameState* s, bool on) : prev(t_cross_stop_at_round) { if (on) { t_cross_stop_at_round = s; } }
+        ~StopScope() { t_cross_stop_at_round = prev; }
+    };
+    if (kobtime::On())
+    {
+        using clk = std::chrono::steady_clock;
+        const clk::time_point t0 = clk::now();
+        GameState ce = after_turn;
+        const clk::time_point t1 = clk::now();
+        kobtime::t_on = true; kobtime::t_hit = false;
+        bool r;
+        { StopScope _st(&ce, KoCrossRoundStopOn()); r = SimulateEndAndStartNextTurn(ce) && OpponentHasLost(ce) && ce.turn_number == t; }
+        const clk::time_point t2 = clk::now();
+        kobtime::t_on = false;
+        auto ns = [](clk::duration d) { return (long long)std::chrono::duration_cast<std::chrono::nanoseconds>(d).count(); };
+        kobtime::g_n.fetch_add(1); kobtime::g_copy_ns.fetch_add(ns(t1 - t0));
+        if (kobtime::t_hit) { kobtime::g_pre_ns.fetch_add(ns(kobtime::t_adv - t1)); kobtime::g_post_ns.fetch_add(ns(t2 - kobtime::t_adv)); }
+        else { kobtime::g_pre_ns.fetch_add(ns(t2 - t1)); kobtime::g_noadv.fetch_add(1); }
+        if (r) { kobtime::g_true.fetch_add(1); }
+        {   // duplicate census: the same end-of-turn state crossed again in one decision
+            static thread_local std::unordered_map<TranspositionTable::Key, bool, TranspositionTable::KeyHash> seen;
+            static thread_local uint64_t ep = 0;
+            if (ep != g_decision_epoch) { seen.clear(); ep = g_decision_epoch; }
+            const TranspositionTable::Key k = BuildSimKey(after_turn, 0, 0, false);
+            const auto it = seen.find(k);
+            if (it == seen.end()) { seen.emplace(k, r); }
+            else { kobtime::g_dup.fetch_add(1); if (it->second != r) { kobtime::g_dup_dis.fetch_add(1); } }
+        }
+        return r;
+    }
+    GameState ce = after_turn;
+    StopScope _st(&ce, KoCrossRoundStopOn());
+    return SimulateEndAndStartNextTurn(ce) && OpponentHasLost(ce) && ce.turn_number == t;
+}
 static bool KillOnlyBoundaryEndsGame(const GameState& after_turn, bool cl_only)
 {
     const int t = after_turn.turn_number;
     if (!after_turn.deck_has_crossing_land_put)
     {
         if (!KoBoundarySimOn()) { return false; }
-        GameState ce = after_turn;
-        return SimulateEndAndStartNextTurn(ce) && OpponentHasLost(ce) && ce.turn_number == t;
+        return CrossEndsThisTurn(after_turn);
     }
     BoundaryFan fan(after_turn, /*with_echo=*/!cl_only, false, false, false, false, false, false, cl_only);
     if (cl_only ? !fan.CrossingLandLive() : !fan.Copies())
-    {
-        GameState ce = after_turn;
-        return SimulateEndAndStartNextTurn(ce) && OpponentHasLost(ce) && ce.turn_number == t;
-    }
+    { return CrossEndsThisTurn(after_turn); }
     while (fan.Next())
     {
         GameState ce = after_turn;
@@ -134459,7 +134740,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // this turn can change the enclosing rollout's answer.
             if (ko && KillOnlySkippable(copy) && !KillOnlyBoundaryEndsGame(copy, /*cl_only=*/false))
             {
-                ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
+                ++t_ko_skipped_n; if (s_rollout_stats || LeafKillOnlyVerifyOn()) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
                 ++candidates_done;
                 continue;
             }
@@ -134775,7 +135056,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     }
                     if (ko && KillOnlySkippable(copy) && !KillOnlyBoundaryEndsGame(copy, /*cl_only=*/false))   // kill-only: the variant did not kill this turn (see LeafKillOnlyOn)
                     {
-                        ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
+                        ++t_ko_skipped_n; if (s_rollout_stats || LeafKillOnlyVerifyOn()) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
                         continue;
                     }
                     if (ko) { ko_rolled = true; }
@@ -134857,7 +135138,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             }
             if (ko && KillOnlySkippable(copy) && !KillOnlyBoundaryEndsGame(copy, /*cl_only=*/true))   // kill-only: the tranche plan did not kill this turn (see LeafKillOnlyOn)
             {
-                ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
+                ++t_ko_skipped_n; if (s_rollout_stats || LeafKillOnlyVerifyOn()) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
                 return true;
             }
             if (ko) { ko_rolled = true; }
@@ -145664,13 +145945,19 @@ int TurnSolver::SimulateToEndForTest(const GameState& state, int depth, int max_
     TranspositionTable tt;
     SearchBudget budget(budget_units > 0 ? budget_units : 0);
     const long long a0 = t_ko_armed_n, k0 = t_ko_skipped_n;
+    const long long v0 = kov::t_verified, m0 = kov::t_mismatch, b0 = kov::t_bound;
     GameState copy = state;
     const int w = SimulateToEnd(std::move(copy), depth, max_turns, budget_units > 0 ? &budget : nullptr,
                                 cutoff, second_main, &tt);
     if (tally != nullptr)
-    { tally->armed = t_ko_armed_n - a0; tally->skipped = t_ko_skipped_n - k0; tally->units = budget.Used(); }
+    {
+        tally->armed = t_ko_armed_n - a0; tally->skipped = t_ko_skipped_n - k0; tally->units = budget.Used();
+        tally->verified = kov::t_verified - v0; tally->mismatches = kov::t_mismatch - m0;
+        tally->bound = kov::t_bound - b0;
+    }
     return w;
 }
+void TurnSolver::SetKillOnlyVerifyForTest(bool on) { t_ko_verify_force = on; }
 
 // MTG_EXH_LEAF_MEMO test hook (see TurnSolver.h).
 TurnSolver::SpentTwice TurnSolver::SimulateToEndSpentTwiceForTest(const GameState& state, int depth,

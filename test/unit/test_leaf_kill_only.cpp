@@ -467,3 +467,76 @@ TEST_CASE("Leaf kill-only NOM2: a deck-out in the opponent's turn (Archive Trap 
     CHECK(b.on == b.off);       // the kill-only turn crosses the boundary and finds the same win
     CHECK(b.t_on.armed >= 1);
 }
+
+// MTG_LEAF_KILL_ONLY_VERIFY (namespace kov in TurnSolver.cpp): the reference is a forked child that starts at the
+// arming point, so the checker (1) catches the opponent-turn deck-out when the boundary sim is OFF, (2) reports it
+// clean when the sim is ON, and (3) leaves the parent's answer, units and kill-only tallies exactly as with VERIFY
+// off. The old in-process reference failed all three (it spent the parent's budget and fed it its memos).
+#if !defined(_WIN32)
+namespace
+{
+struct VerifyScope
+{
+    VerifyScope() { TurnSolver::SetKillOnlyVerifyForTest(true); }
+    ~VerifyScope() { TurnSolver::SetKillOnlyVerifyForTest(false); }
+};
+}   // namespace
+
+TEST_CASE("Leaf kill-only VERIFY: the forked reference reports a mismatch exactly when the kill-only answer differs")
+{
+    // The game-level catch (Mill 58077083 gi83, K with the sim off: 2 clean MISMATCHES on the Archive Trap board, KF 0)
+    // is in logs/mill-k; this synthetic board happens to be won by the fallback candidate even with the sim off, so
+    // here the check is the checker's own contract: mismatches >= 1 iff the kill-only answer != the full solve's.
+    EnsureCardsLoaded();
+    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);
+    const GameState s = MillOpponentTurnTrapBoard();
+    for (int sim : { 0, 1 })
+    {
+        CAPTURE(sim);
+        ArmScope a(heurarm::KO_BOUNDARY_SIM, sim);
+        int full = 0;
+        {
+            ArmScope off(heurarm::LEAF_KILL_ONLY, 0);
+            TurnSolver::ClearPerGameCaches();
+            full = TurnSolver::SimulateToEndForTest(s, 1, kMaxTurns, 5, false);
+        }
+        VerifyScope v;
+        TurnSolver::KillOnlyTally t;
+        TurnSolver::ClearPerGameCaches();
+        const int w = TurnSolver::SimulateToEndForTest(s, 1, kMaxTurns, 5, false, &t);
+        CHECK(full == 5);
+        CHECK(t.armed >= 1);
+        CHECK(t.verified >= 1);
+        CHECK(t.bound == 0);                              // unlimited budget: no pair is cut
+        CHECK((t.mismatches > 0) == (w != full));
+        if (sim == 1) { CHECK(w == 5); CHECK(t.mismatches == 0); }
+    }
+}
+
+TEST_CASE("Leaf kill-only VERIFY: inert -- the same answer, units and tallies as with VERIFY off")
+{
+    EnsureCardsLoaded();
+    const long long kBig = 1LL << 40;   // finite (so units are counted), never spent
+    struct Case { GameState s; int cutoff; bool m2; };
+    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);
+    const Case cases[] = { { NoKillBoard(), 6, true }, { MillOpponentTurnTrapBoard(), 5, false } };
+    for (const Case& c : cases)
+    {
+        TurnSolver::KillOnlyTally off, on;
+        TurnSolver::ClearPerGameCaches();
+        const int w_off = TurnSolver::SimulateToEndForTest(c.s, 1, kMaxTurns, c.cutoff, c.m2, &off, kBig);
+        int w_on = 0;
+        {
+            VerifyScope v;
+            TurnSolver::ClearPerGameCaches();
+            w_on = TurnSolver::SimulateToEndForTest(c.s, 1, kMaxTurns, c.cutoff, c.m2, &on, kBig);
+        }
+        CHECK(w_on == w_off);
+        CHECK(on.units == off.units);
+        CHECK(on.armed == off.armed);
+        CHECK(on.skipped == off.skipped);
+        CHECK(on.verified >= 1);
+        CHECK(on.mismatches == 0);
+    }
+}
+#endif
