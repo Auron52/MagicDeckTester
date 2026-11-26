@@ -16319,6 +16319,7 @@ struct AttackTapCtx
     struct Entry
     {
         std::uint64_t mask = 0;
+        std::uint64_t sac  = 0;   // the subset's creature-sacrificing mana activations (cand_sac), as bits of j
         int pending = 0, yield = 0;
         std::vector<AttackingManaSource> srcs;
         std::vector<AttackingManaSource> ord[2];   // srcs in the executor's tap order (no food / food)
@@ -16335,7 +16336,10 @@ struct AttackTapCtx
     // MTG_ATTACK_LORD_CAST: a lord the plan casts also pumps the PRE-PLAN board's attackers (default off, USER
     // call). Without it a cast lord still pumps the plan's own HASTY casts (kWalkHaste), unconditionally.
     bool board_lord = false;
-    std::map<std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>, int> memo2;   // (mask, spent, walk) -> attack
+    // Per candidate: 1 = a mana activation whose cost SACRIFICES a creature (Skirk Prospector "Sacrifice a Goblin:
+    // Add {R}", Utopia Mycon, a creature that sacrifices itself for mana). Empty = none on offer.
+    std::vector<unsigned char> cand_sac;
+    std::map<std::tuple<std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t>, int> memo2;   // (mask, sac, spent, walk) -> attack
     // Point 10: the pre-plan board's attack intent, built on the first re-projection.
     AttackIntent intent;
     bool intent_built = false;
@@ -16910,6 +16914,23 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
             set_bit(j, a.enchant_target);
         }
     }
+    // Sacrifice-for-mana activations that eat a CREATURE: the sacrificed body is gone before combat, exactly like a
+    // creature tapped to pay (Goblins d0 gi275 / gi1895: Skirk Prospector sacrificed two Goblin Lackeys and Muxus to
+    // pay for Goblin King, and the projection still swung with all three -- 19 read, 12 dealt).
+    for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::SacForMana) { continue; }
+        const Permanent* src = own_perm(a.sac_source_id);
+        const CardDefinition* sd = src ? CardDatabase::Instance().LookupCached(src->card) : nullptr;
+        if (sd == nullptr) { continue; }
+        const bool eats_creature = IsSacManaOutlet(sd->params)
+            || (src->card.IsCreature() && sd->params.sac_for_mana_amount > 0
+                && sd->params.sac_for_mana_victim_land_subtype.empty());
+        if (!eats_creature) { continue; }
+        if (ctx.cand_sac.empty()) { ctx.cand_sac.assign(cands.size(), 0); }
+        ctx.cand_sac[static_cast<std::size_t>(j)] = 1;
+    }
     // Stage-2 walk flags.
     const bool pump = AttackTeamPumpEtbEnabled();
     bool life = AttackPlanLifegainEnabled();
@@ -17004,34 +17025,92 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
     }
     if (!ctx.cand_mask.empty())   // Vampires B: a steal's tapped bodies
     { for (int j : sel) { mask |= ctx.cand_mask[static_cast<size_t>(j)]; } }
-    // Stage 1: the board with the plan's ability / tap-on-entry taps applied (the pre-plan board when
-    // there are none) -- its attack and its attacking mana sources.
+    // The subset's creature-sacrificing mana activations (bits of j; past 64 candidates the stage-1 memo is skipped).
+    std::uint64_t sac = 0;
+    bool any_sac = false, sac_keyable = true;
+    if (!ctx.cand_sac.empty())
+    {
+        for (int j : sel)
+        {
+            if (!ctx.cand_sac[static_cast<std::size_t>(j)]) { continue; }
+            any_sac = true;
+            if (j < 64) { sac |= std::uint64_t{1} << j; } else { sac_keyable = false; }
+        }
+    }
+    // The plan's taps (mask) and sacrifices on a copy of the board. A sacrifice removes the victim the apply
+    // would take -- the baked victim of a single sac, else CanonicalSacVictim, the pick ApplySacForMana makes,
+    // one per sac of a burst -- with no death triggers (a projection: what is left to attack).
+    auto stage1 = [&](GameState& t)
+    {
+        for (int b = 0; b < static_cast<int>(ctx.bit_number.size()); ++b)
+        {
+            if (!(mask & (std::uint64_t{1} << b))) { continue; }
+            for (Permanent& p : t.battlefield)
+            {
+                if (p.controller_index == t.active_player_index && p.card.m_number == ctx.bit_number[b])
+                { p.tapped = true; break; }
+            }
+        }
+        if (!any_sac) { return; }
+        const int me = t.active_player_index;
+        for (int j : sel)
+        {
+            if (!ctx.cand_sac[static_cast<std::size_t>(j)]) { continue; }
+            const Action& a = cands[static_cast<std::size_t>(j)];
+            // The source as the PRE-PLAN board has it: an earlier activation of this plan may have sacrificed it
+            // (source 40 sacs 41, source 41 sacs 40 -- an over-promise the apply cannot honour), and the line
+            // still counts its mana, so a body still goes.
+            const Permanent* src = nullptr;
+            for (const Permanent& q : state.battlefield)
+            { if (q.controller_index == me && q.card.m_number == a.sac_source_id) { src = &q; break; } }
+            const CardDefinition* sd = src ? CardDatabase::Instance().LookupCached(src->card) : nullptr;
+            if (sd == nullptr) { continue; }
+            auto erase_number = [&](int number) -> bool
+            {
+                for (auto it = t.battlefield.begin(); it != t.battlefield.end(); ++it)
+                { if (it->controller_index == me && it->card.m_number == number) { t.battlefield.erase(it); return true; } }
+                return false;
+            };
+            if (!IsSacManaOutlet(sd->params)) { erase_number(a.sac_source_id); continue; }   // it sacrifices itself
+            const std::string need_sub = sd->params.sac_creature_requires_subtype;
+            const int per   = std::max(1, sd->params.sac_outlet_add_mana_amount);
+            const int count = std::max(1, a.ritual_float / per);
+            for (int n = 0; n < count; ++n)
+            {
+                // A baked victim another activation of the same plan already took (two single sacs that both
+                // name the weakest Goblin) takes the next canonical one: what remains to attack never reads
+                // higher than the line can leave.
+                if (count == 1 && a.sac_victim_id != 0 && a.sac_victim_id != kSameLineSacVictim
+                    && erase_number(a.sac_victim_id)) { break; }
+                const int vid = CanonicalSacVictim(t, me, a.sac_source_id, need_sub);
+                if (vid < 0) { break; }
+                erase_number(vid);
+            }
+        }
+    };
+    // Stage 1: the board with the plan's ability / tap-on-entry taps and its sacrifices applied (the pre-plan
+    // board when there are none) -- its attack and its attacking mana sources.
     const std::vector<AttackingManaSource>* s1 = ctx.srcs;
     int pend1 = ctx.pending_atk, y1 = ctx.src_yield;
     AttackTapCtx::Entry* e = nullptr;
-    if (mask != 0)
+    AttackTapCtx::Entry fresh;   // an unkeyable stage 1 (a sacrifice past candidate 64): computed, not memoised
+    if (mask != 0 || any_sac)
     {
-        for (AttackTapCtx::Entry& m : ctx.memo) { if (m.mask == mask) { e = &m; break; } }
+        if (sac_keyable)
+        { for (AttackTapCtx::Entry& m : ctx.memo) { if (m.mask == mask && m.sac == sac) { e = &m; break; } } }
         if (e == nullptr)
         {
             GameState t = state;
-            for (int b = 0; b < static_cast<int>(ctx.bit_number.size()); ++b)
-            {
-                if (!(mask & (std::uint64_t{1} << b))) { continue; }
-                for (Permanent& p : t.battlefield)
-                {
-                    if (p.controller_index == t.active_player_index && p.card.m_number == ctx.bit_number[b])
-                    { p.tapped = true; break; }
-                }
-            }
+            stage1(t);
             AttackTapCtx::Entry ne;
             ne.mask    = mask;
+            ne.sac     = sac;
             AttackIntentScope intent_scope(PrePlanAttackIntent(state, ctx));   // point 10
             ne.pending = PendingAttackDamage(t);
             ne.srcs    = CollectAttackingManaSources(t);
             ne.yield   = SumYield(ne.srcs);
-            ctx.memo.push_back(std::move(ne));
-            e = &ctx.memo.back();
+            if (sac_keyable) { ctx.memo.push_back(std::move(ne)); e = &ctx.memo.back(); }
+            else             { fresh = std::move(ne); e = &fresh; }
         }
         // The activated creatures are tapped on `t`, so they are out of its mana-source list too: a
         // dork spent on its own ability pays nothing, and its share of `need` falls on the others.
@@ -17085,7 +17164,7 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
     if (!reproj && !walk) { return (ctx.pending_atk - pend1) + lost_base; }
     // Memo key: the stage-1 taps, the spent sources, and the subset's walk-relevant members (casts and
     // lifegain activations -- everything the walk reads). Unkeyable past 64 candidates: computed fresh.
-    const bool keyable = cands.size() <= 64;
+    const bool keyable = cands.size() <= 64 && sac_keyable;
     std::uint64_t walk_key = 0;
     if (walk && keyable)
     {
@@ -17107,22 +17186,14 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
             { if ((*s1)[static_cast<std::size_t>(k)].number == num) { spent_key |= std::uint64_t{1} << k; break; } }
         }
     }
-    const auto key = std::make_tuple(mask, spent_key, walk_key);
+    const auto key = std::make_tuple(mask, sac, spent_key, walk_key);
     if (keyable)
     {
         const auto it = ctx.memo2.find(key);
         if (it != ctx.memo2.end()) { return (ctx.pending_atk - it->second) + (reproj ? 0 : lost_base); }
     }
     GameState t = state;
-    for (int b = 0; b < static_cast<int>(ctx.bit_number.size()); ++b)
-    {
-        if (!(mask & (std::uint64_t{1} << b))) { continue; }
-        for (Permanent& p : t.battlefield)
-        {
-            if (p.controller_index == t.active_player_index && p.card.m_number == ctx.bit_number[b])
-            { p.tapped = true; break; }
-        }
-    }
+    stage1(t);
     if (reproj)
     {
         for (int i = 0; i < static_cast<int>(pay->size()) && i < 64; ++i)
