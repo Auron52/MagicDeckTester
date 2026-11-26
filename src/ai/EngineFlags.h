@@ -743,9 +743,10 @@ inline bool LeftoverSwapWideOn()
 // visible-closer lump rule (MTG_ONDEMAND_VISIBLE_LUMP, the on-demand payer in ManaPayment.cpp) cracks a Lotus Bloom
 // early, for a colour a later cast owes, when the early crack's board "gains" a colour over the ordinary payment's.
 // That comparison reads an uncracked Bloom as NO supply, so a crack that buys one unit of another colour reads as a
-// gain while it spends the Bloom's three of any colour. The crack is now made only when the ordinary payment leaves
-// the later bill unpayable and the early crack's board pays it, both judged exactly (every crack of the lumps left;
-// the float of the ritual this payment is for). Neither paying: the comparison stands. Dragonstorm s30152662 T5
+// gain while it spends the Bloom's three of any colour. The crack is now refused when it STRANDS the later bill: the
+// ordinary payment's board pays it and the early crack's does not, both judged exactly (every crack of the lumps left;
+// the float of the ritual this payment is for). Otherwise the comparison stands -- when both pay, the source the crack
+// saves is still worth keeping for later mana use (2HG s5131993: Scourge's firebreathing). Dragonstorm s30152662 T5
 // {Seething Song, Irencrag Feat, Karrthus}: {B} and seven {R} floating paid Irencrag, yet the second Bloom was cracked
 // for {B} and Karrthus's {G} had no source. docs/design/dragonstorm-apply-drop-2026-11-26.md.
 inline bool OnDemandVisibleLumpExactOn()

@@ -34,11 +34,12 @@ rules instead.
 
 ## The change (two levers, DEFAULT ON, each `=0` byte-identical)
 
-- `MTG_ONDEMAND_VISIBLE_LUMP_EXACT`: the early crack is made only when the ordinary payment leaves the later bill
-  (the named rest's pips, a visible closer's pips past an opener, the rest's generic) unpayable and the early crack's
-  board pays it, both judged exactly: `LumpAwareBillPayable` tries every crack of the lumps left (uncracked, or cracked
-  for each colour the bill has a pip of) with the complete backtracker, plus the float of the ritual this payment is
-  for. When neither board pays it the comparison stands as before.
+- `MTG_ONDEMAND_VISIBLE_LUMP_EXACT`: the early crack is refused when it STRANDS the later bill (the named rest's pips,
+  a visible closer's pips past an opener, the rest's generic): the ordinary payment's board pays it and the early
+  crack's does not, both judged exactly: `LumpAwareBillPayable` tries every crack of the lumps left (uncracked, or
+  cracked for each colour the bill has a pip of) with the complete backtracker, plus the float of the ritual this
+  payment is for. In every other case the colour comparison stands as before. (The first version, 893647990, also
+  refused the crack when BOTH boards paid the bill; see "The slower game" below for why that was wrong.)
 - `MTG_LEFTOVER_SWAP_WIDE`: the swap may move any leftover unit (one that floated before the payment as well as one it
   produced: both were in the pool it spent from, CR 601.2h), and its strand test credits the ritual's float.
 
@@ -50,4 +51,47 @@ Unit tests: `test/unit/test_dragonstorm_line_keep.cpp` (both repro boards, lever
 
 ## Measurements
 
-(filled in below as they land)
+### Gate, first version (893647990): Dragonstorm slice of the mana-clean gate, MTG_MANA_ORACLE=2
+
+`logs/ds-apply/gate_report.py <gate_out>`; 72,000 games (gi 87000-158999) per arm, the leave-one-out arms on the first
+18,109 (`loo`). `AD-decl` = APPLY-DROP flags whose dropped cast is in the plan, `AD-undecl` = need-later ("not
+declared"); `ev` = distinct (seed, turn) events.
+
+| arm | gi | AD-decl flags | AD-undecl flags | events decl | events undecl | turns |
+|---|---|---:|---:|---:|---:|---:|
+| off | all | 415 | 299 | 105 | 47 | 313,645 |
+| on  | all | 288 | 363 | 62 | 56 | 313,643 |
+| off | loo | 112 | 70 | 33 | 12 | 78,970 |
+| on  | loo | 66 | 86 | 17 | 15 | 78,969 |
+| no_leftover_swap_wide | loo | 81 | 86 | 21 | 15 | 78,969 |
+| no_ondemand_visible_lump_exact | loo | 97 | 70 | 29 | 12 | 78,970 |
+
+Declared events 105 -> 62 (-41%; 44 fixed, 1 new). Leave-one-out: the lump lever fixes 12 of the slice's 16, the swap
+4. The 9 new need-later events (all from the lump lever) are in games whose play diverged on an EARLIER turn (a
+search choice, e.g. s30106654 casts Song + Lathliss on T3 in one arm only; s30094928 differs from T1): new boards,
+not a worse payment of a shared board. Both arms win those three repro games on the same turn. APPLY-DROP-ORDER 68 =
+68, ORACLE-GAP 5 = 5, ENUM-GAP 33 -> 41. Units -0.036%.
+
+### Play A/B, first version: every suite deck, seed 5130000 + gi, game_index = gi
+
+`logs/ds-apply/ab_report.py`; 63 decks x (400 std + 200 2HG) per arm, Dragonstorm 3000 + 3000 per arm; 86,400 games.
+Every deck but Dragonstorm: net 0, 0 slower, 0 faster (units differ only in Niv and Sea, by <0.01%: the wide swap).
+Dragonstorm std: net 0 (0 / 0), units -0.004%. Dragonstorm 2HG: net +1 (1 slower, 0 faster), units +0.054%.
+
+### The slower game (2HG s5131993 gi1993: 5 -> 6, persisted at d8 b0)
+
+Leave-one-out: the lump lever alone. With the first T1/T2 choices forced to the off arm's, the lever arm still won T6:
+the divergence was T4 combat (off pumped Scourge of Valkas for 9, the lever arm for 5; the pump's banked-source hold
+is searched, MTG_FB_HOLD_SEARCHED). A trace of the rule in that search showed the T5 line {Rite of Flame, Seething
+Song, Dragonlord Kolaghan} with `later={4}{B}{R}`, `ord_pays=1 -> crack=0`: the ordinary payment of Song (tap Sandstone
+Needle) and the early one (crack Lotus Bloom for {B}) BOTH pay Kolaghan, and the lever refused the crack. But the
+crack also keeps the Needle's {R}{R} for firebreathing ({R} per pump), which the Bloom's leftover {B} cannot pay, so
+the line without the Needles' pumps no longer killed on T5 and the T4 search held them. The payability test is the
+right reason to REFUSE a crack (s30152662: the crack strands Karrthus), not a reason to refuse one that strands
+nothing. Narrowed: refuse only when the ordinary board pays and the early one does not. On the narrowed binary the
+game is byte-identical to the off arm at play settings and at d8 b0 (5 = 5). Unit test: `s5131993 2HG T5 -- both
+boards pay, the early crack keeps the Needle`.
+
+The no-strand control unit test asserted identical taps in both arms; the wide swap legitimately re-attributes which
+unit floats (one more land untapped with the levers on). It now asserts both arms pay and leave the same mana, the
+levers never tapping more.
