@@ -435,3 +435,45 @@ Next: cherry-pick wavebp + mana commits (only their own; based 4fc09f9b3) onto w
 Elves fd sweep 0 -> smoke (expect Stompy/Selesnya moves from mana; classify, d8 b0 slower) -> ledger sweep flags 0 ->
 tiers --deck=elves,elves2hg accept + check_gt_logs, commit rows+GT+suite_cost -> 5b, 5c2, scaling A/B, Stage 6 ->
 push_queue join/land, CI watch. 2-hourly status cron 61a8eb73 (session-only).
+
+## Stage 6 -- report (2026-11-26, landed 3f91b7d4a on phase-1-2-deck-analyzer)
+
+1. **Cards implemented:** Joraga Warcaller (T3, multikicker faces K 1..16, per-counter lord), Galadhrim Brigade
+   (T3, squad token copies, each a lord), Immaculate Magistrate (T2, N-counter tap-target pump), Allosaurus Shepherd
+   (T2, layer-7b team base 5/5, new `TeamBasePT` mode), Elvish Clancaller (T2, lord + named TapTutorPut), Leaf-Crowned
+   Visionary (T2, optional {G} draw on Elf cast), Marwyn (T2, power-scaled dork + enter counters), Taunting Elf (T1,
+   lure inert, USER-approved); Concordant Crossroads gained the World rule (CR 704.5m). Coverage 18/18 full.
+2. **Mulligan profile:** none yet (default settings; `Elves.profile.json` holds only the analyzer's defaults). The
+   deck is now in all three suite tiers, so `mullgen.sh run decks/Elves` is unblocked (needs the memory fix
+   ddc45ce91, which is in the next landing).
+3. **Win turn** (accepted GT, d5 b20 play settings): overnight d5 4.32-4.36 (300-game rows), regression d5 4.38-4.40,
+   2HG d5 4.75-4.83; d3 4.33-4.40; d0 4.89-4.90. ~4 non-wins per 1,260 d5 games, all land screws.
+4. **Verification:** `verify_deck.py` GATE PASS; fd/nonconv 0; multi-depth monotone; claude-play 18 games (1 faster,
+   17 equal, 0 slower; 5 flags, all fixed: fd #20, ContPins #21, Genesis Wave site-10 put continuation, Magistrate
+   same-plan target, mana cluster #22/#23); viewer surface clean (dig, dragon, firebreathe, target + kick-count
+   cycling); 5c2 tie-break neutral (default kept); discard draft does not move play (recommend not adopting).
+   Found and fixed on the way: a lethal-projection under-read (same-plan lords pumping hasty casts; sacrificed mana
+   creatures counted as attackers), and a single-step memory blow-up in rare Elves positions (next landing).
+5. **6a disclosure** (read from the code, ElvesProvider : SelesnyaLifegainProvider):
+
+| assumption / heuristic | source | class | cost / why safe |
+|---|---|---|---|
+| passive goldfish opponent (never blocks / casts / gains life); clairvoyant search; d5 b20 play settings | engine | global | Taunting Elf's lure and Shepherd's uncounterable clauses are inert under it |
+| scaling-sink rule: one scaled sink per plan at its max minus hold-back counts for <=2 attacking 1-mana dorks; no partial splits (Wave X, Warcaller K, Brigade squad, Ezuri main pump) | `ElvesScalingAdmit` (USER rule) | PRUNING | held-out A/B net +0.0025/+0.0040 (std/2HG), 0 faster / 11 slower over 3,000 games, lines unfindable at d8 b0: it misses holding back SCALED dorks or a 3rd+ dork as attackers. Amended "hold-all" version measured net 0.0000 both formats (`wip/elves-scal`) -- USER decision |
+| Genesis Wave X menu widened to every X, largest first | `ElvesProvider::XCandidates` | ordering/completeness | makes "Wave for what is left" exist; nothing removed |
+| Genesis Wave put-all (every revealed permanent with MV <= X is put) | ElvesProvider put policy 948933d6c | correctness shortcut | every permanent in this pool is weakly better in play than milled; byte-identical to the engine default here |
+| plan-dedup signature keys Wave's X (`#WX`) | `PlanSignatureKeysWaveX` | completeness | Elves only; the same collapse is still live for Landfall / SelesnyaLifegain (OWED, moves their play) |
+| filter-before-axes (memory) | `PlanListFilterBeforeAxes` (next landing) | identity | play byte-identical; only bounds memory |
+| inherited SelesnyaLifegain hooks incl. its USER-settled discard buckets | base class | inherited | Elves' own draft moved 0/800 games; real cleanup discards ~1 per 400 games |
+| multikick / squad faces capped at K=16 | card DB | model bound | 33 mana for a Warcaller x16; never reached in measured games |
+| Visionary unpinned = decline beyond the horizon | Mihail semantics | playout policy | leaves undervalue Visionary slightly; searched turns branch both ways |
+| World-rule simultaneous-entry tie | engine | inert | Genesis Wave's put set is a choice |
+| Cavern of Souls "choose a type" = any creature | card | exact here | every creature in the list is an Elf |
+| viewer: no auto-resolved choice; Marwyn's tap is the mana-payment exemption | 2c-ter / 5h | -- | viewer-ready |
+
+6. **Accepted deferrals:** Taunting Elf lure (USER-approved). PROVISIONAL (sign-off owed): Shepherd uncounterable /
+   Dinosaur type inert; six INERT_PARAMS classifications in `audit_viewer_decisions.py`.
+7. **Next steps:** the USER's scaling-rule amendment decision; landing ddc45ce91 (memory bound); then the mulligan
+   profile (`mullgen.sh run decks/Elves`); the Wave-X dedup fix for Landfall / SelesnyaLifegain; re-testing
+   `MTG_ATTACK_LORD_CAST` now that the sacrifice under-read is fixed (USER's call); the remaining under-reads in the
+   lethal projection (same-plan haste-granting lords, double strike, Marwyn counters, replicate copies' lord share).
