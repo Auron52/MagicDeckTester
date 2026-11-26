@@ -71,6 +71,20 @@ exemption), not a search-window decision.
 Unit tests: `test/unit/test_worldfire_line_keep.cpp` (the three repro boards, each lever on and off, plus the
 no-strand controls).
 
-## Measurements
+## Measurements (2026-11-26, binary = a8735ea32 Release, MTG_PGO=0)
 
-See `logs/worldfire-ad/report.md`.
+- Unit 4197 / 4197. The Niv hole-1 lever-OFF block now pins MULTI off: MULTI catches that strand by itself (Niv's
+  four non-{U} pips can take Skerry + Bluffs, leaving 2 {U} for the 3 owed; a legal payment exists).
+- Repros (MTG_MANA_ORACLE=3), APPLY-DROP base -> new: gi447 T3 12 -> 2 (the 2 are an UNDECLARED Personal Tutor, also
+  on base), gi65 T4 2 -> 0, gi125 T4 8 -> 0.
+- CPU (perf instructions:u, 6 decks x 16 games, play settings): off 562.89 G; on (tight) 565.89 G = +0.53%; on
+  (loose, TIGHT=0) 575.91 G = +2.31%. Rung trials 76k / 126k / 355k, strand-nofire 377 / 403 / 20,365. Tight and
+  loose are digest-identical on all 28 probe jobs.
+- Gate (Worldfire gi 0-22999, MTG_MANA_ORACLE=2): APPLY-DROP off 6,924 -> on 2,019 (-70.8%); APPLY-DROP-ORDER
+  453 -> 437; ORACLE-GAP 1 -> 1. Leave-one-out on gi < 6000 (off 1,767, on 548): minus MULTI 1,376, minus SUSPEND 822,
+  minus RITUAL 939, loose 548. Of the 2,019 left, 1,085 are "a lost action was not declared in the plan" (outside any
+  line-keep rung). Table: `logs/worldfire-ad/gate_report.txt`.
+- Harness trap: a binary copied under `build/scratch/<x>/` resolves `src/cards/data/cards.json` up from the
+  executable, so it reads the PRIMARY checkout's data unless `src` / `decks` symlinks sit beside it (`build.sh` plants
+  them for worktree builds). Fixed for this run's scratch dirs.
+- Play-setting A/B (off / on, plus loose on the ritual decks; seed base 4870000): see the commit that adds it.

@@ -1,0 +1,9 @@
+arm        gi     APPLY-DROP APPLY-DROP-O DOMINATED-LA   ORACLE-GAP
+off        all          6924          453        41500            1
+off        6k           1767          129        11000            0
+on         all          2019          437        41153            1
+on         6k            548          128        10837            0
+nomulti    6k           1376          129        10895            0
+nosuspend  6k            822          128        10905            0
+noritual   6k            939          129        10861            0
+loose      6k            548          128        10290            0
