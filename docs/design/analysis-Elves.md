@@ -246,7 +246,7 @@ Flags (each verified against cards.json + the rules skill; each became a fix bra
    for a card in hand: in `wip/elves-contpin`.
 Payer over-taps in human play (s9500002, s9500007, s9500014) are the standing mana-payment exemption, not flags.
 
-flags: 4 unresolved
+flags: 5 unresolved
 (2-6 open until their branches are merged onto wip/elves-analysis; this line is updated at the merge.)
 
 ## Stage 5 verification verdicts
