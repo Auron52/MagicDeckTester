@@ -1,0 +1,74 @@
+{
+  "card_scores": {
+    "Allosaurus Shepherd": [
+      0.11600421415573248
+    ],
+    "Cavern of Souls": [
+      -0.03541327352504009
+    ],
+    "Concordant Crossroads": [
+      0.17067067067067043
+    ],
+    "Elvish Archdruid": [
+      0.049510246200559216,
+      -0.17099966454210058
+    ],
+    "Elvish Clancaller": [
+      -0.037330901352788715,
+      -0.13398692810457558
+    ],
+    "Elvish Mystic": [
+      0.1820898399845765
+    ],
+    "Ezuri, Renegade Leader": [
+      -0.204891304347826
+    ],
+    "Galadhrim Brigade": [
+      -0.0615090820269133,
+      -0.14205998604975534
+    ],
+    "Genesis Wave": [
+      -0.05646420013629694,
+      -0.21867704280155564
+    ],
+    "Immaculate Magistrate": [
+      -0.04884738347635942
+    ],
+    "Joraga Warcaller": [
+      0.04474969474969459,
+      -0.018348130212537228
+    ],
+    "Leaf-Crowned Visionary": [
+      0.02065671641791056,
+      -0.11865671641791042
+    ],
+    "Llanowar Elves": [
+      0.2926634768740026,
+      0.027131782945736482
+    ],
+    "Marwyn, the Nurturer": [
+      -0.07797903850535448
+    ],
+    "Priest of Titania": [
+      0.11785240320812385
+    ],
+    "Taunting Elf": [
+      -0.03165301597357395
+    ],
+    "Wirewood Lodge": [
+      -0.06745271432080546
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
