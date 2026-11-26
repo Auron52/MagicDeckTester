@@ -1563,6 +1563,7 @@ enum Site
     kCacheHit,             // a plan-cache HIT replaying the units its computation charged (MTG_CACHE_HIT_CHARGE)
     kRfxFan,               // the damage-reflection fans (AppendSubdecisionAxes): one unit per probe (MTG_RFX_FAN_CHARGE)
     kPlanPrice,            // a plan list's build price: one unit per N materialised plans (DecisionProvider::PlanListPricePer)
+    kDeadCross,            // dead boundary-fan crossings: one unit per MTG_DEAD_CROSS_UNIT_W of one fan (DeadCrossMeter)
     kSiteCount
 };
 static constexpr int kFirstMeterOnly = kMeterRolloutStep;
@@ -1570,7 +1571,7 @@ static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
     "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
     "fs_m2_wave", "greedy_walk", "equip_route", "putback_price", "enum_charge", "aa_route",
-    "meter_rollout_step", "meter_greedy_walk", "cache_hit", "rfx_fan", "plan_price"
+    "meter_rollout_step", "meter_greedy_walk", "cache_hit", "rfx_fan", "plan_price", "dead_cross"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -120045,12 +120046,17 @@ private:
 static std::atomic<long long> g_doth_fans{0}, g_doth_fan_crossings{0};
 static void DothStatsFanCounts(long long* fans, long long* crossings)
 { *fans = g_doth_fans.load(); *crossings = g_doth_fan_crossings.load(); }
+// A fan axis decided BEFORE the turn advances is live (the crossing lands, the morph flip, the end-step grace; see
+// namespace deadfanfold). Without one, every crossing of the fan has the same pre-advance history: the DEAD-FAN FOLD
+// proves the fan's dead crossings after the first one redundant, and the DEAD-CROSSING UNIT PRICE does not bill it.
+static inline bool FanPreAdvanceLive(const BoundaryFan& fan)
+{ return fan.CrossingLandLive() || fan.FaceUpLive() || fan.GraceLive(); }
 // (THE DEAD-FAN FOLD's per-fan state; the argument is at namespace deadfanfold above.)
 struct DeadFanFold
 {
     bool on = false, folded = false;
     explicit DeadFanFold(const BoundaryFan& fan)
-        : on(deadfanfold::On() && !fan.CrossingLandLive() && !fan.FaceUpLive() && !fan.GraceLive() && !DomActive()) {}
+        : on(deadfanfold::On() && !FanPreAdvanceLive(fan) && !DomActive()) {}
     // After a crossing that SUCCEEDED and reached the refusal test (`dead`: its child is refused at entry). True = stop.
     bool After(bool dead)
     {
@@ -120065,6 +120071,56 @@ struct DeadFanFold
         deadfanfold::g_folds.fetch_add(1, std::memory_order_relaxed);
         if (deadfanfold::Verify()) { folded = true; return false; }
         return true;
+    }
+};
+// THE DEAD-CROSSING UNIT PRICE (MTG_DEAD_CROSS_UNITS, heurarm DEAD_CROSS_UNITS, DEFAULT ON; =0 charges nothing).
+// MTG_DEAD_CROSS_UNIT_W (default 2) dead or failed crossings of ONE boundary fan cost one budget unit (unit site
+// dead_cross). The work counter in BillDeadCrossing (kDeadCross) only feeds the PRICED decision ceiling, a 45 s
+// backstop; a dead crossing charges no unit, so the decision's own unit budget never sees it. Maze's End 2HG s31301380
+// gi1380: four decisions spent 154-628 units each while walking 6-10 M dead crossings, 100 s each after the priced fix
+// and 150-350 s before it. A crossing costs ~37 us (305 s / 8.2 M); a unit of ordinary Maze 2HG play costs ~57 us
+// (identity batch: 726 s / 12.07 M units), so w = 2 bills a dead fan at a bit under its real cost. Only a fan with w or
+// more dead crossings pays, so a single crossing (the base m2 loop's per-plan crossing) is never billed. After each
+// charge the fan makes the ANYTIME STOP's budget test (Exhausted(), plus Overrun()) and stops with its line marked
+// truncated. Overrun() alone is not enough: a pass's overrun ceiling is 25 x the budget (kOverrunBudgetMult), and with
+// only that test the gi1380 T5 decision charged 450,052 units (~900 k dead crossings, 62 s) before it stopped. The
+// fan's best line so far is kept, as in every anytime loop; its truncation keeps the pass out of the caches and out of
+// the commit unless the ladder's anytime rule takes it.
+// SCOPED TO THE FANS THE FOLD CANNOT COLLAPSE (FanPreAdvanceLive): a fan with a pre-advance axis live, whose crossings
+// really do differ before the turn advances (Maze's End's Manabond / Burgeoning / off-main Maze's End puts). A fan
+// without one is the fold's: its dead crossings are provably redundant after the first (a sound skip, preferred over
+// any price), so it is never billed, whether the fold flag is on or off. Unscoped, the price also billed those fans'
+// failed crossings and cut Gods' Klothys / Keranos fans at exhaustion: Gods +19 / Gods 2HG +24 turns over 600 held-out
+// games each (ab2, seeds 63000000+), for a CPU cut the fold already gives soundly where it applies.
+// A BUDGET RE-PRICE, never a cut: the meter is armed only on a FINITE budget (`budget != nullptr && !Unlimited()`),
+// so at budget 0 or inside a budget-less playout nothing is charged and nothing is read. Raising the budget restores
+// every crossing in proportion (CLAUDE.md, "A BUDGET MAY RE-PRICE WORK, IT MAY NOT MAKE A LINE UNFINDABLE").
+static inline bool DeadCrossUnitsOn()
+{
+    static const bool env = EnvOn("MTG_DEAD_CROSS_UNITS", true);   // DEFAULT ON (a price, inert unbudgeted); =0 charges nothing
+    return heurarm::Flag(heurarm::DEAD_CROSS_UNITS, env);
+}
+static inline int DeadCrossUnitW()
+{
+    static const int w = std::max(1, EnvInt("MTG_DEAD_CROSS_UNIT_W", 2));
+    return w;
+}
+struct DeadCrossMeter
+{
+    SearchBudget* b = nullptr;
+    int w = 0, n = 0;
+    DeadCrossMeter(SearchBudget* budget, const BoundaryFan& fan)
+    {
+        if (budget != nullptr && !budget->Unlimited() && FanPreAdvanceLive(fan) && DeadCrossUnitsOn())
+        { b = budget; w = DeadCrossUnitW(); }
+    }
+    // One dead (or failed) crossing. True = the budget is spent (or the pass has overrun), so the fan stops.
+    bool Dead()
+    {
+        if (b == nullptr || ++n < w) { return false; }
+        n = 0;
+        ConsumeAt(b, unitsite::kDeadCross);
+        return b->Exhausted() || b->Overrun();
     }
 };
 
@@ -121946,15 +122002,23 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     BoundaryFan fan(s3, /*with_echo=*/true);
                     std::optional<GameState> s3_fan;
                     const bool fan_dead = DeadTailFanSkip(state, cutoff);
+                    DeadCrossMeter dcm(budget, fan);
                     DeadFanFold dff(fan);
                     while (!fan_dead && fan.Next())
                     {
                         GameState* sxp = &s3;
                         if (fan.Copies()) { s3_fan = s3; fan.Stamp(*s3_fan); sxp = &*s3_fan; }
                         GameState& sx = *sxp;
-                        if (!fan.Cross(sx)) { BillFailedCrossing(); continue; }
+                        if (!fan.Cross(sx))
+                        {
+                            BillFailedCrossing();
+                            if (dcm.Dead()) { ++g_fs_trunc_events; best.truncated = true; break; }
+                            continue;
+                        }
                         ExpireStagedCards(sx);
                         const bool dead_x = BillDeadCrossing(sx, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget), max_turns);
+                        if (dead_x && dcm.Dead())
+                        { ++g_fs_trunc_events; best.truncated = true; break; }
                         TurnSolver::SearchLine sub =
                             FSLineWin(sx, DepthAcrossTurn(sx, depth), max_turns, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget),
                                       second_main, tt, lc, budget);
@@ -122056,6 +122120,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             std::optional<GameState> s2_fan;   // a per-pin copy, only when fanning (s2 stays the pre-boundary state)
             bool m2_lt_ok = true;   // P5b-3: no crossing's line came back truncated
             const bool fan_dead = DeadTailFanSkip(state, cutoff);
+            DeadCrossMeter dcm(budget, fan);
             DeadFanFold dff(fan);
             while (!fan_dead && fan.Next())
             {
@@ -122065,6 +122130,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 if (!fan.Cross(sx))
                 {
                     BillFailedCrossing();
+                    if (dcm.Dead()) { ++g_fs_trunc_events; best.truncated = true; m2_lt_ok = false; break; }
                     if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT sim failed\n", m2t_sum(q).c_str()); }
                     continue;
                 }
@@ -122092,6 +122158,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     }
                 }
                 const bool dead_x = BillDeadCrossing(sx, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget), max_turns);
+                if (dead_x && dcm.Dead())
+                { ++g_fs_trunc_events; best.truncated = true; m2_lt_ok = false; break; }
                 TurnSolver::SearchLine sub =
                     FSLineWin(sx, DepthAcrossTurn(sx, depth), max_turns, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget), second_main, tt, lc, budget);
                 m2_lt_ok = m2_lt_ok && !sub.truncated;
@@ -122226,15 +122294,23 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     BoundaryFan fan(s, /*with_echo=*/true);
                     std::optional<GameState> s_fan;
                     const bool fan_dead = DeadTailFanSkip(state, cutoff);
+                    DeadCrossMeter dcm(budget, fan);
                     DeadFanFold dff(fan);
                     while (!fan_dead && fan.Next())
                     {
                         GameState* sxp = &s;
                         if (fan.Copies()) { s_fan = s; fan.Stamp(*s_fan); sxp = &*s_fan; }
                         GameState& sx = *sxp;
-                        if (!fan.Cross(sx)) { BillFailedCrossing(); continue; }
+                        if (!fan.Cross(sx))
+                        {
+                            BillFailedCrossing();
+                            if (dcm.Dead()) { ++g_fs_trunc_events; best.truncated = true; break; }
+                            continue;
+                        }
                         ExpireStagedCards(sx);
                         const bool dead_x = BillDeadCrossing(sx, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget), max_turns);
+                        if (dead_x && dcm.Dead())
+                        { ++g_fs_trunc_events; best.truncated = true; break; }
                         TurnSolver::SearchLine sub =
                             FSLineWin(sx, DepthAcrossTurn(sx, depth), max_turns, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget),
                                       second_main, tt, lc, budget);
@@ -122456,12 +122532,19 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             std::vector<int> best_dredge;
             bool have      = false;
             if (DeadTailFanSkip(state, cutoff)) { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }
+            DeadCrossMeter dcm(budget, fan);
             DeadFanFold dff(fan);
+            bool dcm_cut = false;
             while (fan.Next())
             {
                 GameState s = state;
                 fan.Stamp(s);
-                if (!fan.Cross(s)) { BillFailedCrossing(); continue; }
+                if (!fan.Cross(s))
+                {
+                    BillFailedCrossing();
+                    if (dcm.Dead()) { ++g_fs_trunc_events; dcm_cut = true; break; }
+                    continue;
+                }
                 ExpireStagedCards(s);
                 const int cut = have ? FsChildCut(s, cutoff, best_tail.win_turn, max_turns, budget) : cutoff;
                 if (eot_seen != nullptr && !eot_seen->Visit(BuildDedupKey(s), s, cut, DepthAcrossTurn(s, depth), max_turns)) { continue; }
@@ -122472,6 +122555,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     if (dprobe.prune) { continue; }
                 }
                 const bool dead_x = BillDeadCrossing(s, cut, max_turns);
+                if (dead_x && dcm.Dead()) { ++g_fs_trunc_events; dcm_cut = true; break; }
                 TurnSolver::SearchLine line = FSLineWin(s, DepthAcrossTurn(s, depth), max_turns, cut, second_main, tt, lc, budget);
                 if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, line.win_turn); }
                 if (!have || line.win_turn < best_tail.win_turn)
@@ -122497,6 +122581,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 }
                 if (dff.After(dead_x)) { break; }   // THE DEAD-FAN FOLD (see DeadFanFold)
             }
+            if (dcm_cut) { best_tail.truncated = true; }
             best_tail.boundary_doth = best_doth;
             best_tail.boundary_tutor = best_tutor;
             best_tail.boundary_miracle = best_miracle;
@@ -144747,6 +144832,7 @@ static long long MtgTurnCensusFlag(int f)   // nodekind's non-exclusive plan fla
     X(u_cache_hit,        MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kCacheHit]))             \
     X(u_rfx_fan,          MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kRfxFan]))               \
     X(u_plan_price,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kPlanPrice]))            \
+    X(u_dead_cross,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kDeadCross]))            \
     /* ---- BRANCHING: how many lines were built, scored and paid for. ---- */                    \
     X(cand_scored,        MTG_TURN_CENSUS_CV(g_cand_scored))                                      \
     /* ---- THE ENUMERATION WALK: the space, and the FUNNEL that trims it. ----                   \
