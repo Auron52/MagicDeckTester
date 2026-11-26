@@ -697,6 +697,48 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             m_def_hash[kname] = CardDefHash(entry) ^ std::hash<std::string>{}(kname);
             m_cards[kname] = std::move(kicked);
         }
+        // MULTIKICKER / SQUAD (CR 702.33c / 702.157 -- Joraga Warcaller, Galadhrim Brigade): the kicker face
+        // trick above, ONCE PER KICK COUNT. "<name> (Kicked xK)" costs printed + K x the repeat cost (an
+        // ADDITIONAL cost, CR 601.2b) and carries kick_times = K; everything else is a full copy, exactly as
+        // for the single kicker. The faces bound the axis at kMaxMultikick kicks -- far past any pool a
+        // goldfish turn reaches (Warcaller at 16 kicks costs 33 mana), and an affordable count above it is
+        // the one disclosed limit of the model (CollectActions also clamps there).
+        {
+            const std::optional<ManaCost>& rep = def.params.multikicker_cost.has_value()
+                ? def.params.multikicker_cost : def.params.squad_cost;
+            if (rep.has_value())
+            {
+                if ((def.params.multikicker_cost.has_value() && def.params.squad_cost.has_value())
+                    || def.params.kicker_cost.has_value())
+                {
+                    throw std::runtime_error("a card carries at most one of kicker_cost / multikicker_cost / "
+                                             "squad_cost: " + def.card.m_name.str());
+                }
+                if (!rep->IsFlat())
+                {
+                    throw std::runtime_error("multikicker_cost / squad_cost must be a flat generic/coloured "
+                                             "cost: " + def.card.m_name.str());
+                }
+                ManaCost total = def.card.m_mana_cost;
+                for (int k = 1; k <= kMaxMultikick; ++k)
+                {
+                    total = total.PlusAdditionalCost(*rep);
+                    const std::string kname = MultikickFaceName(def.card.m_name.str(), k);
+                    CardDefinition kicked = def;
+                    kicked.card.m_name = kname;
+                    kicked.card.m_def  = nullptr;
+                    kicked.card.RehashName();
+                    kicked.card.m_mana_cost = total;
+                    kicked.params.multikicker_cost.reset();   // CR 601.2b: the face is already kicked
+                    kicked.params.squad_cost.reset();
+                    kicked.params.kick_times       = k;
+                    kicked.params.kicked_base_name = def.card.m_name.str();
+                    kicked.behaviour_identity      = 0;      // never folds with the printed entry
+                    m_def_hash[kname] = CardDefHash(entry) ^ std::hash<std::string>{}(kname);
+                    m_cards[kname] = std::move(kicked);
+                }
+            }
+        }
         // MORPH / MEGAMORPH (CR 702.37): synthesize the FACE-DOWN FORM "<name> (Face-down)" -- the
         // kicker/bestow trick above, for the same reason: every downstream reader resolves a permanent
         // through its name, so a face-down permanent whose Card IS this entry reads as exactly what CR
@@ -2305,6 +2347,22 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cast_creates_tokens       = params.value("cast_creates_tokens", 0);
     if (params.contains("kicker_cost"))
         p.kicker_cost = ManaCostFromString(params["kicker_cost"].get<std::string>());
+    // Multikicker / squad / Elves params (2026-11-26) -- see CardParams.
+    if (params.contains("multikicker_cost"))
+        p.multikicker_cost = ManaCostFromString(params["multikicker_cost"].get<std::string>());
+    if (params.contains("squad_cost"))
+        p.squad_cost = ManaCostFromString(params["squad_cost"].get<std::string>());
+    p.multikick_enter_counters  = params.value("multikick_enter_counters", false);
+    p.lord_per_own_plus_counter = params.value("lord_per_own_plus_counter", false);
+    p.tap_target_counters_per_subtype = params.value("tap_target_counters_per_subtype", std::string{});
+    if (params.contains("team_base_pt_cost"))
+        p.team_base_pt_cost = ManaCostFromString(params["team_base_pt_cost"].get<std::string>());
+    p.team_base_pt_power   = params.value("team_base_pt_power", 0);
+    p.team_base_pt_tough   = params.value("team_base_pt_tough", 0);
+    p.team_base_pt_subtype = params.value("team_base_pt_subtype", std::string{});
+    if (params.contains("cast_subtype_pay_draw_cost"))
+        p.cast_subtype_pay_draw_cost = ManaCostFromString(params["cast_subtype_pay_draw_cost"].get<std::string>());
+    p.mana_per_own_power = params.value("mana_per_own_power", false);
     if (params.contains("morph_cost"))
         p.morph_cost = ManaCostFromString(params["morph_cost"].get<std::string>());
     if (params.contains("megamorph_cost"))

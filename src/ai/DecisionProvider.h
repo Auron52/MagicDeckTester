@@ -4156,6 +4156,14 @@ public:
                                                    int /*own*/) const
     { return {}; }
 
+    // MultikickCounts -- the deck's short list of kick counts K (1..kmax) for a multikicker / squad cast
+    // (Joraga Warcaller, Galadhrim Brigade). EMPTY = every K in 1..kmax (the base for every deck): the
+    // unkicked cast (K = 0) is always emitted separately and is never prunable here. A provider may only
+    // ORDER / RESTRICT; MTG_UNPRUNED=replicate (the shared count gate) and human play always get the full fan.
+    virtual std::vector<int> MultikickCounts(const GameState& /*s*/, const CardDefinition& /*def*/,
+                                             int /*kmax*/) const
+    { return {}; }
+
     // HoldsSacLandBurn -- the deck's prune on a sacrifice-a-land burn spell (Shard Volley). A spell whose
     // additional cost is "sacrifice a land" spends a permanent mana source for a fixed lump of damage,
     // which in a goldfish is worth the same on any later turn. Asked by BOTH subset walks (Solve's

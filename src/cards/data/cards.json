@@ -5992,6 +5992,205 @@
    }
   },
   {
+   "name": "Immaculate Magistrate",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "{T}: Put a +1/+1 counter on target creature for each Elf you control. [A TapTargetPump-family {T} activation (tap_target_pump_cost \"\" = {T} only) whose payload is +1/+1 COUNTERS, not an until-end-of-turn pump: tap_target_counters_per_subtype \"Elf\" puts N counters through PutPlusCounters (a put, CR 122.6, so a counter doubler doubles it), N = Elves YOU CONTROL counted AT RESOLUTION (CR 608.2h; the Magistrate counts itself). The TARGET is SEARCHED: one plan variant per legal target (Action::sac_victim_id via DecisionProvider::TapTargetPumpTargets; human play sees every legal target as a board click). Summoning sickness applies to the {T} (CR 302.6), lifted by Concordant Crossroads. Counters are permanent, so a counter on Joraga Warcaller also raises its per-counter lord bonus to every other Elf.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "tap_target_pump_cost": "",
+    "tap_target_counters_per_subtype": "Elf"
+   }
+  },
+  {
+   "name": "Joraga Warcaller",
+   "mana_cost": "{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf",
+    "Warrior"
+   ],
+   "keywords": [
+    "Multikicker"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Multikicker {1}{G} (You may pay an additional {1}{G} any number of times as you cast this spell.)\nThis creature enters with a +1/+1 counter on it for each time it was kicked.\nOther Elf creatures you control get +1/+1 for each +1/+1 counter on this creature. [MULTIKICKER (CR 702.33c) is a SEARCHED cast axis: multikicker_cost {1}{G} makes the DB synthesize one \"<name> (Kicked xK)\" face per kick count K (the kicker-face trick: printed cost + K x {1}{G}, ADDED per CR 601.2b), and CollectActions emits one cast variant per affordable K (kicked + Action::kick_count, sharing hand_index) beside the plain unkicked cast, so the search picks K; a provider may only order or restrict that fan (DecisionProvider::MultikickCounts, reopened by MTG_UNPRUNED / human play). multikick_enter_counters: the face enters with K +1/+1 counters (an as-enters replacement in the pre-push window of BOTH creature-enter sites, through PutPlusCounters), then becomes the printed card again (UnkickedSpellCard), so a non-cast entry (Genesis Wave) is never kicked (K = 0). LORD: lord_per_own_plus_counter scales the +1/+1 by the +1/+1 counters on THIS permanent, read LIVE in ComputeLordBonus, so counters added later (Immaculate Magistrate) raise it too. \"Other\" = lord_excludes_self.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "multikicker_cost": "{1}{G}",
+    "multikick_enter_counters": true,
+    "subtypes_affected": [
+     "Elf"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "lord_per_own_plus_counter": true
+   }
+  },
+  {
+   "name": "Allosaurus Shepherd",
+   "mana_cost": "{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "This spell can't be countered.\nGreen spells you control can't be countered.\n{4}{G}{G}: Until end of turn, each Elf creature you control has base power and toughness 5/5 and becomes a Dinosaur in addition to its other creature types. [The activation is a main-phase PermAbilityMode::TeamBasePT (team_base_pt_cost {4}{G}{G}, no {T}, repeatable): a LAYER 7b base set (CR 613.4b) on every Elf creature you control AT RESOLUTION (CR 611.2c -- an Elf entering later is not affected), so counters (7d), lords and pumps (7c) still apply on top. Stored as an until-end-of-turn delta (5 - current base) in temp_power_bonus/temp_tough_bonus, with Permanent::temp_base_set marking it so a second activation does not stack; both cleanup sites clear both. Whether and when to activate is SEARCHED (an ActivatePermAbility action in the main-phase plan). [PARTIAL, PROVISIONAL pending user sign-off: both \"can't be countered\" clauses are inert -- WHY: the goldfish opponent casts nothing, so no spell is ever countered. \"Becomes a Dinosaur in addition to its other creature types\" is not applied -- WHY: no card in this list, and no engine rule, reads the Dinosaur type; the type change alters nothing else (the Elf type is kept, so every lord and count is unchanged).]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "team_base_pt_cost": "{4}{G}{G}",
+    "team_base_pt_power": 5,
+    "team_base_pt_tough": 5,
+    "team_base_pt_subtype": "Elf"
+   }
+  },
+  {
+   "name": "Taunting Elf",
+   "mana_cost": "{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 1,
+   "oracle_text": "All creatures able to block this creature do so. [A vanilla 0/1 Elf body here (it counts for every Elf count and is pumped by every lord). [PARTIAL, USER-APPROVED 2026-11-26 (\"Yes, Taunting Elf's ability does nothing in goldfish.\"): the lure clause is inert -- WHY: the goldfish opponent never blocks. Its board is GoldFishRunner::PopulateOpponentSpawns' fixed pattern of vanilla P/T bodies that \"never attack or block\" (that function's own comment), and Combat.cpp has no blocker path at all, so there is never a creature able to block for this to force.]]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Elvish Clancaller",
+   "mana_cost": "{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Other Elves you control get +1/+1.\n{4}{G}{G}, {T}: Search your library for a card named Elvish Clancaller, put it onto the battlefield, then shuffle. [LORD: subtypes_affected [Elf] +1/+1, lord_excludes_self. TUTOR: the Maze's End TapTutorPut activation (tap_tutor_put_cost {4}{G}{G} + its {T}; summoning sickness applies, lifted by Concordant Crossroads) with a NAME filter -- tutor_types [Creature] + wish_requires_name \"Elvish Clancaller\" (the Squadron Hawk reuse of the name filter on a library search, read by TapTutorPutLibraryCandidate and PerformTutorToBattlefield). The put enters through the full enter cascade (Marwyn's counter, the new lord). A search may fail to find (CR 701.19b) and still shuffles.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Elf"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "tap_tutor_put_cost": "{4}{G}{G}",
+    "tutor_types": [
+     "Creature"
+    ],
+    "wish_requires_name": "Elvish Clancaller",
+    "tutor_shuffle_after": true
+   }
+  },
+  {
+   "name": "Galadhrim Brigade",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf",
+    "Soldier"
+   ],
+   "keywords": [
+    "Squad"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Squad {1}{G} (As an additional cost to cast this spell, you may pay {1}{G} any number of times. When this creature enters, create that many tokens that are copies of it.)\nOther Elves you control get +1/+1. [SQUAD (CR 702.157) shares Joraga Warcaller's multikicker machinery: squad_cost {1}{G} synthesizes the \"<name> (Kicked xK)\" faces (printed + K x {1}{G}, an ADDITIONAL cost, CR 601.2b) and the kick count K is the same SEARCHED cast axis (one variant per affordable K, DecisionProvider::MultikickCounts may only order/restrict it). The face's enter trigger creates K token copies of the PRINTED card (CreateTokenCopyOfCard: copiable values, CR 707.2 -- the squad payment is not copiable, so a copy never makes more copies), each entering through the universal enter cascade (Marwyn's counter, Doubling Season). EACH COPY IS ITSELF A LORD (its name resolves the real definition), so N Brigades give each other Elf +N/+N and each Brigade +(N-1). LORD: subtypes_affected [Elf] +1/+1, lord_excludes_self.]",
+   "template": "lord_effect",
+   "parameters": {
+    "squad_cost": "{1}{G}",
+    "subtypes_affected": [
+     "Elf"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Leaf-Crowned Visionary",
+   "mana_cost": "{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Other Elves you control get +1/+1.\nWhenever you cast an Elf spell, you may pay {G}. If you do, draw a card. [LORD: subtypes_affected [Elf] +1/+1, lord_excludes_self. CAST TRIGGER: cast_trigger_subtype \"Elf\" + cast_subtype_pay_draw_cost {G} -- the Emperor Mihail II optional-payment shape (FireOnCastTriggers, every cast site, executor + rollout lockstep) with a draw for its payload. Whether to pay each trigger is a SEARCHED plan pin (Plan::mihail_pay_choice, one bit per optional cast trigger in resolution order); unpinned = decline inside the search window, pay-when-affordable beyond the horizon (the playout policy). The drawn card arms the site-10 put-in-hand breakpoint, so a drawn Elf is castable the same turn. Only casts trigger it (a Genesis Wave put or a squad token copy is not cast, CR 707.10); its own cast does not trigger itself (it is not on the battlefield yet).]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Elf"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "cast_trigger_subtype": "Elf",
+    "cast_subtype_pay_draw_cost": "{G}"
+   }
+  },
+  {
+   "name": "Marwyn, the Nurturer",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Elf",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Whenever another Elf you control enters, put a +1/+1 counter on Marwyn.\n{T}: Add an amount of {G} equal to Marwyn's power. [WATCHER: own_creature_enters_self_counters 1 + enters_watch_subtypes [Elf] (the Youthful Valkyrie shape, fired from FireCreatureEnterWatchers, both worlds): \"another\" skips its own entry; tokens (squad copies) trigger it. MANA: a scaled mana dork (mana_per_own_power) whose one tap yields Marwyn's LIVE power -- printed 1 + its +1/+1 counters + every lord bonus (Clancaller, Brigade, Visionary, Archdruid, Warcaller) + until-end-of-turn pumps -- read at the tap through ScaledDorkCount. Legendary: the legend rule applies (the list runs one).]",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "G"
+    ],
+    "mana_per_own_power": true,
+    "own_creature_enters_self_counters": 1,
+    "enters_watch_subtypes": [
+     "Elf"
+    ]
+   }
+  },
+  {
    "name": "Arbor Elf",
    "mana_cost": "{G}",
    "types": [
