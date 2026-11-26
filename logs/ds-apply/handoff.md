@@ -22,9 +22,10 @@ references/. Treasure Hunt APPLY-DROP is another agent's (wip/th-apply): do not 
   only lands/rocks/dorks (a Bloom, a Territory, a float unit are invisible) and the complete backtracker does not model
   an on-demand Bloom crack (it only knows pay-sac amount==1, i.e. Treasure).
 - Event mini-gate (only the event games, oracle on the event turn only; `$S/miniT<t>.json`, `logs/ds-apply/run_turns.sh`,
-  compare `logs/ds-apply/cmp.py tn_new`): on 111 games common to the base full-oracle run: base 106 events / 503 flags ->
-  new 75 events / 419 flags; fixed Karrthus-D 26, Kolaghan-D 5; NO new events. ($S/mini_base is the base binary, all
-  turns, 123 of 144 games -- killed when superseded; $S/tn_new is the new binary, T6-T8 groups still running at handoff.)
+  compare `logs/ds-apply/cmp.py tn_new`), FINAL: on the 123 games common to the base full-oracle run: base 119 events /
+  586 flags -> new 85 events / 500 flags; fixed Karrthus-D 29, Kolaghan-D 5; NO new events. Left: Karrthus-NL 21,
+  Kolaghan-D 21, Karrthus-D 17, Scourge-D 8, Kolaghan-NL 8, Apex-D 4, others 1-2. ($S/mini_base = base binary, all
+  turns, 123 of 144 games, killed when superseded; $S/tn_new = new binary, all 146 events done.)
 
 ## Running jobs (all mine)
 - GATE A/B (Dragonstorm slice of the gate, 180,218 games, arms off / on / no_leftover_swap_wide / no_ondemand_visible_lump_exact
