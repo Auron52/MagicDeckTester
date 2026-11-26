@@ -114013,7 +114013,9 @@ namespace kov
         ~FrameGuard()
         {
             if (t_top == &f) { t_top = f.prev; }
+#if !defined(_WIN32)
             if (f.child) { ::_exit(4); }   // the reference unwound by an exception: no answer
+#endif
             Reap(f, false, 0);
         }
         FrameGuard(const FrameGuard&) = delete;
