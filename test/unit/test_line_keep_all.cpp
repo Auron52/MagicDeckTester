@@ -249,3 +249,35 @@ TEST_CASE("Line keep (crit, filter lands): Land's Edge leaves an unconditional {
     }
     CHECK(taps[0] == taps[1]);
 }
+
+// MTG_LINE_KEEP_CRIT_FILTER, {1}-fed converters: Treasure Hunt s30106408 T4 {Ferrous Lake + Land's Edge + Treasure
+// Hunt}. Cascade Bluffs#3, Ferrous Lake#8, Saprazzan Skerry#41 ({U}{U}, two depletion counters) and the land drop
+// Ferrous Lake#6. Skerry is the only unconditional {U}; each Ferrous Lake ("{1}, {T}: Add {U}{R}") needs a unit of
+// another source. Oracle: Skerry's {U}{U} feeds both Lakes, {U}{R}{U}{R} pays Land's Edge and floats a {U}; that {U}
+// and the Bluffs' {C} pay Treasure Hunt.
+TEST_CASE("Line keep (crit, fed converters): two Ferrous Lakes fed by Skerry leave a {U} for Treasure Hunt (s30106408 T4)")
+{
+    ArmLka all_off(heurarm::LINE_KEEP_ALL, false);
+    ArmLka crit_on(heurarm::LINE_KEEP_CRIT, true);
+    ArmLka multi_on(heurarm::LINE_KEEP_CRIT_MULTI, true);
+    GameState s0 = BaseLka(4);
+    PutLka(s0, "Cascade Bluffs", 3);
+    PutLka(s0, "Ferrous Lake", 8);
+    {
+        Permanent& k = PutLka(s0, "Saprazzan Skerry", 41);
+        Counter dep; dep.type = Counter::Type::Depletion; dep.count = 2;
+        k.counters.Add(dep);
+    }
+    PutLka(s0, "Ferrous Lake", 6);
+    s0.players[0].hand.push_back(CardLka("Land's Edge", 25));
+    s0.players[0].hand.push_back(CardLka("Treasure Hunt", 7));
+    for (int k = 0; k < 20; ++k) { s0.players[0].library.push_back(CardLka(k % 2 ? "Island" : "Treasure Hunt", 900 + k)); }
+    const std::vector<Action> line = { CastLka(s0, "Land's Edge"), CastLka(s0, "Treasure Hunt") };
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmLka arm(heurarm::LINE_KEEP_CRIT_FILTER, on);
+        GameState s = s0;
+        CHECK(PayThenRest(s, line, 0, line[1].cost, /*rest_creature=*/false) == on);
+    }
+}

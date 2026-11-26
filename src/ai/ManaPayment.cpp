@@ -12187,7 +12187,10 @@ static bool LineKeepCritGate(const GameState& s, const ManaCost& cost_in, const 
         const int amt = std::max(1, ManaProducedPerTap(*qd));
         const int each = n == 1 ? amt : std::max(1, amt / n);
         for (int ci = 0; ci < 5; ++ci) { if (m & (1u << ci)) { tot[ci] += each; } }
-        const bool fed_filter = filter_on && qd->params.is_filter && !LandTypeChangedToIsland(s, q);
+        // A FED source: a hybrid-fed filter land (Cascade Bluffs) or a {1}-fed converter (ramp_filter: Ferrous Lake,
+        // Izzet Signet; any_color_filter: Capital City, Arcum's Astrolabe) -- its colours cost a unit of another source.
+        const bool fed_filter = filter_on && (qd->params.is_filter || qd->params.ramp_filter || qd->params.any_color_filter)
+                             && !LandTypeChangedToIsland(s, q);
         if (fed_filter) { for (int ci = 0; ci < 5; ++ci) { if (m & (1u << ci)) { filt[ci] += each; } } }
         if ((m & owed) == 0) { continue; }
         if (n_src == kMaxSrc) { return true; }   // a board this wide: let the judge decide
@@ -12227,14 +12230,17 @@ static bool LineKeepCritGate(const GameState& s, const ManaCost& cost_in, const 
             if (tot[ci] - took < rest_c[ci] + cost_c[ci]) { return true; }
         }
     }
-    // MTG_LINE_KEEP_CRIT_FILTER (EngineFlags.h): the same take with the filter lands' colours out of the supply. A
-    // hybrid-fed filter land (Cascade Bluffs) makes its colours only from a coloured unit of ANOTHER source, which this
-    // bill can spend, and unfed it makes {C}; so the colour it seems to add is not supply the bill must leave. Here the
+    // MTG_LINE_KEEP_CRIT_FILTER (EngineFlags.h): the same take with the FED sources' colours out of the supply. A
+    // hybrid-fed filter land (Cascade Bluffs) makes its colours only from a coloured unit of ANOTHER source, and unfed it
+    // makes {C}; a {1}-fed converter (Ferrous Lake, Izzet Signet) makes them only from a unit of another source. This
+    // bill can spend those feeds, so the colour such a source seems to add is not supply the bill must leave. Here the
     // bill's non-c pips take the largest UNCONDITIONAL c sources (one or more), and the gate passes when what is left of
-    // c, without the filters, falls short. tot only shrinks, so this passes a superset of the tests above (it adds
+    // c, without the fed sources, falls short. tot only shrinks, so this passes a superset of the tests above (it adds
     // trials; the exact judge decides). Treasure Hunt s30133719 T8 {Bluffs + Land's Edge + Treasure Hunt}: Thundering
     // Falls + Temple of Epiphany are the only unconditional {U}, Land's Edge's {1}{R}{R} took both, and two unfed Bluffs
     // with a Reliquary Tower could not make Treasure Hunt's {U}; the gate had counted the Bluffs as two more {U}.
+    // s30106408 T4 {Ferrous Lake + Land's Edge + Treasure Hunt}: Saprazzan Skerry's {U}{U} is the only unconditional {U}
+    // and both Ferrous Lakes' {U} need its units as feeds.
     if (filter_on)
     {
         for (int ci = 0; ci < 5; ++ci)
