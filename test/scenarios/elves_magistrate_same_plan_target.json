@@ -1,0 +1,54 @@
+{
+  "_comment": [
+    "IMMACULATE MAGISTRATE PUMPS A CREATURE THE SAME PLAN CASTS (Elves claude-play sweep, 2026-11-26).",
+    "",
+    "Turn 5, main 1: one Forest, Concordant Crossroads (haste), Immaculate Magistrate and three Llanowar Elves;",
+    "Joraga Warcaller in hand. Forest -> Warcaller (unkicked), then Magistrate's {T}: five +1/+1 counters on the",
+    "Warcaller (five Elves). Warcaller 6/6 haste + three Llanowars at 1/1 + 5 = 24 damage -> win on turn 5.",
+    "",
+    "Verified DISCRIMINATING: before TapTargetPumpSamePlanTargets the activation's target list was read off",
+    "the battlefield before the plan's casts, so the Warcaller could not be targeted at any budget and this",
+    "board did not win (d5 b0: no win). The unit test in test_elves.cpp pins both apply worlds."
+  ],
+  "deck": "decks/Elves/Elves.cod",
+  "profile": "decks/Elves/Elves.profile.json",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Concordant Crossroads",
+      "controller": 0
+    },
+    {
+      "name": "Immaculate Magistrate",
+      "controller": 0
+    },
+    {
+      "name": "Llanowar Elves",
+      "controller": 0
+    },
+    {
+      "name": "Llanowar Elves",
+      "controller": 0
+    },
+    {
+      "name": "Llanowar Elves",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Joraga Warcaller"
+  ],
+  "library_filler": "Genesis Wave",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 0,
+  "max_turns": 5,
+  "expect_win_turn": 5
+}

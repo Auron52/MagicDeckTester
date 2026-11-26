@@ -19,6 +19,7 @@
 #include "cards/CardDatabase.h"
 #include "core/EffectHandler.h"
 #include "core/GameEngine.h"
+#include "core/GameLogger.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
@@ -303,6 +304,61 @@ TEST_CASE("Immaculate Magistrate: the target gets one +1/+1 counter per Elf we c
         CHECK(PlusCountersOn(*EN(*g, tgt)) == 3);   // Magistrate + two Llanowar Elves (the Halberdier is no Elf)
         CHECK(EN(*g, tgt)->temp_power_bonus == 0);  // counters, not an until-EOT pump
         CHECK(EN(*g, 1)->tapped);                   // the {T}
+    }
+}
+
+TEST_CASE("Immaculate Magistrate: a creature the SAME plan casts is a searched target, in BOTH worlds")
+{
+    // The Elves claude-play sweep's hole (2026-11-26): the activation runs in the trailing pass, after the
+    // plan's casts, but its target list was read off the battlefield BEFORE them -- so "cast Joraga
+    // Warcaller, then five counters on it" (24 damage: a 6/6 hasty Warcaller and three 6/6 Llanowars) was
+    // unfindable at any budget. TapTargetPumpSamePlanTargets offers the hand creature, pinned to the copy
+    // the cast lands, only in subsets that also cast it (SubsetHasMissingTrickTarget).
+    GameState s = EBase();
+    EForests(s, 1);
+    EPut(s, "Concordant Crossroads", 2);   // haste: the Warcaller attacks
+    EPut(s, "Immaculate Magistrate", 1);
+    EPut(s, "Llanowar Elves", 3);
+    EPut(s, "Llanowar Elves", 4);
+    EPut(s, "Llanowar Elves", 5);
+    EHand(s, "Joraga Warcaller", 20);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    bool stranded = false;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool pin = false, cast = false;
+        for (const Action& a : p.actions)
+        {
+            if (IsAct(a, Action::AbilityMode::TapTargetPump) && a.sac_victim_id == 20) { pin = true; }
+            if (IsCast(a, "Joraga Warcaller")) { cast = true; }
+        }
+        if (pin && !cast) { stranded = true; }
+    }
+    CHECK_FALSE(stranded);   // never offered without the cast that creates its target
+    // Human play keeps ONE battlefield representative and the viewer picks the target on the live board
+    // at activation (ChooseTapTargetPumpTargetAtActivation), where the cast Warcaller already stands --
+    // so the searched pin below exists only for the autonomous search.
+    if (HumanPlayActive()) { return; }
+    const TurnSolver::Plan* line = EFind(plans, [](const TurnSolver::Plan& p)
+    {
+        bool pin = false, cast = false;
+        for (const Action& a : p.actions)
+        {
+            if (IsAct(a, Action::AbilityMode::TapTargetPump) && a.sac_victim_id == 20) { pin = true; }
+            if (IsCast(a, "Joraga Warcaller") && !a.kicked) { cast = true; }
+        }
+        return pin && cast && p.actions.size() == 2;
+    });
+    REQUIRE(line != nullptr);
+    GameState roll, real;
+    EBoth(s, *line, roll, real);
+    for (const GameState* g : { &roll, &real })
+    {
+        REQUIRE(EN(*g, 20) != nullptr);
+        CHECK(PlusCountersOn(*EN(*g, 20)) == 5);   // Magistrate + Warcaller + three Llanowar Elves
+        CHECK(EN(*g, 1)->tapped);                  // the {T}
+        CHECK(EPow(*g, 20) == 6);                  // 1/1 + five counters
+        CHECK(EPow(*g, 3) == 6);                   // 1/1 + the Warcaller's +1/+1 per counter
     }
 }
 
