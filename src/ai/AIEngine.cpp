@@ -5629,6 +5629,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // put_in_hand_armed's EquipmentReturnedFromGraveyard (rollout twin: apply_one's gyeq_at_cast).
     // No freeze is needed: nothing a land-search activation does moves a graveyard Equipment.
     std::vector<int> rdb_gyeq;
+    // Our hand + card permanents before the current cast (Genesis Wave) -- the twin of rdb_gyeq for
+    // put_in_hand_armed's CastPutACardPermanent (rollout twin: apply_one's bfput_at_cast). Empty when
+    // the lever is off. Its verdict is FROZEN at the top of exec_slot_hook (-1 = not frozen, read
+    // live): a positioned land drop / land-search activation / Karoo the hook plays puts a CARD
+    // permanent on the battlefield AFTER the cast, which the rollout's cast window (the end of
+    // apply_one, before its slot_hook) never sees -- the rdb_top_verdict lesson.
+    std::vector<int> rdb_bfput;
+    int rdb_bf_verdict = -1;
     // Name hashes of the committed plan's hand casts -- lockstep twin of ApplyPlanDirect's
     // plan_cast_names. A card the plan casts is never "declined", so the breakpoint filter keeps it.
     std::vector<std::uint64_t> rdb_plan_casts;
@@ -5763,6 +5771,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         rdb_top = PlayableTopLandNumber(state);   // the library-top twin (Courser)
         rdb_top_verdict = -1;
         rdb_gyeq = TurnSolver::GraveyardEquipmentNumbers(state);   // ...and Forge Anew's
+        rdb_bf_verdict = -1;   // ...and the Wave's battlefield-put window
+        if (BpPutInHandEnabled() && BpPutBattlefieldEnabled() && !HumanPlayActive())
+        { rdb_bfput = TurnSolver::PutWindowNumbers(state); } else { rdb_bfput.clear(); }
         // Prefer an expiring STAGED copy (Light Up the Stage etc.) over a persistent hand copy, so a
         // committed line that spends the staged copy this turn -- freeing the drawn copy for a later
         // turn -- replays exactly. Mirrors the land-play fix (TryPlaySpecificLand): the burn 6225
@@ -5884,6 +5895,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         rdb_top = PlayableTopLandNumber(state);   // the library-top twin (Courser)
         rdb_top_verdict = -1;
         rdb_gyeq = TurnSolver::GraveyardEquipmentNumbers(state);   // ...and Forge Anew's
+        rdb_bf_verdict = -1;   // ...and the Wave's battlefield-put window
+        if (BpPutInHandEnabled() && BpPutBattlefieldEnabled() && !HumanPlayActive())
+        { rdb_bfput = TurnSolver::PutWindowNumbers(state); } else { rdb_bfput.clear(); }
         auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (it == ap.hand.end()) { return; }
@@ -5916,6 +5930,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         rdb_top = PlayableTopLandNumber(state);   // the library-top twin (Courser)
         rdb_top_verdict = -1;
         rdb_gyeq = TurnSolver::GraveyardEquipmentNumbers(state);   // ...and Forge Anew's
+        rdb_bf_verdict = -1;   // ...and the Wave's battlefield-put window
+        if (BpPutInHandEnabled() && BpPutBattlefieldEnabled() && !HumanPlayActive())
+        { rdb_bfput = TurnSolver::PutWindowNumbers(state); } else { rdb_bfput.clear(); }
         auto git = std::find_if(ap.graveyard.begin(), ap.graveyard.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (git == ap.graveyard.end()) { return; }
@@ -6121,7 +6138,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // ...and a graveyard Equipment returned to the battlefield (Forge Anew; rollout twin: the
         // same OR at the end of apply_one) -- the shared EquipmentReturnedFromGraveyard.
         const bool gyeq_new = TurnSolver::EquipmentReturnedFromGraveyard(rdb_gyeq, state);
-        if (!TurnSolver::HandGainedACard(rdb_hand, state) && !top_new && !gyeq_new) { return false; }
+        const bool hand_new = TurnSolver::HandGainedACard(rdb_hand, state);
+        // ...and a card permanent PUT onto the battlefield (Genesis Wave; rollout twin: the same OR at
+        // the end of apply_one) -- the shared CastPutACardPermanent, frozen across exec_slot_hook.
+        const bool put_new  = BpPutBattlefieldEnabled() && !rdb_bfput.empty()
+                           && (rdb_bf_verdict >= 0 ? rdb_bf_verdict == 1
+                                                   : TurnSolver::CastPutACardPermanent(rdb_bfput, state, name));
+        if (!hand_new && !top_new && !gyeq_new && !put_new) { return false; }
+        // A PUT-ONLY arming binds the EMPTY hand snapshot, exactly as the rollout does (see its note):
+        // the continuation exists for OLD hand cards, which a snapshot would read as declined.
+        if (!hand_new && !top_new && !gyeq_new) { rdb_hand.clear(); }
         cast_draw_engine = true;
         return true;
     };
@@ -8865,6 +8891,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // ONE shared body. The cast window's library-top verdict is frozen across them (rdb_top_verdict).
     auto exec_slot_hook = [&](const Action& a)
     {
+        // Freeze the cast window's battlefield-put verdict BEFORE anything below can put a card permanent
+        // (a positioned land, a land-search activation): the rollout asks at the end of apply_one, which
+        // precedes its slot_hook. See rdb_bfput.
+        if (rdb_bf_verdict < 0 && !rdb_bfput.empty())
+        { rdb_bf_verdict = TurnSolver::CastPutACardPermanent(rdb_bfput, state, BpNameOf(a)) ? 1 : 0; }
         // Morph INT-8 (C): the plan's named trail flips due right after THIS cast (lockstep twin of slot_hook's),
         // through the executor's own trailing-pass body.
         if (state.deck_has_morph)

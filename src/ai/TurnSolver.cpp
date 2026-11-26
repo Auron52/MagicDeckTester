@@ -39537,6 +39537,62 @@ bool TurnSolver::HandGainedACard(const std::vector<int>& before, const GameState
     return false;
 }
 
+// SITE 10's BATTLEFIELD-PUT HALF (MTG_BP_PUT_BATTLEFIELD; header note on CastPutACardPermanent).
+//
+// THE HOLE (Elves seed 9500006 T4). Genesis Wave X=4 reveals Elvish Mystic, Elvish Archdruid,
+// Concordant Crossroads and Galadhrim Brigade and puts all four. Crossroads gives every creature
+// haste, so the Archdruid taps for six the moment it lands, and that pays for the Leaf-Crowned
+// Visionary + Ezuri in hand: a T4 kill. But every plan is enumerated and priced against the
+// battlefield the main phase STARTED from -- the Archdruid is not on it -- and no class re-decided
+// the turn after the put (the hand did not change, so the hand half above stood down). So the
+// search, handed the pre-Wave board, found only T5 at every depth and budget (d3 b0 included),
+// while the same search handed the post-Wave board found T4 at once.
+//
+// THE NO-OP ARGUMENT (why the gate is exact, not a heuristic). The class exists for objects a put
+// made. If no own CARD permanent arrived from outside the hand during the cast, the cast put
+// nothing, and the board the continuation would be enumerated on holds no object that was not
+// already on the battlefield or in hand when the plan was enumerated -- so whatever the deferred
+// re-solve could do with it, a base plan already carries (that is the sibling argument every class
+// uses); hand entries, a new playable top, a returned Equipment and a new activation each have
+// their own half or site. Conversely, ANY put object can be new material -- a hasted or untapped
+// mana source, a haste grant reaching a body cast earlier this main, a creature that grows another
+// source's yield (the Archdruid counts Elves), a convoke body, a target -- so the gate does NOT ask
+// whether the put "looks useful": that would be the heuristic the user forbade. Tokens are out of
+// scope (a token is CREATED, not put; m_number >= kFirstTokenNumber). The cast card itself is
+// excluded by construction when it came from hand (its number is in the snapshot) and by name for
+// ONE copy otherwise (a graveyard or library-top cast), so a creature spell alone never arms.
+std::vector<int> TurnSolver::PutWindowNumbers(const GameState& state)
+{
+    std::vector<int> out;
+    const int me = state.active_player_index;
+    const Player& ap = state.players[static_cast<std::size_t>(me)];
+    out.reserve(ap.hand.size() + 16);
+    for (const Card& c : ap.hand) { out.push_back(c.m_number); }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == me && p.card.m_number >= 1 && p.card.m_number < GameState::kFirstTokenNumber)
+        { out.push_back(p.card.m_number); }
+    }
+    return out;
+}
+
+bool TurnSolver::CastPutACardPermanent(const std::vector<int>& snapshot, const GameState& state,
+                                       const std::string& cast_name)
+{
+    const int me = state.active_player_index;
+    bool self_seen = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const int n = p.card.m_number;
+        if (n < 1 || n >= GameState::kFirstTokenNumber) { continue; }
+        if (std::find(snapshot.begin(), snapshot.end(), n) != snapshot.end()) { continue; }
+        if (!self_seen && p.card.m_name == cast_name) { self_seen = true; continue; }
+        return true;
+    }
+    return false;
+}
+
 // ---- CollectActions ------------------------------------------------------
 //
 // The single enumeration of action SOURCES, shared by Solve and EnumeratePlans.
@@ -78223,6 +78279,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // cast, for EquipmentReturnedFromGraveyard at the same arming site. Empty (no allocation)
         // for every deck without a graveyard-Equipment return.
         const std::vector<int> gyeq_at_cast = TurnSolver::GraveyardEquipmentNumbers(state);
+        // ...and the BATTLEFIELD-PUT twin (Genesis Wave): our hand + card permanents before this cast, for
+        // CastPutACardPermanent at the same arming site. Executor twin: cast_by_name's rdb_bfput.
+        std::vector<int> bfput_at_cast;
+        if (BpPutInHandEnabled() && BpPutBattlefieldEnabled() && !s_human_play)
+        { bfput_at_cast = TurnSolver::PutWindowNumbers(state); }
         // MTG_HAND_ENTRY_CENSUS only: mark the window inside which today's arming can SEE a hand
         // entry, so the census can report what happens outside it. Inert (and untouched) otherwise.
         HandEntryCastScope _hec;
@@ -81483,11 +81544,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 || TurnSolver::TopLandNewlyPlayable(top_at_cast, state, karoo_deferred)
                 // A graveyard Equipment returned to the battlefield (Forge Anew's ETB) is the same
                 // rule: a new equip option the plan's own Equip candidates could not see.
-                || TurnSolver::EquipmentReturnedFromGraveyard(gyeq_at_cast, state)))
+                || TurnSolver::EquipmentReturnedFromGraveyard(gyeq_at_cast, state)
+                // ...and a card permanent PUT onto the battlefield (Genesis Wave; see
+                // CastPutACardPermanent): new mana / haste / targets the plan was priced without.
+                || (BpPutBattlefieldEnabled() && !bfput_at_cast.empty()
+                    && TurnSolver::CastPutACardPermanent(bfput_at_cast, state, name))))
         {
             deferred_cantrip_resolve = true;
             deferred_cantrip_site    = &def;
-            deferred_hand_before     = deferred_snapshot(hand_at_cast);
+            // A PUT-ONLY arming binds the EMPTY hand snapshot (every card reads as new; the snapshot
+            // consumers stand down) -- the tutor-to-top precedent above: the cards this continuation
+            // exists for are OLD hand cards (the Visionary the Wave's Archdruid now pays for), and a
+            // snapshot would read "the plan declined this card". Routed through deferred_snapshot so
+            // a MTG_BP_NEW_ONLY pin behaves as at every other arming. Executor twin: put_in_hand_armed
+            // clears rdb_hand on the same verdict.
+            static const std::vector<int> kNoHand;
+            const bool hand_gained = TurnSolver::HandGainedACard(hand_at_cast, state);
+            const bool other_half  = hand_gained || TurnSolver::TopLandNewlyPlayable(top_at_cast, state, karoo_deferred)
+                                  || TurnSolver::EquipmentReturnedFromGraveyard(gyeq_at_cast, state);
+            deferred_hand_before     = deferred_snapshot(other_half ? hand_at_cast : kNoHand);
             deferred_put_armed       = true;   // site 10, its own bit (see deferred_site_index)
         }
     };
@@ -96915,6 +96990,21 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             // the battlefield or cast by this plan -- a creature, so the cast order resolves it ahead
             // of the noncreature spells). Deck-gated by the param's own presence (deck_has_draw_ping).
             if (parun_watcher && (d->card.IsInstant() || d->card.IsSorcery())) { mask |= 1 << 10; }
+            // THE BATTLEFIELD-PUT HALF (MTG_BP_PUT_BATTLEFIELD; TurnSolver::CastPutACardPermanent). The
+            // arming is OUTCOME-keyed (a card permanent arrived from outside the hand), so this clause
+            // only has to name the cast families that CAN put one, or the continuation it arms would be
+            // an unchallengeable canon default (the gi428 shape): the Wave's reveal-and-put, a look-top
+            // put, an ETB reveal-put, a tutor / reanimation to the battlefield, and a land search that
+            // puts at least one land. Conservative in the usual direction: a marked plan whose put
+            // whiffs yields variants that collapse onto the base plan. A family added later still
+            // ARMS; it lands here unmarked, the pre-existing conservative shape -- ADD IT HERE TOO.
+            if (BpPutBattlefieldEnabled()
+                && (d->params.reveal_x_put_permanents || d->params.look_top_put_creature_count > 0
+                    || !d->params.etb_reveal_put_subtypes.empty() || d->params.tutor_to_battlefield
+                    || d->params.tutor_to_battlefield_single || d->params.reanimate_creature_max_mv > 0
+                    || d->params.tutor_land_to_battlefield || d->params.scry_reveal_land_to_battlefield
+                    || d->params.land_search_count > d->params.land_search_to_hand))
+            { mask |= 1 << 10; }
             // THE CREATURE-ENTERS WATCHER (Vaultborn Tyrant, "whenever another creature you control
             // enters, draw a card"). State-keyed exactly like the equipment and Aura watchers above,
             // and it is the whole of stompy's site-10 traffic: the draw belongs to the WATCHER, so

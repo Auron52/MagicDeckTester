@@ -1151,6 +1151,7 @@ enum Slot : int
     EE_USER_PRUNE,            // MTG_EE_USER_PRUNE  Enchanted Evening (USER rulings 15 / 16, 2026-11-25/26; EnchantedEveningProvider): no second Sterling Grove onto the battlefield while one stays (except a plan that sacrifices one for its tutor), and the Grove / Idyllic Tutor targets limited to missing lock pieces (EE, Opalescence, Parallax Wave), one mana Aura while mana is short, then Enchantress's Presence. Default ON (USER-requested prune); =0 -> the unrestricted search (the A/B arm; adoption is the USER's)
     EE_GROVE_PRELOCK,         // MTG_EE_GROVE_PRELOCK  AMENDMENT ARM of MTG_EE_USER_PRUNE (the USER's "maybe we'll need an exception prior to the full combo being assembled"): while Enchanted Evening is not on our battlefield and an Opalescence is ours or in hand, a second Sterling Grove may be cast and Sterling Grove is a tutor target (ordered last) -- the Grove as a 2/2 Opalescence attacker; and (2026-11-26, seed 10000 gi=50) with an Opalescence ON our battlefield and none in hand, a second Opalescence is a tutor target after the missing lock pieces (the two animate each other as 4/4s). Default OFF (the USER's call); inert while the prune is off
     ELVES_SCALING_PRUNE,      // MTG_ELVES_SCALING_PRUNE   ElvesProvider (USER 2026-11-26 scaling-sink ruling): of the plans that differ only in their scaling counts (Genesis Wave X, Joraga Warcaller multikick, Galadhrim Brigade squad, Ezuri's main-phase pump count), keep ONE sink at the group's max plus hold-back counts for the 1-mana attackers; no partial splits across two sinks. A USER-directed provider prune. Default ON; =0 -> every count and every split searched
+    BP_PUT_BATTLEFIELD,       // MTG_BP_PUT_BATTLEFIELD    breakpoint site 10's BATTLEFIELD-PUT half (TurnSolver::CastPutACardPermanent): a cast that PUT a card permanent onto our battlefield from the library / graveyard / exile (Genesis Wave, a look-top put, a tutor or reanimation to the battlefield, a land search) arms the deferred re-solve, so the rest of the main is searched on the new board -- "Wave, then tap the hasted Archdruid it put" was unfindable at any budget (Elves seed 9500006). A completeness fix, both worlds in lockstep. DEFAULT ON; =0 -> as before (the A/B hatch)
     COUNT
 };
 
@@ -2246,6 +2247,7 @@ inline const char* Name(int slot)
         "MTG_EE_USER_PRUNE",
         "MTG_EE_GROVE_PRELOCK",
         "MTG_ELVES_SCALING_PRUNE",
+        "MTG_BP_PUT_BATTLEFIELD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
