@@ -1,0 +1,14 @@
+Declined-search fold (967dfef80) cost check. Same jobs as the hatch A/B's new arm (seed 9600001, suite d5 row shape).
+base = 4fc09f9b3 binary (wavebp-base), pre = f11f1cab7 new arm (units/digests from ab.out), fold = 967dfef80.
+Both fresh arms ran CONCURRENTLY on the small lane (2 threads each) beside a full smoke, so ms/g is contended and noisy;
+units are deterministic and are the measure. base reproduces ab.out's base arm digest-for-digest (base==abbase).
+
+deck                 jobs games   units_base    units_pre   units_fold   pre/b  fold/b ms/g base ms/g fold    ms x dig==pre base==abbase
+creature_giving        40   400      4017999      5846190      5846190   1.455   1.455       820       551   0.672 40/40 40/40
+creature_giving2hg     20   200      2710332      3834611      3834611   1.415   1.415      1148      1183   1.030 20/20 20/20
+hydras                 40   400      5042359      5987434      5987434   1.187   1.187       296       520   1.759 40/40 40/40
+landfall               40   400     10649633     13791750     13775419   1.295   1.294       821      1137   1.384 40/40 40/40
+melira                 30   300     17571000     23309799     23309799   1.327   1.327      2272      3100   1.364 30/30 30/30
+
+Smoke (MTG_PGO=0, no accept) on 967dfef80: 201 passed, 42 failed; every key's got= avg/digest is IDENTICAL to the hatch-on smoke of f11f1cab7
+(851/851 result lines, diff empty), so the moved-key set matches exactly.
