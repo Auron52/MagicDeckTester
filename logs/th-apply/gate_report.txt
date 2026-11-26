@@ -1,0 +1,30 @@
+== gate_base (gi 100000-105999, origin 9e566000b)
+arm            APPLY-DROP        AD-undecl APPLY-DROP-ORDER         ENUM-GAP       ORACLE-GAP           CAPPED  CAPPED-DECISION
+base                  146               71                9               23                0                0                0
+== gate (filter lands only, ac40cb59a)
+arm            APPLY-DROP        AD-undecl APPLY-DROP-ORDER         ENUM-GAP       ORACLE-GAP           CAPPED  CAPPED-DECISION
+off                   582              257               62               76                0                0                0
+on                    405              257               62               76                0                0                0
+== gate2 (filter + fed converters, e1096e6b7)
+arm            APPLY-DROP        AD-undecl APPLY-DROP-ORDER         ENUM-GAP       ORACLE-GAP           CAPPED  CAPPED-DECISION
+off                   582              257               62               76                0                0                0
+on                    326              257               62               76                0                0                0
+   146 U T4 m1 {no land + cast:Treasure Hunt} dropped [cast Land's Edge]
+    46 U T5 m1 {no land + cast:Treasure Hunt} dropped [cast Land's Edge]
+    24 D T4 m1 {land+ cast:Treasure Hunt + cast:Throes of Chaos} dropped [cast Throes of Chaos]
+    23 U T4 m1 {land+ cast:Treasure Hunt} dropped [cast Land's Edge]
+    18 D T5 m1 {land+ cast:Treasure Hunt + cast:Throes of Chaos} dropped [cast Throes of Chaos]
+     9 D T5 m1 {land+ cast:Treasure Hunt + cast:Land's Edge} dropped [cast Land's Edge]
+     9 U T5 m1 {land+ cast:Treasure Hunt} dropped [cast Land's Edge]
+     7 U T6 m1 {no land + cast:Treasure Hunt} dropped [cast Land's Edge]
+     7 U T7 m1 {no land + cast:Treasure Hunt} dropped [cast Land's Edge]
+     7 D T4 m1 {no land + cast:Treasure Hunt + cast:Treasure Hunt} dropped [cast Treasure Hunt]
+     5 D T6 m1 {land+ cast:Treasure Hunt + cast:Land's Edge} dropped [cast Land's Edge]
+     5 U T5 m1 {no land + cast:Throes of Chaos} dropped [cast Land's Edge]
+     5 U T7 m1 {no land + retrace:Throes of Chaos} dropped [cast Land's Edge]
+     5 U T7 m1 {land+ cast:Treasure Hunt} dropped [cast Land's Edge]
+     4 U T6 m1 {land+ cast:Treasure Hunt} dropped [cast Land's Edge]
+     3 D T4 m1 {land+ cast:Treasure Hunt + cast:Treasure Hunt} dropped [cast Treasure Hunt]
+     1 D T5 m1 {no land + cast:Treasure Hunt + cast:Land's Edge} dropped [cast Land's Edge]
+     1 D T5 m1 {no land + cast:Treasure Hunt + cast:Treasure Hunt} dropped [cast Treasure Hunt]
+     1 D T5 m1 {land+ cast:Treasure Hunt + cast:Treasure Hunt} dropped [cast Treasure Hunt]
