@@ -413,3 +413,57 @@ TEST_CASE("Leaf kill-only NOM2: Maze's End's end-step win (Manabond's dump, then
     CHECK(b.on == b.off);       // the kill-only turn finds the same win (it answered kMaxTurns + 1 before the fix)
     CHECK(b.t_on.armed >= 1);   // armed at the cutoff turn (a nested re-solve of the same turn may arm it again)
 }
+
+// THE OPPONENT-TURN DECK-OUT (MTG_KO_BOUNDARY_SIM; Mill seed 58077083 gi83). The passive opponent's own turn runs in
+// the boundary: it cracks a fetchland, and an Archive Trap we HELD is cast there for {0} and mills 13 -- a deck-out
+// credited to this turn that no main phase saw. Hard-casting the Trap now (five Islands pay {3}{U}{U}) leaves one
+// card: not a kill, and no Trap for the opponent's fetch. So the full solve's killer is "hold"; the kill-only turn
+// must cross the boundary to see it.
+namespace
+{
+GameState MillOpponentTurnTrapBoard()
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 5;
+    s.phase               = Phase::PreCombatMain;
+    s.players[0].life     = gamesetup::StartingLife();
+    s.players[1].life     = gamesetup::StartingLife();
+    s.players[0].lands_played_this_turn = 1;
+    s.uses_second_main    = false;
+    s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
+        ResolveHeuristicDefaultsPath("decks/Mill/Mill.cod")));
+    for (int k = 0; k < 5; ++k) { Put(s, "Island", 50 + k); }
+    Hand(s, "Archive Trap", 10);
+    for (int k = 0; k < 20; ++k)
+    {
+        Card c = Def("Swamp").card;
+        c.m_number = 900 + k;
+        s.players[0].library.push_back(c);
+    }
+    s.opponent_library_dealt = true;
+    s.opponent_plays_lands   = true;
+    Card delta = Def("Polluted Delta").card;
+    delta.m_number = 2000;
+    s.players[1].hand.push_back(delta);
+    for (int k = 0; k < 14; ++k)   // 14: the Trap's 13 now leaves one; the boundary's draw + fetch + free Trap empty it
+    {
+        Card c = Def(k == 5 ? "Island" : "Counterspell").card;
+        c.m_number = 2001 + k;
+        s.players[1].library.push_back(c);
+    }
+    return s;
+}
+}   // namespace
+
+TEST_CASE("Leaf kill-only NOM2: a deck-out in the opponent's turn (Archive Trap after their fetch) is found at the cutoff")
+{
+    EnsureCardsLoaded();
+    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);
+    ArmScope sim(heurarm::KO_BOUNDARY_SIM, 1);
+    const GameState s = MillOpponentTurnTrapBoard();
+    const Both b = Run(s, /*cutoff=*/5, /*second_main=*/false);
+    CHECK(b.off == 5);          // the full solve: hold the Trap, the opponent's fetch decks them this turn
+    CHECK(b.on == b.off);       // the kill-only turn crosses the boundary and finds the same win
+    CHECK(b.t_on.armed >= 1);
+}
