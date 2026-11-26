@@ -417,15 +417,81 @@ TEST_CASE("Leaf-Crowned Visionary: a breakpoint child resumed from the node snap
         CHECK(complete.players[0].library.size() == resumed.players[0].library.size());
         CHECK(ETapped(complete) == ETapped(resumed));
         CHECK((EN(complete, 30) != nullptr) == (EN(resumed, 30) != nullptr));
-        if (EN(complete, 30) != nullptr)
-        {
-            saw_taunting_cast = true;
-            // The continuation's Taunting Elf cast is past the base plan's one pinned trigger: declined.
-            CHECK(std::none_of(resumed.players[0].hand.begin(), resumed.players[0].hand.end(),
-                               [](const Card& c) { return c.m_number == 31; }));
-        }
+        // Whether the continuation's own Taunting Elf trigger pays is that RANK's pin (ContPins::mihail, the next
+        // test); either way the resumed child must agree with the from-scratch one (the hand check above).
+        if (EN(complete, 30) != nullptr) { saw_taunting_cast = true; }
     }
     CHECK(saw_taunting_cast);   // some continuation rank casts the drawn Elf, so the case is exercised
+}
+
+// LOCKSTEP #21: a breakpoint CONTINUATION's own pay-{G} pin. The continuation enumeration emits Visionary pay
+// variants (so a drawn Elf's own cast can pay again), but ContPins carried no pay pin, so those variants ran under
+// the OUTER plan's pin at the continued ordinal -- past its bits -- and always declined: "pay {G} again for the Elf
+// drawn off Visionary" was unfindable inside a searched continuation. The paying continuation must draw (the
+// second card, Wirewood Lodge #31) and its declining twin must not, in the rollout (recording the line) and in the
+// executor replaying that line.
+TEST_CASE("Leaf-Crowned Visionary: a breakpoint continuation's own pay-{G} pin pays, in BOTH worlds")
+{
+    GameState s = EBase();
+    s.players[0].library = Library{};
+    ELib(s, "Taunting Elf", 30);    // the base plan's paid draw: an Elf, cast in the continuation
+    ELib(s, "Wirewood Lodge", 31);  // the CONTINUATION's paid draw
+    for (int i = 0; i < 6; ++i) { ELib(s, "Forest", 900 + i); }
+    EForests(s, 4);                 // Llanowar + pay + Taunting Elf + pay
+    EPut(s, "Leaf-Crowned Visionary", 1);
+    EHand(s, "Llanowar Elves", 20);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    if (HumanPlayActive()) { CHECK(std::none_of(plans.begin(), plans.end(),
+        [](const TurnSolver::Plan& q) { return q.mihail_pay_choice.IsPinned(); })); return; }
+    const TurnSolver::Plan* paid = EFind(plans, [](const TurnSolver::Plan& q)
+    { return ECountCasts(q) == 1 && IsCast(q.actions[0], "Llanowar Elves") && q.mihail_pay_choice.Paid(0); });
+    REQUIRE(paid != nullptr);
+    // The breakpoint state the continuation list is enumerated at: the paid Llanowar cast, then an EMPTY
+    // continuation (Taunting Elf drawn, still in hand).
+    TurnSolver::Plan prefix = *paid;
+    prefix.bp_choice = TurnSolver::kBpEmptyChoice;
+    prefix.bp_all    = true;
+    GameState reached = s;
+    TurnSolver::ApplyPlan(reached, prefix, true);
+    REQUIRE(std::any_of(reached.players[0].hand.begin(), reached.players[0].hand.end(),
+                        [](const Card& c) { return c.m_number == 30; }));
+    const std::vector<TurnSolver::Plan> cands = TurnSolver::EnumerateBreakpointPlans(reached, true);
+    auto cont_of = [&](bool pay) -> int
+    {
+        for (std::size_t i = 0; i < cands.size(); ++i)
+        {
+            const TurnSolver::Plan& c = cands[i];
+            if (ECountCasts(c) != 1 || !IsCast(c.actions[0], "Taunting Elf")) { continue; }
+            if (c.mihail_pay_choice.Paid(0) == pay && (pay || !c.mihail_pay_choice.IsPinned()))
+            { return static_cast<int>(i); }
+        }
+        return -1;
+    };
+    for (const bool pay : { true, false })
+    {
+        CAPTURE(pay);
+        const int k = cont_of(pay);
+        REQUIRE(k >= 0);
+        TurnSolver::Plan recorded = *paid;
+        recorded.bp_at     = 0;
+        recorded.bp_choice = k;
+        GameState roll = s;
+        TurnSolver::ApplyPlanWithRecordsForTest(roll, recorded, true);
+        GameState real = s;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, recorded, true);
+        eng.TakeTurn(real, true, EResolveAll);
+        for (const GameState* g : { &roll, &real })
+        {
+            CAPTURE(g == &real);
+            CHECK(EN(*g, 20) != nullptr);   // Llanowar Elves
+            CHECK(EN(*g, 30) != nullptr);   // Taunting Elf, cast by the continuation
+            const bool drew_lodge = std::any_of(g->players[0].hand.begin(), g->players[0].hand.end(),
+                                                [](const Card& c) { return c.m_number == 31; });
+            CHECK(drew_lodge == pay);
+            CHECK(ETapped(*g) == (pay ? 4 : 3));
+        }
+    }
 }
 
 // ---- 7. CONCORDANT CROSSROADS: THE WORLD RULE ----------------------------------------------------------------
