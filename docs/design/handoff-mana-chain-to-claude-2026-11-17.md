@@ -296,6 +296,26 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**05:44 UTC 11-26:** pre-compaction checkpoint (the USER asked to compact).
+
+**Running.**
+- **maze2hg-perf successor (agent a2fef92a, opus, wip/maze2hg-perf):** at 258K, building a "fold" variant. It should hand off to logs/maze2hg-perf/maze2hg-perf-handoff2.md after the current step. Its A/B ran on the box lock; 3dffb8a9c is MTG_DEAD_CROSS_UNITS (W=2, a play change). When it reports, commit its report.md from the final message (git add -f).
+- **mill-k A/B:** started by me, queued on the box lock behind maze2hg. Marker build/scratch/mill-k/ab/DONE. My background waiter bi6dvbqg9 is on it. When DONE, start a fresh agent from logs/mill-k/mill-k-handoff.md (6212fc005) for summarize.py, slower.py d8/NC verdicts, and the K VERIFY repair (VERIFY perturbs play and reports armed_turns=0 under per-job K).
+
+**Ready to land.**
+- worldfire-ad, 4238d6010..5cbf34e20 on wip/worldfire-ad. It passes: net -2 over 43,200 games, units +0.12%; 6/7 slower games recover and 1 is clairvoyant.
+- maze2hg-perf c5c8877d9 (byte-identical cuts + MTG_DEAD_CROSS_PRICE), plus 3dffb8a9c / the fold if the successor's A/B passes.
+- Land them as ONE batch: a new branch off origin, cherry-pick, then join, wait, validate under hold (units + smoke/regression), accept GT, check_gt_logs, land.
+
+**USER questions open (data complete).**
+1. Turn K on fleet-wide? It is -109 net and lowers units nearly everywhere. Recommend shipping it with the MTG_KO_BOUNDARY_SIM soundness fix folded in, once the mill-k A/B confirms.
+2. Adopt SG50 together with K on CG/AL/DS? -17 / -17 at about flat units. Recommend only together with K.
+3. Should Creature Giving drop its beam? -61 / -37 at x1.40 units. SG50+K is the cheaper alternative.
+
+**Answered the USER:** Accomplished Alchemist references on e430cc585: 0 of 11 short, 3 faster.
+
+**NEXT after the above:** the gate-1125 queue (Treasure Hunt APPLY-DROP 4440, Dragons ORACLE-GAP 3747, Dragonstorm 1137), then Maze Summit 2HG g292, Cyclone d6, Hinata gi548 / gi33, prepay step 5.
+
 **05:17 UTC 11-26:** worldfire-ad PASSES and is ready to land (verdict at logs/worldfire-ad/ab_verdict.md, 5cbf34e20).
 - A/B: 43,200 paired games, net -2, units +0.12%, CPU +0.30%.
 - 7 slower games: 6 recover at d8 b0. Selesnya v2 gi178 does not (4 / 5 at d8), but MTG_NC_SEARCH=1 at play settings gives 5 / 5, so it is clairvoyant.
