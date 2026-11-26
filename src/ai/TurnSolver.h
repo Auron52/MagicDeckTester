@@ -3388,7 +3388,11 @@ public:
     // at `depth` under `cutoff`, a fresh leaf table, no budget), and how many kill-only turns it armed /
     // candidate rollouts it skipped on this thread (counted in every build, thread-local).
     // `budget_units` > 0 runs it under a finite budget that large (never spent), so `units` is reported.
-    struct KillOnlyTally { long long armed = 0; long long skipped = 0; long long units = 0; };
+    // verified / mismatches / bound: MTG_LEAF_KILL_ONLY_VERIFY's forked references on this thread (POSIX only).
+    struct KillOnlyTally { long long armed = 0; long long skipped = 0; long long units = 0;
+                           long long verified = 0; long long mismatches = 0; long long bound = 0; };
+    // Force MTG_LEAF_KILL_ONLY_VERIFY on/off for this thread (test hook; the env value still turns it on).
+    static void SetKillOnlyVerifyForTest(bool on);
     static int SimulateToEndForTest(const GameState& state, int depth, int max_turns, int cutoff,
                                     bool second_main, KillOnlyTally* tally = nullptr,
                                     long long budget_units = 0);
