@@ -227,6 +227,28 @@ opaque `plan` pointer for the group key. Nothing in generic enumeration changed.
 * **Signature key:** the autonomous plan-dedup signature did not key Genesis Wave's X, so the dedup kept ONE X per cast set (the first enumerated). ElvesProvider opts in to a `#WX` key (`DecisionProvider::PlanSignatureKeysWaveX`, `t_sig_wave_x` in TurnSolver.cpp), so the rule sees every X; every other deck's signature is byte-identical. OWED, for the USER: the same collapse is still live for Landfall and Selesnya Lifegain (their XCandidates offer the un-grown and the grown max, and first-enumerated wins, i.e. the un-grown one), a generic limiter by the core invariant; fixing it moves their play.
 * The definitive with/without A/B (Stage 5e/5f) is the coordinator's.
 
+## Claude-play sweep
+
+commit: `948933d6c` (benchmark d5 b200). seeds: 9500001..9500018 (disjoint from every suite tier; seed only --
+--game-index does not vary a --claude-play game). games: 18. Driver: 6 Opus player agents x 3 games (Claude session).
+Result: Claude faster 1 (s9500006, 4 vs 5), equal 17, slower 0. Rules / card-data violations: 0.
+Full per-seed tally, notes and repro CSVs: `logs/elves/sweep-tally.md`.
+
+Flags (each verified against cards.json + the rules skill; each became a fix branch -- see the coordinator checkpoints):
+1. fd-diverge s7036 (breakpoint resume reset the Visionary cast-trigger ordinal): FIXED `wip/elves-fd` bac7df0a2.
+2. Continuation casts' Visionary pay-{G} choice not pinned (ContPins): `wip/elves-contpin`.
+3. Genesis Wave puts open no re-solve, s9500006 misses T4 at every budget incl. d3 b0: `wip/elves-wavebp`.
+4. Immaculate Magistrate targets only the pre-cast battlefield (fixture mag4.json, lethal unfindable at b0):
+   `wip/elves-tapt`.
+5. Mana cluster (hasted scaled-dork credit 1; in-plan scaled yield; Marwyn prepay power; Lodge untap burst unused by
+   the payer; Cavern `wild` paid a non-creature cost): `wip/elves-mana`.
+6. Cosmetic labels (Clancaller "Merfolk", Visionary dig frame, Magistrate "X=0" / "+0/+0") and validate_line `act=`
+   for a card in hand: in `wip/elves-contpin`.
+Payer over-taps in human play (s9500002, s9500007, s9500014) are the standing mana-payment exemption, not flags.
+
+flags: 4 unresolved
+(2-6 open until their branches are merged onto wip/elves-analysis; this line is updated at the merge.)
+
 ## Stage 5 verification verdicts
 
 (pending)
