@@ -418,6 +418,116 @@ TEST_CASE("F3b lord cast: MTG_ATTACK_LORD_CAST=0 (the default) credits nothing f
                     [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Lord of Atlantis" }); }) == 4);
 }
 
+// ---- F3c: lords cast this turn pump the plan's own HASTY casts (unconditional) -------------------------
+// Elves d0 gi3558 (seed 9803559) T4, opponent at 18. Board: Priest of Titania and Elvish Archdruid (both
+// summoning-ready), Concordant Crossroads (all creatures have haste), three Forests. The plan {Elvish Clancaller,
+// Elvish Archdruid, Leaf-Crowned Visionary, Joraga Warcaller} costs 8; in the game the Forests and BOTH dorks paid,
+// so the board's attack (4) was gone, and the four hasty casts swung. Four lords on the battlefield then (two
+// Archdruids, Clancaller, Visionary; the unkicked Warcaller pumps nothing): each lord gets +3 from the other three,
+// the Warcaller +4 -- Archdruid 5, Clancaller 4, Visionary 4, Warcaller 5 = 18, lethal. The projection priced each
+// hasty cast with the PRE-PLAN board's one Archdruid only (proj_atk 9 at that payment, 11 at the grown supply), no
+// subset read as a win, and a higher-eval set won the turn. The exact pin is the lands-only board below (no dork
+// to pay, so no payment question): the same four casts, three lords pumping each other, 4 + 3 + 3 + 4 = 14.
+namespace
+{
+GameState ElfStackLandsBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Elvish Clancaller", "Elvish Archdruid", "Leaf-Crowned Visionary",
+                                    "Joraga Warcaller" });
+    Put(s, "Concordant Crossroads", 42);
+    for (int k = 0; k < 8; ++k) { Put(s, "Forest", 50 + k); }
+    return s;
+}
+GameState ElfStackBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Elvish Clancaller", "Elvish Archdruid", "Leaf-Crowned Visionary",
+                                    "Joraga Warcaller" });
+    Put(s, "Priest of Titania", 40);
+    Put(s, "Elvish Archdruid", 41);
+    Put(s, "Concordant Crossroads", 42);
+    for (int k = 0; k < 3; ++k) { Put(s, "Forest", 50 + k); }
+    return s;
+}
+bool ElfStack(const TurnSolver::Plan& p)
+{
+    if (!CastsOnly(p, { "Elvish Clancaller", "Elvish Archdruid", "Leaf-Crowned Visionary", "Joraga Warcaller" }))
+    { return false; }
+    for (const Action& a : p.actions) { if (a.kicked) { return false; } }
+    return true;
+}
+// Joraga Warcaller kicked twice ({G} + 2 x {1}{G} = 5, five Forests) under Concordant Crossroads, next to a
+// summoning-ready Llanowar Elves: it enters a hasty 3/3 (two counters) and the Llanowar is 1/1 + 2 = 3/3.
+GameState WarcallerBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Joraga Warcaller" });
+    Put(s, "Llanowar Elves", 40);
+    Put(s, "Concordant Crossroads", 41);
+    for (int k = 0; k < 5; ++k) { Put(s, "Forest", 50 + k); }
+    return s;
+}
+bool WarcallerKicked(const TurnSolver::Plan& p, int k)
+{
+    if (!CastsOnly(p, { "Joraga Warcaller" })) { return false; }
+    for (const Action& a : p.actions) { if (a.kind == Action::Kind::CastFromHand) { return a.kicked && a.kick_count == k; } }
+    return false;
+}
+// Galadhrim Brigade squadded once ({2}{G} + {1}{G} = 5) under Concordant Crossroads, no other creature: the
+// Brigade and its token copy are both hasty 2/2 lords, each +1/+1 from the other -- 3 + 3 = 6.
+GameState BrigadeBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Galadhrim Brigade" });
+    Put(s, "Concordant Crossroads", 41);
+    for (int k = 0; k < 5; ++k) { Put(s, "Forest", 50 + k); }
+    return s;
+}
+bool BrigadeSquad(const TurnSolver::Plan& p, int k)
+{
+    if (!CastsOnly(p, { "Galadhrim Brigade" })) { return false; }
+    for (const Action& a : p.actions) { if (a.kind == Action::Kind::CastFromHand) { return a.kicked && a.kick_count == k; } }
+    return false;
+}
+}
+
+TEST_CASE("F3c lord stack: lords cast in the same plan pump its hasty casts (Elves gi3558: 18, not 9)")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    // Exact: 14 (it read 5, the printed powers).
+    CHECK(Threshold([](int l) { return ElfStackLandsBoard(l, 0); }, ElfStack) == 14);
+    const TurnSolver::Plan g14 = GreedySolve(ElfStackLandsBoard(14, 0));
+    CHECK((g14.wins_this_turn && ElfStack(g14)));
+    CHECK_FALSE(GreedySolve(ElfStackLandsBoard(15, 0)).wins_this_turn);
+    // The gi3558 board: the lord stack now reads as lethal at 18 (it read 11 at best, and nothing won). The dork
+    // that pays is the projection's payment model, so this pins "a win", not the exact total.
+    CHECK(Threshold([](int l) { return ElfStackBoard(l, 1); }, ElfStack) >= 18);
+    const TurnSolver::Plan g = GreedySolve(ElfStackBoard(18, 1));
+    CHECK(g.wins_this_turn);
+    CHECK(CastsOnly(g, { "Elvish Clancaller", "Elvish Archdruid", "Leaf-Crowned Visionary", "Joraga Warcaller" }));
+}
+
+TEST_CASE("F3c lord stack: a kicked Warcaller is hasty and enters with its counters; the board pump is LORD_CAST's")
+{
+    EnsureCardsLoaded();
+    {
+        ArmScope arm({ { heurarm::ATTACK_LORD_CAST, 0 } });   // the default: the Llanowar stays 1
+        CHECK(Threshold([](int l) { return WarcallerBoard(l, 0); },
+                        [](const TurnSolver::Plan& p) { return WarcallerKicked(p, 2); }) == 4);
+    }
+    {
+        ArmScope arm({ { heurarm::ATTACK_LORD_CAST, 1 } });   // the Llanowar read 3 too
+        CHECK(Threshold([](int l) { return WarcallerBoard(l, 1); },
+                        [](const TurnSolver::Plan& p) { return WarcallerKicked(p, 2); }) == 6);
+    }
+}
+
+TEST_CASE("F3c lord stack: a squad's token copies are hasty lords too (Galadhrim Brigade x1: 6)")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    CHECK(Threshold([](int l) { return BrigadeBoard(l, 0); },
+                    [](const TurnSolver::Plan& p) { return BrigadeSquad(p, 1); }) == 6);
+}
+
 // ---- F4a: a spent dork loses its team-pump share too (MTG_ATTACK_TAP_REPROJECT) ------------------
 // Blossoming Bogbeast + Llanowar Elves attack: Bogbeast gains 2, then +2/+2 to each attacker -> 3 + 1
 // + 2 x 2 = 8. Elvish Mystic's {G} can only come from the Llanowar, which then cannot attack and gets
