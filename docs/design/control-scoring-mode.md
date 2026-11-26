@@ -265,9 +265,14 @@ For ONE control game paired with ONE gauntlet game g:
 
       E(g) = min over k = 0..n of  max(T_k, W - D_k(g)),   with T_0 = -infinity (so the k = 0 term is W)
 
-* **The deck's score:** `E = mean over (control game, paired gauntlet game) of E(g)`. Each control game is
-  paired with one gauntlet game (section 5.4), so this is a mean over games. It is not computed per deck from
-  averaged delays.
+* **The deck's score, partial at every level (USER 2026-11-26):** "Yeah, ideally it should be partial at every
+  level. We average the effect on each deck and then average those averages together." So:
+  1. per (control game, gauntlet game) pair, `E(g)` as above (floor and min applied per pair, never to averages;
+     section 4.4);
+  2. per gauntlet DECK d, `E_d = mean of E(g) over that deck's games`;
+  3. `E = mean over gauntlet decks d of E_d`, each deck weighted EQUALLY (USER, section 7.5).
+  Every level stays fractional. A single mean over all pairs equals this only when every deck has the same number
+  of games, so the two-level form is the definition. It is never computed from averaged delays.
 
 The USER asked for "<win turn - average control impact>", with the floor quoted in section 1. This exact form
 (the min over prefixes of `max(T_k, W - D_k)`, taken per pair) is a CANDIDATE proposed for this design, not a
@@ -439,7 +444,8 @@ one partial score per gauntlet deck, not one scalar credit.
   `P_g` is non-decreasing in W, and `P_g(W) <= W`. A line that delays deck 1 by three rounds and deck 2 by none
   has `P_1` well below `P_2`. That difference is the partial-ness the USER asked for, and averaging only at the
   end keeps it. Section 4.4's rule (floor and min per pair, then average) applies: the mapping supplies delays
-  per gauntlet GAME (at least 20 per deck), and `P_g` is the mean over those games. A per-deck histogram over
+  per gauntlet GAME (at least 20 per deck), and `P_g` is the mean over that deck's games. The line's score is then
+  the equal-weight mean of the per-deck `P_g` (section 4.1: partial at every level). A per-deck histogram over
   (base kill round, delay) is an equivalent compact form if the per-game vector is too large to carry at a node.
 * **A finished line's score** is `E = mean over g of P_g(W)`, with W its verified kill round, or the leaf or
   rollout estimate beyond the window.
@@ -617,7 +623,9 @@ Two passes per control game, no lockstep:
    `k` is replayed, so each `D_k(g)` is measured jointly, with stacking included. Since effects are causal,
    prefix k's game equals the full schedule's game up to round `T_{k+1}`, so n effects cost n replays that
    share a prefix, not n full games (a resume point after `T_k` would share the work).
-3. `E(g) = min_k max(T_k, W - D_k(g))`, averaged over games.
+3. `E(g) = min_k max(T_k, W - D_k(g))`, averaged within each gauntlet deck, then over decks with equal weight
+   (section 4.1). The `pool[seed % 50]` pairing must therefore be replaced or extended so that every
+   goldfish-enabled gauntlet deck gets at least 20 games.
 
 * **Targets:** hand and library effects name real cards (the passive opponent already holds g's real hand).
   Board effects use a target policy applied in the replay ("its largest creature"). The control deck commits
