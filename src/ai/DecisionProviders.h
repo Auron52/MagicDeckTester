@@ -3977,6 +3977,25 @@ public:
     bool PlanListFilterLive(const GameState& s) const override;
     void PlanListAdmitAt(const GameState& s, bool is_pre_combat, const std::vector<PlanView>& plans,
                          std::vector<char>& admit) const override;
+    // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h): Genesis Wave's put subset. THIS DECK'S POLICY IS
+    // "PUT EVERY LEGAL REVEAL", a SOUND DOMINANCE FOLD for this pool, not a judgement (2026-11-26, the coordinator):
+    // an unpicked reveal is MILLED, and every permanent card in the Elves list is weakly better on the battlefield --
+    // a land (Forest, Cavern of Souls, Wirewood Lodge: no drawback, none bounces), an Elf creature (no enter-trigger
+    // that destroys or sacrifices one of ours, no upkeep cost; every put Elf feeds Marwyn's counter and the scaled
+    // dorks' counts), or Concordant Crossroads. A duplicate legend (Marwyn, Ezuri) dies to the legend rule, which keeps
+    // the OLDEST copy (EnforceLegendRule), so the put copy only ADDS: its entry still triggers the surviving Marwyn.
+    // A second Crossroads: the world rule keeps one, the same state as "put one, mill the other". Nothing in the pool
+    // prices a thinner library or punishes an own creature entering or dying. So no subset beats "all", and this
+    // equals the engine's disclosed default on this pool (no etb_destroy_* creature) -- byte-identical play.
+    // Re-derive if the list gains a permanent with a drawback on entry. Human play still picks freely.
+    bool ImplementsRequiredHeuristic(RequiredHeuristic h) const override
+    { return h == RequiredHeuristic::GenesisWavePut; }
+    std::vector<int> GenesisWavePutPicks(const GameState&, int, const std::vector<Card>& candidates, int) const override
+    {
+        std::vector<int> all(candidates.size());
+        for (std::size_t i = 0; i < all.size(); ++i) { all[i] = static_cast<int>(i); }
+        return all;
+    }
 };
 
 // AccomplishedAlchemist (mono-green lifegain -> Accomplished Alchemist mana -> untappers -> Stroke of
