@@ -937,6 +937,8 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Companion")     { return Keyword::Companion; }
     if (s == "Champion")      { return Keyword::Champion; }   // inert tag; mechanic is param-modelled (champion_subtype)
     if (s == "Unearth")       { return Keyword::Unearth; }    // inert tag; mechanic is param-modelled  // inert tag; main-deck card, no companion zone
+    if (s == "Multikicker")   { return Keyword::Multikicker; } // inert tag; param-modelled (multikicker_cost)
+    if (s == "Squad")         { return Keyword::Squad; }       // inert tag; param-modelled (squad_cost)
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
