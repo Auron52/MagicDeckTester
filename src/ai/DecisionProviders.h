@@ -5206,11 +5206,11 @@ public:
     // A list that adds a cast-count payoff must drop both.
     void CalmingVerseVariants(const GameState& s, int controller, bool& keep, bool& sweep) const override
     {
-        (void)sweep;
         bool opposing = false;
         for (const Permanent& p : s.battlefield)
         { if (p.controller_index != controller && p.card.IsEnchantment()) { opposing = true; break; } }
         if (!opposing) { keep = false; }
+        if (LockPlayoutNow(s)) { sweep = false; }   // the lock playout never destroys its own lock (ruling 22)
     }
     //   * Force of Vigor on an OWN permanent of a class whose destruction cannot help (lock step 8a; FovOwnTargetInert,
     //     DecisionProviders.cpp, states the argument per class): every option holding one is dominated by the same
@@ -5219,6 +5219,9 @@ public:
     void DestroyUpToArtEnchTargetOptions(const GameState& s, int controller,
                                          std::vector<std::vector<int>>& options) const override
     {
+        // ...and in the LOCK PLAYOUT (USER ruling 22, LockPlayoutNow) no own target at all: the playout must keep the
+        // lock intact (a lock-safety restriction of the greedy finish, not a fold).
+        const bool lock_playout = LockPlayoutNow(s);
         options.erase(std::remove_if(options.begin(), options.end(),
                                      [&](const std::vector<int>& o)
                                      {
@@ -5228,7 +5231,8 @@ public:
                                              if (bi < 0 || bi >= static_cast<int>(s.battlefield.size())) { continue; }
                                              const Permanent& q = s.battlefield[static_cast<std::size_t>(bi)];
                                              if (q.controller_index == controller
-                                                 && FovOwnTargetInert(s, controller, q)) { return true; }
+                                                 && (lock_playout || FovOwnTargetInert(s, controller, q)))
+                                             { return true; }
                                          }
                                          return false;
                                      }),
@@ -5260,6 +5264,18 @@ public:
     // no Calming Verse is in our hand or library; every other class stays (DecisionProviders.cpp states why per class).
     std::vector<int> FadeExileCreatureTargets(const GameState& s, int controller, const Permanent& src,
                                               const std::vector<int>& legal) const override;
+    // ---- USER ruling 22 (2026-11-26): THE LOCK PLAYOUT (DecisionProvider::LockPlayoutNow; MTG_EE_LOCK_PLAYOUT, heurarm
+    // EE_LOCK_PLAYOUT, DEFAULT ON, USER-requested). *"Once we have the full lock we should just go off and win playing out
+    // via heuristic so that it is faster."* True while the free-turn lock is credited (in_free_turn) with Enchanted
+    // Evening AND Opalescence on our battlefield (ruling 1: "Enchanted Evening and Opalescence permanently locks the
+    // lands"; the credit itself already carries the fairness check). A Calming Verse + Enchanted Evening credit is NOT
+    // the full lock (ruling 5) and stays searched. While true, the provider keeps the greedy finish lock-safe: no Wave
+    // exile of our own permanents (FadeExileCreatureTargets), no Force of Vigor on our own permanents
+    // (DestroyUpToArtEnchTargetOptions), no Calming Verse SWEEP-SELF (CalmingVerseVariants), and Oblivion Ring's forced
+    // own target never a lock piece while another exists (EtbExileNonlandTargetPick). Definitions in
+    // DecisionProviders.cpp ("EnchantedEveningProvider: the lock playout").
+    bool LockPlayoutNow(const GameState& s) const override;
+    int EtbExileNonlandTargetPick(const GameState& s, int controller, const std::vector<int>& legal) const override;
     // Utopia Sprawl's colour axis held to {G, W} (lock step 8b; a SOUND dominance prune, re-checked at runtime over
     // our cards; DecisionProviders.cpp, EeSprawlProofBreaks).
     std::vector<int> EtbChoiceCandidates(const GameState& s, int controller, const CardDefinition& def) const override;

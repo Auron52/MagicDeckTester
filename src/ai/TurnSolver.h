@@ -2382,12 +2382,20 @@ public:
     // names one of a CLOSED list of sites, each of which is OUTSIDE every search window:
     //   HorizonLeaf -- a playout turn BEYOND the search horizon (remaining depth <= 0);
     //   D0Runner    -- the depth-0 executor (an engine with no search at all: lookahead depth 0).
+    //   LockPlayout -- USER-AUTHORIZED (Enchanted Evening ruling 22, 2026-11-26: *"Once we have the full lock we should
+    //                  just go off and win playing out via heuristic so that it is faster."* / *"(just like with out
+    //                  Combo Out situations)"*): the executor plays a turn of a CREDITED FULL LOCK with the depth-0
+    //                  runner (DecisionProvider::LockPlayoutNow; AIEngine::SyncLockPlayout drops the engine's depth to
+    //                  0 for that turn and marks it live, TurnSolver::LockPlayoutLive). The search side needs no site:
+    //                  it ends its window there (FSLineWin returns the depth-0 playout), so its greedy picks are the
+    //                  ordinary HorizonLeaf playout at remaining depth 0. Documented in
+    //                  docs/design/no-greedy-in-search-window.md.
     // The constructor ABORTS the process if the claim is false (depth left), so a regression dies in
     // the first smoke run instead of silently shaping play. The static_assert below locks the list:
     // adding a site means editing it, next to this note. DO NOT add a "diagnostic" or "cheap" site --
     // a cost problem is answered by provider pruning or budget, never by a greedy substitute.
     // ============================================================================================
-    enum class GreedySite : int { HorizonLeaf = 0, D0Runner = 1, kCount = 2 };
+    enum class GreedySite : int { HorizonLeaf = 0, D0Runner = 1, LockPlayout = 2, kCount = 3 };
     class GreedyPermit
     {
     public:
@@ -2402,9 +2410,13 @@ public:
     private:
         const bool m_d0;
     };
-    static_assert(static_cast<int>(GreedySite::kCount) == 2,
+    // LockPlayout was added WITH the USER (ruling 22, 2026-11-26); the list stays closed.
+    static_assert(static_cast<int>(GreedySite::kCount) == 3,
                   "USER HARD RULE 2026-09-30: no new greedy site inside the search window -- "
                   "see docs/design/no-greedy-in-search-window.md before touching this list");
+    // The executor's lock-playout extent (AIEngine::SyncLockPlayout): a GreedyPermit(LockPlayout) aborts outside it.
+    static void SetLockPlayoutLive(bool live);
+    static bool LockPlayoutLive();
 
     // Returns the highest-value feasible plan for one main phase by a static evaluation (no
     // lookahead) -- GREEDY: only with a permit (above).

@@ -58,12 +58,47 @@ What the rule means in practice:
 
 - **Compile time.** `TurnSolver::Solve()` and `SolveUncached()` take a required
   `TurnSolver::GreedyPermit`, so no call compiles without one.
-- **A closed list of sites.** A permit names a `GreedySite` from a closed enum: `HorizonLeaf` and
-  `D0Runner`. A `static_assert` pins the enum's size, so adding a site means editing the assert,
-  which sits next to the rule. There is deliberately no "diagnostic" site.
+- **A closed list of sites.** A permit names a `GreedySite` from a closed enum: `HorizonLeaf`,
+  `D0Runner` and (USER-authorized 2026-11-26, below) `LockPlayout`. A `static_assert` pins the enum's
+  size, so adding a site means editing the assert, which sits next to the rule. There is deliberately
+  no "diagnostic" site.
 - **Run time.** The permit constructor **aborts the process** if remaining depth is > 0. The check is
   in every build, not an `assert` that vanishes under NDEBUG. A regression dies in the first smoke
   run.
+
+## USER-authorized site: `LockPlayout` (Enchanted Evening ruling 22, 2026-11-26)
+
+The USER, verbatim: *"Once we have the full lock we should just go off and win playing out via heuristic so that it
+is faster."* and *"(just like with out Combo Out situations)"*. Ledger: `docs/design/analysis-Enchanted Evening.md`,
+ruling 22.
+
+* **When.** `DecisionProvider::LockPlayoutNow(state)`. Only `EnchantedEveningProvider` returns true: the free-turn lock
+  was CREDITED (`GameState::in_free_turn`: the opponent's last regular turn ended with the board lock and no fairness
+  veto, `freeturn::LockHolds`) AND Enchanted Evening and Opalescence are on our battlefield (ruling 1's full lock; a
+  Calming Verse + EE credit is ruling 5's temporary lock and stays searched). Lever `MTG_EE_LOCK_PLAYOUT` (heurarm
+  `EE_LOCK_PLAYOUT`), DEFAULT ON because the USER asked for it; `=0` is the A/B arm. Never in human play.
+* **Search world (no new site).** The ruling ENDS the search window at such a turn: `FSLineWin` returns the depth-0
+  playout of the rest of the game, the rollout plays that turn at depth 0 (`SimulateToEndImpl`'s `turn_depth`), and a
+  lock turn takes no free-turn depth give-back (`GivesRoundBack`). The greedy picks inside that playout are the
+  ordinary `HorizonLeaf` playout at remaining depth 0, inside a depth-0 frame, so the gate's depth check holds
+  literally. What is USER-authorized is the truncation of the window itself.
+* **Executor world (`GreedySite::LockPlayout`).** `AIEngine::SyncLockPlayout`, called by `GameEngine::RunTurnFrom`
+  right after each turn-counter step, drops the engine's depth to 0 for a lock turn (and the opponent's following
+  turn, over which `in_free_turn` persists) and restores it at the first turn that starts without the lock. While
+  live, the depth-0 runner's three `Solve()` sites take a `LockPlayout` permit, which ABORTS unless
+  `TurnSolver::LockPlayoutLive()` (set by the sync) is true, in every build.
+* **Why not a `ComboRoute` action.** The ComboRoute contract is one standalone main-phase action, emitted only when
+  its trial kills THIS turn. A lock finish spans several of our turns (EE 5/5 + Wave 4/4 against 20 life), with
+  combat, end steps and the opponent's turns between them, so it does not fit one action; the closest existing
+  multi-turn shape is the beyond-the-horizon playout, which is what is reused. Under the credited lock every further
+  own turn shares the round, so a playout that keeps the lock and kills scores the current round, which no line can
+  beat (the same dominance argument as a verified go-off).
+* **Lock safety lives in the provider (restrict only).** While `LockPlayoutNow`: no Parallax Wave exile of our own
+  permanents, no Force of Vigor on our own permanents, no Calming Verse SWEEP-SELF, and Oblivion Ring's forced own
+  target is a non-lock permanent while one exists. The 2026-11-26 d0 probe showed why: the depth-0 policy Waved our own
+  Enchanted Evening on the credited turn (8000 gi=80, 10000 gi=65), the opponent's lands lived and the round advanced.
+* **The idle pass.** Unchanged: the playout picks from the same full menus (the idle pass included); nothing is
+  removed from a menu, the search simply does not branch past the credited lock.
 
 ## Deleted in this change
 

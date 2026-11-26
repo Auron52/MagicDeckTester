@@ -23270,6 +23270,31 @@ inline void ResolveDestroyUpToArtEnch(GameState& state, int controller, const Ca
                       "\xF0\x9F\x92\x80 " + src + (names.empty() ? std::string(": destroys nothing")
                                                                 : ": destroys " + names));
     }
+    // ...and the game trace (EE step 8c trace gap: a main-phase Force of Vigor's targets were in no trace; only the
+    // end-step pitch logged them). Real resolution only (g_reveal_logger is null in the search); LOG ONLY, not folded
+    // into the play digest.
+    if (g_reveal_logger != nullptr && !g_tap_speculating)
+    {
+        std::string what;
+        for (int num : live)
+        {
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.card.m_number != num) { continue; }
+                if (!what.empty()) { what += ", "; }
+                what += (q.controller_index == controller ? "own " : "opp ") + q.card.m_name.str()
+                      + "#" + std::to_string(num);
+                break;
+            }
+        }
+        for (const std::pair<int, int>& v : vlive)
+        {
+            const CardDefinition* d = eefair::DefOfBit(state, v.first, v.second);
+            if (!what.empty()) { what += ", "; }
+            what += "virtual " + (d ? d->card.m_name.str() : std::string("card"));
+        }
+        g_reveal_logger->LogAbility(0, src, what.empty() ? std::string("destroys nothing") : "destroys " + what, false);
+    }
     for (const std::pair<int, int>& v : vlive) { eefair::Clear(state, v.first, 1ull << v.second); }
     if (live.empty()) { return; }
     std::vector<DestroyedTogether> gone;

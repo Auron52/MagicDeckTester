@@ -1136,6 +1136,7 @@ enum Slot : int
     EE_USER_PRUNE,            // MTG_EE_USER_PRUNE  Enchanted Evening (USER rulings 15 / 16, 2026-11-25/26; EnchantedEveningProvider): no second Sterling Grove onto the battlefield while one stays (except a plan that sacrifices one for its tutor), and the Grove / Idyllic Tutor targets limited to missing lock pieces (EE, Opalescence, Parallax Wave), one mana Aura while mana is short, then Enchantress's Presence. Default ON (USER-requested prune); =0 -> the unrestricted search (the A/B arm; adoption is the USER's)
     EE_GROVE_PRELOCK,         // MTG_EE_GROVE_PRELOCK  AMENDMENT ARM of MTG_EE_USER_PRUNE (the USER's "maybe we'll need an exception prior to the full combo being assembled"): while Enchanted Evening is not on our battlefield and an Opalescence is ours or in hand, a second Sterling Grove may be cast and Sterling Grove is a tutor target (ordered last) -- the Grove as a 2/2 Opalescence attacker; and (2026-11-26, seed 10000 gi=50) with an Opalescence ON our battlefield and none in hand, a second Opalescence is a tutor target after the missing lock pieces (the two animate each other as 4/4s). Default OFF (the USER's call); inert while the prune is off
     FREE_TURN_EE_FAIR,        // MTG_FREE_TURN_EE_FAIR  Enchanted Evening lock step 6 (USER rulings 5, 6, 8-13, 17): the free-turn fairness check's VIRTUAL BOARD -- the nonland permanents the opponent could have cast with its lands since the game began or the last Calming Verse wipe veto the lock (eefair::, SpellEffects.h). Default ON (USER-requested); =0 -> no virtual board (the A/B arm)
+    EE_LOCK_PLAYOUT,          // MTG_EE_LOCK_PLAYOUT  Enchanted Evening USER ruling 22 (2026-11-26: "Once we have the full lock we should just go off and win playing out via heuristic so that it is faster."): once the free-turn lock is credited with Enchanted Evening + Opalescence ours (EnchantedEveningProvider::LockPlayoutNow), the search stops branching -- the rest of the game is the greedy playout (search: FSLineWin / the rollout play that turn at depth 0; executor: the depth-0 runner under GreedySite::LockPlayout), with the provider's lock-safety restrictions. Default ON (USER-requested); =0 -> the free turns are searched (the A/B arm)
     COUNT
 };
 
@@ -2216,6 +2217,7 @@ inline const char* Name(int slot)
         "MTG_EE_USER_PRUNE",
         "MTG_EE_GROVE_PRELOCK",
         "MTG_FREE_TURN_EE_FAIR",
+        "MTG_EE_LOCK_PLAYOUT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -39509,6 +39509,19 @@ std::vector<int> EnchantedEveningProvider::FadeExileCreatureTargets(const GameSt
                                                                     const std::vector<int>& legal) const
 {
     (void)src;
+    if (LockPlayoutNow(s))
+    {
+        // THE LOCK PLAYOUT (USER ruling 22; below): opponent targets only -- the greedy finish never exiles its own
+        // permanent (2026-11-26 d0 probe, ho gi=80 / hb gi=65: the depth-0 policy Waved our own Enchanted Evening on
+        // the credited turn, the opponent's lands lived and the round advanced).
+        std::vector<int> opp;
+        for (int ti : legal)
+        {
+            if (ti >= 0 && ti < static_cast<int>(s.battlefield.size())
+                && s.battlefield[static_cast<std::size_t>(ti)].controller_index != controller) { opp.push_back(ti); }
+        }
+        return opp;
+    }
     if (HumanPlayActive() || DecisionUnpruned()) { return legal; }
     const Player& pl = s.players[static_cast<std::size_t>(controller)];
     auto verse = [](const Card& c)
@@ -39535,6 +39548,60 @@ std::vector<int> EnchantedEveningProvider::FadeExileCreatureTargets(const GameSt
         out.push_back(ti);
     }
     return out;
+}
+
+// EnchantedEveningProvider: THE LOCK PLAYOUT (USER ruling 22, 2026-11-26; MTG_EE_LOCK_PLAYOUT, heurarm EE_LOCK_PLAYOUT,
+// DEFAULT ON, USER-requested). The USER: *"Once we have the full lock we should just go off and win playing out via
+// heuristic so that it is faster."* / *"(just like with out Combo Out situations)"*.
+//   THE FULL LOCK = the free-turn lock CREDITED (GameState::in_free_turn: the opponent's last regular turn ended with the
+//   board lock and no fairness veto, freeturn::LockHolds / eefair::Veto) AND Enchanted Evening AND Opalescence on our
+//   battlefield (ruling 1: "Enchanted Evening and Opalescence permanently locks the lands"). A credit from Calming Verse +
+//   Enchanted Evening alone is the temporary lock of ruling 5 ("not a full lock"): no clock, the next land breaks it, and
+//   the 2026-11-26 d0 probe lost four of those games when they were played out greedily -- so it stays searched.
+//   Under the full lock every further own turn shares the ROUND (free turns), so the game's win turn is the current round
+//   as long as the playout keeps the lock and kills: Enchanted Evening 5/5, Parallax Wave 4/4 and the other non-Aura
+//   enchantments (P/T = MV) attack a passive opponent with no permanents. The lock-safety restrictions (the header lists
+//   them) are what keeps that true: the greedy finish never removes its own permanent.
+bool EnchantedEveningProvider::LockPlayoutNow(const GameState& s) const
+{
+    if (!s.in_free_turn || HumanPlayActive() || !EeLockPlayoutOn()) { return false; }
+    bool ee = false, opal = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        ee = ee || eeprune::IsEE(d);
+        opal = opal || eeprune::IsOpal(d);
+    }
+    return ee && opal;
+}
+
+// Oblivion Ring's MANDATORY exile in the lock playout: the default ladder (an opponent permanent first, else our least
+// costly) unless it would take a LOCK PIECE (Enchanted Evening, Opalescence, Parallax Wave) of ours while a non-lock
+// permanent is also legal -- then the least costly non-lock one. A beyond-horizon order of the playout only.
+int EnchantedEveningProvider::EtbExileNonlandTargetPick(const GameState& s, int controller,
+                                                        const std::vector<int>& legal) const
+{
+    const int base = DeckProvider::EtbExileNonlandTargetPick(s, controller, legal);
+    if (!LockPlayoutNow(s) || base < 0 || base >= static_cast<int>(legal.size())) { return base; }
+    auto lock_piece = [&](int bi)
+    {
+        if (bi < 0 || bi >= static_cast<int>(s.battlefield.size())) { return false; }
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(bi)];
+        if (q.controller_index != controller) { return false; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        return eeprune::IsEE(d) || eeprune::IsOpal(d) || eeprune::IsWave(d);
+    };
+    if (!lock_piece(legal[static_cast<std::size_t>(base)])) { return base; }
+    int best = -1, best_mv = 1 << 30;
+    for (std::size_t k = 0; k < legal.size(); ++k)
+    {
+        if (lock_piece(legal[k])) { continue; }
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(legal[k])];
+        const int mv = q.card.m_mana_cost.ManaValue();
+        if (mv < best_mv) { best = static_cast<int>(k); best_mv = mv; }
+    }
+    return best >= 0 ? best : base;
 }
 
 // UTOPIA SPRAWL's colour axis restricted to {G, W} (lock step 8b, 2026-11-26; a SOUND dominance prune on the

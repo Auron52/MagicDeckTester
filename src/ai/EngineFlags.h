@@ -73,6 +73,15 @@ inline bool FreeTurnEeFairOn()
     static const bool on = EnvOn("MTG_FREE_TURN_EE_FAIR", true);   // DEFAULT ON; =0 disables the virtual board
     return heurarm::Flag(heurarm::FREE_TURN_EE_FAIR, on);   // per-job arm (one pooled A/B batch)
 }
+// MTG_EE_LOCK_PLAYOUT (DEFAULT ON, USER-requested; USER ruling 22, 2026-11-26: "Once we have the full lock we should just
+// go off and win playing out via heuristic so that it is faster." / "(just like with out Combo Out situations)"). Read by
+// BOTH worlds through DecisionProvider::LockPlayoutNow (TurnSolver's search / rollout, AIEngine's executor), hence one
+// reader here. =0 -> the credited free turns are searched as before (the A/B arm).
+inline bool EeLockPlayoutOn()
+{
+    static const bool on = EnvOn("MTG_EE_LOCK_PLAYOUT", true);   // DEFAULT ON (USER ruling 22); =0 searches the free turns
+    return heurarm::Flag(heurarm::EE_LOCK_PLAYOUT, on);   // per-job arm (one pooled A/B batch)
+}
 // MTG_OPP_BOUNCE_OPENING (DEFAULT ON since the fourth pass, USER ruling below; a play change for EVERY game against a
 // Karoo / Lake of the Dead list; =0 restores the unchanged opening hand).
 // USER 2026-11-22: "we shouldn't be playing a bounceland first if we don't have an existing land unless forced by what

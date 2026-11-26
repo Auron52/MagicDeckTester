@@ -273,6 +273,9 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         // ++turn_number, or (a pending extra turn) ++extra_turns_taken with the round unchanged.
         // Lockstep twin: SimulateEndAndStartNextTurn. Identical to ++turn_number for every other deck.
         state.AdvanceTurnCounter();
+        // USER ruling 22 (Enchanted Evening): a turn of a credited full lock is played by the depth-0 runner, until a
+        // turn starts without it (AIEngine::SyncLockPlayout; a no-op for every other deck).
+        m_ai.SyncLockPlayout(state);
         // play-event turn_seq stamp (GameLogger.h): turns taken beyond the round, extra AND free turns.
         g_play_extra_turns_taken = state.extra_turns_taken + state.free_turns_taken;
         freeturn::EmitFreeTurnEvent(state);   // a no-op unless this turn is a free turn (MTG_FREE_TURNS)
@@ -766,7 +769,23 @@ std::vector<std::pair<int, std::string>> GameEngine::UpkeepTutorOptions(const Ga
 
 bool GameEngine::CastUpkeepTutor(GameState& state, int hand_number, const std::string& target)
 {
+    // The upkeep-window Sterling Grove activation (a battlefield SOURCE, not a hand card) wrote nothing to the game
+    // trace: the Grove vanished and the tutored card was simply drawn (EE step 8c trace gap). Log it the way the
+    // main-phase activation is logged -- LOG ONLY, not folded into the play digest, so every fingerprint stays put.
+    std::string grove_name;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number == hand_number && p.controller_index == state.active_player_index)
+        { grove_name = p.card.m_name.str(); break; }
+    }
     if (!m_ai.CastUpkeepTutor(state, hand_number, target)) { return false; }
+    if (m_logger != nullptr && !grove_name.empty())
+    {
+        // No phase is open in the upkeep: DrawStep writes it as the DRAW phase's first action.
+        m_upkeep_ability_num  = hand_number;
+        m_upkeep_ability_src  = grove_name;
+        m_upkeep_ability_note = "upkeep: sacrifice, tutor " + target + " to the top";
+    }
     ResolveStack(state);
     if (UpkeepFloatClearEnabled())
     { CrossManaBoundary(state, state.active_player_index); }
@@ -1050,6 +1069,11 @@ void GameEngine::DrawStep(GameState& state)
         std::vector<int> hand, gy, staged;
         CollectBoardState(state, bf, hand, obf, gy, staged);
         m_logger->StartPhase(state.turn_number, "DRAW", state.in_extra_turn ? state.extra_turns_taken : 0);
+        if (!m_upkeep_ability_note.empty())
+        {
+            m_logger->LogAbility(m_upkeep_ability_num, m_upkeep_ability_src, m_upkeep_ability_note, /*fold_digest=*/false);
+            m_upkeep_ability_note.clear();
+        }
         if (draw.drew) { m_logger->LogDraw(draw.card_number, draw.card_name); }
         m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged, PhaseLibraryTop(state));
     }
@@ -1082,6 +1106,7 @@ bool GameEngine::AdvanceToFirstMainForTest(GameState& state)
     if (OpponentHasLost(state)) { return true; }
     if (state.player_lost_on_draw) { return false; }
     state.AdvanceTurnCounter();
+    m_ai.SyncLockPlayout(state);   // as RunTurnFrom (USER ruling 22)
     UntapStep(state);
     UpkeepStep(state);
     if (state.player_lost_on_draw) { return false; }

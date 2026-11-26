@@ -76,6 +76,11 @@ private:
     AIEngine&    m_ai;
     GameLogger*  m_logger = nullptr;
     int          m_stop_after_turn = 0;   // SetStopAfterTurn
+    // An upkeep-window Sterling Grove activation's trace line, written when the DRAW phase opens (the logger has no
+    // phase open during the upkeep). Log only; never folded into the play digest.
+    std::string  m_upkeep_ability_note;
+    int          m_upkeep_ability_num = 0;
+    std::string  m_upkeep_ability_src;
 
     void RunTurn(GameState& state);
     void RunTurnFrom(GameState& state, ResumeAt from);

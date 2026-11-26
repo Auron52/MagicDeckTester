@@ -4053,8 +4053,13 @@ struct FreeTurnTrueD0Scope
     FreeTurnTrueD0Scope& operator=(const FreeTurnTrueD0Scope&) = delete;
 };
 // The depth give-back test of both sites: an extra turn always, a free turn unless the standing pass is running.
+// THE LOCK PLAYOUT (USER ruling 22, DecisionProvider::LockPlayoutNow): a credited full lock ends the search window --
+// such a turn is played at depth 0 by every host (FSLineWin returns the playout; the rollout plays it at depth 0), so it
+// takes no give-back either. in_free_turn first: false for every deck without the lock trait (no provider call).
+static inline bool LockPlayoutHere(const GameState& s)
+{ return s.in_free_turn && ResolveProvider(s).LockPlayoutNow(s); }
 static inline bool GivesRoundBack(const GameState& s)
-{ return s.in_extra_turn || (s.in_free_turn && ftstand::t_true_d0 == 0); }
+{ return s.in_extra_turn || (s.in_free_turn && ftstand::t_true_d0 == 0 && !LockPlayoutHere(s)); }
 static bool FreeTurnStandOn()
 {
     static const bool on = EnvOn("MTG_FREE_TURN_STAND", true);   // DEFAULT ON (a re-price); =0 the unbounded pass 0
@@ -63536,9 +63541,19 @@ TurnSolver::GreedyPermit::~GreedyPermit()
     if (m_d0) { --g_d0_permit_nest; }
 }
 
+// The executor's LOCK PLAYOUT extent (USER ruling 22; AIEngine::SyncLockPlayout sets it while its depth is dropped to 0
+// for a credited full lock). Thread-local: one engine per worker thread.
+static thread_local bool t_lock_playout_live = false;
+void TurnSolver::SetLockPlayoutLive(bool live) { t_lock_playout_live = live; }
+bool TurnSolver::LockPlayoutLive() { return t_lock_playout_live; }
+
 TurnSolver::GreedyPermit::GreedyPermit(GreedySite site, int remaining_depth)
-    : m_d0(site == GreedySite::D0Runner)
+    : m_d0(site == GreedySite::D0Runner || site == GreedySite::LockPlayout)
 {
+    // LockPlayout (USER ruling 22) is the depth-0 runner playing a credited full lock: valid ONLY inside the executor's
+    // lock-playout extent. Fatal otherwise, in every build -- the same tripwire as a false depth claim.
+    if (site == GreedySite::LockPlayout && !t_lock_playout_live)
+    { greedywindow::Trip("GreedyPermit(LockPlayout) outside the lock playout", remaining_depth); }
     if (m_d0)
     {
         ++g_d0_permit_nest;             // TurnSolver::InD0Runner() for the permit's extent
@@ -63566,7 +63581,8 @@ TurnSolver::GreedyPermit::GreedyPermit(GreedySite site, int remaining_depth)
     // assert that vanishes under NDEBUG: a false claim is the forbidden in-window greedy pick.
     // This is the ONE check: Solve/SolveUncached cannot be entered without constructing a permit.
     greedywindow::Require(site == GreedySite::HorizonLeaf ? "GreedyPermit(HorizonLeaf)"
-                                                          : "GreedyPermit(D0Runner)",
+                          : site == GreedySite::D0Runner  ? "GreedyPermit(D0Runner)"
+                                                          : "GreedyPermit(LockPlayout)",
                           remaining_depth);
 }
 
@@ -114680,13 +114696,16 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // roll_entry_extra is false for every other deck: identity.
         static const bool s_et_chain_true_d0 = EnvOn("MTG_ET_CHAIN_TRUE_D0", true); // DEFAULT ON; =0 disables
         static const bool s_et_rollout_true_d0 = EnvOn("MTG_ET_ROLLOUT_TRUE_D0", true); // DEFAULT ON; =0 disables
-        const int turn_depth = ((chain_only && s_et_chain_true_d0)
+        int turn_depth = ((chain_only && s_et_chain_true_d0)
                                 || (s_et_rollout_true_d0 && !chain_only && depth == 0
                                     && roll_entry_extra && state.turn_number == roll_start
                                     && ResolveProvider(state).ExtraTurnChainWalkEnabled())) ? 0
                              : ((first_turn_depth >= 0 && state.turn_number == roll_start)
                                 ? first_turn_depth
                                 : depth + ((roll_entry_extra && state.turn_number == roll_start) ? 1 : 0));
+        // THE LOCK PLAYOUT (USER ruling 22): a turn of a credited full lock is played at depth 0 -- the greedy finish.
+        const bool lock_turn = LockPlayoutHere(state);
+        if (lock_turn) { turn_depth = 0; }
         t_echo_rollout_turn_depth = turn_depth;   // the echo census's playout test (NoteEchoUncoveredSearch)
         static const bool s_et_rollout_preland = EnvOn("MTG_ET_ROLLOUT_PRELAND", true); // DEFAULT ON; =0 disables
         if (s_et_rollout_preland && turn_depth <= 0 && !chain_only && chain_steps == nullptr
@@ -114917,7 +114936,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             // M2 FIXPOINT re-passes (interior twin; see ApplySecondMainInSearch): the apply above
             // fired a breakpoint, so freshly drawn cards may sit castable behind untapped mana.
             if (m2fix_here && g_bp_fired_last > 0
-                && ApplySecondMainInSearch(state, depth, max_turns, budget, second_main, tt,
+                && ApplySecondMainInSearch(state, lock_turn ? 0 : depth, max_turns, budget, second_main, tt,
                                            /*in_rollout=*/true))
             { leafeval::Publish(leafeval::kInvalid); leafeval::t_inf = state.inf_life_turn;
               return state.turn_number; }
@@ -123356,6 +123375,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     const pastcut::CutFrame _pcf(cutoff);   // MTG_FSL_PASTCUT_PROBE: this node's cutoff, for FSLineStoreWin
     const LandTwinNodeFrame _ltnf(state);   // P5b-3: this node's cut watermark, for FSLineStoreWin (fold live only)
     if (state.TurnSeqCapped(max_turns)) { return { max_turns + 1, {} }; }   // extra-turn chain backstop (inert elsewhere)
+    // THE LOCK PLAYOUT (USER ruling 22, 2026-11-26: "Once we have the full lock we should just go off and win playing out
+    // via heuristic so that it is faster."): at a turn of a CREDITED FULL LOCK (DecisionProvider::LockPlayoutNow) the
+    // search window ends -- the node's value is the depth-0 playout of the rest of the game (every further turn of the
+    // lock shares this round, so a playout that keeps the lock and kills scores this round). Not the value leaf: the
+    // USER asked for the playout. No committed phases (the executor plays these turns with the depth-0 runner itself).
+    if (depth > 0 && LockPlayoutHere(state))
+    {
+        GameState leaf = state;
+        const int w = SimulateToEnd(std::move(leaf), /*depth=*/0, max_turns, budget, cutoff, second_main, tt);
+        return { w, {} };
+    }
     const unsigned long long dvs_latent_at_entry = g_devseq_latent_n;   // MTG_BP_DEV_SEQ: see DvsDirty below
     const unsigned long long dvs_hard_at_entry = g_devseq_hard_n;       // ...and its non-canon-drop part (DevSeqDeferredP2)
     // MTG_DEV_SEQ_TAIL_SKIP: this node's earliest-latent-turn scope and its completeness watermarks (see DvsDirty).

@@ -1094,6 +1094,7 @@ void AIEngine::SetSearchSettings(int lookahead_depth, int budget_ms)
 
 void AIEngine::OnGameEnd(const GameState& state, int win_turn)
 {
+    EndLockPlayout();   // USER ruling 22: a game's lock playout never outlives it
     if (!s_fd_oracle) { return; }
     // win_turn <= 0 means the game ended without a win (loss / timeout).
     const int realized = win_turn > 0 ? win_turn : m_max_turns + 1;
@@ -1128,6 +1129,7 @@ void AIEngine::OnGameEnd(const GameState& state, int win_turn)
 
 void AIEngine::HandleMulligan(GameState& state, int max_turns)
 {
+    EndLockPlayout();   // a new game starts searched (a voided previous game skipped OnGameEnd)
     Player& ap = state.ActivePlayer();
 
     // Stamp this engine's required combo pieces onto the state so the search rollout's
@@ -2180,9 +2182,51 @@ int AIEngine::RolloutWinTurn(GameState trial, int max_turns, int* lands_out)
 // took three separate bug hunts -- the last of them costing two full turns on TH s3304 gi301,
 // unrecoverable at depth 8 / budget 60000 -- to fix them one at a time. A fourth site added later
 // needs the same clear. See docs/design/th-colourless-first-s3003-gi301.md §7.6.
+void AIEngine::SyncLockPlayout(const GameState& state)
+{
+    const bool want = !m_external_chooser && ResolveProvider(state).LockPlayoutNow(state);
+    if (want && !m_lock_playout)
+    {
+        if (m_lookahead_depth <= 0) { return; }   // already the depth-0 runner: nothing to change
+        m_lock_playout_saved_depth = m_lookahead_depth;
+        m_lookahead_depth = 0;
+        m_lock_playout = true;
+        m_committed_line.clear();   // a searched line's later phases are not replayed by the playout
+        TurnSolver::SetLockPlayoutLive(true);
+    }
+    else if (!want && m_lock_playout) { EndLockPlayout(); }
+}
+
+void AIEngine::EndLockPlayout()
+{
+    if (!m_lock_playout) { return; }
+    m_lookahead_depth = m_lock_playout_saved_depth;
+    m_lock_playout = false;
+    TurnSolver::SetLockPlayoutLive(false);
+}
+
 int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
                                  GameEngine::ResumeAt from, int* lands_out)
 {
+    // A trial game shares this engine: it starts outside any lock playout of the game in progress and restores that
+    // game's mode afterwards (the trial's own turns sync their own).
+    const bool lp_saved = m_lock_playout;
+    if (lp_saved) { EndLockPlayout(); }
+    struct LockPlayoutRestore
+    {
+        AIEngine& e; bool was;
+        ~LockPlayoutRestore()
+        {
+            e.EndLockPlayout();
+            if (was)
+            {
+                e.m_lock_playout_saved_depth = e.m_lookahead_depth;
+                e.m_lookahead_depth = 0;
+                e.m_lock_playout = true;
+                TurnSolver::SetLockPlayoutLive(true);
+            }
+        }
+    } _lpr{ *this, lp_saved };
     RevealLogPause _rlp;  // rollout: suppress scry/dig reveal logging (real play only)
     HumanPlaySuppress _hps;  // rollout: play autonomously even under --claude-play (bottoming/keep parity)
     // Census `probe` column (TurnCensus.h). This is a WHOLE TRIAL GAME played to label a decision,
@@ -5317,7 +5361,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // would be a defect. Counted so the question is settled by measurement.
             execgreedy::Record(m_lookahead_depth, m_in_rollout);
             plan = TurnSolver::Solve(state, is_pre_combat_main,
-                                     TurnSolver::GreedyPermit(TurnSolver::GreedySite::D0Runner, m_lookahead_depth));
+                                     TurnSolver::GreedyPermit(D0PermitSite(), m_lookahead_depth));
             // GREEDY AURA-SWAP TIMING (MTG_SOLVE_COMBAT_SWAP, USER 2026-10-06): a pre-combat swap that
             // would tap a would-be attacker is dropped (DeferAuraSwapToCombat) and the d0 runner pins
             // the damage-max Arcanum Wings combat swap exactly as the rollout's horizon leaf does
@@ -6854,7 +6898,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     }
                 }
                 extra = TurnSolver::Solve(state, is_pre_combat_main,
-                                     TurnSolver::GreedyPermit(TurnSolver::GreedySite::D0Runner, m_lookahead_depth));
+                                     TurnSolver::GreedyPermit(D0PermitSite(), m_lookahead_depth));
             }
             // The re-solve's own LAND DROP (MTG_BP_RESOLVE_LAND) -- same rule, same karoo guard as
             // the plan-carried branch above, and played BEFORE the continuation's casts so its mana
@@ -7604,7 +7648,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         {
                             execgreedy::Record(-1, m_in_rollout);
                             extra = TurnSolver::Solve(state, is_pre_combat_main,
-                                     TurnSolver::GreedyPermit(TurnSolver::GreedySite::D0Runner, m_lookahead_depth));
+                                     TurnSolver::GreedyPermit(D0PermitSite(), m_lookahead_depth));
                         }
                         // The re-solve's LAND DROP -- twin of the main site (MTG_BP_RESOLVE_LAND).
                         if (BpResolveLandEnabled() && extra.land_decided

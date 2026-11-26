@@ -1659,6 +1659,21 @@ public:
     // never pays for a trial. Generic = false.
     virtual bool UntapLoopRouteEnabled() const { return false; }
 
+    // LockPlayoutNow -- THE LOCK PLAYOUT (USER ruling 22, Enchanted Evening, 2026-11-26): *"Once we have the full lock we
+    // should just go off and win playing out via heuristic so that it is faster."* / *"(just like with out Combo Out
+    // situations)"*. True = from `s` on, the rest of the game is played out by the greedy policy instead of searched:
+    // the free-turn lock was CREDITED for us (GameState::in_free_turn: the opponent's last turn ended locked -- board lock
+    // and no fairness veto, freeturn::LockHolds) and the deck's own definition of its FULL lock stands. Read by both
+    // worlds (one predicate, lockstep): TurnSolver ends the search window at such a turn (FSLineWin returns the depth-0
+    // playout, the rollout plays the turn at depth 0, no free-turn depth give-back) and AIEngine plays the turn with the
+    // depth-0 runner (GreedySite::LockPlayout). Under a credited lock every further own turn shares the ROUND, so the win
+    // turn is the current round whenever the playout keeps the lock and kills -- which is what the provider's own
+    // restrictions while this is true are for (never exile / destroy its own lock pieces). The ComboRoute contract
+    // (one verified this-turn action) does not fit a multi-turn finish that crosses combat, end steps and the
+    // opponent's turns, so this reuses the existing beyond-the-horizon playout instead. Never in human play.
+    // Generic = false (every other deck byte-identical: one bool test of in_free_turn, which only lock decks raise).
+    virtual bool LockPlayoutNow(const GameState& s) const { (void)s; return false; }
+
     // ComboOffSearchDefault -- the PROVIDER-LEVEL default of the search's two COMBO OFF queries
     // (MTG_EDF_CO_ROOT / MTG_EDF_CO_LOOK, TurnSolver.cpp `edfco`) when the env leaves them unset. Generic
     // = false (EldraziDisplacerFlicker included: its measured default stays OFF, byte-identical);

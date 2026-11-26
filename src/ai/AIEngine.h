@@ -183,6 +183,16 @@ public:
     // Called by GameEngine::PlayOut so the value tracks each game's actual limit.
     void SetMaxTurns(int max_turns) { m_max_turns = max_turns; }
 
+    // THE LOCK PLAYOUT (USER ruling 22, Enchanted Evening 2026-11-26: "Once we have the full lock we should just go off
+    // and win playing out via heuristic so that it is faster."). Called by GameEngine::RunTurnFrom right after each turn
+    // counter step (and by the game / trial boundaries): when DecisionProvider::LockPlayoutNow holds (a CREDITED full
+    // lock; GameState::in_free_turn persists through the opponent's following turn), the engine plays with depth 0 --
+    // the depth-0 runner, under GreedySite::LockPlayout -- until a turn starts without it; then the saved depth is back.
+    // A no-op for every deck whose provider returns false (and at depth 0 already).
+    void SyncLockPlayout(const GameState& state);
+    // Leave the lock playout unconditionally (restore the saved depth). Game / trial-game boundaries.
+    void EndLockPlayout();
+
     // Marks the second (post-combat) main phase as RELEVANT for this deck. OFF by
     // default, in which case NOTHING happens in the second main: in a clairvoyant
     // goldfish combat reveals nothing and creates no new resources, so everything
@@ -333,6 +343,12 @@ private:
     friend struct MtgTestSeam;
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
+    // SyncLockPlayout: live, and the depth it saved (restored by EndLockPlayout).
+    bool                     m_lock_playout      = false;
+    int                      m_lock_playout_saved_depth = 0;
+    // The depth-0 runner's permit: LockPlayout while the lock playout is live (USER ruling 22), else D0Runner.
+    TurnSolver::GreedySite D0PermitSite() const
+    { return m_lock_playout ? TurnSolver::GreedySite::LockPlayout : TurnSolver::GreedySite::D0Runner; }
     int                      m_budget_ms         = 0;   // virtual-ms search budget (see SearchBudget)
     long long                m_budget_units_override = -1;   // >0: per-decision budget in raw units (bottoming eval only; see BottomCards)
     SearchBudget DecisionBudget() const
