@@ -229,6 +229,7 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         {"Gods", "Gods"},
         {"Eldrazi Displacer Flicker", "EldraziFlicker"}, {"Five Colour", "FiveColour"},
         {"Fluctuator", "Fluctuator"},         {"Fungus", "Fungus"},
+        {"Elves", "SelesnyaLifegain"},   // Elves Stage 2 (2026-11-26): the CURRENT routing; an ElvesProvider (USER scaling-sink ruling) replaces it
         {"Giants", "Giants"},                 {"Goblins", "Goblins"},
         {"Hinata", "Hinata"},                {"Kitty Equipment", "Equipment"},
         {"Knights", "Knights"},               {"Melira Pod", "MeliraPod"},

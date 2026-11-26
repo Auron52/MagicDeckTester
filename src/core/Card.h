@@ -205,6 +205,12 @@ enum class Keyword
     // CardParams::champion_subtype (ResolveChampionEtb / ReturnChampionedCard). No engine code reads this
     // enumerator; it exists so Scryfall's keywords array can be pasted VERBATIM (see Jump's note).
     Champion,
+    // Multikicker (Joraga Warcaller) / Squad (Galadhrim Brigade): INERT keyword-ability tags -- the mechanics are
+    // modelled structurally via CardParams::multikicker_cost / squad_cost (the "(Kicked xK)" faces + Action::
+    // kick_count). No engine code reads these enumerators; they exist so Scryfall's keywords array can be pasted
+    // VERBATIM (see Jump's note).
+    Multikicker,
+    Squad,
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };
