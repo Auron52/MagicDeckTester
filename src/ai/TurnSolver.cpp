@@ -115326,7 +115326,12 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         const std::string ko_board = FsSimBoardText(*ko_vcopy);   // named in a MISMATCH line (the entry board)
         t_ko_suppress = true;
         const unsigned long long ts = g_fs_trunc_events, ds = g_condemn_drops, bs = budgetbind::t_binds;
-        const int ref = SimulateToEndImpl(*ko_vcopy, depth, max_turns, budget, cutoff_turn, second_main, tt);
+        // A FRESH leaf table for the reference (MTG_LEAF_KILL_ONLY_VERIFY only): on the shared one the reference's
+        // own first lookup is the entry the kill-only run just stored for this very state, so it echoed that answer
+        // back and a missed boundary win (Mill's Archive Trap in the opponent's turn, 2026-11-26) verified clean.
+        TranspositionTable ko_ref_tt;
+        const int ref = SimulateToEndImpl(*ko_vcopy, depth, max_turns, budget, cutoff_turn, second_main,
+                                          tt != nullptr ? &ko_ref_tt : nullptr);
         g_fs_trunc_events = ts; g_condemn_drops = ds; budgetbind::t_binds = bs;
         t_ko_suppress = false;
         g_ko_verified.fetch_add(1, std::memory_order_relaxed);
@@ -132202,10 +132207,33 @@ static BoundaryChoice BoundaryChooseCrossingLandsByRollout(GameState& copy, int 
 // crossing-land digit alone at the group-wave host: cl_only), and reports whether any branch ends the game on this
 // turn. Such a branch is the chooser's pick (no branch can win earlier), so a candidate for which this returns true is
 // scored exactly as the full solve scores it; one for which it returns false still cannot win this round.
+// MTG_KO_BOUNDARY_SIM -- DEFAULT OFF (pending the USER's K decision); =1 crosses the boundary for EVERY deck, not
+// only a crossing-land deck. THE MISSED CASE (Mill, 2026-11-26, the K fleet's one worse deck): the claim above that
+// "a deck-out is flagged the moment the library empties" is true of every mill INSIDE our turn, but the passive
+// opponent's own turn runs in the boundary too (SimulateEndAndStartNextTurn -> ResolvePassiveOpponentLandTurn), and
+// when it cracks a fetchland our Archive Trap is cast there for {0} and mills 13 -- a deck-out that ends the game
+// at the boundary, credited to THIS turn (the opponent_decked return before AdvanceTurnCounter), on a board no main
+// phase saw. Mill seed 58077083 gi83: the full solve's turn-3 killer is "Polluted Delta + Fractured Sanity" holding
+// Archive Trap for the opponent's fetch; the kill-only turn skipped it (no kill by the end of combat) and returned
+// another plan, so the turn-1 root read the Hedron Crab line as no-win and cast Surgical Extraction a turn early
+// (T3 -> T4). The general form costs one boundary crossing per candidate the identity would skip -- what the full
+// solve runs there anyway, minus the next turn's rollout -- and needs no list of the mechanisms that can end a game
+// in the boundary (end-step pings, the opponent's draws and Howling Mine, the opponent-turn instant window, effect
+// wins), which is exactly the list that was incomplete. A crossing-land deck keeps its fan below.
+inline bool KoBoundarySimOn()
+{
+    static const bool v = EnvOn("MTG_KO_BOUNDARY_SIM");
+    return heurarm::Flag(heurarm::KO_BOUNDARY_SIM, v);
+}
 static bool KillOnlyBoundaryEndsGame(const GameState& after_turn, bool cl_only)
 {
-    if (!after_turn.deck_has_crossing_land_put) { return false; }
     const int t = after_turn.turn_number;
+    if (!after_turn.deck_has_crossing_land_put)
+    {
+        if (!KoBoundarySimOn()) { return false; }
+        GameState ce = after_turn;
+        return SimulateEndAndStartNextTurn(ce) && OpponentHasLost(ce) && ce.turn_number == t;
+    }
     BoundaryFan fan(after_turn, /*with_echo=*/!cl_only, false, false, false, false, false, false, cl_only);
     if (cl_only ? !fan.CrossingLandLive() : !fan.Copies())
     {
