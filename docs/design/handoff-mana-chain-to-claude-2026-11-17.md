@@ -296,6 +296,14 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**02:38 UTC 11-26:** status check.
+- **maze2hg-perf:** handed off at 359K. Report committed on wip/maze2hg-perf as 76a69d8db. Code c5c8877d9 adds byte-identical per-node cuts plus MTG_DEAD_CROSS_PRICE. g1380 went 990 s -> 410 s with the same digest; g1647 needed no fix (the g803 defect, already landed).
+- **Successor a2fef92a (maze2hg-perf branch):** its "stop when exhausted" variant takes g1380 to 15.6 s and g1647 to 4.3 s, both on the same win turn, but the digest moved, so it is a play change. Now running a census of which decks are affected, then a held-out A/B and d8 b0 checks.
+- **Unit tests:** the 2 Windswept Heath failures the old agent reported are not on origin. e430cc585 passes 4193/4193, and both files pass in isolation on the maze2hg build. The landing validation re-checks this.
+- **k-fleet:** the chain2 follow-up is on its NC replays, under the box lock.
+- **worldfire-ad:** its 32-thread gate (522 of 688 jobs) runs WITHOUT the box lock, beside the k-fleet batch. I left it running (36G available) and told the agent to use the lock from now on.
+- **Push queue:** empty.
+
 **00:38 UTC 11-26:** status check.
 - k-fleet first A/B finished at 23:05 (build/scratch/k-fleet/ab/summary.md). K on all decks is quality-neutral except Maze's End, which gains (-18 play, -8 2HG). Units drop on almost every deck (x0.74-0.99). SG50+K vs today: CG -11/-14, AL -6/+2, DS 0/-5, at about x1.00 units. 57 slower games are listed in slower.json. The ab2 follow-up batch is at 32/32, and the d8 b0 and NC replays come after it. Once those report, put K fleet-wide and SG50+K to the USER.
 - maze2hg-perf is at about 346K context, so I asked it to hand off. Its g1380 before/after lane jobs keep running.
