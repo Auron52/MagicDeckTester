@@ -1,0 +1,63 @@
+{
+  "card_scores": {
+    "Blood Scrivener": [
+      -0.04857379898862213
+    ],
+    "Cemetery Reaper": [
+      -0.0477996465899686,
+      -0.21304122822149463
+    ],
+    "Culling the Weak": [
+      -0.1335385389745527
+    ],
+    "Dark Ritual": [
+      0.30942369527578517,
+      0.21190130624092873
+    ],
+    "Death Baron": [
+      -0.031111111111111533
+    ],
+    "Diregraf Ghoul": [
+      0.12648035499133137,
+      0.04093567251462016
+    ],
+    "Dread Wanderer": [
+      0.18117053600401256,
+      0.05275229357798139
+    ],
+    "Fleshbag Marauder": [
+      -0.2377232142857144
+    ],
+    "Gravecrawler": [
+      0.13554913431480564,
+      0.1314995357474471
+    ],
+    "Gray Merchant of Asphodel": [
+      -0.16180979267219175
+    ],
+    "Lord of the Accursed": [
+      -0.0742319716817823,
+      -0.2707584112522978
+    ],
+    "Lord of the Undead": [
+      0.020334772913314758,
+      -0.20816326530612184
+    ],
+    "Undead Warchief": [
+      0.17696572580645142,
+      -0.22354152367879188
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
