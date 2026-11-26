@@ -718,11 +718,18 @@ std::string ClassKey(const Permanent& p, bool age = true)
 // realisation leaving the other copy up compared as INCOMPARABLE with the menu's board instead of reaching it
 // (Colossus Hammer eg1, `U:Mountain|L||0,0|old|card 1>0`; Slivers, the new against the old Sliver Hive). A manland
 // (Mutavault, can_animate) keeps it: an animated Mutavault that entered this turn cannot attack.
+// ...and a MANA ROCK the same way (a noncreature artifact source, `mana_rock`, that cannot animate): it has no summoning
+// sickness to remember either. Dragons gate claude-queue-20261125a (238 ORACLE-GAPs): {Mind Stone + Dragon Tempest} on a
+// board with a Mind Stone in play, and the plan's trailing Mind Stone dig. The dig taps the first untapped Mind Stone as
+// its {T} before paying its {1}, so "the old stone paid, the new one digs" and "the new one paid, the old one digs" reach
+// one frontier board; the {1} is unpayable, the dig rolls its tap back, and the two end boards differ only in which copy
+// -- the new or the old -- is left up. The engine's was the other one, so it read as an outcome the oracle never reached.
 bool AgeIsInert(const Permanent& p)
 {
-    if (!p.card.IsLand() || p.card.IsCreature() || p.is_animated) { return false; }
+    if (p.card.IsCreature() || p.is_animated) { return false; }
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-    return d != nullptr && !d->params.can_animate;
+    if (d == nullptr || d->params.can_animate) { return false; }
+    return p.card.IsLand() || d->params.mana_rock;
 }
 std::string ResClassKey(const Permanent& p)
 {
@@ -1432,6 +1439,22 @@ struct NoSacActionScope
     NoSacActionScope& operator=(const NoSacActionScope&) = delete;
 };
 
+// THE SELF-TAP SOURCE (Hook::f_self_tap_src): a payment frontier for an ability whose cost also TAPS its source --
+// Haven of the Spirit Dragon's "{2}, {T}, Sacrifice: return a Dragon" -- may not tap that source for the mana.
+// The payer holds it (SelfTapSourceHoldBit); the table must too, or it lists "Haven:C + Mountain" for the {2},
+// a payment after which the ability is a no-op. That outcome is no legal activation and it never covers the
+// engine's (the Haven left up, the rebuy unpaid): Dragons gate claude-queue-20261125a, 3,433 of 3,747 ORACLE-GAPs.
+// BuildSources reads it; set only around a frontier's own table (Realize).
+thread_local int t_self_tap_src = 0;
+struct SelfTapSrcTableScope
+{
+    int saved;
+    explicit SelfTapSrcTableScope(int n) : saved(t_self_tap_src) { t_self_tap_src = n; }
+    ~SelfTapSrcTableScope() { t_self_tap_src = saved; }
+    SelfTapSrcTableScope(const SelfTapSrcTableScope&)            = delete;
+    SelfTapSrcTableScope& operator=(const SelfTapSrcTableScope&) = delete;
+};
+
 // Do the first two Aura colour picks on `land` commute? They do when the first two Auras LandAuraAddToPoolOfLand
 // credits a pick to (attached, controlled alike, adding one mana of any colour on this board) add the same amount.
 bool AuraPicksSymmetric(const GameState& s, const Permanent& land)
@@ -1609,6 +1632,7 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != a || p.tapped) { continue; }
+        if (t_self_tap_src != 0 && p.card.m_number == t_self_tap_src) { continue; }   // owes its {T} to the ability
         const HumanPreTapOffer o = HumanPreTapOfferFor(state, p);
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (t_no_sac_action && o.route == HumanPreTapOffer::Route::SacAction
@@ -3821,6 +3845,7 @@ struct FrontierRec
     int                    sac_victim = 0;      // Hook::f_sac_victim
     int                    sac_spare_source = 0;   // Hook::f_sac_spare_source
     int                    sac_spare_victim = 0;   // Hook::f_sac_spare_victim
+    int                    self_tap_src = 0;       // Hook::f_self_tap_src
     std::uint64_t          cont_sig = 0;           // Hook::cont_sig at the frontier
     std::int32_t           dbl_combat_hold = 0; // temporarily held attacker during this payment
     ManaCost               line_unpaid;       // the apply scope has ended before enumeration
@@ -3843,7 +3868,8 @@ std::uint64_t FrontKey(const FrontierRec& f, bool line_context)
                                        + "t" + std::to_string(f.tapahead)
                                        + (f.tapchoice > 0 ? "k" + std::to_string(f.tapchoice) + "/" + std::to_string(f.tc_kind) : "")
                                        + (f.has_spell ? "|" + f.spell.m_name.str() : "")
-                                       + "v" + std::to_string(f.sac_victim));
+                                       + "v" + std::to_string(f.sac_victim)
+                                       + (f.self_tap_src != 0 ? "h" + std::to_string(f.self_tap_src) : ""));
     // A failed payment can leave the same board as a successful but
     // effect-free activation. It still drops an action from the line,
     // and a later payment cannot repair that drop. Keep frontiers with
@@ -4431,6 +4457,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     fr.sac_victim   = h.f_sac_victim;
                     fr.sac_spare_source = h.f_sac_spare_source;
                     fr.sac_spare_victim = h.f_sac_spare_victim;
+                    fr.self_tap_src = h.f_self_tap_src;
                     fr.cont_sig = h.cont_sig;
                     fr.dbl_combat_hold = h.f_dbl_combat_hold;
                     fr.line_unpaid = h.f_line_unpaid;
@@ -4708,6 +4735,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             std::optional<PaySacSpareScope> _spare;
             if (f.sac_spare_source != 0 || f.sac_spare_victim != 0)
             { _spare.emplace(f.sac_spare_source, f.sac_spare_victim); }
+            const SelfTapSrcTableScope _self_src(f.self_tap_src);
             std::vector<PayOption> opts = f.tapchoice > 0
                 ? TapChoiceOptions(f.st, f.tc_elig, f.tapchoice, &r.unmodeled)
                 : f.tapahead > 0

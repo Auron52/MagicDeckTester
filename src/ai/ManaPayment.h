@@ -51,6 +51,22 @@ inline std::uint64_t SelfTapSourceHoldBit(const GameState& state, int card_numbe
     return 0;
 }
 
+// The card number of the source a SelfTapSourceHoldBit hold is holding for the payment in progress (0 = none).
+// Play never reads it -- the hold bit alone is what the payer honours. The mana oracle does: a payment frontier
+// records it (ManaPayment.cpp's audit hook, Hook::f_self_tap_src) and the oracle's payment table leaves that source
+// out, exactly as the payer does. Without it the table paid Haven of the Spirit Dragon's {2} with the Haven itself,
+// a payment after which the rebuy is a no-op, and missed the engine's own outcome (Dragons gate
+// claude-queue-20261125a: 3,433 of 3,747 ORACLE-GAPs). Install it with the hold, set only when the hold bit is.
+inline thread_local int t_pay_self_tap_src = 0;
+struct SelfTapSrcScope
+{
+    int prev;
+    explicit SelfTapSrcScope(int card_number) : prev(t_pay_self_tap_src) { t_pay_self_tap_src = card_number; }
+    ~SelfTapSrcScope() { t_pay_self_tap_src = prev; }
+    SelfTapSrcScope(const SelfTapSrcScope&) = delete;
+    SelfTapSrcScope& operator=(const SelfTapSrcScope&) = delete;
+};
+
 // THE effective spell cost (C1 unit 2): spectacle, splice-onto-Arcane combining, affinity,
 // Medallion-style colour reduction, and Hinata's per-target discount (fixed-cost spells only --
 // {X} spells apply the discount where the chosen X is known). Was a byte-identical twin pair

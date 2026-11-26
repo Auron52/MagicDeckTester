@@ -1386,6 +1386,10 @@ struct CastRiders
 // Reporting only: no play reads either, so every game is byte-identical with the oracle off.
 extern thread_local bool g_gy_damage_hoist_probe;
 void NoteGraveyardDamageDrop(const GameState& state, const Action& a);
+// ...and its twin for a GraveyardReturnAbility (Haven of the Spirit Dragon) that did not activate: unpaid, its source
+// tapped for mana earlier in the plan or gone, or no legal target left. Unreported, the oracle read such a plan as
+// realised whole (Dragons gate claude-queue-20261125a ORACLE-GAP). Reporting only, like the above.
+void NoteGraveyardReturnDrop(const GameState& state, const Action& a);
 
 class TurnSolver
 {

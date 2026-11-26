@@ -1765,3 +1765,113 @@ TEST_CASE("mana oracle: a FORCED Summit tap (every untapped Gate) is the line's 
     const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, plan, { plan });
     CHECK(std::find(v.begin(), v.end(), "UNMODELED") == v.end());
 }
+
+// ---- Haven of the Spirit Dragon's "{2}, {T}, Sacrifice: return a Dragon" (GraveyardReturnAbility) ----------------------
+// Dragons gate claude-queue-20261125a: 3,433 of the deck's 3,747 ORACLE-GAPs, every one a plan with this rebuy. Two
+// defects, both on the oracle's side. (1) Its payment table offered the Haven ITSELF for the {2} ("Haven:C + Mountain"),
+// after which the {T} is gone and the rebuy is a no-op; the payer holds the Haven (SelfTapSourceHoldBit), so the engine
+// either pays with other sources or not at all, and the oracle's one "outcome" covered neither. (2) A rebuy that did not
+// activate was never named to the act-drop sink, so the engine's realisation of an unpayable one read as "every action
+// done". Both apply worlds now report it (NoteGraveyardReturnDrop) and the table leaves the source out
+// (Hook::f_self_tap_src).
+namespace
+{
+Action HavenReturnAction(int haven_num, const char* target)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup("Haven of the Spirit Dragon");
+    Action a;
+    a.kind           = Action::Kind::GraveyardReturnAbility;
+    a.card_name      = d->card.m_name;
+    a.hand_index     = -1;
+    a.cost           = d->params.gy_return_cost.value();
+    a.sac_source_id  = haven_num;
+    a.tutor_target   = target;
+    a.eval           = 2;
+    a.is_noncreature = true;
+    return a;
+}
+GameState HavenBoard(const std::vector<std::string>& names)
+{
+    static const DragonsProvider prov;
+    GameState s = Board(names);   // Haven first: #1
+    s.m_provider = &prov;
+    s.players[0].life = s.players[1].life = 20;
+    Card g = CardDatabase::Instance().Lookup("Glorybringer")->card;
+    g.m_number = 200;
+    s.players[0].graveyard.push_back(g);
+    Hand(s, { "Lightning Bolt" });
+    SetLibrary(s, std::vector<std::string>(20, "Mountain"));
+    return s;
+}
+bool HandHas(const GameState& s, const char* nm)
+{
+    for (const Card& c : s.players[0].hand) { if (c.m_name.str() == nm) { return true; } }
+    return false;
+}
+} // namespace
+
+TEST_CASE("mana oracle: Haven's {2} rebuy is never paid with the Haven itself, and an unpayable rebuy is a reported drop")
+{
+    EnsureOracleCards();
+    // Haven + one Mountain: the {2} has one legal source. Dragons s30097740 T8 (ORACLE-GAP x109).
+    GameState s = HavenBoard({ "Haven of the Spirit Dragon", "Mountain" });
+    const TurnSolver::Plan plan = PlanOf({ HavenReturnAction(1, "Glorybringer") });
+    {
+        GameState g = s;
+        std::vector<std::string> drops;
+        std::vector<std::string>* saved = g_act_drop_sink;
+        g_act_drop_sink = &drops;
+        TurnSolver::ApplyPlan(g, plan, /*is_pre_combat=*/true);
+        g_act_drop_sink = saved;
+        CHECK_FALSE(HandHas(g, "Glorybringer"));
+        REQUIRE(drops.size() == 1);
+        CHECK(drops[0].rfind("Haven of the Spirit Dragon", 0) == 0);
+    }
+    const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, plan, { plan });
+    INFO("verdict: ", Joined(v));
+    CHECK_FALSE(Has(v, "ORACLE-GAP"));
+    CHECK_FALSE(Has(v, "APPLY-DROP"));
+}
+
+TEST_CASE("mana oracle: Haven's rebuy paid by two other lands is among the oracle's outcomes (Bolt beside it)")
+{
+    EnsureOracleCards();
+    GameState s = HavenBoard({ "Haven of the Spirit Dragon", "Mountain", "Mountain", "Mountain" });
+    const TurnSolver::Plan plan = PlanOf({ CastAction(s, "Lightning Bolt"), HavenReturnAction(1, "Glorybringer") });
+    {
+        GameState g = s;
+        std::vector<std::string> drops;
+        std::vector<std::string>* saved = g_act_drop_sink;
+        g_act_drop_sink = &drops;
+        TurnSolver::ApplyPlan(g, plan, /*is_pre_combat=*/true);
+        g_act_drop_sink = saved;
+        REQUIRE(drops.empty());
+        CHECK(HandHas(g, "Glorybringer"));   // the premise: the engine realises the whole plan
+    }
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
+    const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, plan, { plan });
+    INFO("verdict: ", Joined(v));
+    CHECK_FALSE(Has(v, "ORACLE-GAP"));
+    CHECK_FALSE(Has(v, "APPLY-DROP"));
+}
+
+// Dragons s30096720 T4 (gate claude-queue-20261125a, 238 ORACLE-GAPs of this family): {Dragon Tempest + Mind Stone} beside
+// a Mind Stone in play. Mind Stone off Gruul Turf, Tempest off Mountain + a stone, and the trailing Mind Stone dig taps
+// the OTHER stone as its {T} and cannot pay its {1}, so it rolls back. Whether the old or the new stone paid, the frontier
+// boards before the dig are one, and the two end boards differ only in which copy is left up -- a mana rock's age, which
+// no rule reads (it has no summoning sickness). The end board forgets it now (AgeIsInert), as it does a plain land's.
+TEST_CASE("mana oracle: which Mind Stone -- the one cast this turn or the old one -- is left up is not identity")
+{
+    EnsureOracleCards();
+    static const DragonsProvider prov;
+    GameState s = Board({ "Mountain", "Mind Stone", "Dragonspeaker Shaman", "Gruul Turf" });
+    s.m_provider = &prov;
+    s.players[0].life = s.players[1].life = 20;
+    Hand(s, { "Inferno of the Star Mounts", "Lightning Greaves", "Dragon Tempest", "Mountain", "Mind Stone" });
+    SetLibrary(s, std::vector<std::string>(20, "Mountain"));
+    const TurnSolver::Plan plan = PlanOf({ CastAction(s, "Dragon Tempest"), CastAction(s, "Mind Stone") });
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
+    const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, plan, { plan });
+    INFO("verdict: ", Joined(v));
+    CHECK_FALSE(Has(v, "ORACLE-GAP"));
+}

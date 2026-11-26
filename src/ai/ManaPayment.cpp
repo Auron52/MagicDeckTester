@@ -14234,6 +14234,7 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
         h.f_sac_victim = g_pay_sac_victim;
         h.f_sac_spare_source = g_pay_sac_spare[0];
         h.f_sac_spare_victim = g_pay_sac_spare[1];
+        h.f_self_tap_src = t_pay_self_tap_src;   // the source this payment's ability owes its {T} (SelfTapSrcScope)
         return false;
     }
     const PayOption& opt = h.script[h.next++];
