@@ -418,14 +418,20 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
     {
         if (!e.is_directory()) { continue; }
         bool has_list = false;
+        bool has_profile = false;
         for (const auto& f : fs::directory_iterator(e.path()))
         {
-            if (f.is_regular_file() && (f.path().extension() == ".cod" || f.path().extension() == ".txt"))
-            { has_list = true; break; }
+            if (!f.is_regular_file()) { continue; }
+            if (f.path().extension() == ".cod" || f.path().extension() == ".txt") { has_list = true; }
+            const std::string name = f.path().filename().string();
+            const std::string suffix = ".profile.json";
+            if (name.size() >= suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0)
+            { has_profile = true; }
         }
-        if (has_list) { ++folders; }
+        // A user may have copied in a decklist before its baseline profile/provider is ready.
+        if (has_list && has_profile) { ++folders; }
     }
-    CHECK_MESSAGE(folders == checked, "decks/ holds ", folders, " decklist folders but the table pins ", checked,
+    CHECK_MESSAGE(folders == checked, "decks/ holds ", folders, " profiled decklist folders but the table pins ", checked,
                   " -- add the new deck's expected provider here");
 }
 
