@@ -749,7 +749,7 @@ TEST_CASE("Genesis Wave: the put opens site 10 -- a continuation spends the hast
     TurnSolver::ApplyPlan(reached, prefix, true);
     REQUIRE(EN(reached, 60) != nullptr);
     REQUIRE(EN(reached, 61) != nullptr);
-    CHECK(TurnSolver::CastPutACardPermanent(TurnSolver::PutWindowNumbers(initial), reached, "Genesis Wave"));
+    CHECK(TurnSolver::CastPutACardPermanent(TurnSolver::PutWindowNumbers(initial), reached, "Genesis Wave", false));
     {   // ...and a plain creature cast from hand puts nothing: the cast card is not a put
         GameState after = initial;
         const std::vector<int> snap = TurnSolver::PutWindowNumbers(after);
@@ -757,7 +757,7 @@ TEST_CASE("Genesis Wave: the put opens site 10 -- a continuation spends the hast
                                                    [](const Card& c) { return c.m_number == 71; }),
                                     after.players[0].hand.end());
         EPut(after, "Elvish Mystic", 71, false, true);
-        CHECK_FALSE(TurnSolver::CastPutACardPermanent(snap, after, "Elvish Mystic"));
+        CHECK_FALSE(TurnSolver::CastPutACardPermanent(snap, after, "Elvish Mystic", false));
     }
 
     const std::vector<TurnSolver::Plan> cands = TurnSolver::EnumerateBreakpointPlans(reached, true);

@@ -5637,6 +5637,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // apply_one, before its slot_hook) never sees -- the rdb_top_verdict lesson.
     std::vector<int> rdb_bfput;
     int rdb_bf_verdict = -1;
+    // ...and whether that cast carried the land-put credit (CastRiders::land_put) -- CastPutACardPermanent's
+    // inert-land fold reads it, exactly as the rollout reads apply_one's cast_put_credit.
+    bool rdb_bf_credited = false;
     // Name hashes of the committed plan's hand casts -- lockstep twin of ApplyPlanDirect's
     // plan_cast_names. A card the plan casts is never "declined", so the breakpoint filter keeps it.
     std::vector<std::uint64_t> rdb_plan_casts;
@@ -5772,6 +5775,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         rdb_top_verdict = -1;
         rdb_gyeq = TurnSolver::GraveyardEquipmentNumbers(state);   // ...and Forge Anew's
         rdb_bf_verdict = -1;   // ...and the Wave's battlefield-put window
+        rdb_bf_credited = riders.land_put.Total() > 0;   // the inert-land fold's credit (rollout twin: cast_put_credit)
         if (BpPutInHandEnabled() && !HumanPlayActive())
         { rdb_bfput = TurnSolver::PutWindowNumbers(state); } else { rdb_bfput.clear(); }
         // Prefer an expiring STAGED copy (Light Up the Stage etc.) over a persistent hand copy, so a
@@ -5896,6 +5900,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         rdb_top_verdict = -1;
         rdb_gyeq = TurnSolver::GraveyardEquipmentNumbers(state);   // ...and Forge Anew's
         rdb_bf_verdict = -1;   // ...and the Wave's battlefield-put window
+        rdb_bf_credited = riders.land_put.Total() > 0;   // the inert-land fold's credit (rollout twin: cast_put_credit)
         if (BpPutInHandEnabled() && !HumanPlayActive())
         { rdb_bfput = TurnSolver::PutWindowNumbers(state); } else { rdb_bfput.clear(); }
         auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
@@ -5931,6 +5936,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         rdb_top_verdict = -1;
         rdb_gyeq = TurnSolver::GraveyardEquipmentNumbers(state);   // ...and Forge Anew's
         rdb_bf_verdict = -1;   // ...and the Wave's battlefield-put window
+        rdb_bf_credited = false;   // a graveyard cast carries no land-put credit (Action::rock_mana is hand casts only)
         if (BpPutInHandEnabled() && !HumanPlayActive())
         { rdb_bfput = TurnSolver::PutWindowNumbers(state); } else { rdb_bfput.clear(); }
         auto git = std::find_if(ap.graveyard.begin(), ap.graveyard.end(),
@@ -6143,7 +6149,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // the end of apply_one) -- the shared CastPutACardPermanent, frozen across exec_slot_hook.
         const bool put_new  = !rdb_bfput.empty()
                            && (rdb_bf_verdict >= 0 ? rdb_bf_verdict == 1
-                                                   : TurnSolver::CastPutACardPermanent(rdb_bfput, state, name));
+                                                   : TurnSolver::CastPutACardPermanent(rdb_bfput, state, name,
+                                                                                       rdb_bf_credited));
         if (!hand_new && !top_new && !gyeq_new && !put_new) { return false; }
         // A PUT-ONLY arming binds the EMPTY hand snapshot, exactly as the rollout does (see its note):
         // the continuation exists for OLD hand cards, which a snapshot would read as declined.
@@ -8895,7 +8902,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // (a positioned land, a land-search activation): the rollout asks at the end of apply_one, which
         // precedes its slot_hook. See rdb_bfput.
         if (rdb_bf_verdict < 0 && !rdb_bfput.empty())
-        { rdb_bf_verdict = TurnSolver::CastPutACardPermanent(rdb_bfput, state, BpNameOf(a)) ? 1 : 0; }
+        { rdb_bf_verdict = TurnSolver::CastPutACardPermanent(rdb_bfput, state, BpNameOf(a), rdb_bf_credited) ? 1 : 0; }
         // Morph INT-8 (C): the plan's named trail flips due right after THIS cast (lockstep twin of slot_hook's),
         // through the executor's own trailing-pass body.
         if (state.deck_has_morph)

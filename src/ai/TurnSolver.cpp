@@ -39767,9 +39767,155 @@ std::vector<int> TurnSolver::PutWindowNumbers(const GameState& state)
     return out;
 }
 
-bool TurnSolver::CastPutACardPermanent(const std::vector<int>& snapshot, const GameState& state,
-                                       const std::string& cast_name)
+// THE INERT-LAND FOLD (2026-11-26; docs/design/bpput-inert-land-fold.md, logs/bpput/report.md). A SOUND identity
+// fold of the battlefield-put half: a put LAND that no option this turn can read is not new material, so the cast
+// that put it arms nothing for it -- exactly as if the search had whiffed.
+//
+// WHAT IT EXTENDS. The no-op argument above: the class exists for objects a put made, and when a cast put nothing
+// the board the continuation would be enumerated on holds no object the plan was enumerated without, so a base
+// plan already carries whatever the deferred re-solve could do. Here the cast DID put an object, L, but L is
+// invisible to every option, so the continuation's option set, and the legality, cost and effect of each option,
+// are what they would be without L -- the whiffed board the class already declines to arm.
+//
+// THE PROOF, by what an option can read of a land permanent L (a basic, non-snow, non-creature land: its whole
+// rules text is its intrinsic mana ability, CR 305.6):
+//   (a) ITS MANA. A TAPPED L produces nothing this turn unless something untaps it, and every untapper is a reader
+//       (b). An UNTAPPED L is admitted only from a CREDITED cast: the land-put credit (core/LandSearch.h, "THE
+//       LAND-PUT MANA CREDIT") already priced L's tap, bonuses included, into every cast AFTER the search in the
+//       plan, and the credit classes partition the picks, so "cast the search, then spend L" is a base plan. The
+//       mana sinks outside that funding order (a suspend, which runs in the pre-cast pass; a mana-cost activation)
+//       are the mana readers, checked whenever L is untapped.
+//   (b) ITS PRESENCE AS AN OBJECT: a land / land-type / basic count, a land target, a sacrifice / bounce / blink /
+//       untap victim, a land-entered-this-turn condition, a landfall trigger, a per-land mana bonus, a fastland's
+//       entry test, a top-play permission. Every one of those is a card param (or a template / landwalk keyword),
+//       and a definition holding any param outside the reviewed whitelist is a READER
+//       (CardDefinition::bpput_land_reader, CardDatabase.cpp BpPutLandReaderFromJson -- fails toward reader).
+//       LandPutReaderLive scans every zone an option can act from this turn: our hand, graveyard, staged cards,
+//       sideboard (a companion / wish), the exile, and every permanent on the battlefield, both sides.
+//   (c) THE LIBRARY. A reader still in the library cannot act this turn except by arriving in a zone above. A
+//       non-reader cannot move it there except through a route that arms its own breakpoint (a draw or tutor to
+//       hand, a put), whose re-solve sees L in both worlds alike -- whitelist property (2). So the library is
+//       not scanned at arming; the mark (PlanOpensBreakpoint) needs the library only to know WHICH land comes.
+// Hence when every new permanent is inert, no option of the continuation reads any of them, and the armed
+// continuation reaches no state the unarmed tree does not. Under an unlimited budget nothing becomes
+// unfindable; under a finite one the freed variants are budget spent elsewhere.
+//
+// LOCKSTEP. Both worlds reach this through CastPutACardPermanent with the cast's credit (the rollout's
+// apply_one rider, the executor's cast_by_name rider), so they agree on the arming. The MARK
+// (PlanOpensBreakpoint's land clause, PlanLandPutFoldsInert) folds only where this provably folds: a mark
+// folded where the arming still fired would leave the continuation an unchallengeable canon default.
+bool TurnSolver::PutLandFoldCandidate(const Permanent& p, bool land_put_credited)
 {
+    if (!p.card.IsLand() || p.card.IsCreature() || p.def_absent) { return false; }
+    if (!p.card.HasSupertype(Supertype::Basic) || p.card.HasSupertype(Supertype::Snow)) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr || d->bpput_land_reader || d->bpput_mana_reader) { return false; }
+    return p.tapped || land_put_credited;
+}
+
+bool TurnSolver::LandPutReaderLive(const GameState& state, bool untapped_put)
+{
+    auto reads = [untapped_put](const CardDefinition* d)
+    { return d == nullptr || d->bpput_land_reader || (untapped_put && d->bpput_mana_reader); };
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.def_absent) { continue; }   // a token with no definition: no param can read anything
+        if (reads(CardDatabase::Instance().LookupCached(q.card))) { return true; }
+    }
+    const Player& ap = state.players[static_cast<std::size_t>(state.active_player_index)];
+    for (const Card& c : ap.hand)      { if (reads(CardDatabase::Instance().LookupCached(c))) { return true; } }
+    for (const Card& c : ap.graveyard) { if (reads(CardDatabase::Instance().LookupCached(c))) { return true; } }
+    for (const Card& c : ap.sideboard) { if (reads(CardDatabase::Instance().LookupCached(c))) { return true; } }
+    for (const StagedCard& sc : ap.staged_cards)
+    { if (reads(CardDatabase::Instance().LookupCached(sc.card))) { return true; } }
+    for (const Card& c : state.exile)  { if (reads(CardDatabase::Instance().LookupCached(c))) { return true; } }
+    return false;
+}
+
+bool TurnSolver::CastPutACardPermanent(const std::vector<int>& snapshot, const GameState& state,
+                                       const std::string& cast_name, bool land_put_credited)
+{
+    const int me = state.active_player_index;
+    bool self_seen = false;
+    bool inert_untapped = false;
+    bool any_inert = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const int n = p.card.m_number;
+        if (n < 1 || n >= GameState::kFirstTokenNumber) { continue; }
+        if (std::find(snapshot.begin(), snapshot.end(), n) != snapshot.end()) { continue; }
+        if (!self_seen && p.card.m_name == cast_name) { self_seen = true; continue; }
+        // THE INERT-LAND FOLD (above): a candidate land is set aside until the reader scan, which runs once.
+        if (PutLandFoldCandidate(p, land_put_credited))
+        { any_inert = true; inert_untapped = inert_untapped || !p.tapped; continue; }
+        return true;
+    }
+    return any_inert && LandPutReaderLive(state, inert_untapped);
+}
+
+// MTG_BPPUT_CENSUS (DIAGNOSTIC, print-only, default OFF; logs/bpput/report.md). Every PUT-ONLY site-10 arming in
+// the rollout (no other half fired), by the cast that armed it and by the KIND of each new card permanent; and, at
+// the deferred loop, whether the continuation that applied there was empty, split by base plan vs bp variant and by
+// committed (recorded) vs scoring apply. Never read by play.
+namespace bpputcensus
+{
+inline bool On() { static const bool v = EnvOn("MTG_BPPUT_CENSUS"); return v; }
+enum Kind : int { kLandTappedBasic = 0, kLandTappedOther, kLandUntapped, kCreature, kOther, kKinds };
+inline const char* KindName(int k)
+{
+    static const char* n[kKinds] = { "land_tapped_basic", "land_tapped_other", "land_untapped", "creature", "other" };
+    return n[k];
+}
+struct Row { long long armings = 0; long long kinds[kKinds] = {}; long long all_tapped_basic = 0; };
+// cont[committed][variant][nonempty]
+struct Stats
+{
+    std::mutex mu;
+    std::map<std::string, Row> by_src;
+    long long cont[2][2][2] = {};
+    std::map<std::string, std::array<long long, 2>> cont_by_src;   // committed-apply continuations: [0]=empty [1]=nonempty
+    ~Stats()
+    {
+        if (!On()) { return; }
+        long long tot = 0;
+        for (auto& kv : by_src) { tot += kv.second.armings; }
+        std::fprintf(stderr, "[bpput] put-only site-10 armings=%lld\n", tot);
+        for (auto& kv : by_src)
+        {
+            const Row& r = kv.second;
+            std::fprintf(stderr, "[bpput] src=%-40s armings=%-10lld all_tapped_basic=%-10lld", kv.first.c_str(),
+                         r.armings, r.all_tapped_basic);
+            for (int k = 0; k < kKinds; ++k) { std::fprintf(stderr, " %s=%lld", KindName(k), r.kinds[k]); }
+            std::fprintf(stderr, "\n");
+        }
+        for (int c = 0; c < 2; ++c)
+            for (int v = 0; v < 2; ++v)
+                std::fprintf(stderr, "[bpput] cont %s %s empty=%lld nonempty=%lld\n", c ? "committed" : "scoring",
+                             v ? "variant" : "base", cont[c][v][0], cont[c][v][1]);
+        for (auto& kv : cont_by_src)
+            std::fprintf(stderr, "[bpput] committed-cont src=%-40s empty=%lld nonempty=%lld\n", kv.first.c_str(),
+                         kv.second[0], kv.second[1]);
+    }
+};
+inline Stats g;
+// The batch job's deck key ("new__landfall_c40" -> "landfall"), so one pooled batch reports per deck.
+inline std::string JobKey()
+{
+    const char* j = heurarm::t_job_name;
+    if (j == nullptr) { return "-"; }
+    std::string s(j);
+    const std::size_t us = s.find("__");
+    if (us != std::string::npos) { s = s.substr(us + 2); }
+    const std::size_t c = s.rfind("_c");
+    if (c != std::string::npos) { s = s.substr(0, c); }
+    return s;
+}
+inline void NoteArming(const std::vector<int>& snapshot, const GameState& state, const std::string& cast_name)
+{
+    Row add;
+    add.armings = 1;
+    bool all_tb = true, any = false;
     const int me = state.active_player_index;
     bool self_seen = false;
     for (const Permanent& p : state.battlefield)
@@ -39779,10 +39925,33 @@ bool TurnSolver::CastPutACardPermanent(const std::vector<int>& snapshot, const G
         if (n < 1 || n >= GameState::kFirstTokenNumber) { continue; }
         if (std::find(snapshot.begin(), snapshot.end(), n) != snapshot.end()) { continue; }
         if (!self_seen && p.card.m_name == cast_name) { self_seen = true; continue; }
-        return true;
+        any = true;
+        int k = kOther;
+        if (p.card.IsLand())
+        {
+            if (!p.tapped) { k = kLandUntapped; }
+            else if (p.card.HasSupertype(Supertype::Basic) && !p.card.HasSupertype(Supertype::Snow)
+                     && !p.card.IsCreature()) { k = kLandTappedBasic; }
+            else { k = kLandTappedOther; }
+        }
+        else if (p.card.IsCreature()) { k = kCreature; }
+        if (k != kLandTappedBasic) { all_tb = false; }
+        ++add.kinds[k];
     }
-    return false;
+    if (any && all_tb) { add.all_tapped_basic = 1; }
+    std::lock_guard<std::mutex> lk(g.mu);
+    Row& r = g.by_src[JobKey() + "|" + cast_name];
+    r.armings += add.armings;
+    r.all_tapped_basic += add.all_tapped_basic;
+    for (int k = 0; k < kKinds; ++k) { r.kinds[k] += add.kinds[k]; }
 }
+inline void NoteCont(bool committed, bool variant, bool nonempty, const std::string& src)
+{
+    std::lock_guard<std::mutex> lk(g.mu);
+    ++g.cont[committed ? 1 : 0][variant ? 1 : 0][nonempty ? 1 : 0];
+    if (committed) { ++g.cont_by_src[JobKey() + "|" + src][nonempty ? 1 : 0]; }
+}
+}   // namespace bpputcensus
 
 // ---- CollectActions ------------------------------------------------------
 //
@@ -77016,6 +77185,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // precedence order below, which is the whole point: it arms only where no param-keyed class did,
     // so turning the rule on cannot renumber a class that already worked.
     bool deferred_put_armed = false;
+    std::string deferred_put_only_src;   // MTG_BPPUT_CENSUS only: the put-only armer's name (diagnostic)
     // Blood Sun step 6d (see deferred_nest_rearm): having armed, a re-arm from the top of the loop's continuation
     // opens the next pass, numbered at the acquisition's own site (3).
     auto note_acq_nest_rearm = [&]()
@@ -81915,7 +82085,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // ...and a card permanent PUT onto the battlefield (Genesis Wave; see
                 // CastPutACardPermanent): new mana / haste / targets the plan was priced without.
                 || (!bfput_at_cast.empty()
-                    && TurnSolver::CastPutACardPermanent(bfput_at_cast, state, name))))
+                    && TurnSolver::CastPutACardPermanent(bfput_at_cast, state, name,
+                                                         cast_put_credit.Total() > 0))))
         {
             deferred_cantrip_resolve = true;
             deferred_cantrip_site    = &def;
@@ -81931,6 +82102,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                   || TurnSolver::EquipmentReturnedFromGraveyard(gyeq_at_cast, state);
             deferred_hand_before     = deferred_snapshot(other_half ? hand_at_cast : kNoHand);
             deferred_put_armed       = true;   // site 10, its own bit (see deferred_site_index)
+            if (bpputcensus::On() && !other_half)
+            { bpputcensus::NoteArming(bfput_at_cast, state, name); deferred_put_only_src = name; }
         }
     };
     // RIPPLE -- the rollout's (and the viewer's) twin of EffectHandler::ResolveRippleTrigger (Shadowborn INT-3).
@@ -85301,6 +85474,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         std::vector<uint64_t> s9d_keys;
         if (s9d_on) { s9d_keys = TurnSolver::SnapshotActivatableAbilities(state); }
         const bool bp5_from_rank = bp_searched_plan(deferred_site_index(), extra);   // plan-carried, else EMPTY
+        if (bpputcensus::On() && !deferred_put_only_src.empty() && deferred_site_index() == 10)
+        {
+            bpputcensus::NoteCont(out_breakpoint != nullptr, plan.bp_choice >= 0, !extra.actions.empty(),
+                                  deferred_put_only_src);
+        }
+        deferred_put_only_src.clear();
         // Diagnostic (default off): what the deferred continuation solved, and from which arm.
         {
             static const bool s_bp5_trace = EnvOn("MTG_BP5_TRACE");
@@ -96876,6 +97055,54 @@ static bool PlanDeclinesEveryLandSearch(const GameState& state, const TurnSolver
     return consumers <= p.land_search_pins.size();
 }
 
+// THE INERT-LAND FOLD's MARK half (TurnSolver::CastPutACardPermanent, "THE INERT-LAND FOLD"; docs/design/
+// bpput-inert-land-fold.md). True iff the land-search cast `a` (def `d`) of plan `p` provably ARMS NOTHING through
+// the battlefield-put half, so its land clause need not mark the plan. It must imply the arming's fold in every
+// world, or the continuation the arming opens would be an unchallengeable canon default. So, on the plan-start
+// state:
+//   * the cast is a hard cast of an instant / sorcery whose resolution searches straight to the battlefield
+//     (nothing to hand), and its land enters TAPPED, or the cast carries the land-put credit (Action::rock_mana --
+//     the same value the apply_one rider and the executor's cast_by_name rider hand CastPutACardPermanent);
+//   * EVERY pick the search can make (the search's own memo: LandSearchMemoSlot) is a fold candidate land -- basic,
+//     non-snow, non-creature, a non-reader definition -- so whichever land comes is one;
+//   * no reader is live now (LandPutReaderLive, the mana readers included when the land comes untapped);
+//   * no OTHER action of the plan can bring a card into a zone an option acts from by a route the class does not
+//     arm on: a tutor / ETB tutor to hand, a put, a land search to hand. (A draw has no whitelisted key, so a
+//     drawing card is already a reader and fails the scan above.) The plan's other cards are in the scanned zones.
+// At the arming, the zones then hold at most the plan-start cards, cards that arrived through an ARMED route (whose
+// deferred re-solve already claimed the cast window, so this put is never asked), and the land itself.
+static bool PlanLandPutFoldsInert(const GameState& state, const TurnSolver::Plan& p, const Action& a,
+                                  const CardDefinition& d)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.alt_cost) { return false; }
+    const CardParams& pp = d.params;
+    if (!(d.card.IsInstant() || d.card.IsSorcery()) || !pp.land_search_on_resolve || pp.land_search_count < 1
+        || pp.land_search_to_hand != 0 || pp.land_search_on_enter_or_attack) { return false; }
+    const bool credited = a.rock_mana.Total() > 0;
+    if (!pp.land_search_tapped && !credited) { return false; }
+    const landsearchmemo::Slot& ms = LandSearchMemoSlot(state, state.active_player_index, LandSearchSpecOf(pp));
+    for (const std::vector<const CardDefinition*>& pick : ms.pick_defs)
+    {
+        for (const CardDefinition* ld : pick)
+        {
+            if (ld == nullptr || !ld->card.IsLand() || ld->card.IsCreature()
+                || !ld->card.HasSupertype(Supertype::Basic) || ld->card.HasSupertype(Supertype::Snow)
+                || ld->bpput_land_reader || ld->bpput_mana_reader) { return false; }
+        }
+    }
+    for (const Action& o : p.actions)
+    {
+        if (&o == &a) { continue; }
+        const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().Lookup(o.card_name);
+        if (od == nullptr) { return false; }
+        const CardParams& op = od->params;
+        if (op.tutor_to_hand || op.etb_tutor_hand_count > 0 || op.tutor_to_battlefield_single
+            || op.tutor_to_battlefield || op.reveal_x_put_permanents || op.land_search_to_hand > 0
+            || o.kind == Action::Kind::ActivateVial || o.kind == Action::Kind::ActivatePod) { return false; }
+    }
+    return !TurnSolver::LandPutReaderLive(state, !pp.land_search_tapped);
+}
+
 static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p, bool look_top_route)
 {
     int mask = 0;
@@ -97445,7 +97672,8 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             const bool land_put_by_cast = d->params.land_search_count > d->params.land_search_to_hand
                 && !d->params.land_search_activation_cost && !d->params.karametra_cast_land_search
                 && !(RemovalSearchesForController(*d) && a.enchant_target <= 0 && !HumanPlayActive())
-                && !(d->params.land_search_optional && PlanDeclinesEveryLandSearch(state, p));
+                && !(d->params.land_search_optional && PlanDeclinesEveryLandSearch(state, p))
+                && !PlanLandPutFoldsInert(state, p, a, *d);
             if ((d->params.reveal_x_put_permanents || d->params.look_top_put_creature_count > 0
                     || !d->params.etb_reveal_put_subtypes.empty() || d->params.tutor_to_battlefield
                     || d->params.tutor_to_battlefield_single || d->params.reanimate_creature_max_mv > 0

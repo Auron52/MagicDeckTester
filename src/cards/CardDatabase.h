@@ -5926,6 +5926,18 @@ struct CardDefinition
     // beside `enter_watcher` instead of six scattered CardParams probes per permanent walked. Same
     // derivation contract -- computed by RebuildInternedIndex for every reachable definition.
     bool landfall_watcher = false;
+    // "This definition MAY READ a land we put onto the battlefield, or move a library card to a zone it can act from
+    // without opening a breakpoint" -- the reader byte of the site-10 INERT-LAND FOLD (TurnSolver.cpp,
+    // TurnSolver::PutLandIsInert; docs/design/bpput-inert-land-fold.md). Derived at load from the card's JSON
+    // `parameters` KEYS against a reviewed whitelist (BpPutLandReaderFromJson, CardDatabase.cpp): a definition is a
+    // non-reader only when EVERY key it holds is on that list. It FAILS TOWARD READER -- the default is true, an
+    // unknown key (a param invented tomorrow) makes a reader, and a definition registered without JSON stays a
+    // reader -- because a false "non-reader" licenses a collapse while a false "reader" only declines one.
+    bool bpput_land_reader = true;
+    // ...and its MANA half: a definition whose only reads are a non-cast MANA SINK outside the cast funding order (a
+    // suspend from hand, a mana-cost activation). It reads an UNTAPPED put land's mana -- the land-put credit funds
+    // later CASTS only -- and nothing of a tapped one. Same derivation, same fail-toward-reader default.
+    bool bpput_mana_reader = true;
     // "This definition returns ITSELF FROM THE GRAVEYARD on a landfall" (Bloodghast;
     // CardParams::landfall_return_self_from_gy). Deliberately NOT part of DefHasLandfallTrigger /
     // landfall_watcher: a Bloodghast ON THE BATTLEFIELD watches nothing (CR 113.6k), and folding it in
