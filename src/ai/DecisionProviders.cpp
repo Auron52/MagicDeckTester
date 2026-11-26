@@ -72588,7 +72588,7 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
         if (ci < 5) { own |= 1 << ci; }
         if (ci < 5 && (s.deck_spell_pip_colors & (1 << ci)) != 0) { seen |= 1 << ci; }
     }
-    const int n = __builtin_popcount(static_cast<unsigned>(seen));
+    const int n = std::popcount(static_cast<unsigned>(seen));
     // THE TWO TIE-BREAKS (Maze's End d8 b0 slower games of the spend rank, 2026-11-24). Without them the rewrite
     // made ties the historical ladder never had, and the payer breaks a tie by battlefield order:
     // * A DEAD source (no colour the list spends) ranks 5 + its colour count, not 5: below every source that makes a
@@ -72602,7 +72602,7 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
     //   G) and Boros Guildgate (R/W) were both mono-spendable 10; Gateway Plaza's {1} took Citadel's {G} (battlefield
     //   order) and Sylvan Scrying {1}{G} + Burgeoning {G} were no longer castable together (T5 -> T6).
     // ORDER ONLY (the ManaSourceRank contract), like the rewrite itself.
-    if (n == 0) { return 5 + std::min(4, __builtin_popcount(static_cast<unsigned>(own))); }
+    if (n == 0) { return 5 + std::min(4, std::popcount(static_cast<unsigned>(own))); }
     const int major = s.deck_spell_major_color;
     return n * 10 + ((major < 5 && (seen & (1 << major)) != 0) ? 1 : 0);
 }
