@@ -810,6 +810,7 @@ static bool FbNextTurnLethal(GameState& probe, std::vector<int>& idx, FbPayer pa
         p.tapped = false;
         p.temp_power_bonus = 0;
         p.temp_tough_bonus = 0;
+        p.temp_base_set = false;
     }
     probe.floating_mana = ManaPool{};
     probe.floating_haste_c = 0;

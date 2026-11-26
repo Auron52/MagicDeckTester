@@ -703,6 +703,8 @@ inline uint64_t FungibilityKey(const Permanent& p)
     if (p.return_at_end_step) { Mix(h, 0x12E7A2Bull); }
     // Unearth (Permanent::unearthed): exiled at this turn's end step and on any departure. Set-gated.
     if (p.unearthed) { Mix(h, 0x0E0A57E5ull); }
+    // Allosaurus Shepherd's base set (Permanent::temp_base_set): decides what a second activation does.
+    if (p.temp_base_set) { Mix(h, 0xBA5E5E7ull); }
     // Soulbond partner (Silverblade Paladin). A full int, not a bit: WHICH creature is paired is
     // what decides who double-strikes, so two otherwise-identical Paladins paired to different
     // bodies are NOT fungible.
@@ -3730,6 +3732,7 @@ static std::string BoardSignature(const GameState& s)
         if (p.destroy_at_end_if_attacked) { e += "/xb"; } // Berserked: destroyed at end step if it attacked
         if (p.return_at_end_step) { e += "/xr"; } // Ilharg put body, returned to hand at end step
         if (p.unearthed) { e += "/xu"; }   // unearthed: exiled at end step / on leaving
+        if (p.temp_base_set) { e += "/bs"; }   // Allosaurus Shepherd: base P/T already set this turn
         // Trench Gorger's base P/T (set by its ETB; Sea Creatures I6): param-gated, so every other deck keeps
         // the EXACT prior signature.
         if (const CardDefinition* gd = CardDatabase::Instance().LookupCached(p.card);
@@ -6923,6 +6926,7 @@ static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const P
         { PermAbilityMode::TapTutorPut,         &sd.params.tap_tutor_put_cost            },
         { PermAbilityMode::TapTreasure,         &sd.params.tap_treasure_cost             },   // Heap Gate (I4), LAST
         { PermAbilityMode::SelfPing,            &sd.params.self_ping_cost                },   // Stuffy Doll, appended LAST
+        { PermAbilityMode::TeamBasePT,          &sd.params.team_base_pt_cost             },   // Allosaurus Shepherd, LAST
     };
     const int ctrl = state.active_player_index;
     for (const ModeSpec& m : modes)
@@ -21096,7 +21100,8 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     { return false; }
     why = foldcensus::kTempHasteEtc;
     if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.temp_vigilance || p.exile_at_end
-        || p.sac_at_end_step || p.destroy_at_end_if_attacked || p.return_at_end_step || p.unearthed) { return false; }
+        || p.sac_at_end_step || p.destroy_at_end_if_attacked || p.return_at_end_step || p.unearthed
+        || p.temp_base_set) { return false; }
     why = foldcensus::kChosenSubtype;
     if (p.chosen_subtype_id != 0) { return false; }
     // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object state that makes two
@@ -34275,7 +34280,8 @@ static int UntapFloatSpendCap(const GameState& state, int ctrl)
                                                    &qp.tap_investigate_cost, &qp.self_ping_cost })
         { if (tc->has_value()) { cap = std::max(cap, (*tc)->ManaValue() + self_untap); } }
         for (const std::optional<ManaCost>* ac : { &qp.drain_cost, &qp.pay_token_cost, &qp.ping_all_cost,
-                                                   &qp.self_counter_cost, &qp.activated_dig_cost, &qp.sac_draw_cost })
+                                                   &qp.self_counter_cost, &qp.activated_dig_cost, &qp.sac_draw_cost,
+                                                   &qp.team_base_pt_cost })
         { if (ac->has_value()) { cap = std::max(cap, (*ac)->ManaValue()); } }
     }
     return cap;
@@ -34421,6 +34427,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::TapTutorPut, &pp.tap_tutor_put_cost },
         { PermAbilityMode::TapTreasure, &pp.tap_treasure_cost },   // Heap Gate (Maze's End I4) -- appended LAST
         { PermAbilityMode::SelfPing,    &pp.self_ping_cost     },   // Stuffy Doll -- appended LAST (slots = table INDEX)
+        { PermAbilityMode::TeamBasePT,  &pp.team_base_pt_cost  },   // Allosaurus Shepherd -- appended LAST
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -34834,7 +34841,7 @@ static bool S9SacManaDemand(const GameState& state, int ctrl)
         for (const std::optional<ManaCost>* tc : { &qp.tap_draw_cost, &qp.tap_damage_cost, &qp.tap_lifegain_cost,
                                                    &qp.tap_investigate_cost, &qp.self_ping_cost, &qp.drain_cost,
                                                    &qp.pay_token_cost, &qp.ping_all_cost, &qp.self_counter_cost,
-                                                   &qp.activated_dig_cost, &qp.sac_draw_cost })
+                                                   &qp.activated_dig_cost, &qp.sac_draw_cost, &qp.team_base_pt_cost })
         { if (tc->has_value() && (*tc)->ManaValue() > 0) { return true; } }
     }
     {
@@ -45888,6 +45895,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                           + (p.destroy_at_end_if_attacked ? "B" : "")   // Berserked: dies if it attacks
                           + (p.return_at_end_step ? "R" : "")           // Ilharg put body: back to hand tonight
                           + (p.unearthed ? "U" : "")                    // unearthed: exiled at end step
+                          + (p.temp_base_set ? "S" : "")                // Allosaurus Shepherd's base set
                           + "/c" + p.counters.KeyFragment();
                 if (!seen_equiv.insert(eq).second) { continue; }
                 // The best dork's plain form is replaced by the cast-time pick (above); its strive
@@ -50805,6 +50813,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // Stuffy Doll's "{T}: deals 1 damage to itself" -- appended LAST. A {T}-only mode
                     // (an EMPTY self_ping_cost, the Wellwisher shape), once per untap: a single emission.
                     { Action::AbilityMode::SelfPing,       &sd->params.self_ping_cost       },
+                    // Allosaurus Shepherd's "{4}{G}{G}: each Elf creature you control has base P/T 5/5 until
+                    // end of turn" -- appended LAST. {T}-less but a SINGLE emission (excluded from the K
+                    // block below): a repeat only reaches Elves that entered since, which a later main-phase
+                    // decision (or the post-entry site) re-offers on its own.
+                    { Action::AbilityMode::TeamBasePT,     &sd->params.team_base_pt_cost    },
                 };
                 for (const ModeSpec& m : modes)
                 {
@@ -50949,7 +50962,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         && m.mode != Action::AbilityMode::ActivatedDig
                         && m.mode != Action::AbilityMode::FigureTwo
                         && m.mode != Action::AbilityMode::FigureFour
-                        && m.mode != Action::AbilityMode::FigureEight)
+                        && m.mode != Action::AbilityMode::FigureEight
+                        && m.mode != Action::AbilityMode::TeamBasePT)
                     {
                         const bool fold_fanout =
                             HumanPlayActive() || DecisionUnpruned(UnprunedGate::BlinkTarget);
@@ -83711,6 +83725,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         p.pending_death_trigger = 0;   // delayed Searing Blood trigger expires with the damage marks
         p.temp_power_bonus      = 0;
         p.temp_tough_bonus      = 0;
+        p.temp_base_set         = false;   // Allosaurus Shepherd's base set (lockstep w/ CleanupStep)
         p.temp_haste            = false;   // Expedite until-EOT haste expires (lockstep w/ CleanupStep)
         p.temp_lifelink         = false;   // Heliod's until-EOT lifelink grant expires (same lockstep)
         p.temp_double_strike    = false;   // Valiant Knight's until-EOT team grant expires (CR 514.2)
@@ -93710,6 +93725,9 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
     // loop (kActPingLoopLive) becomes live the moment a cast Ballista lands next to Heliod -- all three
     // carry keys in CollectActivationKeys, so a Ballista CAST this plan must be fanned.
     if (pp.self_counter_cost.has_value() || pp.remove_counter_ping_damage > 0) { return true; }
+    // Allosaurus Shepherd (Elves, 2026-11-26): "{4}{G}{G}: Elves base 5/5" has no {T}, so a copy CAST this plan
+    // can activate in the same main -- CollectActivationKeys carries its TeamBasePT key.
+    if (pp.team_base_pt_cost.has_value()) { return true; }
     // Lurrus of the Dream-Den (2026-11-10): a cast Lurrus's graveyard-cast permission is live the moment
     // it lands -- CollectActivationKeys' kActGyCast -- so a plan that casts it must be fanned.
     if (pp.gy_cast_permanent_max_mv > 0) { return true; }
@@ -108375,7 +108393,8 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             | (static_cast<std::uint64_t>(pm.mana_tap_mark) << 40)
             | (static_cast<std::uint64_t>(pm.temp_vigilance) << 41)     // End-Raze until-EOT grant (0 elsewhere)
             | (static_cast<std::uint64_t>(pm.return_at_end_step) << 42) // Ilharg put body (0 elsewhere)
-            | (static_cast<std::uint64_t>(pm.unearthed) << 48));        // Unearth (0 elsewhere)
+            | (static_cast<std::uint64_t>(pm.unearthed) << 48)          // Unearth (0 elsewhere)
+            | (static_cast<std::uint64_t>(pm.temp_base_set) << 49));    // Allosaurus Shepherd (0 elsewhere)
         mix(static_cast<std::uint64_t>(static_cast<std::uint8_t>(pm.chosen_color)) | (static_cast<std::uint64_t>(pm.garth_chosen_mask) << 8)
             | (static_cast<std::uint64_t>(pm.chosen_keyword_mask) << 16) | (static_cast<std::uint64_t>(pm.chosen_subtype_id) << 24));
         if (pm.chosen_player >= 0) { mix(0xD011ull ^ (static_cast<std::uint64_t>(pm.chosen_player) << 20)); }   // Stuffy Doll
@@ -110731,6 +110750,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         if (perm.destroy_at_end_if_attacked) { Fold(tk, 0xBE55E5Cull); }   // Berserk (nonzero-gated)
         if (perm.return_at_end_step) { Fold(tk, 0x12E7A2Bull); }   // Ilharg put body (nonzero-gated)
         if (perm.unearthed) { Fold(tk, 0x0E0A57E5ull); }   // unearthed (nonzero-gated)
+        if (perm.temp_base_set) { Fold(tk, 0xBA5E5E7ull); }   // Allosaurus Shepherd base set (nonzero-gated)
         // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object, future-determining
         // (lifelink + vigilance on every Human; which opponent creature returns). Nonzero-gated.
         if (perm.chosen_keyword_mask != 0)
@@ -141703,7 +141723,7 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "TapSubtypeSteal", "TransformSelf", "TapTargetPump", "PayCounterSelf", "CounterPing", "PingLoop",
         "SacNamedTutorPut", "TargetPump", "UntapLand", "FigureTwo", "FigureFour", "FigureEight",
         "ThresholdLoot", "CounterDestroyArtEnch", "TurnFaceUp", "TurnFaceUpLate", "SelfBounce", "TapTutorPut", "TapTreasure",
-        "SelfPing"
+        "SelfPing", "TapPing", "TeamBasePT"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }

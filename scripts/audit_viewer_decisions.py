@@ -207,6 +207,21 @@ MANIFEST = {
     "land_aura_can_target_opponent": ("main_phase",     truthy),
     "reveal_subtype_or_pay": ("main_phase",             truthy),
     "kicker_cost": ("main_phase",                        truthy),
+    # ---- Elves (2026-11-26) ----
+    # Joraga Warcaller's multikicker / Galadhrim Brigade's squad: the kick COUNT K is a main_phase plan VARIANT
+    # (Action::kick_count, one per K = 0..kmax; human play is never pruned) and the GUI cycles K on the kicker
+    # toggle (linebuild.js toggleKicker, the "[k/kmax kicks]" badge).
+    "multikicker_cost": ("main_phase",                   truthy),
+    "squad_cost": ("main_phase",                         truthy),
+    # Immaculate Magistrate's "{T}: N +1/+1 counters on target creature": the TapTargetPump target, picked on the
+    # live battlefield through the board-click `target` at activation (a creature cast earlier in the line included).
+    "tap_target_counters_per_subtype": ("target",        truthy),
+    # Leaf-Crowned Visionary's "you may pay {G}. If you do, draw a card" on each Elf cast: Mihail's yes/no -- the
+    # `dig` chooser "(Elf cast: pay {G} to draw a card)", offered only when the {G} is payable.
+    "cast_subtype_pay_draw_cost": ("dig",                truthy),
+    # Allosaurus Shepherd's "{4}{G}{G}: Elves base 5/5 until end of turn": whether / when to activate is a
+    # main_phase board activation (generic act_label `act=`), no target.
+    "team_base_pt_cost": ("main_phase",                  present),
     # Spellskite (Morph INT-1): the redirect is a searched plan VARIANT of a solo-target trick cast
     # (Action::trick_redirect, verb "redirect"), and its {U/P} mana-vs-2-life choice is the phyrexian
     # twin -- both ride main_phase plan variants.
@@ -1027,6 +1042,7 @@ BOARD_ACTIVATIONS = {
     "lifelink_grant_cost":                       ("activate",       truthy,   "lifelink_grant_cost"),  # Heliod {1}{W}
     "self_counter_cost":                         ("activate",       truthy,   "self_counter_cost"),    # Walking Ballista {4}
     "figure_two_cost":                          ("activate",       truthy,   "figure_two_cost"),
+    "team_base_pt_cost":                        ("activate",       present,  "team_base_pt_cost"),   # Allosaurus Shepherd
     "figure_four_cost":                         ("activate",       truthy,   "figure_four_cost"),
     "figure_eight_cost":                        ("activate",       truthy,   "figure_eight_cost"),
     "remove_counter_ping_damage":                ("activate",       positive, None),                   # Walking Ballista ping (counter cost)
@@ -1085,6 +1101,13 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # Elves (2026-11-26) -- payloads and magnitudes of choices classified in MANIFEST.
+    "multikick_enter_counters": "Joraga Warcaller -- enters with K +1/+1 counters, K fixed by the kick count already chosen (multikicker_cost -> main_phase), no choice of its own",
+    "lord_per_own_plus_counter": "Joraga Warcaller -- a static lord whose bonus scales with the counters on it, no choice",
+    "mana_per_own_power": "Marwyn, the Nurturer -- its tap yields {G} x its live power (a fixed colour and amount); whether to tap is the mana-payment exemption",
+    "team_base_pt_power": "Allosaurus Shepherd -- the printed 5 of 'base power and toughness 5/5' (rides team_base_pt_cost -> main_phase), no choice",
+    "team_base_pt_tough": "Allosaurus Shepherd -- the printed 5 toughness (rides team_base_pt_cost), no choice",
+    "team_base_pt_subtype": "Allosaurus Shepherd -- 'each Elf creature you control': every matching creature, fixed (rides team_base_pt_cost), no choice",
     # Maze's End (I1, 2026-11-17).
     "damage_all_creatures_x_per_subtype": "Gates Ablaze -- an untargeted symmetric sweep ('each creature'), X fixed by the Gates you control at resolution: no target, no mode, no division, no 'may'. The only decision is whether to cast it (main_phase)",
     "alt_win_distinct_named_subtype": "Maze's End's win condition subtype -- a mandatory rules check at resolution, no choice",
@@ -2600,6 +2623,10 @@ def modeled_tokens(card):
     if p.get("cast_trigger_bounce_nonland") or p.get("etb_bounce_nonland"):   # Hullbreaker / Brinelin (Sea I4)
         t.add("target")
     if p.get("transmute_cost") or p.get("life_gated_put_creatures_cost"):
+        t.add("search")
+    # Seahunter / Maze's End / Elvish Clancaller: "{cost}, {T}: Search your library for ..." -- the find rides the
+    # TapTutorPut main_phase plan variants (one per distinct legal name + fail-to-find).
+    if "tap_tutor_put_cost" in p:
         t.add("search")
     # The land-search cluster: every "search your library for ... land" is the tutor_etb prompts.
     if p.get("land_search_count", 0) > 0:
