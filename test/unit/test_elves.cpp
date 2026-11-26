@@ -786,3 +786,185 @@ TEST_CASE("Genesis Wave: the put opens site 10 -- a continuation spends the hast
         CHECK(exec.battlefield[i].tapped == roll.battlefield[i].tapped);
     }
 }
+// ---- 11. ELVES MANA ACCOUNTING (the 2026-11-26 claude-play sweep's mana cluster) ---------------------------------
+
+namespace {
+bool PlanCastsInOrder(const TurnSolver::Plan& p, const std::vector<std::string>& names)
+{
+    std::vector<std::string> got;
+    for (const Action& a : p.actions) { if (a.kind == Action::Kind::CastFromHand) { got.push_back(a.card_name.str()); } }
+    return got == names;
+}
+}   // namespace
+
+TEST_CASE("Elves mana: a HASTED Priest of Titania is credited its Elf count, not one (seed 9500015 T3)")
+{
+    // Concordant Crossroads; two Forests, Joraga Warcaller, Priest of Titania (2 Elves -> 2). Visionary off the
+    // Forests, Priest off the first Priest (3 Elves -> 3, {G} floats), then the HASTED second Priest taps for 4.
+    GameState s = EBase();
+    EForests(s, 2);
+    EPut(s, "Concordant Crossroads", 1);
+    EPut(s, "Joraga Warcaller", 2);
+    EPut(s, "Priest of Titania", 3);
+    EHand(s, "Leaf-Crowned Visionary", 20);
+    EHand(s, "Priest of Titania", 21);
+    EHand(s, "Ezuri, Renegade Leader", 22);
+    CHECK(ScaledDorkEntryYield(s, 0, ED("Priest of Titania")) == 3);   // Warcaller + Priest + itself
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* p = EFind(plans, [](const TurnSolver::Plan& q)
+    {
+        return PlanCastsInOrder(q, { "Leaf-Crowned Visionary", "Priest of Titania", "Ezuri, Renegade Leader" })
+            && !q.mihail_pay_choice.Paid(0) && !q.mihail_pay_choice.Paid(1);
+    });
+    REQUIRE(p != nullptr);
+    GameState roll, real;
+    EBoth(s, *p, roll, real);
+    for (const GameState* g : { &roll, &real })
+    {
+        CHECK(EN(*g, 20) != nullptr);
+        CHECK(EN(*g, 21) != nullptr);
+        CHECK(EN(*g, 22) != nullptr);
+    }
+    // The validator agrees (the walk resolves the Visionary and the hasted Priest before pricing Ezuri).
+    TurnSolver::LineSpec spec;
+    spec.casts = { "Leaf-Crowned Visionary", "Priest of Titania", "Ezuri, Renegade Leader" };
+    const TurnSolver::LineCheck chk = TurnSolver::CheckLine(s, true, spec, &plans);
+    CHECK(chk.verdict != TurnSolver::LineCheck::Verdict::Illegal);
+}
+
+TEST_CASE("Elves mana: with no live Priest, only the hasted Priest's own count can fund the line")
+{
+    // Concordant Crossroads, three Forests, Joraga Warcaller. Priest of Titania off two Forests; HASTED it taps for 2
+    // (Warcaller + itself), which with the third Forest pays Ezuri's {1}{G}{G}. Credited one mana, the pair read as
+    // 4 of the 5 it costs and was never enumerated (no live Priest on the board, so no growth credit covers it).
+    GameState s = EBase();
+    EForests(s, 3);
+    EPut(s, "Concordant Crossroads", 1);
+    EPut(s, "Joraga Warcaller", 2);
+    EHand(s, "Priest of Titania", 21);
+    EHand(s, "Ezuri, Renegade Leader", 22);
+    CHECK(ScaledDorkEntryYield(s, 0, ED("Priest of Titania")) == 2);   // Warcaller + itself
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* p = EFind(plans, [](const TurnSolver::Plan& q)
+    { return PlanCastsInOrder(q, { "Priest of Titania", "Ezuri, Renegade Leader" }); });
+    REQUIRE(p != nullptr);
+    GameState roll, real;
+    EBoth(s, *p, roll, real);
+    for (const GameState* g : { &roll, &real })
+    {
+        CHECK(EN(*g, 21) != nullptr);
+        CHECK(EN(*g, 22) != nullptr);
+    }
+    // The validator, handed no menu, prices it with its own real-payment walk: the Priest resolves onto the copy.
+    TurnSolver::LineSpec spec;
+    spec.casts = { "Priest of Titania", "Ezuri, Renegade Leader" };
+    const TurnSolver::LineCheck chk = TurnSolver::CheckLine(s, true, spec, nullptr);
+    CHECK(chk.verdict != TurnSolver::LineCheck::Verdict::Illegal);
+}
+
+TEST_CASE("Elves mana: a batch the Priests' own Elves grow is not prepaid at the plan-start count (seed 9500015 T3)")
+{
+    // Two untapped Priests at 3 (Warcaller + both Priests), nothing else. {Visionary, Ezuri} = 5 of the 6 the
+    // plan-start count makes, so the old whole-turn prepay tapped both Priests at 3 and floated {G}. Visionary
+    // first, then the second Priest at 4, floats {G}{G}.
+    GameState s = EBase();
+    EPut(s, "Joraga Warcaller", 2);
+    EPut(s, "Priest of Titania", 3);
+    EPut(s, "Priest of Titania", 4);
+    EHand(s, "Leaf-Crowned Visionary", 20);
+    EHand(s, "Ezuri, Renegade Leader", 22);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* p = EFind(plans, [](const TurnSolver::Plan& q)
+    {
+        return PlanCastsInOrder(q, { "Leaf-Crowned Visionary", "Ezuri, Renegade Leader" })
+            && !q.mihail_pay_choice.Paid(0);
+    });
+    REQUIRE(p != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *p, /*is_pre_combat=*/true);
+    REQUIRE(EN(roll, 22) != nullptr);
+    CHECK(roll.floating_mana.Total() + roll.floating_creature_mana.Total() == 2);
+}
+
+TEST_CASE("Elves mana: the prepay does not tap Marwyn before an Elf in the same batch grows it (seed 9500008 T6)")
+{
+    // Forest x2, Llanowar Elves, Leaf-Crowned Visionary, Marwyn (1 + the Visionary = power 2). {Taunting Elf,
+    // Immaculate Magistrate} paying the Visionary's {G} on Taunting Elf's cast = 6: legal only with Marwyn tapped
+    // after Taunting Elf enters (its counter -> power 3).
+    GameState s = EBase();
+    EForests(s, 2);
+    EPut(s, "Llanowar Elves", 2);
+    EPut(s, "Leaf-Crowned Visionary", 3);
+    EPut(s, "Marwyn, the Nurturer", 4);
+    EHand(s, "Taunting Elf", 20);
+    EHand(s, "Immaculate Magistrate", 21);
+    const CardDefinition& marwyn = ED("Marwyn, the Nurturer");
+    CHECK(CastGrowsScaledDork(marwyn, *EN(s, 4), ED("Taunting Elf")));
+    CHECK(CastGrowsScaledDork(marwyn, *EN(s, 4), ED("Elvish Clancaller")));   // a lord covering an Elf Marwyn
+    CHECK_FALSE(CastGrowsScaledDork(marwyn, *EN(s, 4), ED("Concordant Crossroads")));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* p = EFind(plans, [](const TurnSolver::Plan& q)
+    {
+        return PlanCastsInOrder(q, { "Taunting Elf", "Immaculate Magistrate" })
+            && q.mihail_pay_choice.Paid(0) && !q.mihail_pay_choice.Paid(1);
+    });
+    REQUIRE(p != nullptr);
+    GameState roll, real;
+    EBoth(s, *p, roll, real);
+    for (const GameState* g : { &roll, &real })
+    {
+        CHECK(EN(*g, 20) != nullptr);
+        CHECK(EN(*g, 21) != nullptr);
+        CHECK(g->players[0].hand.size() == 1u);   // the paid Visionary draw
+    }
+}
+
+TEST_CASE("Elves mana: Wirewood Lodge's burst is fed from the float when the float is the only {G} (seed 9500005 T3)")
+{
+    // After Clancaller and a Brigade: floating {G}, Priest of Titania TAPPED (4 Elves), Wirewood Lodge untapped.
+    // {2}{G}: the {G} feeds the Lodge, the Priest untaps and taps again for 4 -- the float drain used to spend the
+    // {G} on the bill and strand the Lodge.
+    GameState s = EBase();
+    EPut(s, "Elvish Mystic", 1, /*tapped=*/true);
+    EPut(s, "Priest of Titania", 2, /*tapped=*/true);
+    EPut(s, "Elvish Clancaller", 3, false, /*sick=*/true);
+    EPut(s, "Galadhrim Brigade", 4, false, /*sick=*/true);
+    EPut(s, "Wirewood Lodge", 5);
+    s.floating_mana.green = 1;
+    ManaCost cost; cost.generic = 2; cost.green = 1;
+    GameState pay = s;
+    REQUIRE(TapForCostDirect(pay, cost, /*for_creature=*/true));
+    CHECK(EN(pay, 5)->tapped);
+    CHECK(pay.floating_mana.Total() == 1);   // {G}x4 for the feed's {G}, minus {2}{G}
+}
+
+TEST_CASE("Elves mana: a Cavern-class float unit pays a noncreature cost only as {C} (seed 9500008 T6)")
+{
+    for (const bool creature : { false, true })
+    {
+        CAPTURE(creature);
+        GameState s = EBase();
+        s.floating_mana.wild = 1;
+        SetCcoFloatWild(s, 1);
+        REQUIRE(CcoFloatWild(s) == 1);
+        ManaCost g; g.green = 1;
+        GameState a = s;
+        CHECK(TapForCostDirect(a, g, creature) == creature);   // a {G} pip: creature spells only
+        if (!creature) { CHECK(a.floating_mana.wild == 1); CHECK(CcoFloatWild(a) == 1); }   // untouched
+        else { CHECK(a.floating_mana.Total() == 0); CHECK(CcoFloatWild(a) == 0); }
+        ManaCost one; one.generic = 1;
+        GameState b = s;
+        CHECK(TapForCostDirect(b, one, creature));              // a generic pip: anything (as {C})
+        CHECK(b.floating_mana.Total() == 0);
+    }
+    // A noncreature {G} with a Forest-made {G} beside it takes the {G} and leaves the Cavern unit marked.
+    GameState s = EBase();
+    s.floating_mana.wild = 1;
+    s.floating_mana.green = 1;
+    SetCcoFloatWild(s, 1);
+    ManaCost g; g.green = 1;
+    REQUIRE(TapForCostDirect(s, g, /*for_creature=*/false));
+    CHECK(s.floating_mana.green == 0);
+    CHECK(s.floating_mana.wild == 1);
+    CHECK(CcoFloatWild(s) == 1);
+}

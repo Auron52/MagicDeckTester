@@ -1862,6 +1862,20 @@ inline void SetPrepayKeptC(GameState& s, int n)
     s.floating_prepay_c       = static_cast<std::uint8_t>(n);
     s.floating_prepay_c_stamp = n > 0 ? PrepayCStampNow(s) : std::uint8_t{0xFF};
 }
+// The CAVERN-CLASS units of the general float (GameState::floating_cco_wild): how many of floating_mana.wild came
+// out of a colored_creature_only source (Cavern of Souls, Sliver Hive, Unclaimed Territory, Secluded Courtyard),
+// 0 when stale. Such a unit is ANY colour for a creature spell and {C} for everything else.
+inline int CcoFloatWild(const GameState& s)
+{
+    if (s.floating_cco_wild == 0 || s.floating_cco_wild_stamp != PrepayCStampNow(s)) { return 0; }
+    return std::min<int>(s.floating_cco_wild, s.floating_mana.wild);
+}
+inline void SetCcoFloatWild(GameState& s, int n)
+{
+    n = std::max(0, std::min({ n, 255, s.floating_mana.wild }));
+    s.floating_cco_wild       = static_cast<std::uint8_t>(n);
+    s.floating_cco_wild_stamp = n > 0 ? PrepayCStampNow(s) : std::uint8_t{0xFF};
+}
 
 // ---- THE PREPAY'S COLOUR-RESTRICTED `wild` (GameState::prepay_wild_true; MTG_PREPAY_WILD_TRUE, CR 106.1b) ----
 // The prepay funds the bill's generic out of the solve's surplus colours and books it `wild`; a unit whose source
@@ -35743,6 +35757,24 @@ inline int ScaledDorkCount(const GameState& state, int controller, const CardDef
     return n;
 }
 
+// The yield of one tap of a scaled dork that has just ENTERED from hand and can tap at once (a hasted cast:
+// Concordant Crossroads, a haste lord). ScaledDorkCount reads the battlefield, which does not hold the projected
+// body yet, so the hasted-cast credit used to fall to ManaProducedPerTap (1): a hasted Priest of Titania on a
+// board of three Elves was credited {G} where its tap makes {G}{G}{G}{G}, and "Leaf-Crowned Visionary, Priest of
+// Titania, Ezuri" was never enumerated (Elves claude-play seed 9500015 T3). The count is the board's plus the dork
+// itself when it has the counted subtype; Marwyn's is its printed power plus the board's lords (no counter yet:
+// its watcher counts ANOTHER Elf). Casts earlier in the same plan are not counted, so this is a lower bound on the
+// real tap (the count only grows while a plan resolves) and the credit can never offer a phantom.
+inline int ScaledDorkEntryYield(const GameState& state, int controller, const CardDefinition& def)
+{
+    if (def.params.mana_per_life_gained) { return ScaledDorkCount(state, controller, def); }
+    if (def.params.mana_per_own_power)
+    { return std::max(0, def.card.m_power.value_or(0) + ComputeLordBonus(def.card, state, controller).first); }
+    int n = ScaledDorkCount(state, controller, def);
+    if (def.card.IsCreature() && CardHasSubtype(def.card, def.params.mana_per_creature_subtype)) { ++n; }
+    return n;
+}
+
 // Arbor Elf gate: a source with mana_requires_land_subtype is live only while the controller
 // controls a permanent with that subtype (only Forests carry subtype "Forest"). True for every
 // card without the param -> byte-identical elsewhere.
@@ -36509,6 +36541,34 @@ inline bool FeedsLiveScaledDork(const GameState& state, const CardDefinition& de
         if (CardHasSubtype(def.card, d->params.mana_per_creature_subtype)) { return true; }
     }
     return false;
+}
+
+// Does casting `cast` raise what one tap of the scaled mana dork `dork` (on the battlefield as `body`) makes? For
+// a subtype-counting dork (Priest of Titania / Elvish Archdruid) a creature of that subtype. For Marwyn, the
+// Nurturer (mana_per_own_power) a creature its enter-watcher counts (a +1/+1 counter) and a lord whose bonus
+// covers it. Life-scaled dorks (Accomplished Alchemist) grow from lifegain, not from casts: false. Read by the
+// batch prepay's grown-scaler decline (TurnSolver, MTG_PREPAY_SCALER_GROWN), which used to know the subtype
+// shape only and so pre-tapped Marwyn at its plan-start power (Elves claude-play seed 9500008 T6).
+inline bool CastGrowsScaledDork(const CardDefinition& dork, const Permanent& body, const CardDefinition& cast)
+{
+    if (dork.params.mana_per_life_gained) { return false; }
+    if (dork.params.mana_per_own_power)
+    {
+        if (cast.card.IsCreature() && dork.params.own_creature_enters_self_counters > 0)
+        {
+            if (dork.params.enters_watch_subtypes.empty()) { return true; }
+            for (const std::string& sub : dork.params.enters_watch_subtypes)
+            { if (CardHasSubtype(cast.card, sub)) { return true; } }
+        }
+        if (IsLordPermanent(cast) && cast.params.power_bonus > 0)
+        {
+            if (cast.params.affects_all_creatures) { return true; }
+            for (const std::string& sub : cast.params.subtypes_affected)
+            { if (CardHasSubtype(body.card, sub)) { return true; } }
+        }
+        return false;
+    }
+    return cast.card.IsCreature() && CardHasSubtype(cast.card, dork.params.mana_per_creature_subtype);
 }
 
 // --- Three Tree City scaled mana ability ------------------------------------------------------
@@ -52532,6 +52592,15 @@ inline bool AnyUntappedFilterSource(const GameState& state)
         if (p.controller_index != active || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && (IsManaConversionSource(d->params) || IsScaledManaLand(*d))) { return true; }
+        // An untap-burst land (Wirewood Lodge: "{G},{T}: Untap target Elf") with a TAPPED 2+ scaled Elf is a
+        // conversion of floating mana too: its burst consumes one floating {G} feed. The float drain spends that
+        // {G} on the bill first, the first backtracker then runs with an empty float, and the burst it offered
+        // (AvailableManaPool credits it) could not be fed: Elves claude-play seed 9500005 T3, Clancaller ->
+        // Brigade -> Brigade dropped the second Brigade with the Lodge untapped (one floating {G}, a tapped Priest
+        // at 4). MTG_UNTAP_FLOAT_FEED_RETRY=0 -> the plain filters only.
+        static const bool s_untap_retry = EnvOn("MTG_UNTAP_FLOAT_FEED_RETRY", true);
+        if (heurarm::Flag(heurarm::UNTAP_FLOAT_FEED_RETRY, s_untap_retry) && d && d->params.untap_creature_cost.has_value()
+            && UntapBurstBestYield(state, active, *d, /*require_tapped=*/true) >= 2) { return true; }
     }
     return false;
 }

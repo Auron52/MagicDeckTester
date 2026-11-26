@@ -13748,9 +13748,56 @@ static void SwapLeftoverForLine(GameState& state, const ManaCost& cost_in, const
     }
 }
 
+// CAVERN-CLASS FLOAT (GameState::floating_cco_wild, MTG_CCO_FLOAT_WILD). For a NONCREATURE payment the marked
+// `wild` units are {C} (Cavern of Souls' coloured mana pays only creature spells, CR 106.6), so they are presented
+// to the whole payment as colourless and handed back afterwards; a unit still left is restored to `wild` only as
+// far as the {C} count proves it unspent (the converted units are taken to have been spent first -- a leftover
+// genuine {C} is never relabelled any-colour). For a CREATURE payment they stay `wild` and the payment is charged
+// with them first (legal: a creature spell may spend a Cavern's colour), so the mark shrinks by the wild it spent.
+// Inert (one read) whenever no prepay marked a unit this phase.
+struct CcoFloatScope
+{
+    GameState& s;
+    bool for_creature;
+    int  k = 0, c_pre = 0, w_pre = 0;
+    CcoFloatScope(GameState& st, bool fc) : s(st), for_creature(fc)
+    {
+        k = CcoFloatWild(s);
+        if (k == 0) { return; }
+        w_pre = s.floating_mana.wild;
+        if (!for_creature)
+        {
+            c_pre = s.floating_mana.colorless;
+            s.floating_mana.wild -= k;
+            s.floating_mana.wild_c = std::min(s.floating_mana.wild_c, s.floating_mana.wild);
+            s.floating_mana.colorless += k;
+            SetCcoFloatWild(s, 0);
+        }
+    }
+    ~CcoFloatScope()
+    {
+        if (k == 0) { return; }
+        if (!for_creature)
+        {
+            const int back = std::clamp(s.floating_mana.colorless - c_pre, 0, k);
+            s.floating_mana.colorless -= back;
+            s.floating_mana.wild      += back;
+            SetCcoFloatWild(s, CcoFloatWild(s) + back);
+        }
+        else
+        {
+            const int spent = std::max(0, w_pre - s.floating_mana.wild);
+            SetCcoFloatWild(s, std::max(0, k - spent));
+        }
+    }
+    CcoFloatScope(const CcoFloatScope&) = delete;
+    CcoFloatScope& operator=(const CcoFloatScope&) = delete;
+};
+
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
 {
+    CcoFloatScope _cco_float(state, for_creature);
     // Record the committed mana-ability taps only after the full payment has
     // succeeded. The payer tries and rolls back alternate allocations; creating
     // tokens inside TapSourceIntoFloat or the backtracker would turn trial taps
