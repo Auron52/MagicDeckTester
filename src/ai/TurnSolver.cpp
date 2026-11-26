@@ -132241,8 +132241,9 @@ static BoundaryChoice BoundaryChooseCrossingLandsByRollout(GameState& copy, int 
 // crossing-land digit alone at the group-wave host: cl_only), and reports whether any branch ends the game on this
 // turn. Such a branch is the chooser's pick (no branch can win earlier), so a candidate for which this returns true is
 // scored exactly as the full solve scores it; one for which it returns false still cannot win this round.
-// MTG_KO_BOUNDARY_SIM -- DEFAULT OFF (pending the USER's K decision); =1 crosses the boundary for EVERY deck, not
-// only a crossing-land deck. THE MISSED CASE (Mill, 2026-11-26, the K fleet's one worse deck): the claim above that
+// MTG_KO_BOUNDARY_SIM -- DEFAULT ON (a soundness fix to the identity, 2026-11-26: Mill KF vs today -18 over 12,000
+// games with 0 slower, identical on every other deck); =0 restores the crossing-land-only check. It crosses the
+// boundary for EVERY deck, not only a crossing-land deck. THE MISSED CASE (Mill, 2026-11-26, the K fleet's one worse deck): the claim above that
 // "a deck-out is flagged the moment the library empties" is true of every mill INSIDE our turn, but the passive
 // opponent's own turn runs in the boundary too (SimulateEndAndStartNextTurn -> ResolvePassiveOpponentLandTurn), and
 // when it cracks a fetchland our Archive Trap is cast there for {0} and mills 13 -- a deck-out that ends the game
@@ -132256,7 +132257,7 @@ static BoundaryChoice BoundaryChooseCrossingLandsByRollout(GameState& copy, int 
 // wins), which is exactly the list that was incomplete. A crossing-land deck keeps its fan below.
 inline bool KoBoundarySimOn()
 {
-    static const bool v = EnvOn("MTG_KO_BOUNDARY_SIM");
+    static const bool v = EnvOn("MTG_KO_BOUNDARY_SIM", true);
     return heurarm::Flag(heurarm::KO_BOUNDARY_SIM, v);
 }
 static bool KillOnlyBoundaryEndsGame(const GameState& after_turn, bool cl_only)
