@@ -5,7 +5,7 @@
 #
 #   --smoke       fast gate, target < 15 min, run frequently / before every push
 #   (default)     pre-commit regression, target < 45 min, run before committing
-#   --overnight   deep multi-seed sweep, target < 8 h, run while you sleep
+#   --overnight   deep multi-seed sweep; full run can exceed 10 h on a 12-core host
 #
 # Each case is (deck x depth x seed x games x budget), defined in
 # regression_cases.sh. The whole matrix is emitted as ONE manifest and run via
@@ -239,7 +239,7 @@ if [ "$ACCEPT" = 1 ]; then
     [ -n "$prior_acks" ] && echo "$prior_acks"
     [ -n "$ACCEPT_ACK" ] && echo "# accepted-with-regressions ($MODE, $(date +%Y-%m-%d)): $ACCEPT_ACK"
     echo "# Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)"
-    echo "# Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint."
+    echo "# Modes: smoke (<15m), regression (<45m), overnight (full sweep; host-dependent); seeds disjoint."
     emit_mode smoke      SMOKE_CASES
     emit_mode regression REGRESSION_CASES
     emit_mode overnight  OVERNIGHT_CASES

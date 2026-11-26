@@ -11,7 +11,7 @@
 # Lookahead bottoming is derived from depth by the engine (ON iff depth>0); no flag.
 #
 # Time budgets (shared across ALL decks; trim cheaper decks when adding new ones):
-#   smoke      < 15 min   regression < 45 min   overnight < 8 h
+#   smoke      < 15 min   regression < 45 min   overnight full sweep (host-dependent)
 # See test/TIMINGS.md for the measured per-case costs these counts are sized from.
 
 # Per-deck folder layout (docs/design/per-deck-folder-layout.md): each deck's decklist,

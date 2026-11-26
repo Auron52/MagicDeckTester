@@ -62,10 +62,10 @@ Release first: `./build.sh` (never raw `cmake` — see CLAUDE.md; a bare `cmake`
 |------|------|--------|--------|---------|-------|
 | smoke | `--smoke` | < 15 min | ~4.5-6.5 min PGO, 6.5-11 min Release (2026-11-19, 32 cores) | frequently / before every push | 1001 |
 | regression | *(default)* | < 45 min | `--both` (smoke + regression pooled): ~19 min PGO, 22-25 min Release (2026-11-19, 32 cores) | before committing | 2002, 3003 |
-| overnight | `--overnight` | < 8 h | ~30 min PGO (2026-11-10, 578 jobs, 29 threads) | any time — see below | 4004, 5005, 6006, 7007 |
+| overnight | `--overnight` | full sweep | 10 h 52 m game batch (2026-11-26, 793 jobs, 12 threads); ~30 min PGO on 29 threads with 578 jobs (2026-11-10) | any time — see below | 4004, 5005, 6006, 7007 |
 
-> **THE BUDGET COLUMN IS A CEILING, NOT AN ESTIMATE — do not defer the overnight tier on it.**
-> "< 8 h" is the *sizing rule* for the matrix, not what a run costs. Measured 2026-09-26 on a
+> **The old < 8 h sizing rule was measured on a faster host and a smaller matrix; it is not a ceiling for the current full tier.**
+> Measured 2026-09-26 on a
 > 32-core box: the full overnight tier is **12 minutes 52 seconds** of batch makespan. Read that
 > number before telling a user a tier is theirs to schedule: on 2026-09-26 an agent deferred the
 > overnight as "~8 h, so that's yours to schedule rather than mine to launch", quoting this table,
