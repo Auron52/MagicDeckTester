@@ -4026,6 +4026,45 @@ static thread_local int g_cs_m2solve_nest = 0;   // inside SolveSecondMainInSear
 // (Hoisted up here from RolloutNestGuard so the main-phase filter, defined earlier, can read it --
 // see the PLAYOUT carve-out in MainPhaseFilterActive.)
 static thread_local int g_rollout_nest = 0;
+// THE FREE-TURN STANDING PASS (EE lock step 8a, 2026-11-26). A FREE turn (MTG_FREE_TURNS) is not a new round, so it
+// gets the depth give-back (DepthAcrossTurn, SimulateToEndImpl's entry give-back; USER-accepted 2026-11-21). Every
+// iterative-deepening host assumes its PASS 0 -- the ranking that always stands, which no ceiling may cut -- is cheap:
+// greedy rollouts beyond this turn. Along a projected LOCK the round never advances, so the give-back turns pass 0's
+// depth-0 rollouts into a depth-1 SEARCH at every free turn, whose own pass-0 rollouts enter the next free turn at
+// depth 1 again: the nesting is bounded only by the game's end or TurnSeqCapped, each level multiplied by its
+// candidates and boundary-fan width, and nothing polls the budget (nested solves run enforce_budget = false; Overrun()
+// is armed only for passes >= 1). Measured: ho1 gi=9 (seed 8009) at d3 b10, the executor's end-of-turn crossing node,
+// pass 0, rollout nest 15 at T4 (seq 10 -> 19, every one a free turn), 709k units against a 9k budget and climbing.
+// The REMEDY RE-PRICES (FreeTurnStandOn): under a FINITE budget, on a deck with free turns, pass 0 is armed with the
+// proportional ceiling (kOverrunBudgetMult x the budget, FullSearchLine's constant); a pass 0 that trips it is re-run
+// as the STANDING pass -- this scope set, so a free turn takes NO give-back (it counts as a ply, like any other turn:
+// "this turn complete" instead of "this round complete") -- and that ranking stands. Inert at an unlimited budget
+// (never armed) and for every deck without free turns; a pass 0 that fits the ceiling is unchanged unit for unit; a
+// larger budget completes the round-complete pass 0 a smaller one cut. The scope is folded into every rollout memo key
+// (beside kRolloutNarrowTag), so the standing pass never reads a give-back answer.
+namespace ftstand { inline thread_local int t_true_d0 = 0; }
+static constexpr uint64_t kFreeTurnStandTag = 0xF7D0;
+struct FreeTurnTrueD0Scope
+{
+    bool on;
+    explicit FreeTurnTrueD0Scope(bool o) : on(o) { if (on) { ++ftstand::t_true_d0; } }
+    ~FreeTurnTrueD0Scope() { if (on) { --ftstand::t_true_d0; } }
+    FreeTurnTrueD0Scope(const FreeTurnTrueD0Scope&) = delete;
+    FreeTurnTrueD0Scope& operator=(const FreeTurnTrueD0Scope&) = delete;
+};
+// The depth give-back test of both sites: an extra turn always, a free turn unless the standing pass is running.
+static inline bool GivesRoundBack(const GameState& s)
+{ return s.in_extra_turn || (s.in_free_turn && ftstand::t_true_d0 == 0); }
+static bool FreeTurnStandOn()
+{
+    static const bool on = EnvOn("MTG_FREE_TURN_STAND", true);   // DEFAULT ON (a re-price); =0 the unbounded pass 0
+    return on;
+}
+static double OverrunBudgetMult();   // kOverrunBudgetMult (defined with FullSearchLine)
+// Arm pass 0 of a host? A finite budget, a deck with free turns, not already the standing pass.
+static inline bool FreeTurnStandArms(const GameState& s, const SearchBudget* b)
+{ return FreeTurnStandOn() && s.deck_has_free_turn && b != nullptr && !b->Unlimited() && ftstand::t_true_d0 == 0; }
+namespace nestdiag { inline thread_local int t_host = 0, t_pass = -1, t_max = 0; }   // TEMP DIAG (EE 8a)
 // P5b fold 2 (MTG_FOLD_LAND_ORDER): the lever, and whether it is LIVE for this state's enumeration. Live only on
 // the SEARCH's own enumerations (g_rollout_nest == 0): inside a playout beyond the horizon the twin order is never
 // chosen (the playout does not branch over the first land), so dropping a land-first plan there is not an identity
@@ -112241,6 +112280,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         if (g_condemn_suppress) { Fold(k, 0xC5B9); }
     }
     if (t_rollout_narrow) { Fold(k, kRolloutNarrowTag); }   // see MTG_ROLLOUT_FAN_NARROW
+    if (ftstand::t_true_d0 != 0) { Fold(k, kFreeTurnStandTag); }
     FoldPhysicalCards(k, state);   // MTG_PLAN_CACHE_EXACT_KEY
     auto it = cache.find(k);
     // MTG_PLAN_PRICED_LEDGER: the unlimited cache's verdict on this lookup (see pledger).
@@ -114444,7 +114484,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     static const int s_roll_horizon = []{ const char* e = std::getenv("MTG_ROLLOUT_HORIZON");
                                           return (e && *e) ? std::atoi(e) : -1; }();
     const int roll_start = state.turn_number;
-    const bool roll_entry_extra = state.InSameRoundTurn();   // entered at an extra (or free) turn's start (see turn_depth)
+    const bool roll_entry_extra = GivesRoundBack(state);   // entered at an extra (or free) turn's start (see turn_depth)
     // First-turn depth override applies to the OUTERMOST rollout only (see the thread_local).
     // Read BEFORE the nest guard increments. Also gated on the env hatch: an explicitly-set
     // MTG_FD_LEAF_DEPTH is the A/B baseline and must not carry the per-deck first-turn ply.
@@ -114467,6 +114507,11 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         }
     } _ro_timer{ _ro_time, _ro_t0 };
     RolloutNestGuard _rollout_nest;   // see g_rollout_nest: this rollout re-enters SolveWithLookahead
+    { static const bool s_nd = EnvOn("MTG_DIAG_NEST");
+      if (s_nd && g_rollout_nest >= 6 && g_rollout_nest > nestdiag::t_max) { nestdiag::t_max = g_rollout_nest;
+        std::fprintf(stderr, "[nestdiag] host=%d pass=%d nest=%d T%d seq=%d depth=%d entry_same_round=%d free=%d used=%lld lim=%lld ovl=%lld\n",
+          nestdiag::t_host, nestdiag::t_pass, g_rollout_nest, state.turn_number, state.TurnSeq(), depth, roll_entry_extra ? 1 : 0,
+          state.in_free_turn ? 1 : 0, budget ? budget->Used() : -1LL, budget ? budget->Limit() : -1LL, budget ? budget->OverrunLimit() : -1LL); } }
     GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks inside this rollout bill here
     if (s_rollout_stats) { g_rollout_calls.fetch_add(1, std::memory_order_relaxed); }   // deterministic telemetry
     while (state.turn_number <= max_turns)
@@ -114484,6 +114529,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             combatpin::t_reads = cp_reads0;
             if (CanonSimKeyOn()) { Fold(bk, FsOrderSig(state)); }
             if (t_rollout_narrow) { Fold(bk, kRolloutNarrowTag); }
+            if (ftstand::t_true_d0 != 0) { Fold(bk, kFreeTurnStandTag); }
             sfxprobe::t_pending.push_back(bk);
         }
         if (chain_only && (g_et_chain_trial_aborted || EtChainTrialBudgetExceeded()))
@@ -115300,6 +115346,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         // cached=8/fresh=7 on mirrorwing gi=363 (a must-find win silently lost). Order-exact key.
         if (CanonSimKeyOn()) { Fold(key, FsOrderSig(state)); }
         if (t_rollout_narrow) { Fold(key, kRolloutNarrowTag); }
+        if (ftstand::t_true_d0 != 0) { Fold(key, kFreeTurnStandTag); }
         PROF_INC(tt_lookups); ++g_tt_look_n;
         const int* cached = tt->Lookup(key);
         if (cached != nullptr)
@@ -120633,14 +120680,31 @@ struct CrossingPassCeiling
 {
     SearchBudget* b = nullptr;
     long long     saved = 0;
-    CrossingPassCeiling(SearchBudget* budget, int sub)
+    long long     stand_lim = -1;   // >= 0: PASS 0 armed by the free-turn standing-pass rule (FreeTurnStandArms)
+    CrossingPassCeiling(SearchBudget* budget, int sub, const GameState& s, int stand)
     {
         static const bool s_on = EnvOn("MTG_CROSSING_PASS_CEILING", true);   // DEFAULT ON; =0 the unbounded pass
-        if (!s_on || sub <= 0 || budget == nullptr || budget->Unlimited()) { return; }
+        if (sub <= 0)
+        {
+            // Pass 0 stands, so it is never cut at the budget's limit -- but on a deck with free turns it can nest
+            // without bound (FreeTurnTrueD0Scope), so it is armed at the PROPORTIONAL ceiling, and a trip re-runs it
+            // as the standing pass (the caller's loop; `stand` 0 = first try, 1 = the re-run, 2 = done).
+            if (stand != 0 || !FreeTurnStandArms(s, budget)) { return; }
+            b = budget;
+            saved = budget->OverrunLimit();
+            stand_lim = SearchBudget::SatAdd(budget->Used(),
+                                             SearchBudget::SatMulD(OverrunBudgetMult(), budget->EffectiveLimit()));
+            budget->SetOverrunLimit(saved > 0 ? std::min(saved, stand_lim) : stand_lim);
+            return;
+        }
+        if (!s_on || budget == nullptr || budget->Unlimited()) { return; }
         b = budget;
         saved = budget->OverrunLimit();
         budget->SetOverrunLimit(saved > 0 ? std::min(saved, budget->Limit()) : budget->Limit());
     }
+    // Pass 0 ran into ITS OWN ceiling (an enclosing host's ceiling is that host's rollback, never a re-run here).
+    bool StandTripped() const
+    { return stand_lim >= 0 && b->Used() >= stand_lim && !(saved > 0 && saved <= stand_lim); }
     ~CrossingPassCeiling() { if (b != nullptr) { b->SetOverrunLimit(saved); } }
     CrossingPassCeiling(const CrossingPassCeiling&) = delete;
     CrossingPassCeiling& operator=(const CrossingPassCeiling&) = delete;
@@ -120675,10 +120739,12 @@ int TurnSolver::ChooseRealCrossingFetch(GameState& state, int depth, int max_tur
         if (!(f.StutLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.StutPin() != -2; }))
         { return -2; }
     }
-    for (int sub = 0; sub <= depth - 1; ++sub)
+    for (int sub = 0, stand = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
-        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
+        FreeTurnTrueD0Scope _ftd0(stand == 1);   // the standing pass (see CrossingPassCeiling)
+        CrossingPassCeiling _cpc(budget, sub, state, stand);   // a pass that will be discarded stops where it becomes discardable
+        struct NdScope2 { int h, p; NdScope2(int sd) : h(nestdiag::t_host), p(nestdiag::t_pass) { nestdiag::t_host = 2; nestdiag::t_pass = sd; nestdiag::t_max = 0; } ~NdScope2() { nestdiag::t_host = h; nestdiag::t_pass = p; } } _nds2(sub);
         BoundaryFan fan(state, /*with_echo=*/false, /*stut_only=*/true);
         if (!fan.StutLive()) { return -2; }
         int best_wt = max_turns + 2, best_pin = -2;
@@ -120695,6 +120761,8 @@ int TurnSolver::ChooseRealCrossingFetch(GameState& state, int depth, int max_tur
         }
         if (!wide) { return -2; }   // one candidate at resolution: the same pick either way
         // A pass the budget cut short is not a completed pass: keep the shallower answer (pass 0 always stands).
+        if (stand == 0 && _cpc.StandTripped()) { stand = 1; --sub; continue; }   // re-run pass 0 as the standing pass
+        if (stand == 1) { stand = 2; }
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
         chosen = best_pin;
     }
@@ -120726,10 +120794,12 @@ std::pair<int, int> TurnSolver::ChooseRealCrossingReanimate(GameState& state, in
         if (!(f.GraceLive() || f.EmeriaLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.GracePin() != -2 || f.EmeriaPin() != -2; }))
         { return { -2, -2 }; }
     }
-    for (int sub = 0; sub <= depth - 1; ++sub)
+    for (int sub = 0, stand = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
-        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
+        FreeTurnTrueD0Scope _ftd0(stand == 1);   // the standing pass (see CrossingPassCeiling)
+        CrossingPassCeiling _cpc(budget, sub, state, stand);   // a pass that will be discarded stops where it becomes discardable
+        struct NdScope2 { int h, p; NdScope2(int sd) : h(nestdiag::t_host), p(nestdiag::t_pass) { nestdiag::t_host = 2; nestdiag::t_pass = sd; nestdiag::t_max = 0; } ~NdScope2() { nestdiag::t_host = h; nestdiag::t_pass = p; } } _nds2(sub);
         BoundaryFan fan(state, /*with_echo=*/false, /*stut_only=*/false, /*reanim_only=*/true);
         int best_wt = max_turns + 2;
         std::pair<int, int> best{ -2, -2 };
@@ -120746,6 +120816,8 @@ std::pair<int, int> TurnSolver::ChooseRealCrossingReanimate(GameState& state, in
             { best_wt = wt; best = { fan.GracePin(), fan.EmeriaPin() }; }
         }
         if (!wide) { return { -2, -2 }; }
+        if (stand == 0 && _cpc.StandTripped()) { stand = 1; --sub; continue; }   // re-run pass 0 as the standing pass
+        if (stand == 1) { stand = 2; }
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
         chosen = best;
     }
@@ -120774,10 +120846,12 @@ int TurnSolver::ChooseRealCrossingFaceUp(GameState& state, int depth, int max_tu
         if (!(f.FaceUpLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.FaceUpPin() != -2; }))
         { return -2; }
     }
-    for (int sub = 0; sub <= depth - 1; ++sub)
+    for (int sub = 0, stand = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
-        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
+        FreeTurnTrueD0Scope _ftd0(stand == 1);   // the standing pass (see CrossingPassCeiling)
+        CrossingPassCeiling _cpc(budget, sub, state, stand);   // a pass that will be discarded stops where it becomes discardable
+        struct NdScope2 { int h, p; NdScope2(int sd) : h(nestdiag::t_host), p(nestdiag::t_pass) { nestdiag::t_host = 2; nestdiag::t_pass = sd; nestdiag::t_max = 0; } ~NdScope2() { nestdiag::t_host = h; nestdiag::t_pass = p; } } _nds2(sub);
         BoundaryFan fan(state, /*with_echo=*/false, false, false, false, /*face_up_only=*/true);
         if (!fan.FaceUpLive()) { return -2; }
         int best_wt = max_turns + 2, best_pin = -2;
@@ -120793,6 +120867,8 @@ int TurnSolver::ChooseRealCrossingFaceUp(GameState& state, int depth, int max_tu
             if (wt < best_wt) { best_wt = wt; best_pin = fan.FaceUpPin(); }
         }
         if (!wide) { return -2; }
+        if (stand == 0 && _cpc.StandTripped()) { stand = 1; --sub; continue; }   // re-run pass 0 as the standing pass
+        if (stand == 1) { stand = 2; }
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
         chosen = best_pin;
     }
@@ -120815,10 +120891,12 @@ std::int64_t TurnSolver::ChooseRealCrossingLands(GameState& state, int depth, in
         if (!(f.CrossingLandLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.CrossingLandPin() != -2; }))
         { return -2; }
     }
-    for (int sub = 0; sub <= depth - 1; ++sub)
+    for (int sub = 0, stand = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
-        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
+        FreeTurnTrueD0Scope _ftd0(stand == 1);   // the standing pass (see CrossingPassCeiling)
+        CrossingPassCeiling _cpc(budget, sub, state, stand);   // a pass that will be discarded stops where it becomes discardable
+        struct NdScope2 { int h, p; NdScope2(int sd) : h(nestdiag::t_host), p(nestdiag::t_pass) { nestdiag::t_host = 2; nestdiag::t_pass = sd; nestdiag::t_max = 0; } ~NdScope2() { nestdiag::t_host = h; nestdiag::t_pass = p; } } _nds2(sub);
         BoundaryFan fan(state, /*with_echo=*/false, false, false, false, false, false, false, /*cl_only=*/true);
         if (!fan.CrossingLandLive()) { return -2; }
         int best_wt = max_turns + 2;
@@ -120835,6 +120913,8 @@ std::int64_t TurnSolver::ChooseRealCrossingLands(GameState& state, int depth, in
             if (wt < best_wt) { best_wt = wt; best_pin = fan.CrossingLandPin(); }
         }
         if (!wide) { return -2; }
+        if (stand == 0 && _cpc.StandTripped()) { stand = 1; --sub; continue; }   // re-run pass 0 as the standing pass
+        if (stand == 1) { stand = 2; }
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
         chosen = best_pin;
     }
@@ -120881,10 +120961,12 @@ int TurnSolver::ChooseRealCrossingLand(GameState& state, int depth, int max_turn
         if (!(f.LandLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.LandPin() != -2; }))
         { return -2; }
     }
-    for (int sub = 0; sub <= depth - 1; ++sub)
+    for (int sub = 0, stand = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
-        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
+        FreeTurnTrueD0Scope _ftd0(stand == 1);   // the standing pass (see CrossingPassCeiling)
+        CrossingPassCeiling _cpc(budget, sub, state, stand);   // a pass that will be discarded stops where it becomes discardable
+        struct NdScope2 { int h, p; NdScope2(int sd) : h(nestdiag::t_host), p(nestdiag::t_pass) { nestdiag::t_host = 2; nestdiag::t_pass = sd; nestdiag::t_max = 0; } ~NdScope2() { nestdiag::t_host = h; nestdiag::t_pass = p; } } _nds2(sub);
         BoundaryFan fan(state, /*with_echo=*/false, /*stut_only=*/false,
                         /*reanim_only=*/false, /*land_only=*/true);
         int best_wt = max_turns + 2, best_pin = -2;
@@ -120900,6 +120982,8 @@ int TurnSolver::ChooseRealCrossingLand(GameState& state, int depth, int max_turn
             if (wt < best_wt) { best_wt = wt; best_pin = fan.LandPin(); }
         }
         if (!wide) { return -2; }
+        if (stand == 0 && _cpc.StandTripped()) { stand = 1; --sub; continue; }   // re-run pass 0 as the standing pass
+        if (stand == 1) { stand = 2; }
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
         chosen = best_pin;
     }
@@ -120926,10 +121010,12 @@ int TurnSolver::ChooseRealCrossingHorn(GameState& state, int depth, int max_turn
         if (!(f.HornLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.HornPin() != -2; }))
         { return -2; }
     }
-    for (int sub = 0; sub <= depth - 1; ++sub)
+    for (int sub = 0, stand = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
-        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
+        FreeTurnTrueD0Scope _ftd0(stand == 1);   // the standing pass (see CrossingPassCeiling)
+        CrossingPassCeiling _cpc(budget, sub, state, stand);   // a pass that will be discarded stops where it becomes discardable
+        struct NdScope2 { int h, p; NdScope2(int sd) : h(nestdiag::t_host), p(nestdiag::t_pass) { nestdiag::t_host = 2; nestdiag::t_pass = sd; nestdiag::t_max = 0; } ~NdScope2() { nestdiag::t_host = h; nestdiag::t_pass = p; } } _nds2(sub);
         BoundaryFan fan(state, /*with_echo=*/false, false, false, false, false, /*horn_only=*/true);
         int best_wt = max_turns + 2, best_pin = -2;
         bool wide = false;
@@ -120944,6 +121030,8 @@ int TurnSolver::ChooseRealCrossingHorn(GameState& state, int depth, int max_turn
             if (wt < best_wt) { best_wt = wt; best_pin = fan.HornPin(); }
         }
         if (!wide) { return -2; }
+        if (stand == 0 && _cpc.StandTripped()) { stand = 1; --sub; continue; }   // re-run pass 0 as the standing pass
+        if (stand == 1) { stand = 2; }
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
         chosen = best_pin;
     }
@@ -120991,10 +121079,12 @@ int TurnSolver::ChooseRealCrossingUpkeepLegend(GameState& state, int depth, int 
         if (!(f.UpkeepLegendLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.UpkeepLegendPin() != -2; }))
         { return -2; }
     }
-    for (int sub = 0; sub <= depth - 1; ++sub)
+    for (int sub = 0, stand = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
-        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
+        FreeTurnTrueD0Scope _ftd0(stand == 1);   // the standing pass (see CrossingPassCeiling)
+        CrossingPassCeiling _cpc(budget, sub, state, stand);   // a pass that will be discarded stops where it becomes discardable
+        struct NdScope2 { int h, p; NdScope2(int sd) : h(nestdiag::t_host), p(nestdiag::t_pass) { nestdiag::t_host = 2; nestdiag::t_pass = sd; nestdiag::t_max = 0; } ~NdScope2() { nestdiag::t_host = h; nestdiag::t_pass = p; } } _nds2(sub);
         BoundaryFan fan(state, /*with_echo=*/false, false, false, false, false, false, /*ulk_only=*/true);
         int best_wt = max_turns + 2, best_pin = -2;
         bool wide = false;
@@ -121009,6 +121099,8 @@ int TurnSolver::ChooseRealCrossingUpkeepLegend(GameState& state, int depth, int 
             if (wt < best_wt) { best_wt = wt; best_pin = fan.UpkeepLegendPin(); }
         }
         if (!wide) { return -2; }
+        if (stand == 0 && _cpc.StandTripped()) { stand = 1; --sub; continue; }   // re-run pass 0 as the standing pass
+        if (stand == 1) { stand = 2; }
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
         chosen = best_pin;
     }
@@ -121058,10 +121150,12 @@ int TurnSolver::ChooseRealResolutionFetch(const GameState& state, int controller
     RevealLogPause _rlp;   // a search, not the real game: no reveal logging, no viewer sink
     TranspositionTable tt;
     int chosen = -1;
-    for (int sub = 0; sub <= depth - 1; ++sub)
+    for (int sub = 0, stand = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
-        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
+        FreeTurnTrueD0Scope _ftd0(stand == 1);   // the standing pass (see CrossingPassCeiling)
+        CrossingPassCeiling _cpc(budget, sub, state, stand);   // a pass that will be discarded stops where it becomes discardable
+        struct NdScope2 { int h, p; NdScope2(int sd) : h(nestdiag::t_host), p(nestdiag::t_pass) { nestdiag::t_host = 2; nestdiag::t_pass = sd; nestdiag::t_max = 0; } ~NdScope2() { nestdiag::t_host = h; nestdiag::t_pass = p; } } _nds2(sub);
         int best_wt = max_turns + 2, best_rank = 0;
         for (int r = 0; r < width; ++r)
         {
@@ -121077,6 +121171,8 @@ int TurnSolver::ChooseRealResolutionFetch(const GameState& state, int controller
             if (wt < best_wt) { best_wt = wt; best_rank = r; }
         }
         // A pass the budget cut short is not a completed pass: keep the shallower answer (pass 0 always stands).
+        if (stand == 0 && _cpc.StandTripped()) { stand = 1; --sub; continue; }   // re-run pass 0 as the standing pass
+        if (stand == 1) { stand = 2; }
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
         chosen = best_rank;
     }
@@ -121100,10 +121196,12 @@ int TurnSolver::ChooseRealResolutionLand(const GameState& state, int controller,
     RevealLogPause _rlp;
     TranspositionTable tt;
     int chosen = -1;
-    for (int sub = 0; sub <= depth - 1; ++sub)
+    for (int sub = 0, stand = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
-        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
+        FreeTurnTrueD0Scope _ftd0(stand == 1);   // the standing pass (see CrossingPassCeiling)
+        CrossingPassCeiling _cpc(budget, sub, state, stand);   // a pass that will be discarded stops where it becomes discardable
+        struct NdScope2 { int h, p; NdScope2(int sd) : h(nestdiag::t_host), p(nestdiag::t_pass) { nestdiag::t_host = 2; nestdiag::t_pass = sd; nestdiag::t_max = 0; } ~NdScope2() { nestdiag::t_host = h; nestdiag::t_pass = p; } } _nds2(sub);
         int best_wt = max_turns + 2, best_rank = 0;
         for (int r = 0; r < width; ++r)
         {
@@ -121116,6 +121214,8 @@ int TurnSolver::ChooseRealResolutionLand(const GameState& state, int controller,
             { wt = SimulateToEnd(std::move(ce), sub, max_turns, budget, cut, second_main, &tt); }
             if (wt < best_wt) { best_wt = wt; best_rank = r; }
         }
+        if (stand == 0 && _cpc.StandTripped()) { stand = 1; --sub; continue; }   // re-run pass 0 as the standing pass
+        if (stand == 1) { stand = 2; }
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
         chosen = best_rank;
     }
@@ -121182,10 +121282,12 @@ int TurnSolver::ChooseRealAttackLand(const GameState& state, const std::vector<i
     RevealLogPause _rlp;
     TranspositionTable tt;
     int chosen = 0;
-    for (int sub = 0; sub <= depth - 1; ++sub)
+    for (int sub = 0, stand = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
-        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
+        FreeTurnTrueD0Scope _ftd0(stand == 1);   // the standing pass (see CrossingPassCeiling)
+        CrossingPassCeiling _cpc(budget, sub, state, stand);   // a pass that will be discarded stops where it becomes discardable
+        struct NdScope2 { int h, p; NdScope2(int sd) : h(nestdiag::t_host), p(nestdiag::t_pass) { nestdiag::t_host = 2; nestdiag::t_pass = sd; nestdiag::t_max = 0; } ~NdScope2() { nestdiag::t_host = h; nestdiag::t_pass = p; } } _nds2(sub);
         int best_wt = max_turns + 2, best_pin = 0;
         for (int pin : pins)
         {
@@ -121237,6 +121339,8 @@ int TurnSolver::ChooseRealAttackLand(const GameState& state, const std::vector<i
             }
             if (wt < best_wt) { best_wt = wt; best_pin = pin; }
         }
+        if (stand == 0 && _cpc.StandTripped()) { stand = 1; --sub; continue; }   // re-run pass 0 as the standing pass
+        if (stand == 1) { stand = 2; }
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
         chosen = best_pin;
     }
@@ -121405,7 +121509,7 @@ bool TurnSolver::DevSeqTailSkipForTest(const GameState& tail_state, int rec_cut,
 static inline int DepthAcrossTurn(const GameState& after_transition, int depth_after)
 {
     // A FREE turn (MTG_FREE_TURNS) is not a new round either: same give-back (USER-accepted default 2026-11-21).
-    return after_transition.InSameRoundTurn() ? depth_after + 1 : depth_after;
+    return GivesRoundBack(after_transition) ? depth_after + 1 : depth_after;
 }
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
                                          int cutoff, bool second_main, TranspositionTable* tt,
@@ -132516,6 +132620,7 @@ static thread_local const GameState* g_current_search_root_state = nullptr;
 const GameState* TurnSolver::CurrentSearchRootState()
 { return g_current_search_root_state; }
 
+static double OverrunBudgetMult() { return kOverrunBudgetMult; }   // (declared with FreeTurnTrueD0Scope)
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                                   int depth, int max_turns,
                                                   SearchBudget* budget, bool enforce_budget,
@@ -133008,12 +133113,15 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         }
     }
 
+    int ft_stand = 0;   // the free-turn standing pass (FreeTurnTrueD0Scope): 0 first try, 1 the re-run of pass 0, 2 done
     for (int sub_depth = 0; sub_depth <= depth - 1; ++sub_depth)
     {
+        FreeTurnTrueD0Scope _ftd0(ft_stand == 1);
         // Kill-only: a deeper pass would re-run the identical this-turn tests (no rollout reads its
         // sub_depth), so pass 0 is the answer.
         if (ko && sub_depth > 0 && !ko_rolled) { break; }
         long long remaining_at_start = budget ? budget->Remaining() : LLONG_MAX;
+        struct NdScope { int h, p; bool on; NdScope(bool o, int sd) : h(nestdiag::t_host), p(nestdiag::t_pass), on(o) { if (on) { nestdiag::t_host = 1; nestdiag::t_pass = sd; nestdiag::t_max = 0; } } ~NdScope() { if (on) { nestdiag::t_host = h; nestdiag::t_pass = p; } } } _nds(enforce_budget && g_rollout_nest == 0, sub_depth);
         // The combat-pin share's per-pass cache: a base candidate's post-apply state, by index.
         std::unordered_map<int, GameState> cp_cache;
         // ...and that base's post-apply dedup-key PREFIX (BuildDedupKeyBeforeLandSearchPins), filled
@@ -133075,7 +133183,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             long long     prev = 0;
             ~PassCeiling() { if (b != nullptr) { b->SetOverrunLimit(prev); } }
         } pass_ceiling;
-        if (gate && sub_depth > 0 && LaPassCeilingOn())
+        // ...and PASS 0 on a deck with free turns under a finite budget (FreeTurnTrueD0Scope): the same ceiling, but a
+        // trip RE-RUNS pass 0 as the standing pass (below, at the abort) instead of ending the ladder with no ranking.
+        const bool ft_stand_arm = gate && sub_depth == 0 && ft_stand == 0 && FreeTurnStandArms(state, budget);
+        if ((gate && sub_depth > 0 && LaPassCeilingOn()) || ft_stand_arm)
         {
             long long lim = SearchBudget::SatAdd(
                 used_before, SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()));
@@ -133086,6 +133197,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
         }
         bool pass_ceiling_tripped = false;   // a candidate's rollout ran into it: the scores are partial
+        bool pass_rescued = false;           // ...and the anytime rescue kept a win it had proven
 
         // Trace T1 top-level decisions (enforce_budget=true) AND T2 rollout decisions
         // where depth==3 (fired from the sub_depth=3 pass inside SimulateToEnd).
@@ -133804,7 +133916,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // rescue (nothing a void game commits is read). Always false unless a ceiling or cap is armed.
             if (gamework::Abandoned()) { void_cut = true; break; }
             // --- Overrun guard: finish if almost done, else abort + roll back ---
-            if (gate && budget->Exhausted() && candidates_done > 0)
+            if (gate && ft_stand != 1 && budget->Exhausted() && candidates_done > 0)   // (the standing pass completes)
             {
                 ++g_fs_trunc_events;
                 long long pass_used       = budget->Used() - used_before;
@@ -134879,6 +134991,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         {
             const bool better_proven = pass_has_best && pass_best_win < committed_win;
             const bool rescued       = s_id_anytime && better_proven;
+            pass_rescued = rescued;
             ++g_fs_trunc_events;
             if (s_rollout_stats)
             {
@@ -135280,6 +135393,15 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             }
         }
 
+        // THE STANDING PASS (FreeTurnTrueD0Scope): pass 0 ran into its proportional ceiling and proved no win to keep --
+        // re-run it with free turns counted as plies, and let that ranking stand. One re-run at most.
+        if (ft_stand_arm && pass_ceiling_tripped && !pass_rescued)
+        {
+            ft_stand = 1;
+            sub_depth = -1;
+            continue;
+        }
+        if (ft_stand == 1) { ft_stand = 2; }
         if (pass_aborted)
         {
             if (trace_this)
@@ -136698,6 +136820,7 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     static const bool s_hosttag_m2s = EnvOn("MTG_ENUM_MEMO_HOSTTAG", true);
     if (s_hosttag_m2s && g_condemn_suppress) { Fold(k, 0xC5B9); Fold(k_sup, 0xC5B9); }
     if (t_rollout_narrow) { Fold(k, kRolloutNarrowTag); Fold(k_sup, kRolloutNarrowTag); }
+    if (ftstand::t_true_d0 != 0) { Fold(k, kFreeTurnStandTag); Fold(k_sup, kFreeTurnStandTag); }
     auto& cache = solvememo::t_m2cache;
     auto it = cache.find(k);
     // MTG_LEAF_KILL_ONLY (see LeafKillOnlyOn): a kill-only solve's plan lives under its own namespace;
@@ -136908,6 +137031,7 @@ static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth,
               | (g_force_constant_leaf ? 4u : 0u));
     if (g_condemn_suppress) { Fold(k, 0xC5B9); }
     if (t_rollout_narrow) { Fold(k, kRolloutNarrowTag); }
+    if (ftstand::t_true_d0 != 0) { Fold(k, kFreeTurnStandTag); }
     auto& cache = m1memo::t_cache;
     if (m1memo::t_epoch != g_decision_epoch)
     {
@@ -137829,6 +137953,7 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
         }
     }
     if (t_rollout_narrow) { Fold(key, kRolloutNarrowTag); }   // see MTG_ROLLOUT_FAN_NARROW
+    if (ftstand::t_true_d0 != 0) { Fold(key, kFreeTurnStandTag); }
     FoldPhysicalCards(key, state);   // MTG_PLAN_CACHE_EXACT_KEY
     // Blood Sun step 6: a list derived with Revelation waves 0..k admitted (and, in a continuation wave's own
     // frame, wave k's tranche kept) is its own entry. Inert (no fold) at wave 0, i.e. for every other deck.
@@ -138115,6 +138240,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             { armh = armh * 131 + static_cast<std::uint8_t>(heurarm::t_arm[static_cast<std::size_t>(ai)] + 1); }
             Fold(rbase, armh ^ 0xA53CULL);
             if (t_rollout_narrow) { Fold(rbase, kRolloutNarrowTag); }
+            if (ftstand::t_true_d0 != 0) { Fold(rbase, kFreeTurnStandTag); }
             FoldPhysicalCards(rbase, state);
             Fold(rbase, front_only ? 0xF1ull : 0xF2ull);
             Fold(rbase, lazy_req ? 0x1Aull : 0x1Bull);

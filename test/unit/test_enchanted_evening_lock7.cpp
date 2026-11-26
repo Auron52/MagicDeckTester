@@ -415,9 +415,15 @@ TEST_CASE("EE lock step 7: the crossing is pending only when the end step can of
         REQUIRE_FALSE(s.opponent_plays_lands);
         s.deck_has_crossing_land_put = false;   // stamped false for the list (no Burgeoning / Manabond); default true
         pending_matches(s, false, "no-target");
+        // An Exploration of OURS is folded away as a target (lock step 8a: FovOwnTargetInert -- destroying it cannot
+        // help), so it does not make the crossing pending; a Sterling Grove of ours is kept (its shroud blocks the
+        // Wave loop) -> pending.
         L7Put(s, kExpl, 60);
         RefreshTypeStatics(s);
-        pending_matches(s, true, "own-exploration");
+        pending_matches(s, false, "own-exploration-folded");
+        L7Put(s, "Sterling Grove", 61);
+        RefreshTypeStatics(s);
+        pending_matches(s, true, "own-grove");
     }
     // Every other deck: the stamp is off, so a FoV in hand is never pending.
     {

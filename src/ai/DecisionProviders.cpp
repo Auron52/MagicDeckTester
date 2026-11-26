@@ -39349,6 +39349,56 @@ EnchantedEveningProvider::TutorCandidates(const GameState& s, int controller, co
 bool EnchantedEveningProvider::TutorNeedsCandidate(const GameState&, int, const CardParams& pp) const
 { return eeprune::On() && eeprune::IsEnchantmentTutor(pp); }
 
+// FORCE OF VIGOR OWN-TARGET DOMINANCE (lock step 8a, 2026-11-26; a SOUND fold, default ON, no flag -- CLAUDE.md
+// "collapse wasted search"). Destroying our permanent q leaves the state exactly as keeping it, minus q (and an Aura on
+// a destroyed land), plus q in our graveyard. PREMISE, true of this list: nothing in it reads our graveyard, a
+// permanent of ours dying or leaving, our land count or our permanent count -- no landfall, no dies / leaves trigger
+// on these classes, no threshold-style count; Enchantress's Presence counts enchantment SPELLS cast. So the removal
+// can only matter through a downside q has for us while it stays, and the folded classes have none:
+//   * a MANA LAND (produces mana; under Enchanted Evening our lands are enchantments, so FoV can target them; under
+//     EE + Opalescence they are 0/0 and already gone): it only adds mana. The one card that reads "an untapped land
+//     you control" is Calming Verse's clause 2 -- and its KEEP variant taps every mana land into the float first
+//     (searched; withdrawn only when clause 1 has nothing to destroy, where not casting covers it), so a destroyed
+//     mana land never reaches a Verse result the kept land cannot.
+//   * a FETCHLAND (no mana ability) only while no Calming Verse is in our hand or library: without a Verse nothing
+//     reads it as an untapped land, and cracking it is always at least as good. With a Verse live it is KEPT (an
+//     uncrackable untapped fetch is the one state where destroying it changes clause 2).
+//   * a MANA AURA (Wild Growth, Utopia Sprawl): an extra mana from its land, nothing else.
+//   * EXPLORATION (an extra land drop) and ENCHANTRESS'S PRESENCE (a draw per enchantment spell): upside only, and
+//     under Opalescence each is one more attacker.
+// The USER's tutor prune (rulings 15 / 16) reads our mana and our copies of a piece; a state with MORE mana or a
+// Presence already out is the state that prune itself treats as needing no fetch, so it adds no line the kept
+// permanent lacks. KEPT (not proven dominated; each has a real reason to be destroyed or a downside for us):
+// Sterling Grove (its shroud blocks the Parallax Wave self-exile loop, ruling 17; also the second-Grove prune counts
+// it), Parallax Wave and Oblivion Ring (leave triggers return exiled cards), Enchanted Evening (its static makes our
+// lands enchantments: Calming Verse clause 2, Opalescence), Opalescence (its static kills our lands under EE), and
+// every card this list does not name. A list that adds a reader of any of the above must drop the class.
+bool EnchantedEveningProvider::FovOwnTargetInert(const GameState& s, int controller, const Permanent& q) const
+{
+    if (q.controller_index != controller || HumanPlayActive()) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+    if (d == nullptr) { return false; }
+    if (q.card.IsLand())
+    {
+        if (!d->params.produces.empty()) { return true; }
+        if (d->params.fetch_land_types.empty()) { return false; }   // a land we cannot classify: kept
+        const Player& pl = s.players[static_cast<std::size_t>(controller)];
+        auto verse = [](const Card& c)
+        {
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+            return cd != nullptr && cd->params.destroy_opp_enchantments_then_own_if_untapped_land;
+        };
+        for (const Card& c : pl.hand)    { if (verse(c)) { return false; } }
+        for (const Card& c : pl.library) { if (verse(c)) { return false; } }
+        return true;
+    }
+    if (eeprune::IsManaAura(d) || eeprune::IsPresence(d)) { return true; }
+    // Exploration, recognised by its one param (any other effect on the card would be a reader to check).
+    return d->params.static_extra_land_drops > 0 && !d->params.is_aura && !eeprune::IsGrove(d)
+        && !eeprune::IsEE(d) && !eeprune::IsOpal(d) && !eeprune::IsWave(d)
+        && !d->params.etb_exile_nonland_until_leaves;
+}
+
 bool EnchantedEveningProvider::PlanListFilterLive(const GameState& s) const
 {
     if (!eeprune::On()) { return false; }

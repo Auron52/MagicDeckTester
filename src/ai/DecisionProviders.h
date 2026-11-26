@@ -5212,14 +5212,29 @@ public:
         { if (p.controller_index != controller && p.card.IsEnchantment()) { opposing = true; break; } }
         if (!opposing) { keep = false; }
     }
+    //   * Force of Vigor on an OWN permanent of a class whose destruction cannot help (lock step 8a; FovOwnTargetInert,
+    //     DecisionProviders.cpp, states the argument per class): every option holding one is dominated by the same
+    //     option without it, which the "up to" menu also lists. Withdrawn (both windows: the main-phase cast and the
+    //     opponent end-step cast share DestroyUpToArtEnchSearchPins). Not in human play (the human sees every target).
     void DestroyUpToArtEnchTargetOptions(const GameState& s, int controller,
                                          std::vector<std::vector<int>>& options) const override
     {
-        (void)s; (void)controller;
         options.erase(std::remove_if(options.begin(), options.end(),
-                                     [](const std::vector<int>& o) { return o.empty(); }),
+                                     [&](const std::vector<int>& o)
+                                     {
+                                         if (o.empty()) { return true; }
+                                         for (int bi : o)
+                                         {
+                                             if (bi < 0 || bi >= static_cast<int>(s.battlefield.size())) { continue; }
+                                             const Permanent& q = s.battlefield[static_cast<std::size_t>(bi)];
+                                             if (q.controller_index == controller
+                                                 && FovOwnTargetInert(s, controller, q)) { return true; }
+                                         }
+                                         return false;
+                                     }),
                       options.end());
     }
+    bool FovOwnTargetInert(const GameState& s, int controller, const Permanent& q) const override;
     // USER ruling 7 (2026-11-25): *"The default for Parallax Wave and Opalescence in this deck should be to exile all
     // opponent creatures."* -- the deck default, so this provider adopts PerformWaveOpalSweep (SpellEffects.h) at the
     // opponent's end step (lock cluster step 4).

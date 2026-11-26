@@ -4923,6 +4923,13 @@ public:
         }
         return best;
     }
+    // ...and the OWN-TARGET DOMINANCE test both Force of Vigor windows share (lock step 8a): true = destroying OUR
+    // permanent `q` is weakly dominated by leaving it, so every option holding it is dominated by the same option
+    // without it (the "up to" menu always lists that subset too). A provider's DestroyUpToArtEnchTargetOptions uses
+    // it to restrict; EotFovMayOffer uses it so that a crossing whose only targets are folded is not "pending". A
+    // SOUND fold only (the argument belongs in the override). Base: nothing folded.
+    virtual bool FovOwnTargetInert(const GameState& s, int controller, const Permanent& q) const
+    { (void)s; (void)controller; (void)q; return false; }
 
     // FadeExileCreatureTargets -- the exile targets the SEARCH is offered for Parallax Wave's "Remove a fade counter
     // from this enchantment: Exile target creature" (lock cluster step 4; one activation action per returned target).

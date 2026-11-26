@@ -33188,7 +33188,9 @@ inline bool EotFovMayOffer(const GameState& s)
     for (std::size_t i = 0; !target && i < s.battlefield.size(); ++i)
     {
         const Permanent& q = s.battlefield[i];
-        if (opp_only && q.controller_index == me) { continue; }
+        // An own permanent the provider's dominance fold withdraws as a target (FovOwnTargetInert, lock step 8a)
+        // gives the menu no option, so it does not make the crossing pending.
+        if (q.controller_index == me && (opp_only || ResolveProvider(s).FovOwnTargetInert(s, me, q))) { continue; }
         target = q.card.HasType(CardType::Artifact) || q.card.IsEnchantment();
     }
     const bool two = opponentdeck::HasSecondHead(s);
