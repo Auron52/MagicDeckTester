@@ -87,3 +87,10 @@ still cut down the numbers somewhat."*
   (USER plans it for an overnight), confirm discovery reports K=20, then `valueleaf.sh run "decks/Maze's End"`.
   Needs a 2-hourly session-only status cron. The K=33 artifacts stay in `logs/maze_journal_stop-20261125T212636Z/`.
 - Status cron 241e2fa5 deleted.
+- **2026-11-26 02:46 UTC: Worldfire LANDED** on phase-1-2-deck-analyzer as 6fffffa39 (USER: "Let's land worldfire
+  first"): rebased the 6 wip commits (bucket-keep-order engine change, 19-bucket ruling, keep table, valueleaf.sh
+  slow-game fix, sidecar), Release build, unit, full smoke (only the 4 Worldfire keys moved), Worldfire regression
+  (every row better), `--deck=worldfire,worldfire2hg` accepts, check_gt_logs consistent. Still owed: Worldfire's
+  overnight rows ENTRY -> FULL resize + overnight GT (periodic overnight run).
+- Found the shared branch's Windows CI red since run 45700576325 (`__builtin_popcount` in DecisionProviders.cpp from
+  4a47d9969); urgent fix 9ca7deb5e (std::popcount) validating for a `join --urgent` landing.
