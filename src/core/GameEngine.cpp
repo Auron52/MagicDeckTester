@@ -434,14 +434,15 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
                 std::string card;
                 const int veto = eefair::Veto(state, &card);
                 std::fprintf(stderr, "[ee-fair] job=%s gi=%d real=%d fair=%d seed=%llu round=%d raw=%d board_lock=%d "
-                             "veto=%d card=%s credited=%d virt=%d spent=%d\n",
+                             "veto=%d card=%s credited=%d virt=%d spent=%d oring=%d\n",
                              escstats::t_job != nullptr ? escstats::t_job : "-", escstats::t_gi,
                              t_ee_fair_real_game ? 1 : 0, FreeTurnEeFairOn() ? 1 : 0,
                              static_cast<unsigned long long>(state.game_seed), state.turn_number,
                              state.RawRound(), board ? 1 : 0, veto, card.empty() ? "-" : card.c_str(),
                              state.pending_free_turn ? 1 : 0,
                              static_cast<int>(std::popcount(state.opp_virtual_board[0]) + std::popcount(state.opp_virtual_board[1])),
-                             static_cast<int>(std::popcount(state.opp_virtual_spent[0]) + std::popcount(state.opp_virtual_spent[1])));
+                             static_cast<int>(std::popcount(state.opp_virtual_spent[0]) + std::popcount(state.opp_virtual_spent[1])),
+                             state.opp_virtual_oring_link != 0 ? 1 : 0);   // ruling 20: an O-Ring holds a virtual card
             }
         }
     }

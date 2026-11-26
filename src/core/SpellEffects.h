@@ -22654,6 +22654,10 @@ inline bool CreatureNow(const CardDefinition* d, const Statics& st)
 // Opalescence an Equipment is itself a creature and cannot be attached (CR 301.5c).
 inline bool Hexproof(const CardDefinition* d) { return d->card.HasKeyword(Keyword::Hexproof); }
 inline std::uint64_t Live(const GameState& s, int head) { return s.opp_virtual_board[static_cast<std::size_t>(head - 1)]; }
+// A virtual board given explicitly (the live one, or a hypothetical: the board at the end-step check after the sweep,
+// minus an Oblivion Ring target -- USER ruling 20). The readers below take one so a "what if" never copies GameState.
+using Masks = std::array<std::uint64_t, 2>;
+inline std::uint64_t LiveIn(const Masks& L, int head) { return L[static_cast<std::size_t>(head - 1)]; }
 inline void Clear(GameState& s, int head, std::uint64_t bits)
 {
     const std::size_t h = static_cast<std::size_t>(head - 1);
@@ -22725,7 +22729,7 @@ inline void NoteVirtualDeployments(GameState& s)
 // Enchanted Evening every permanent), "artifacts_enchantments" you control -- counting real permanents and the
 // surviving virtual ones; an Aura base-set (Almost Perfect) raises the base when larger. Trample: its own keyword or an
 // aura_grants_trample Aura.
-inline int ReachPower(const GameState& s, int head, int bit, const Statics& st, bool& trample)
+inline int ReachPower(const GameState& s, const Masks& L, int head, int bit, const Statics& st, bool& trample)
 {
     const CardDefinition* c = DefOfBit(s, head, bit);
     trample = false;
@@ -22743,7 +22747,7 @@ inline int ReachPower(const GameState& s, int head, int bit, const Statics& st, 
         for (int h = 1; h <= Heads(s); ++h)
         {
             if (only_head != 0 && h != only_head) { continue; }
-            std::uint64_t m = Live(s, h);
+            std::uint64_t m = LiveIn(L, h);
             while (m != 0)
             {
                 const int b = std::countr_zero(m);
@@ -22756,7 +22760,7 @@ inline int ReachPower(const GameState& s, int head, int bit, const Statics& st, 
         return n;
     };
     int bonus = 0;
-    std::uint64_t m = Live(s, head);
+    std::uint64_t m = LiveIn(L, head);
     while (m != 0)
     {
         const int b = std::countr_zero(m);
@@ -22778,13 +22782,74 @@ inline int ReachPower(const GameState& s, int head, int bit, const Statics& st, 
     }
     return base + bonus;
 }
-inline bool HexproofThreat(const GameState& s, int head, int bit, const Statics& st)
+inline bool HexproofThreat(const GameState& s, const Masks& L, int head, int bit, const Statics& st)
 {
     bool trample = false;
-    const int power = ReachPower(s, head, bit, st, trample);
+    const int power = ReachPower(s, L, head, bit, st, trample);
     return trample && power >= 5;
 }
-// Is there a hexproof virtual creature that is a threat (ruling 13's FoV window opens only then)?
+inline bool HexproofThreat(const GameState& s, int head, int bit, const Statics& st)
+{ return HexproofThreat(s, s.opp_virtual_board, head, bit, st); }
+// EVASION (USER ruling 21, 2026-11-26: "If they cannot be blocked by the creature then we need to remove the flying or
+// the creature itself to fully lock."): can OUR creatures NOT legally block the virtual creature `bit` of `head`, wearing
+// every creature Aura that head has virtually deployed (the generous reading of ReachPower: all of them on this one
+// creature)? Ruling 9's containment is "chump-blocked forever", so an evasion ability our creatures cannot answer
+// voids it. Modelled (the pool's evasion on a hexproof creature is all Aura-granted -- Gryff's Boon / Arcanum Wings
+// flying, Spirit Mantle protection from creatures -- the rest is for completeness):
+//   * protection from creatures (CR 702.16f, an aura_grants_protection_from_creatures Aura): no creature can block it;
+//   * a colour-conditional "can't be blocked" grant (Steel of the Godhead's blue clause) while the creature has the
+//     colour;
+//   * flying (its own keyword or an aura_grants_flying Aura; CR 702.9b) with no creature of ours with flying or reach;
+//   * fear (CR 702.36b) with no artifact or black creature of ours; menace (CR 702.110b) with fewer than two creatures
+//     of ours.
+// NOT modelled: landwalk (this list has no Swamp / Island; under Enchanted Evening + Opalescence our lands are gone
+// anyway), shadow / horsemanship (no Keyword, and nothing in the pool has them on a hexproof creature), and a printed
+// "can't be blocked" on a creature (none on a pool hexproof creature). A plain creature with no evasion is NOT
+// unblockable here even when we control no creature at all -- that is ruling 19's hexproof non-threat, which never
+// vetoes ("No blocking should be done to be consistent for every deck"). Our side is player 0 (the fairness check's
+// convention: the opponent never controls our permanents).
+inline bool Unblockable(const GameState& s, const Masks& L, int head, int bit)
+{
+    const CardDefinition* c = DefOfBit(s, head, bit);
+    if (c == nullptr) { return false; }
+    bool flying = c->card.HasKeyword(Keyword::Flying);
+    const bool fear = c->card.HasKeyword(Keyword::Fear);
+    const bool menace = c->card.HasKeyword(Keyword::Menace);
+    std::uint64_t m = LiveIn(L, head);
+    while (m != 0)
+    {
+        const int b = std::countr_zero(m);
+        m &= m - 1;
+        if (b == bit) { continue; }
+        const CardDefinition* a = DefOfBit(s, head, b);
+        if (a == nullptr || !IsAura(a) || a->params.is_land_aura) { continue; }
+        if (a->params.aura_grants_protection_from_creatures) { return true; }
+        for (const CardParams::AuraColorBonus& cb : a->params.aura_color_bonuses)
+        { if (cb.unblockable && c->card.HasColor(cb.color)) { return true; } }
+        flying = flying || a->params.aura_grants_flying;
+    }
+    if (!flying && !fear && !menace) { return false; }
+    int ours = 0;
+    bool air = false, fear_blocker = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != 0 || !(p.card.IsCreature() || p.is_animated)) { continue; }
+        ++ours;
+        air = air || p.HasKeyword(Keyword::Flying) || p.HasKeyword(Keyword::Reach);
+        fear_blocker = fear_blocker || p.card.HasType(CardType::Artifact) || p.card.HasColor(Color::Black);
+    }
+    return (flying && !air) || (fear && !fear_blocker) || (menace && ours < 2);
+}
+// Ruling 21's clause: a hexproof virtual creature our creatures cannot block, with power >= 1 (a 0-power creature deals
+// no combat damage; orchestrator default, surfaced to the USER), counting its Auras exactly as clause 2 does.
+inline bool HexproofEvasive(const GameState& s, const Masks& L, int head, int bit, const Statics& st)
+{
+    if (!Unblockable(s, L, head, bit)) { return false; }
+    bool trample = false;
+    return ReachPower(s, L, head, bit, st, trample) >= 1;
+}
+// Is there a hexproof virtual creature that VETOES the lock (clause 2: trample and power >= 5; clause 4, ruling 21:
+// unblockable and power >= 1)? Ruling 13's Force of Vigor window over its virtual Auras opens only then.
 inline bool ThreatOnHead(const GameState& s, int head, const Statics& st)
 {
     std::uint64_t m = Live(s, head);
@@ -22793,7 +22858,9 @@ inline bool ThreatOnHead(const GameState& s, int head, const Statics& st)
         const int b = std::countr_zero(m);
         m &= m - 1;
         const CardDefinition* d = DefOfBit(s, head, b);
-        if (d != nullptr && CreatureNow(d, st) && Hexproof(d) && HexproofThreat(s, head, b, st)) { return true; }
+        if (d != nullptr && CreatureNow(d, st) && Hexproof(d)
+            && (HexproofThreat(s, s.opp_virtual_board, head, b, st)
+                || HexproofEvasive(s, s.opp_virtual_board, head, b, st))) { return true; }
     }
     return false;
 }
@@ -23547,9 +23614,45 @@ inline std::vector<int> EtbExileNonlandLegal(const GameState& state, int control
     return legal;
 }
 
+namespace eefair   // USER ruling 20 (defined with the veto, below)
+{
+inline bool IsVirtualOringTarget(const GameState& s, int number, int& head, int& bit);
+inline int OringLink(int source_number, int head, int bit);
+inline int OringLinkSource(int link);
+inline int OringLinkHead(int link);
+inline int OringLinkBit(int link);
+}
+
 inline void ResolveEtbExileNonlandUntilLeaves(GameState& state, int controller, int source_number,
                                               const std::string& src_name, const std::string& pin)
 {
+    // USER ruling 20: a pin naming a card that is not on the battlefield may be a VIRTUAL permanent of the fairness
+    // check (emitted only when exiling it makes the lock hold; eefair::OringVirtualTargets). Still live and targetable
+    // on resolution -> its bit is cleared and linked to this source; its leave trigger puts the card back.
+    if (const int pn = ExileUntilLeavesPinTarget(pin); pn > 0 && controller == 0)
+    {
+        bool on_board = false;
+        for (const Permanent& q : state.battlefield) { if (q.card.m_number == pn) { on_board = true; break; } }
+        int vh = 0, vb = 0;
+        if (!on_board && eefair::IsVirtualOringTarget(state, pn, vh, vb))
+        {
+            const std::size_t h = static_cast<std::size_t>(vh - 1);
+            const std::uint64_t b = 1ull << vb;
+            state.opp_virtual_board[h] &= ~b;
+            state.opp_virtual_spent[h] |= b;
+            bool source_here = false;
+            for (const Permanent& sp : state.battlefield) { if (sp.card.m_number == source_number) { source_here = true; break; } }
+            if (source_here) { state.opp_virtual_oring_link = eefair::OringLink(source_number, vh, vb); }
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                const CardDefinition* d = eefair::DefOfBit(state, vh, vb);
+                EmitPlayEvent(state.turn_number, "trigger",
+                              src_name + ": exiles the " + (d ? d->card.m_name.str() : std::string("card"))
+                              + " the opponent could have cast, until it leaves the battlefield (the lock holds)");
+            }
+            return;
+        }
+    }
     const std::vector<int> legal = EtbExileNonlandLegal(state, controller, source_number);
     if (legal.empty())
     {
@@ -23619,6 +23722,23 @@ inline void ResolveEtbExileNonlandUntilLeaves(GameState& state, int controller, 
 // collected before any return, so a returning Oblivion Ring that exiles afresh is a new link.
 inline void ReturnExiledUntilLeaves(GameState& state, const Card& left)
 {
+    // USER ruling 20: a virtual card this Oblivion Ring exiled returns to the virtual board.
+    if (state.opp_virtual_oring_link != 0 && eefair::OringLinkSource(state.opp_virtual_oring_link) == left.m_number)
+    {
+        const int link = state.opp_virtual_oring_link;
+        const std::size_t h = static_cast<std::size_t>(eefair::OringLinkHead(link) - 1);
+        const std::uint64_t b = 1ull << eefair::OringLinkBit(link);
+        state.opp_virtual_spent[h] &= ~b;
+        state.opp_virtual_board[h] |= b;
+        state.opp_virtual_oring_link = 0;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            const CardDefinition* d = eefair::DefOfBit(state, eefair::OringLinkHead(link), eefair::OringLinkBit(link));
+            EmitPlayEvent(state.turn_number, "trigger",
+                          "the " + (d ? d->card.m_name.str() : std::string("card")) + " the opponent could have cast "
+                          "returns to its virtual board (" + left.m_name.str() + " left)");
+        }
+    }
     std::vector<std::pair<Card, int>> back;
     for (std::size_t i = 0; i < state.exile.size(); )
     {
@@ -23982,21 +24102,24 @@ inline void PerformWaveOpalSweep(GameState& state)
 // ---- The fairness check's VETO (lock step 6; design §3.4.4, USER rulings 9-13, 17), read by freeturn::LockHolds -------
 namespace eefair
 {
-enum Clause : int { kNone = 0, kVirtualCreature = 1, kHexproofThreat = 2, kHexproofNoLoop = 3 };
+// Clause 3 (a hexproof creature with no able Wave loop) is DELETED by USER ruling 19 (2026-11-26: "No blocking should
+// be done to be consistent for every deck."): a hexproof creature that is not a threat never vetoes, loop or no loop.
+// Clause 4 is USER ruling 21 (evasion).
+enum Clause : int { kNone = 0, kVirtualCreature = 1, kHexproofThreat = 2, kHexproofEvasive = 4 };
 inline const char* ClauseName(int c)
 {
     switch (c)
     {
     case kVirtualCreature: return "a creature it could have cast";
     case kHexproofThreat:  return "a hexproof creature it could have cast reaches 5 power with trample";
-    case kHexproofNoLoop:  return "a hexproof creature it could have cast, and no Wave + Opalescence loop";
+    case kHexproofEvasive: return "a hexproof creature it could have cast that our creatures cannot block";
     default:               return "";
     }
 }
 // The Wave + Opalescence self-exile loop is possible right now (the sweep's own test: the deck rule, an Opalescence of
-// ours, and a Wave of ours whose shroud enablers are targetable with a counter left for itself). It is what CONTAINS a
-// hexproof creature that cannot reach 5 power with trample (ruling 9: chump-blocked forever, the blockers exiled and
-// replaced); with no loop (ruling 17) it contains nothing.
+// ours, and a Wave of ours whose shroud enablers are targetable with a counter left for itself). The veto no longer
+// reads it (ruling 19); Oblivion Ring's virtual-target test does (AtCheck: with the loop able, the end-step sweep clears
+// every targetable virtual creature before the check).
 inline bool WaveLoopAble(const GameState& s)
 {
     if (!s.deck_has_wave_opal_sweep) { return false; }
@@ -24014,16 +24137,16 @@ inline bool WaveLoopAble(const GameState& s)
     return false;
 }
 // The first clause that vetoes the lock (kNone = the virtual board lets it hold). `card` names the virtual card.
-// A virtual creature of any head vetoes (it would be an opposing creature, condition 2), EXCEPT a hexproof one while
-// the loop is possible that cannot reach power >= 5 with trample (rulings 9 / 10 / 11a).
-inline int Veto(const GameState& s, std::string* card = nullptr)
+// A virtual creature of any head vetoes (it would be an opposing creature, condition 2), EXCEPT a hexproof one that
+// neither reaches power >= 5 with trample (clause 2; rulings 9 / 10 / 11a) nor is unblockable by our creatures with
+// power >= 1 (clause 4; ruling 21). Such a creature never vetoes, with or without an able Wave loop (ruling 19).
+inline int VetoIn(const GameState& s, const Masks& L, std::string* card = nullptr)
 {
-    if (!Any(s)) { return kNone; }
+    if ((L[0] | L[1]) == 0) { return kNone; }
     const Statics st = StaticsOf(s);
-    int loop = -1;
     for (int head = 1; head <= Heads(s); ++head)
     {
-        std::uint64_t m = Live(s, head);
+        std::uint64_t m = LiveIn(L, head);
         while (m != 0)
         {
             const int b = std::countr_zero(m);
@@ -24033,16 +24156,81 @@ inline int Veto(const GameState& s, std::string* card = nullptr)
             int c = kVirtualCreature;
             if (Hexproof(d))
             {
-                if (loop < 0) { loop = WaveLoopAble(s) ? 1 : 0; }
-                if (loop == 0) { c = kHexproofNoLoop; }
-                else if (HexproofThreat(s, head, b, st)) { c = kHexproofThreat; }
-                else { continue; }   // contained
+                if (HexproofThreat(s, L, head, b, st)) { c = kHexproofThreat; }
+                else if (HexproofEvasive(s, L, head, b, st)) { c = kHexproofEvasive; }
+                else { continue; }   // contained (ruling 9) / not a threat (ruling 19)
             }
             if (card != nullptr) { *card = d->card.m_name.str(); }
             return c;
         }
     }
     return kNone;
+}
+inline int Veto(const GameState& s, std::string* card = nullptr) { return VetoIn(s, s.opp_virtual_board, card); }
+
+// ---- USER ruling 20 (2026-11-26): Oblivion Ring against the virtual board ------------------------------------------
+// "I suppose if this is the different between the lock and not it should be an option. Otherwise I wouldn't cast it."
+// An Oblivion Ring we cast may exile a permanent of the opponent's virtual board, offered ONLY when that exile is what
+// makes the lock hold: the virtual board as it will stand at the opponent's end-step check (AtCheck) vetoes, and the
+// same board without that card does not. TurnSolver's Oblivion Ring post-pass adds the board-lock precondition
+// (freeturn::LockHoldsOnBoard: the real board already locks the opponent) and emits each such card as its own pinned
+// cast variant ("OR<n>", n = the virtual card's number), beside the real targets; never a forced pick. O-Ring targets,
+// so a hexproof virtual creature is never its target -- but the Aura that makes it a threat or evasive is.
+// THE LINK: the resolver clears the bit (as every removal does) and records GameState::opp_virtual_oring_link; the
+// O-Ring's leave trigger (ReturnExiledUntilLeaves) puts the card back on the virtual board ("return the exiled card to
+// the battlefield under its owner's control", CR 610.3c), so the veto is back. One link at a time (the list holds one
+// Oblivion Ring); a second O-Ring with a link live is offered no virtual target.
+inline int OringLink(int source_number, int head, int bit) { return source_number * 128 + (head - 1) * 64 + bit; }
+inline int OringLinkSource(int link) { return link / 128; }
+inline int OringLinkHead(int link) { return (link / 64) % 2 + 1; }
+inline int OringLinkBit(int link) { return link % 64; }
+// The virtual board at the opponent's end-step check: with the Wave + Opalescence loop able, the sweep (which runs in
+// that end step, immediately before the check) has exiled every targetable virtual creature.
+inline Masks AtCheck(const GameState& s)
+{
+    Masks L = s.opp_virtual_board;
+    if (s.deck_has_wave_opal_sweep && WaveLoopAble(s))
+    {
+        for (const std::pair<int, int>& v : SweepTargets(s)) { L[static_cast<std::size_t>(v.first - 1)] &= ~(1ull << v.second); }
+    }
+    return L;
+}
+// A live virtual card Oblivion Ring may target: a nonland permanent (every virtual card is one) that is not a hexproof
+// creature now (CR 702.11b) and is not already gone (an MV-0 enchantment under Opalescence).
+inline bool OringTargetable(const GameState& s, int head, int bit, const Statics& st)
+{
+    if ((Live(s, head) & (1ull << bit)) == 0) { return false; }
+    const CardDefinition* d = DefOfBit(s, head, bit);
+    return d != nullptr && !Gone(d, st) && !(CreatureNow(d, st) && Hexproof(d));
+}
+// The offered virtual targets (card numbers), in head / list order. Empty unless the check's board vetoes.
+inline std::vector<int> OringVirtualTargets(const GameState& s)
+{
+    std::vector<int> out;
+    if (!Any(s) || s.opp_virtual_oring_link != 0) { return out; }
+    const Masks L = AtCheck(s);
+    if (VetoIn(s, L) == kNone) { return out; }
+    const Statics st = StaticsOf(s);
+    for (int head = 1; head <= Heads(s); ++head)
+    {
+        for (std::uint64_t m = Live(s, head); m != 0; m &= m - 1)
+        {
+            const int b = std::countr_zero(m);
+            if (!OringTargetable(s, head, b, st)) { continue; }
+            Masks w = L;
+            w[static_cast<std::size_t>(head - 1)] &= ~(1ull << b);
+            if (VetoIn(s, w) == kNone) { out.push_back(Band(head) + b); }
+        }
+    }
+    return out;
+}
+// The resolver's test for a pin naming a card that is not on the battlefield: a live, targetable virtual card.
+inline bool IsVirtualOringTarget(const GameState& s, int number, int& head, int& bit)
+{
+    head = opponentdeck::HeadOfNumber(number);
+    bit = number - Band(head);
+    if (bit < 0 || bit >= 64 || s.opp_virtual_oring_link != 0) { return false; }
+    return OringTargetable(s, head, bit, StaticsOf(s));
 }
 } // namespace eefair
 

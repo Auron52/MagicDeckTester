@@ -1779,6 +1779,8 @@ INERT_PARAMS = {
     "aura_grants_lifelink": "automatic lifelink grant, no choice",
     "aura_grants_trample": "read only by the free-turn fairness check (EE lock step 6), no choice",
     "aura_umbra_armor": "read only by the free-turn fairness check (EE lock step 6), no choice",
+    "aura_grants_flying": "read only by the free-turn fairness check (EE ruling 21), no choice",
+    "aura_grants_protection_from_creatures": "read only by the free-turn fairness check (EE ruling 21), no choice",
     "aura_scale_kind": "aura scaling selector (rides is_aura)", "aura_scale_power": "aura scaling stat (rides is_aura)",
     "aura_scale_tough": "aura scaling stat (rides is_aura)",
     "aura_enchant_requires": "aura enchant-target restriction (narrows the is_aura main_phase variants)",

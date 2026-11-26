@@ -321,7 +321,7 @@ TEST_CASE("EE fairness: the veto -- a castable creature breaks EE + Opalescence;
     L6Put(v, kEE, 51);
     RefreshTypeStatics(v);
     v.opp_virtual_board[0] = B(slot, "Slippery Bogle");
-    CHECK(eefair::Veto(v) == eefair::kHexproofNoLoop);
+    CHECK(eefair::Veto(v) == eefair::kNone);   // USER ruling 19: a hexproof non-threat never vetoes (clause 3 deleted)
     v.opp_virtual_board[0] = B(slot, "Rancor");
     CHECK(eefair::Veto(v) == eefair::kNone);
     // MTG_FREE_TURN_EE_FAIR's masks are zero for an unstamped deck: nothing to veto.
@@ -355,14 +355,17 @@ TEST_CASE("EE fairness: hexproof (rulings 9-11) -- contained under an able Wave 
     // Ancestral Mask counts every other enchantment on the battlefield -- under EE, ours too.
     s.opp_virtual_board[0] = bogle | B(slot, "Rancor") | B(slot, "Ancestral Mask");
     CHECK(eefair::Veto(s) == eefair::kHexproofThreat);
-    // Ruling 17: two Groves make the loop impossible -- nothing contains even the 1/1.
+    // Ruling 17: two Groves make the loop impossible -- and ruling 19: the 1/1 still does not veto (no clause 3);
+    // a threat still does (clause 2 does not need the loop).
     GameState g = s;
     L6Put(g, kGrove, 54);
     L6Put(g, kGrove, 55);
     RefreshTypeStatics(g);
     g.opp_virtual_board[0] = bogle;
     CHECK_FALSE(eefair::WaveLoopAble(g));
-    CHECK(eefair::Veto(g) == eefair::kHexproofNoLoop);
+    CHECK(eefair::Veto(g) == eefair::kNone);
+    g.opp_virtual_board[0] = bogle | B(slot, "Rancor") | B(slot, "Daybreak Coronet");
+    CHECK(eefair::Veto(g) == eefair::kHexproofThreat);
     // Ruling 11: a Verse with EE out destroys the creature AND its Auras; the lock is back.
     s.opp_virtual_board[0] = bogle | B(slot, "Rancor") | B(slot, "Daybreak Coronet");
     ResolveCalmingVerse(s, 0, L6Def(kVerse), "VS");
@@ -462,4 +465,146 @@ TEST_CASE("EE fairness: Force of Vigor may target the virtual Auras of a hexproo
     GameState roll = s;
     TurnSolver::ApplyPlan(roll, *plan, true);
     CHECK(roll.opp_virtual_board[0] == (B(slot, "Slippery Bogle") | B(slot, "Daybreak Coronet")));
+}
+
+TEST_CASE("EE fairness: evasion (USER ruling 21) -- a hexproof creature our creatures cannot block vetoes at power >= 1")
+{
+    L6Rule rule;
+    static const EnchantedEveningProvider prov;
+    GameState s = L6Fresh();
+    const int slot = s.opponent_slot;
+    s.m_provider = &prov;
+    s.deck_has_wave_opal_sweep = true;
+    L6Put(s, kEE, 51);
+    L6Put(s, kOpal, 52);
+    L6Put(s, kWave, 53);
+    RefreshTypeStatics(s);
+    const std::uint64_t bogle = B(slot, "Slippery Bogle"), scout = B(slot, "Gladecover Scout");
+    // Gryff's Boon: +1/+0 and flying; nothing of ours flies or has reach -> unblockable, power 1 (MV) + 1 = 2.
+    s.opp_virtual_board[0] = bogle | B(slot, "Gryff's Boon");
+    CHECK(eefair::Veto(s) == eefair::kHexproofEvasive);
+    CHECK_FALSE(freeturn::LockHolds(s));
+    // Spirit Mantle: protection from creatures -- no creature of ours can block it.
+    s.opp_virtual_board[0] = scout | B(slot, "Spirit Mantle");
+    CHECK(eefair::Veto(s) == eefair::kHexproofEvasive);
+    // Alpha Authority ("can't be blocked by more than one creature") is not evasion: one chump blocker is legal.
+    s.opp_virtual_board[0] = bogle | B(slot, "Alpha Authority");
+    CHECK(eefair::Veto(s) == eefair::kNone);
+    // Trample + power >= 5 is still clause 2, checked first.
+    s.opp_virtual_board[0] = bogle | B(slot, "Gryff's Boon") | B(slot, "Rancor") | B(slot, "Daybreak Coronet");
+    CHECK(eefair::Veto(s) == eefair::kHexproofThreat);
+    // The loop does not matter (ruling 19 + 21): two Groves, the flyer still vetoes.
+    GameState g = s;
+    L6Put(g, kGrove, 54);
+    L6Put(g, kGrove, 55);
+    RefreshTypeStatics(g);
+    g.opp_virtual_board[0] = bogle | B(slot, "Gryff's Boon");
+    CHECK_FALSE(eefair::WaveLoopAble(g));
+    CHECK(eefair::Veto(g) == eefair::kHexproofEvasive);
+    // A creature of ours with flying (a test-only board: a real flyer) can block the Boon's flyer -> contained again;
+    // protection from creatures stays unblockable whatever we control.
+    GameState f = s;
+    {
+        const int i = L6Put(f, "Forest", 60);
+        f.battlefield[static_cast<std::size_t>(i)].card = L6Card("Birds of Paradise", 60);
+    }
+    f.opp_virtual_board[0] = bogle | B(slot, "Gryff's Boon");
+    CHECK(eefair::Veto(f) == eefair::kNone);
+    f.opp_virtual_board[0] = scout | B(slot, "Spirit Mantle");
+    CHECK(eefair::Veto(f) == eefair::kHexproofEvasive);
+    // The veto lifts when the EVASION SOURCE goes: Force of Vigor is offered against the virtual Boon (ruling 13's
+    // window now opens for an evasive hexproof creature too), and destroying it restores the lock.
+    s.opp_virtual_board[0] = bogle | B(slot, "Gryff's Boon");
+    const std::vector<std::vector<int>> cls = eefair::FovVirtualAuraClasses(s);
+    REQUIRE(cls.size() == 1);
+    CHECK(cls.front().front() == L6Num(slot, "Gryff's Boon"));
+    GameState r = s;
+    ResolveDestroyUpToArtEnch(r, 0, L6Def(kFoV), DestroyUpToArtEnchPin({ L6Num(slot, "Gryff's Boon") }));
+    CHECK(r.opp_virtual_board[0] == bogle);
+    CHECK(eefair::Veto(r) == eefair::kNone);
+    // ...and when the CREATURE goes: a Calming Verse under EE destroys both.
+    GameState v = s;
+    ResolveCalmingVerse(v, 0, L6Def(kVerse), "VS");
+    CHECK(eefair::Veto(v) == eefair::kNone);
+}
+
+TEST_CASE("EE fairness: Oblivion Ring may exile a virtual permanent only when that makes the lock hold (USER ruling 20)")
+{
+    L6Rule rule;
+    static const EnchantedEveningProvider prov;
+    GameState s = L6Fresh();
+    const int slot = s.opponent_slot;
+    s.m_provider = &prov;
+    s.phase = Phase::PreCombatMain;
+    s.step = Step::MainPhase;
+    s.players[0].lands_played_this_turn = 1;
+    for (int k = 0; k < 8; ++k) { s.players[0].library.push_back(L6Card("Plains", 900 + k)); }
+    L6Put(s, kEE, 51);
+    for (int k = 0; k < 4; ++k) { L6Put(s, "Plains", 101 + k); }   // EE alone: our lands stay (no Opalescence)
+    RefreshTypeStatics(s);
+    s.players[0].hand.push_back(L6Card("Oblivion Ring", 31));
+    REQUIRE(freeturn::LockHoldsOnBoard(s));   // the opponent has no land: the board lock stands
+    const int boon = L6Num(slot, "Gryff's Boon");
+    const std::uint64_t bogle = B(slot, "Slippery Bogle"), kor = B(slot, "Kor Spiritdancer");
+    // The evasive Bogle vetoes; exiling the Boon lifts it -> offered. The Bogle itself is hexproof: never offered.
+    s.opp_virtual_board[0] = bogle | B(slot, "Gryff's Boon");
+    CHECK(eefair::OringVirtualTargets(s) == std::vector<int>{ boon });
+    const std::set<std::string> pins = L6Pins(TurnSolver::EnumerateMainPlans(s, true), "Oblivion Ring");
+    CHECK(pins.count(ExileUntilLeavesPin(boon)) == 1);
+    CHECK(pins.count(ExileUntilLeavesPin(L6Num(slot, "Slippery Bogle"))) == 0);
+    CHECK(pins.count("") == 1);   // the real-target base stays: a searched option, never forced
+    // No veto (a bare Bogle, ruling 19): nothing virtual is offered.
+    GameState n = s;
+    n.opp_virtual_board[0] = bogle;
+    CHECK(eefair::OringVirtualTargets(n).empty());
+    // Two vetoes (two castable creatures): exiling one does not make the lock hold -> not offered.
+    GameState t = s;
+    t.opp_virtual_board[0] = kor | B(slot, "Kor Spiritdancer", 1);
+    CHECK(eefair::OringVirtualTargets(t).empty());
+    // One castable creature: offered.
+    t.opp_virtual_board[0] = kor;
+    CHECK(eefair::OringVirtualTargets(t) == std::vector<int>{ L6Num(slot, "Kor Spiritdancer") });
+    // The board lock does not stand (the opponent has a land and a nonland in hand): the post-pass offers nothing.
+    GameState u = t;
+    L6OppLand(u, slot, "Plains", 0);
+    L6Hand(u, slot, "Ethereal Armor");
+    REQUIRE_FALSE(freeturn::LockHoldsOnBoard(u));
+    for (const std::string& pin : L6Pins(TurnSolver::EnumerateMainPlans(u, true), "Oblivion Ring"))
+    { CHECK(ExileUntilLeavesPinTarget(pin) < opponentdeck::kNumberBase); }
+    // Resolution: the pinned virtual target is exiled and linked; the lock holds; the O-Ring leaving returns it.
+    GameState r = s;
+    L6Put(r, "Oblivion Ring", 31);
+    RefreshTypeStatics(r);
+    ResolveEtbExileNonlandUntilLeaves(r, 0, 31, "Oblivion Ring", ExileUntilLeavesPin(boon));
+    CHECK(r.opp_virtual_board[0] == bogle);
+    CHECK(r.opp_virtual_spent[0] == B(slot, "Gryff's Boon"));
+    CHECK(r.opp_virtual_oring_link != 0);
+    CHECK(eefair::Veto(r) == eefair::kNone);
+    CHECK(freeturn::LockHolds(r));
+    Card ring;
+    for (std::size_t i = 0; i < r.battlefield.size(); ++i)
+    {
+        if (r.battlefield[i].card.m_number != 31) { continue; }
+        ring = r.battlefield[i].card;
+        r.battlefield.erase(r.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+        break;
+    }
+    FireLeavesBattlefieldTriggers(r, 0, ring);
+    CHECK(r.opp_virtual_board[0] == (bogle | B(slot, "Gryff's Boon")));
+    CHECK(r.opp_virtual_spent[0] == 0);
+    CHECK(r.opp_virtual_oring_link == 0);
+    CHECK(eefair::Veto(r) == eefair::kHexproofEvasive);
+    // The rollout applies the same pinned cast (both worlds).
+    std::optional<TurnSolver::Plan> plan;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        if (p.actions.size() == 1 && p.actions.front().card_name.str() == "Oblivion Ring"
+            && p.actions.front().tutor_target.str() == ExileUntilLeavesPin(boon))
+        { plan = p; }
+    }
+    REQUIRE(plan.has_value());
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *plan, true);
+    CHECK(roll.opp_virtual_board[0] == bogle);
+    CHECK(roll.opp_virtual_oring_link != 0);
 }

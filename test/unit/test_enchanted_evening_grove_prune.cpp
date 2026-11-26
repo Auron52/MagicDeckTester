@@ -431,3 +431,56 @@ TEST_CASE("EE prune amendment arm MTG_EE_GROVE_PRELOCK: before EE is ours, with 
         CHECK_FALSE(eeprune::GrovePrelockException(u, 0));
     }
 }
+
+TEST_CASE("EE prune amendment MTG_EE_GROVE_PRELOCK, second Opalescence: before EE is ours, with an Opalescence out, a "
+          "second copy is a tutor target after the missing lock pieces (seed 10000 gi=50)")
+{
+    struct PreScope
+    {
+        heurarm::Arm saved = heurarm::t_arm;
+        PreScope() { heurarm::t_arm[heurarm::EE_GROVE_PRELOCK] = 1; }
+        ~PreScope() { heurarm::t_arm = saved; }
+    };
+    GameState s = GpBoard();   // the library holds one more Opalescence
+    AddLands(s, 2, 2);
+    GpPut(s, kOpal, 207);      // one Opalescence ours
+    // Default OFF: B2 -- never a duplicate.
+    CHECK_FALSE(eeprune::SecondOpalExtension(s, 0));
+    CheckBoth(s, { kEE, kWave });
+    {
+        PreScope on;
+        CHECK(eeprune::SecondOpalExtension(s, 0));
+        // Listed after the missing lock pieces (EE, Wave); Sterling Grove (the amendment's beater) stays last.
+        for (const CardParams* pp : { &GroveTutor(), &IdyllicTutor() })
+        {
+            const std::vector<std::string> c = Cands(s, *pp);
+            REQUIRE(c.size() >= 3);
+            CHECK(c[0] == kEE);
+            CHECK(c[1] == kWave);
+            CHECK(c[2] == kOpal);
+            CHECK(c.back() == kGrove);
+        }
+        // A second Opalescence already in hand: no third.
+        GameState h = s;
+        h.players[0].hand.push_back(GpCard(kOpal, 209));
+        CHECK_FALSE(eeprune::SecondOpalExtension(h, 0));
+        const std::vector<std::string> ch = Cands(h, IdyllicTutor());
+        CHECK(std::count(ch.begin(), ch.end(), std::string(kOpal)) == 0);
+        // Enchanted Evening ours: the lock is assembling -- no second copy.
+        GameState t = s;
+        GpPut(t, kEE, 208);
+        CHECK_FALSE(eeprune::SecondOpalExtension(t, 0));
+        const std::vector<std::string> ct = Cands(t, IdyllicTutor());
+        CHECK(std::count(ct.begin(), ct.end(), std::string(kOpal)) == 0);
+        // Opalescence only in HAND (not ours yet): the extension needs one on the battlefield.
+        GameState u = GpBoard();
+        AddLands(u, 2, 2);
+        u.players[0].hand.push_back(GpCard(kOpal, 207));
+        CHECK_FALSE(eeprune::SecondOpalExtension(u, 0));
+        // No copy left in the library: nothing to fetch.
+        GameState w = s;
+        GpDropFromLibrary(w, kOpal);
+        const std::vector<std::string> cw = Cands(w, IdyllicTutor());
+        CHECK(std::count(cw.begin(), cw.end(), std::string(kOpal)) == 0);
+    }
+}

@@ -3325,6 +3325,7 @@
    "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 and has protection from creatures. [Protection inert vs the passive opponent (nothing blocks or targets our creature).]",
    "template": "custom",
    "parameters": {
+    "aura_grants_protection_from_creatures": true,
     "aura_power_bonus": 1,
     "aura_tough_bonus": 1,
     "is_aura": true
@@ -3408,6 +3409,7 @@
    "oracle_text": "Enchant creature\nEnchanted creature gets +1/+0 and has flying.\n{3}{W}: Return this card from your graveyard to the battlefield attached to target creature. Activate only as a sorcery. [Flying inert; the graveyard-return ability is inert (the aura never reaches the graveyard vs the passive opponent).]",
    "template": "custom",
    "parameters": {
+    "aura_grants_flying": true,
     "aura_power_bonus": 1,
     "aura_tough_bonus": 0,
     "is_aura": true
@@ -12234,6 +12236,7 @@
    "oracle_text": "Enchant creature\nEnchanted creature has flying.\nAura swap {2}{U} ({2}{U}: Exchange this Aura with an Aura card in your hand.) [Enchant creature: is_aura, host = searched enchant_target. AURA SWAP MODELLED (aura_swap_cost) by the shared ApplyAuraSwap: Wings returns to hand and the hand Aura is PUT (not cast -- no cast triggers, does not target, so Lightning Greaves' shroud does NOT stop it, CR 303.4a vs 303.4f) onto the same creature and ENTERS (Colossification's ETB taps the host). If either half cannot complete nothing happens (ruling). TWO windows, both searched: the MAIN PHASE (Action::Kind::AuraSwap; a Wings cast this plan reaches it through breakpoint site 9, and the swap's return-to-hand opens site 10 for a recast) and IN COMBAT after attack triggers resolve (Plan::combat_aura_swap_choice -> ApplyCombatAuraSwap, both worlds), where Colossification's tap is free (CR 506.4). WHICH hand Aura comes in is the provider's DAMAGE-MAX pick (USER ruling 2026-10-05; AuraSwapRanking prices the swap by performing it: Almost Perfect's base set, a Colossification tap in a main phase, double strike) -- proven against the fully-branched MTG_AURA_SWAP_BRANCH control arm (Bruna ledger); human play offers every legal Aura. DeckUsesSecondMain detects aura_swap_cost (a combat swap returns Wings to hand -> main-2 recast). The opponent's-turn window is collapsed onto our combat/main-2 windows (equivalent vs a passive opponent) -- user-approved 2026-10-05. Flying grant inert (no blockers; nothing in Bruna reads Flying) -- user-approved 2026-10-05.]",
    "template": "custom",
    "parameters": {
+    "aura_grants_flying": true,
     "is_aura": true,
     "aura_power_bonus": 0,
     "aura_tough_bonus": 0,

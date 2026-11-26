@@ -39303,6 +39303,26 @@ bool GrovePrelockException(const GameState& s, int controller)
     return false;
 }
 
+// The amendment's second-Opalescence extension (same arm): Enchanted Evening not on our battlefield, an Opalescence ON
+// our battlefield, no Opalescence in our hand. (Its library copy is checked by the caller: it must be a candidate.)
+bool SecondOpalExtension(const GameState& s, int controller)
+{
+    static const bool env = EnvOn("MTG_EE_GROVE_PRELOCK");
+    if (!heurarm::Flag(heurarm::EE_GROVE_PRELOCK, env)) { return false; }
+    bool opal = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (IsEE(d)) { return false; }
+        opal = opal || IsOpal(d);
+    }
+    if (!opal) { return false; }
+    for (const Card& h : s.players[static_cast<std::size_t>(controller)].hand)
+    { if (IsOpal(CardDatabase::Instance().LookupCached(h))) { return false; } }
+    return true;
+}
+
 }   // namespace eeprune
 
 std::vector<std::string>
@@ -39335,6 +39355,11 @@ EnchantedEveningProvider::TutorCandidates(const GameState& s, int controller, co
     if (ee != nullptr && !c.have_ee)     { kept.push_back(*ee); }
     if (opal != nullptr && !c.have_opal) { kept.push_back(*opal); }
     if (wave != nullptr && !c.have_wave) { kept.push_back(*wave); }
+    // The amendment's SECOND OPALESCENCE (USER-owned arm, DEFAULT OFF; seed 10000 gi=50, a real non-clairvoyant loss):
+    // before Enchanted Evening is ours, with an Opalescence on our battlefield and none in hand, a second copy is the
+    // pre-lock beatdown's best target -- the two animate each other as 4/4 attackers. Listed after the missing lock
+    // pieces, before the mana Aura and Presence.
+    if (opal != nullptr && c.have_opal && eeprune::SecondOpalExtension(s, controller)) { kept.push_back(*opal); }
     if (mana)
     {
         const std::string* m = eeprune::PreferSprawl(c) ? (sprawl != nullptr ? sprawl : wg)
@@ -48792,6 +48817,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
         for (std::uint64_t m : { s.opp_virtual_board[0], s.opp_virtual_board[1], s.opp_virtual_spent[0],
                                  s.opp_virtual_spent[1] })
         { v.push_back(static_cast<long long>(m & 0xFFFFFFFFull)); v.push_back(static_cast<long long>(m >> 32)); }
+        if (s.opp_virtual_oring_link != 0) { v.push_back(0xEE0B1A); v.push_back(s.opp_virtual_oring_link); }   // ruling 20
     }
     v.push_back(s.opponent_lost_life_this_turn); v.push_back(s.opponent_library_dealt); v.push_back(s.opponent_decked);
     v.push_back(s.inf_life_turn); v.push_back(s.inf_life_possible); v.push_back(s.top_stacked_turn);

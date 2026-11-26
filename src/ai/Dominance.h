@@ -971,6 +971,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         fold(0xEEFA1Bull);
         fold(s.opp_virtual_board[0]); fold(s.opp_virtual_board[1]);
         fold(s.opp_virtual_spent[0]); fold(s.opp_virtual_spent[1]);
+        if (s.opp_virtual_oring_link != 0) { fold(0xEE0B1Aull + (static_cast<std::uint64_t>(s.opp_virtual_oring_link) << 24)); }   // ruling 20
     }
     fold(static_cast<std::uint64_t>(s.active_player_index));
     fold(static_cast<std::uint64_t>(s.priority_player_index));

@@ -57771,6 +57771,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         { or_nums.push_back(num); }
                     }
                 }
+                // USER ruling 20 (Enchanted Evening): a permanent of the fairness check's VIRTUAL board, offered only
+                // when exiling it is what makes the lock hold -- the real board already locks the opponent
+                // (LockHoldsOnBoard) and the virtual board at the end-step check vetoes only through that card
+                // (eefair::OringVirtualTargets). Appended after the real targets; each its own pinned variant, never
+                // a forced pick (the base keeps the provider's real pick). Empty for every other deck (no virtual board).
+                if (eefair::Any(state) && freeturn::LockHoldsOnBoard(state))
+                {
+                    for (int num : eefair::OringVirtualTargets(state))
+                    { if (std::find(or_nums.begin(), or_nums.end(), num) == or_nums.end()) { or_nums.push_back(num); } }
+                }
                 or_built = true;
             }
             for (int num : or_nums)
@@ -112915,6 +112925,8 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         Fold(k, 0xEEFA1Bull);
         Fold(k, state.opp_virtual_board[0]); Fold(k, state.opp_virtual_board[1]);
         Fold(k, state.opp_virtual_spent[0]); Fold(k, state.opp_virtual_spent[1]);
+        if (state.opp_virtual_oring_link != 0)   // USER ruling 20: the O-Ring's virtual link decides a later return
+        { Fold(k, 0xEE0B1Aull + (static_cast<uint64_t>(state.opp_virtual_oring_link) << 24)); }
     }
     Fold(k, static_cast<uint64_t>(state.vial_target_mv));
     Fold(k, static_cast<uint64_t>(state.stack.size()));

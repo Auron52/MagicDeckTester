@@ -3136,6 +3136,12 @@ struct CardParams
     // check: a Calming Verse destroys the umbra instead of the virtual creature it enchants (eefair::VerseClears).
     // Real permanents do not model umbra armor (the passive opponent never casts an Aura). Play-inert for every deck.
     bool aura_umbra_armor = false;
+    // Evasion grants (USER ruling 21, 2026-11-26): flying (Gryff's Boon, Arcanum Wings) and protection from creatures
+    // (Spirit Mantle). Combat evasion stays INERT vs the passive opponent (it never blocks); the ONE reader is the
+    // fairness check's evasion clause: a hexproof virtual creature our creatures cannot block vetoes the lock while its
+    // power is >= 1 (eefair::Unblockable, SpellEffects.h). Play-inert for every deck.
+    bool aura_grants_flying = false;
+    bool aura_grants_protection_from_creatures = false;
     // Dynamic P/T scaling: the aura's grant grows with a board count. aura_scale_kind selects WHICH count
     // multiplies aura_scale_power/tough:
     //   "enchantments"            +N per enchantment you control, INCLUDING this aura (Ethereal Armor: 1/1)

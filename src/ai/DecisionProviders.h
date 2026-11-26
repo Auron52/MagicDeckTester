@@ -5286,6 +5286,9 @@ bool PreferSprawl(const Census& c);         // B3: short of white (with a Forest
 // The amendment arm MTG_EE_GROVE_PRELOCK (heurarm EE_GROVE_PRELOCK, DEFAULT OFF): the pre-lock Grove beater exception
 // is live -- the amendment on, Enchanted Evening not on our battlefield, an Opalescence ours or in hand.
 bool GrovePrelockException(const GameState& s, int controller);
+// ...and its SECOND-OPALESCENCE extension: EE not ours, an Opalescence on our battlefield, none in hand -> the enchantment
+// tutors may fetch a second Opalescence (after the missing lock pieces). Seed 10000 gi=50.
+bool SecondOpalExtension(const GameState& s, int controller);
 }
 
 class WorldfireProvider : public DeckProvider

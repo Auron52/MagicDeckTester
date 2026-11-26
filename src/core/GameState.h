@@ -383,6 +383,12 @@ struct GameState
     std::array<int, 2> noncombat_damage_received_this_turn{};
     std::vector<IncineratorDamageTrigger> pending_incinerator_damage;
     int noncombat_trigger_depth = 0;
+    // ENCHANTED EVENING, USER ruling 20 (2026-11-26): an Oblivion Ring of ours that exiled a permanent of the
+    // fairness check's VIRTUAL board (opp_virtual_board below; eefair::OringLink in SpellEffects.h): source number * 128
+    // + (head - 1) * 64 + bit, 0 = none. Its leave trigger puts the card back on the virtual board. FUTURE-DETERMINING:
+    // folded beside the virtual masks (nonzero-gated) in BuildSimKey, dominance::Build and the route signature. In the
+    // 4-byte hole after noncombat_trigger_depth (sizeof(GameState) unchanged, measured). Zero for every other deck.
+    std::int32_t opp_virtual_oring_link = 0;
 
     std::array<Player, 2>    players;
     // 2HG's SECOND opponent head (USER 2026-11-17: "there should technically be two and they should
