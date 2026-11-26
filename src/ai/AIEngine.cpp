@@ -131,9 +131,22 @@ static BottomCostReport g_bottom_cost_report;
 
 // Kessig Wolf Run: the executor's game-log label for a RESOLVED pump -- the X actually paid and the
 // creature it went to, read off the live pin (TapTargetPumpPay rewrote its X to the paid value).
-static std::string TapTargetPumpPaidLabel(const GameState& s, const CardDefinition& d)
+// `for_digest`: the text the play digest has always folded (GameLogger::LogAbility's digest_ability), which the
+// display-only Magistrate relabel below leaves untouched.
+static std::string TapTargetPumpPaidLabel(const GameState& s, const CardDefinition& d, bool for_digest = false)
 {
     const TapTargetPumpPin pin = g_tap_target_pump_pin;
+    // Immaculate Magistrate: COUNTERS, no {X}, no until-EOT pump -- the resolved count (the resolver's own
+    // CountOtherControlledWithSubtype, read just after it ran), never "X=0 ... +0/+0 until end of turn".
+    if (!for_digest && !d.params.tap_target_counters_per_subtype.empty())
+    {
+        std::string who = "target creature";
+        for (const Permanent& q : s.battlefield) { if (q.card.m_number == pin.target) { who = q.card.m_name.str(); break; } }
+        const int n = CountOtherControlledWithSubtype(s, s.active_player_index, d.params.tap_target_counters_per_subtype,
+                                                      INT_MIN);
+        return std::to_string(n) + " +1/+1 counter" + (n == 1 ? "" : "s") + " on " + who + " (one per "
+             + d.params.tap_target_counters_per_subtype + " you control)";
+    }
     const int x = pin.x == kTapTargetPumpXAll ? 0 : std::max(0, pin.x);
     std::string who = "target creature";
     for (const Permanent& q : s.battlefield) { if (q.card.m_number == pin.target) { who = q.card.m_name.str(); break; } }
@@ -7931,10 +7944,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         // TapDraw label would log "draw a card" and misrepresent it. Param-keyed,
                         // so every real tap-draw keeps its exact label (digest-stable elsewhere).
                         // Kessig Wolf Run: the X it paid and the creature it pumped (the pin, still live).
-                        m_logger->LogAbility(src_id, a.card_name.str(),
-                                             snow_look ? "look at top; put a snow card into hand"
-                                             : tpump   ? TapTargetPumpPaidLabel(state, *a.def)
-                                                       : PermAbilityLabelFor(a.ability_mode, a.def));
+                        const std::string shown = snow_look ? std::string("look at top; put a snow card into hand")
+                                                : tpump     ? TapTargetPumpPaidLabel(state, *a.def)
+                                                            : PermAbilityLabelFor(a.ability_mode, a.def);
+                        // The digest folds the pre-relabel text (display-only relabels move no fingerprint).
+                        const std::string folded = snow_look ? shown
+                                                 : tpump     ? TapTargetPumpPaidLabel(state, *a.def, /*for_digest=*/true)
+                                                             : PermAbilityLabelForDigest(a.ability_mode, a.def);
+                        m_logger->LogAbility(src_id, a.card_name.str(), shown, true,
+                                             folded == shown ? nullptr : &folded);
                     }
                     // LOCKSTEP with the rollout's repeat loop (TurnSolver apply_one). A repeatable
                     // {T}-less sink's plan carries K activations with only the FIRST on the subset's

@@ -733,6 +733,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             {
                 tag = a.card_name;
                 if (a.cast_from_top) { tag += " (from library top)"; }
+                tag += TurnSolver::RepeatKickSummaryTag(a);   // Joraga Warcaller / Galadhrim Brigade: the kick count
                 // An {X} spell's X is the whole difference between its variants (claude-play sweep
                 // gi5: every Rolling Earthquake X read "Rolling Earthquake"). X=0 is a real line
                 // (the Spellshock trigger), so it prints too. A tutor-put cast prints its X beside
@@ -1213,7 +1214,15 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 if (a.ability_mode == Action::AbilityMode::ThresholdLoot)
                 { tag += a.draw_target ? " (opponent draws)" : " (you draw)"; }
                 // Kessig Wolf Run's pump: the X and the TARGET are the whole decision (the blink lesson).
-                if (a.ability_mode == Action::AbilityMode::TapTargetPump)
+                // Immaculate Magistrate has no {X}: name its counter COUNT instead of "X=0" (display only).
+                if (a.ability_mode == Action::AbilityMode::TapTargetPump && a.def != nullptr
+                    && !a.def->params.tap_target_counters_per_subtype.empty())
+                {
+                    const int ctr = TurnSolver::TapTargetCountersProjected(s, plan, a);
+                    tag += " -- " + std::to_string(ctr) + " counter" + (ctr == 1 ? "" : "s")
+                         + " \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id);
+                }
+                else if (a.ability_mode == Action::AbilityMode::TapTargetPump)
                 {
                     tag += " -- X=" + (a.chosen_x == kTapTargetPumpXAll ? std::string("all remaining mana")
                                                                         : std::to_string(a.chosen_x))
