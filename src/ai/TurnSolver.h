@@ -2630,8 +2630,17 @@ public:
     // (the cast card itself, when it was cast from the graveyard or the library top). The full
     // no-op argument is at the definition.
     static std::vector<int> PutWindowNumbers(const GameState& state);
+    // `land_put_credited`: the cast carried the land-put mana credit (Action::rock_mana, the CastRiders::land_put
+    // rider) -- read by THE INERT-LAND FOLD below, which skips an own put LAND that no option this turn can read.
     static bool CastPutACardPermanent(const std::vector<int>& snapshot, const GameState& state,
-                                      const std::string& cast_name);
+                                      const std::string& cast_name, bool land_put_credited);
+    // THE INERT-LAND FOLD (docs/design/bpput-inert-land-fold.md; proof at the definition). A put permanent `p` is a
+    // fold CANDIDATE iff it is a basic, non-snow, non-creature land whose definition reads nothing
+    // (CardDefinition::bpput_land_reader false) and which is either TAPPED or was put by a CREDITED cast (its mana
+    // was priced into the plan at enumeration). It is INERT iff it is a candidate and no reader is live
+    // (LandPutReaderLive). `untapped_put` widens the readers to the mana sinks (bpput_mana_reader).
+    static bool PutLandFoldCandidate(const Permanent& p, bool land_put_credited);
+    static bool LandPutReaderLive(const GameState& state, bool untapped_put);
 
     // ---- THE LAND-DROP POSITION (Plan::land_slot, 2026-10-15) -----------------------------------
     static constexpr int8_t kLandSlotFirst      = 0;    // before every cast (the default)

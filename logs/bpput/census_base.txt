@@ -1,0 +1,28 @@
+[bpput] put-only site-10 armings=4607344
+[bpput] src=creature_giving2hg|Crop Rotation         armings=313984     all_tapped_basic=0          land_tapped_basic=0 land_tapped_other=23 land_untapped=313961 creature=0 other=0
+[bpput] src=creature_giving|Crop Rotation            armings=489832     all_tapped_basic=0          land_tapped_basic=0 land_tapped_other=1346 land_untapped=488486 creature=0 other=0
+[bpput] src=hydras|Nature's Lore                     armings=369359     all_tapped_basic=0          land_tapped_basic=0 land_tapped_other=0 land_untapped=369359 creature=0 other=0
+[bpput] src=hydras|Search for Tomorrow               armings=140785     all_tapped_basic=0          land_tapped_basic=0 land_tapped_other=0 land_untapped=140785 creature=0 other=0
+[bpput] src=hydras|Three Visits                      armings=109417     all_tapped_basic=0          land_tapped_basic=0 land_tapped_other=0 land_untapped=109417 creature=0 other=0
+[bpput] src=landfall|Cultivate                       armings=21         all_tapped_basic=21         land_tapped_basic=21 land_tapped_other=0 land_untapped=0 creature=0 other=0
+[bpput] src=landfall|Genesis Wave                    armings=236069     all_tapped_basic=0          land_tapped_basic=0 land_tapped_other=54993 land_untapped=287119 creature=26611 other=88245
+[bpput] src=landfall|Primeval Titan                  armings=138040     all_tapped_basic=0          land_tapped_basic=0 land_tapped_other=276080 land_untapped=0 creature=0 other=0
+[bpput] src=landfall|Rampant Growth                  armings=511486     all_tapped_basic=511486     land_tapped_basic=511486 land_tapped_other=0 land_untapped=0 creature=0 other=0
+[bpput] src=landfall|Search for Tomorrow             armings=506124     all_tapped_basic=0          land_tapped_basic=0 land_tapped_other=0 land_untapped=506124 creature=0 other=0
+[bpput] src=melira|Chord of Calling                  armings=1792178    all_tapped_basic=0          land_tapped_basic=0 land_tapped_other=0 land_untapped=0 creature=1792178 other=0
+[bpput] src=melira|Reveillark                        armings=49         all_tapped_basic=0          land_tapped_basic=0 land_tapped_other=0 land_untapped=0 creature=50 other=0
+[bpput] cont scoring base empty=268550 nonempty=5697
+[bpput] cont scoring variant empty=91504 nonempty=136024
+[bpput] cont committed base empty=498548 nonempty=488081
+[bpput] cont committed variant empty=1383749 nonempty=1600992
+[bpput] committed-cont src=creature_giving2hg|Crop Rotation         empty=113100 nonempty=180760
+[bpput] committed-cont src=creature_giving|Crop Rotation            empty=172601 nonempty=291124
+[bpput] committed-cont src=hydras|Nature's Lore                     empty=68199 nonempty=44183
+[bpput] committed-cont src=hydras|Search for Tomorrow               empty=23748 nonempty=15491
+[bpput] committed-cont src=hydras|Three Visits                      empty=25114 nonempty=12685
+[bpput] committed-cont src=landfall|Genesis Wave                    empty=98547 nonempty=122881
+[bpput] committed-cont src=landfall|Primeval Titan                  empty=76681 nonempty=53592
+[bpput] committed-cont src=landfall|Rampant Growth                  empty=273441 nonempty=207854
+[bpput] committed-cont src=landfall|Search for Tomorrow             empty=249529 nonempty=193857
+[bpput] committed-cont src=melira|Chord of Calling                  empty=781313 nonempty=966622
+[bpput] committed-cont src=melira|Reveillark                        empty=24 nonempty=24

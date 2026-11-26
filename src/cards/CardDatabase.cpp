@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <cstring>
 #include <functional>
+#include <unordered_set>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -76,6 +77,91 @@ CardDatabase CardDatabase::s_instance;
 
 static ManaCost ManaCostFromString(const std::string& cost_str);   // defined below (LoadFromJson reads it)
 
+// THE SITE-10 INERT-LAND FOLD's READER BYTE (CardDefinition::bpput_land_reader; the fold and its proof are at
+// TurnSolver::PutLandIsInert, docs/design/bpput-inert-land-fold.md). A definition is a NON-reader iff every key
+// of its JSON `parameters` object is on the whitelist below (with the two value conditions). Each whitelisted key
+// was reviewed against its engine reader for three properties, all of which it must have:
+//   (1) it never reads OUR LANDS ON THE BATTLEFIELD in a way that decides what a plan can do -- no land / land-type
+//       / basic count, no land as a target, cost, sacrifice, bounce, blink or untap victim, no land-entered-this-turn
+//       condition, no landfall trigger, no per-land mana (a land-tap bonus);
+//   (2) it never moves a library card into a zone a plan can act from (hand, battlefield, graveyard, exile, the
+//       playable top) EXCEPT through a route that arms its own breakpoint (a draw / tutor to hand: the hand half; a
+//       put: the battlefield half) or outside our main phase (an upkeep trigger);
+//   (3) it is not an activated ability with a MANA cost (the land-put credit is proven for casts only).
+// Anything else -- including every key not listed, i.e. every param added later -- makes a reader: this byte FAILS
+// TOWARD READER, which only declines a fold. Widening the list needs the same three-way review per key.
+static bool BpPutLandReaderFromJson(const json& entry, bool& mana_reader)
+{
+    mana_reader = false;
+    // A TEMPLATE carries behaviour of its own: only the four whose behaviour is their params (custom), a land's
+    // mana ability (basic_land), a vanilla body, or a mana dork's {T} are reviewed; any other template is a reader.
+    const std::string tmpl = entry.value("template", std::string("custom"));
+    if (tmpl != "custom" && tmpl != "basic_land" && tmpl != "vanilla_creature" && tmpl != "mana_dork") { return true; }
+    // ...and a landwalk keyword reads lands (the defender's, but stay on the reader side).
+    if (entry.contains("keywords") && entry["keywords"].is_array())
+    {
+        for (const json& kw : entry["keywords"])
+        { if (kw.is_string() && kw.get<std::string>().find("walk") != std::string::npos) { return true; } }
+    }
+    if (!entry.contains("parameters")) { return false; }   // a vanilla definition holds nothing that reads
+    const json& p = entry["parameters"];
+    if (!p.is_object()) { return true; }
+    static const std::unordered_set<std::string> kSafe = {
+        // mana / land bodies: their own mana ability and entry, nothing that reads another land
+        "produces", "produces_amount", "enters_tapped", "etb_pay_life_to_untap", "mdfc_back_name",
+        "mdfc_back_produces", "tap_self_damage", "tap_self_damage_is_trigger", "taps_spawn_opp_token", "etb_lifegain",
+        // creature / permanent bodies and their non-land triggers
+        "attack_double_team_counters", "enters_with_plus_counters", "enters_with_x_dice_sides",
+        "enters_with_x_plus_counters", "upkeep_double_self_counters", "etb_modal_double_self_counters",
+        "etb_modal_fight_opp_creature", "reduces_spell_subtype", "reduces_spell_subtype_amount",
+        "prevents_minus_counters", "reduces_minus_counters_by_one", "etb_self_lifegain", "persist", "etb_damage_any",
+        "etb_damage_equals_power", "etb_destroy_opp_creature", "dies_token_power", "dies_token_subtypes",
+        "dies_token_toughness", "dies_trigger_creates_tokens", "dies_watch_includes_self", "dies_watch_subtype",
+        "dies_trigger_damage", "opp_creature_enters_life_loss", "own_creature_enters_lifegain",
+        "any_creature_enters_lifegain", "etb_opp_creatures_debuff", "opp_dies_life_loss", "etb_created_token_power",
+        "etb_created_token_subtypes", "etb_created_token_toughness", "created_token_color", "etb_opp_creates_tokens",
+        "ltb_return_creatures", "ltb_return_max_power", "evoke_cost", "etb_choose_color", "chosen_color_pump_power",
+        "chosen_color_pump_tough",
+        // upkeep-only effects: they resolve before our main phase, never inside it
+        "cumulative_upkeep_opp_token", "upkeep_token_power", "upkeep_token_subtypes", "upkeep_token_toughness",
+        "upkeep_sac_tutor_creatures", "upkeep_sac_tutor_opp_min",
+        // spells that search / tutor: they read the LIBRARY, and each lands its card through a route that arms
+        // (to hand, onto the battlefield) or onto the library top (read only by a top-play permission -- a reader)
+        "tutor_to_hand", "tutor_types", "tutor_shuffle_after", "tutor_max_mv", "tutor_max_toughness",
+        "etb_tutor_hand_count", "tutor_to_top", "land_search_count", "land_search_basic_only", "land_search_subtype",
+        "land_search_on_resolve", "land_search_tapped", "land_search_to_hand", "suspend_time_counters",
+        "convoke", "tutor_mv_max_is_x", "tutor_to_battlefield_single", "reveal_x_put_permanents",
+        // equipment bodies (the equip cost is checked by value below)
+        "is_equipment", "equip_grants_haste", "equip_grants_shroud",
+        // a walker's starting loyalty (its abilities are checked by effect below)
+        "loyalty_start",
+    };
+    static const std::unordered_set<std::string> kSafeLoyalty = { "beast_token_33", "draw_greatest_power" };
+    for (auto it = p.begin(); it != p.end(); ++it)
+    {
+        const std::string& k = it.key();
+        if (kSafe.count(k) != 0) { continue; }
+        if (k == "equip_cost_generic" && it.value().is_number_integer() && it.value().get<int>() == 0) { continue; }
+        // The MANA SINKS outside the cast funding order (property 3): a suspend (the Suspend action runs in the
+        // PRE-CAST pass, ahead of the credited cast), a mana-cost equip or a counter-removal activation. They read
+        // an untapped put land's mana and nothing else of it.
+        if (k == "suspend_cost" || k == "equip_cost_generic" || k == "remove_counter_destroy_art_ench_cost")
+        { mana_reader = true; continue; }
+        if (k == "loyalty_abilities" && it.value().is_array())
+        {
+            bool ok = true;
+            for (const json& ab : it.value())
+            {
+                if (!ab.is_object() || !ab.contains("effect") || !ab["effect"].is_string()
+                    || kSafeLoyalty.count(ab["effect"].get<std::string>()) == 0) { ok = false; break; }
+            }
+            if (ok) { continue; }
+        }
+        return true;
+    }
+    return false;
+}
+
 void CardDatabase::LoadFromJson(const std::filesystem::path& path)
 {
     // Parsing a card interns its subtypes; re-open the registry for this (single-threaded) load.
@@ -106,6 +192,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         {
             def.params = BuildParamsFromJson(entry["parameters"]);
         }
+        def.bpput_land_reader = BpPutLandReaderFromJson(entry, def.bpput_mana_reader);
         // Planar Nexus: the CDA lives on the card's subtype set, where every subtype reader looks.
         if (def.params.all_nonbasic_land_types) { def.card.m_subtypes.SetAllNonbasicLandTypes(true); }
         // BEHAVIOURAL IDENTITY (see CardDefinition::behaviour_identity). Digest the WHOLE entry

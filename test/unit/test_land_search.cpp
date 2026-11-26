@@ -31,6 +31,7 @@
 #include "mtg_test_seam.h"
 
 #include <algorithm>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -1156,4 +1157,105 @@ TEST_CASE("Land search: a Primeval Titan plan that DECLINES its search does not 
     PerformLandSearch(r, 0, LandSearchSpecOf(D("Primeval Titan").params), "Primeval Titan", kLandSearchPinMask);
     CHECK(r.battlefield.size() == before);
     CHECK(r.players[0].library.size() == 3u);
+}
+
+// THE INERT-LAND FOLD of site 10's battlefield-put half (TurnSolver::CastPutACardPermanent / PutLandFoldCandidate /
+// LandPutReaderLive, TurnSolver.cpp PlanLandPutFoldsInert; docs/design/bpput-inert-land-fold.md, 2026-11-26).
+// A put basic that nothing this turn can read -- tapped, or untapped off a CREDITED cast whose mana the plan already
+// priced -- is not new material: neither the arming (both worlds) nor the mark fires for it.
+namespace
+{
+const TurnSolver::Plan* SoloCast(const std::vector<TurnSolver::Plan>& plans, const char* name, bool want_credit)
+{
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.actions.size() == 1 && p.actions[0].kind == Action::Kind::CastFromHand
+            && p.actions[0].card_name.str() == name && (p.actions[0].rock_mana.Total() > 0) == want_credit)
+        { return &p; }
+    }
+    return nullptr;
+}
+// The cast window around a put: the snapshot, then `name` arriving (tapped or not) as the cast's put.
+bool ArmsFor(GameState s, const char* put, bool tapped, const char* cast, bool credited)
+{
+    const std::vector<int> snap = TurnSolver::PutWindowNumbers(s);
+    Put(s, put, 77, tapped);
+    return TurnSolver::CastPutACardPermanent(snap, s, cast, credited);
+}
+}
+
+TEST_CASE("Inert-land fold: a credited Nature's Lore / a tapped Rampant Growth with no reader live arms and marks nothing")
+{
+    LoadCards();
+    GameState s = Fresh();
+    for (int i = 0; i < 3; ++i) { Put(s, "Forest", 20 + i, false); }
+    Card lore = D("Nature's Lore").card; lore.m_number = 1;  s.players[0].hand.push_back(lore);
+    Card rg   = D("Rampant Growth").card; rg.m_number = 2;   s.players[0].hand.push_back(rg);
+    Card hyd  = D("Kalonian Hydra").card; hyd.m_number = 3;  s.players[0].hand.push_back(hyd);
+    for (int i = 0; i < 6; ++i) { Lib(s, "Forest", 50 + i); }
+    CHECK_FALSE(TurnSolver::LandPutReaderLive(s, true));
+    // The arming, as both worlds ask it: an untapped Forest from a CREDITED cast, a tapped one from any cast.
+    CHECK_FALSE(ArmsFor(s, "Forest", false, "Nature's Lore", true));
+    CHECK_FALSE(ArmsFor(s, "Forest", true, "Rampant Growth", false));
+    // ...an UNCREDITED untapped Forest is new mana the plan was never priced with: it still arms.
+    CHECK(ArmsFor(s, "Forest", false, "Nature's Lore", false));
+    // ...and a put CREATURE is never folded.
+    CHECK(ArmsFor(s, "Llanowar Elves", false, "Nature's Lore", true));
+    // The mark agrees: the credited Lore plan and the Rampant Growth plan are not site-10 marked.
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* lp = SoloCast(plans, "Nature's Lore", true);
+    const TurnSolver::Plan* rp = SoloCast(plans, "Rampant Growth", false);
+    REQUIRE(lp != nullptr);
+    REQUIRE(rp != nullptr);
+    CHECK((TurnSolver::PlanOpensBreakpointForTest(s, *lp) & (1 << 10)) == 0);
+    CHECK((TurnSolver::PlanOpensBreakpointForTest(s, *rp) & (1 << 10)) == 0);
+}
+
+TEST_CASE("Inert-land fold: a live reader (landfall, land count, domain, untapper, snow, a mana sink) keeps the put armed and marked")
+{
+    LoadCards();
+    auto base = []
+    {
+        GameState s = Fresh();
+        for (int i = 0; i < 3; ++i) { Put(s, "Forest", 20 + i, false); }
+        Card lore = D("Nature's Lore").card; lore.m_number = 1; s.players[0].hand.push_back(lore);
+        Card rg   = D("Rampant Growth").card; rg.m_number = 2;  s.players[0].hand.push_back(rg);
+        for (int i = 0; i < 6; ++i) { Lib(s, "Forest", 50 + i); }
+        return s;
+    };
+    auto hand = [](GameState& s, const char* n, int num) { Card c = D(n).card; c.m_number = num; s.players[0].hand.push_back(c); };
+    // Each reader, in the zone it acts from. Every one must keep BOTH the arming and the mark.
+    struct Case { const char* what; std::function<void(GameState&)> add; bool tapped_too; };
+    const std::vector<Case> cases = {
+        { "Khalni Heart Expedition on board (landfall)", [](GameState& s) { Put(s, "Khalni Heart Expedition", 30, false); }, true },
+        { "Scute Swarm on board (landfall, land count)", [](GameState& s) { Put(s, "Scute Swarm", 30, false); }, true },
+        { "Avenger of Zendikar in hand (land count)",    [&](GameState& s) { hand(s, "Avenger of Zendikar", 30); }, true },
+        { "Faeburrow Elder on board (domain)",           [](GameState& s) { Put(s, "Faeburrow Elder", 30, false); }, true },
+        { "Voyaging Satyr on board (untap target land)", [](GameState& s) { Put(s, "Voyaging Satyr", 30, false); }, true },
+        { "Avenger of Zendikar in the graveyard",        [](GameState& s) { Grave(s, "Avenger of Zendikar", 30); }, true },
+        // A suspend ({G}, the PRE-CAST pass) reads an UNTAPPED put land's mana only.
+        { "Search for Tomorrow in hand (suspend: a mana sink)", [&](GameState& s) { hand(s, "Search for Tomorrow", 30); }, false },
+    };
+    for (const Case& c : cases)
+    {
+        CAPTURE(c.what);
+        GameState s = base();
+        c.add(s);
+        CHECK(ArmsFor(s, "Forest", false, "Nature's Lore", true));
+        CHECK(ArmsFor(s, "Forest", true, "Rampant Growth", false) == c.tapped_too);
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+        const TurnSolver::Plan* lp = SoloCast(plans, "Nature's Lore", true);
+        REQUIRE(lp != nullptr);
+        CHECK((TurnSolver::PlanOpensBreakpointForTest(s, *lp) & (1 << 10)) != 0);
+    }
+    // A SNOW basic is never a candidate (snow readers are not reviewed), and a library holding one keeps the mark.
+    {
+        GameState s = base();
+        CHECK(ArmsFor(s, "Snow-Covered Forest", true, "Rampant Growth", false));
+        Lib(s, "Snow-Covered Forest", 70);
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+        const TurnSolver::Plan* rp = SoloCast(plans, "Rampant Growth", false);
+        REQUIRE(rp != nullptr);
+        CHECK((TurnSolver::PlanOpensBreakpointForTest(s, *rp) & (1 << 10)) != 0);
+    }
 }
