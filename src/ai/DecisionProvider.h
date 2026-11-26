@@ -5431,7 +5431,10 @@ public:
     // removes. It may only REMOVE plans; it never adds or reorders. It may remove every plan (an empty list is
     // the ordinary no-castable-play result; Maze's End F5). Default: not live (byte-identical). Never consulted in human play or under the unpruned gate. First
     // user: Maze's End P5, Heap Gate's Treasure offered only when its mana would otherwise go unused.
-    struct PlanView { const std::vector<Action>* actions; const std::string* land; };
+    // `plan` (may be null: a caller holding no TurnSolver::Plan) is the whole TurnSolver::Plan the view was
+    // taken from, opaque here (TurnSolver.h is not included); a provider that needs plan identity beyond the
+    // actions and the land (ElvesProvider's group key) casts it back in DecisionProviders.cpp.
+    struct PlanView { const std::vector<Action>* actions; const std::string* land; const void* plan = nullptr; };
     virtual bool PlanListFilterLive(const GameState&) const { return false; }
     // CastDominanceLive / CastDominanceClass -- a provider-DECLARED dominance premise for the engine's plan-list
     // CAST / LAND DOMINANCE FOLD (TurnSolver.cpp CastDominanceFold; Maze's End P7). Live is asked once per
@@ -5548,6 +5551,20 @@ public:
     // count is EtbTapSubtypeDrawDefault's, the order untouched). Default -1 -> byte-identical.
     virtual int EtbTapSubtypePayFirst(const GameState&, int /*controller*/, const CardDefinition&,
                                       std::vector<int>& /*elig*/) const { return -1; }
+    // PlanListAdmitAt -- PlanListAdmit with the enumeration's phase: `is_pre_combat` true for a pre-combat main's
+    // enumeration (root or continuation), false for the post-combat main's. The engine calls THIS (after
+    // PlanListFilterLive); the default forwards to PlanListAdmit, so a provider that only overrides PlanListAdmit is
+    // byte-identical. Same contract: REMOVE only, never add or reorder; never consulted in human play or under the
+    // unpruned gate. First user: Elves (the USER's scaling-sink rule keeps hold-back counts only while an attack can
+    // still follow, i.e. pre-combat).
+    virtual void PlanListAdmitAt(const GameState& s, bool /*is_pre_combat*/, const std::vector<PlanView>& plans,
+                                 std::vector<char>& admit) const
+    { PlanListAdmit(s, plans, admit); }
+
+    // PlanSignatureKeysWaveX -- key Genesis Wave's X in the AUTONOMOUS plan-dedup signature, so plans that differ only
+    // in that X stay distinct (TurnSolver.cpp t_sig_wave_x). Widening only (lossless). Default false: the signature is
+    // byte-identical and the dedup keeps the first-enumerated X per cast set. ElvesProvider: true (it offers every X).
+    virtual bool PlanSignatureKeysWaveX(const GameState&) const { return false; }
 };
 
 // ---------------------------------------------------------------------------------------------------

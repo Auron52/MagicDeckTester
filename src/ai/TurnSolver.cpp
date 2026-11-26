@@ -87972,6 +87972,21 @@ static bool TapTutorPutTargetTagged(const Action& act)
     return d != nullptr && d->params.tap_tutor_put_return_self;
 }
 
+// GENESIS WAVE'S X IN THE AUTONOMOUS SIGNATURE (DecisionProvider::PlanSignatureKeysWaveX; ElvesProvider opts in,
+// 2026-11-26). Without the key the dedup keeps ONE Wave X per cast set -- the first enumerated -- so a provider that
+// offers several X (Elves: every X, then the USER's scaling rule keeps the max the plan's other casts leave plus the
+// hold-back counts) would have them collapsed before the rule sees them. Set for the duration of one EnumeratePlans
+// dedup (WaveXSigScope); false everywhere else, so every other deck's signature is byte-identical. The collapse it
+// leaves for those decks is the pre-existing one (one Wave X per cast set; Landfall / Selesnya Lifegain's XCandidates
+// offer at most the un-grown and the grown max), recorded in docs/design/analysis-Elves.md.
+static thread_local bool t_sig_wave_x = false;
+struct WaveXSigScope
+{
+    bool saved;
+    explicit WaveXSigScope(bool on) : saved(t_sig_wave_x) { t_sig_wave_x = on; }
+    ~WaveXSigScope() { t_sig_wave_x = saved; }
+};
+
 static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_bestow_sig, bool host_sig,
                                      bool cre_host_sig, bool rep_sig)
 {
@@ -88067,6 +88082,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (act.twobrid_colored > 0) { w.Put("#W"); w.Int(act.twobrid_colored); }
                 if (act.browbeat_flip != 0) { w.Put("#BB"); w.Int(act.browbeat_flip); }   // Browbeat pre-ping (set-gated)
                 if (d && d->params.x_damage_each_creature_and_player) { w.Put("#Q"); w.Int(act.chosen_x); }
+                if (t_sig_wave_x && d && d->params.reveal_x_put_permanents) { w.Put("#WX"); w.Int(act.chosen_x); }
                 if (d && d->params.enters_with_x_plus_counters) { w.Put("#BX"); w.Int(act.chosen_x); }   // Walking Ballista's X
                 if (d && d->params.etb_modal_fight_opp_creature) { w.Put("#VM"); w.Put(act.tutor_target); }   // Voracious mode
                 if (d && d->params.modal_exile_target_artifact_enchantment) { w.Put("#AX"); w.Put(act.tutor_target); }   // Archdruid's Charm mode
@@ -92800,6 +92816,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // for human play (keyed below), and for the proof's CONTROL arm (MTG_AURA_HOST_BRANCH=1).
     const bool cre_host_sig = AuraHostBranchOn() || DecisionUnpruned();
     const bool rep_sig = ReplicateSigEnabled();   // the #R key below (MTG_REPLICATE_SIG)
+    const WaveXSigScope wave_x_sig(ResolveProvider(state).PlanSignatureKeysWaveX(state));   // the #WX key
     bool range_hosts = false;
     if (!host_sig && !s_human_play_sig && EdfAuraRangeHostsOn())
     {
@@ -93847,6 +93864,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         // Rolling Earthquake: X decides which of OUR creatures die and how much
                         // every player takes -- distinct X are DISTINCT plans (the #X precedent).
                         if (cd && cd->params.x_damage_each_creature_and_player) { k += "#Q"; k += std::to_string(act.chosen_x); }
+                        // Genesis Wave's X, for a provider that searches several (see t_sig_wave_x).
+                        if (t_sig_wave_x && cd && cd->params.reveal_x_put_permanents) { k += "#WX"; k += std::to_string(act.chosen_x); }
                         // Walking Ballista: X is its body AND its reach -- distinct X are DISTINCT plans.
                         if (cd && cd->params.enters_with_x_plus_counters) { k += "#BX"; k += std::to_string(act.chosen_x); }
                         // Voracious Hydra: double vs fight <target> are DISTINCT plans (the #G precedent).
@@ -108122,9 +108141,9 @@ static void ApplyProviderPlanListFilter(const GameState& state, bool is_pre_comb
     if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
     std::vector<DecisionProvider::PlanView> views;
     views.reserve(all.size());
-    for (const TurnSolver::Plan& p : all) { views.push_back({ &p.actions, &p.land_to_play }); }
+    for (const TurnSolver::Plan& p : all) { views.push_back({ &p.actions, &p.land_to_play, &p }); }
     std::vector<char> admit(all.size(), 1);
-    prov.PlanListAdmit(state, views, admit);
+    prov.PlanListAdmitAt(state, is_pre_combat, views, admit);   // default: PlanListAdmit (Maze's End byte-identical)
     // It MAY empty the list: an empty list is the ordinary "no castable play" result of every enumeration (the
     // main-2 host's caller appends the do-nothing plan; main 1 offers none once the drop is spent). (F5: the old
     // "never empties" keep was the second leak -- a list whose only plans held Heap Gate's Treasure was kept whole,

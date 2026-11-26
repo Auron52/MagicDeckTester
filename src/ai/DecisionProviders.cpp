@@ -28097,6 +28097,7 @@ namespace
     const LifegainHeliodComboProvider g_lifegain_heliod_combo;
     const SelesnyaLifegainProvider g_selesnya_lifegain;
     const AccomplishedAlchemistProvider g_accomplished_alchemist;
+    const ElvesProvider          g_elves;
     const LandfallProvider       g_landfall;
     const GaladrielProvider      g_galadriel;
     const NivMizzetComboProvider g_niv_mizzet_combo;
@@ -30911,6 +30912,17 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // target, so it counts only if it is ever main-decked) -- each carried by no other card in cards.json,
     // so no other deck's routing moves and no single swap can lose the provider. See the provider.
     bool alchemist = false;
+    // ELVES (Elf ramp into lords + scaling sinks; onboarded 2026-11-26). MUST return ABOVE `selesnya`: Genesis
+    // Wave's reveal_x_put_permanents alone sets that signature (measured: test_pirates_provider pinned Elves ->
+    // SelesnyaLifegain at Stage 2). Signature = params of SEVEN different cards, each carried by no other card in
+    // cards.json (checked 2026-11-26): Joraga Warcaller's lord_per_own_plus_counter, Immaculate Magistrate's
+    // tap_target_counters_per_subtype "Elf", Allosaurus Shepherd's team_base_pt_cost (subtype Elf), Leaf-Crowned
+    // Visionary's cast_subtype_pay_draw_cost, Marwyn's mana_per_own_power, and multikicker_cost / squad_cost on an
+    // ELF card only. Deliberately EXCLUDES the bare multikicker_cost / squad_cost (Everflowing Chalice is a
+    // colourless multikicker staple any deck may add), Genesis Wave, Concordant Crossroads, Ezuri's team pump
+    // (AccomplishedAlchemist runs Ezuri), the scaled Elf dorks (Priest / Archdruid: SelesnyaLifegain) and the lords
+    // (Elvish Clancaller's lord_effect is the generic lord shape).
+    bool elves = false;
     // LANDFALL ELEMENTALS (Elemental landfall tribal). Signature = new params OR'd across two different
     // cards, both new in the 2026-10-18 onboarding and carried by no other card in cards.json: Risen
     // Reef's enters_look_top_land_or_hand and Smokebraider's mana_only_subtype_abilities. Deliberately
@@ -31143,6 +31155,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.transform_min_controlled_subtype == "Vampire")
         { vampires = true; }
         if (p.attack_gather_auras) { bruna = true; }
+        if (p.lord_per_own_plus_counter || p.tap_target_counters_per_subtype == "Elf"
+            || (p.team_base_pt_cost.has_value() && p.team_base_pt_subtype == "Elf")
+            || p.cast_subtype_pay_draw_cost.has_value() || p.mana_per_own_power
+            || ((p.multikicker_cost.has_value() || p.squad_cost.has_value()) && CardHasSubtype(def->card, "Elf")))
+        { elves = true; }
         if (p.draw_target_player || p.storm
             || p.untap_enchanted_cost.has_value() || p.untap_target_creature_cost.has_value()
             || p.self_untap_cost.has_value() || p.untap_pump_cost.has_value()
@@ -31717,6 +31734,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // AccomplishedAlchemist ABOVE selesnya (the Alchemist's mana_per_life_gained capture -- see the
     // flag). Its signature is carried by no other deck, so the position is free.
     if (alchemist)   { return g_accomplished_alchemist; }
+    // Elves ABOVE selesnya (Genesis Wave's capture -- see the flag). Its signature is carried by no other deck, so
+    // the position is free.
+    if (elves)       { return g_elves; }
     if (selesnya)    { return g_selesnya_lifegain; }
     if (angels)      { return g_angels; }
     // Soldiers: ABOVE goblin and anti -- see the flag. SoldiersProvider (Stage 4a, 2026-10-04) is an
@@ -75287,4 +75307,249 @@ bool BloodSunProvider::LandPlayOffered(const GameState& s, int controller, const
     // Lotus Field
     if (lands < p.etb_sacrifice_lands || vale_in_hand) { return false; }
     return lotus_needed();
+}
+
+
+// ---- ElvesProvider: THE USER'S SCALING-SINK RULE (2026-11-26) -------------------------------------------------
+//
+// USER, verbatim: "There are multiple scaling effects like Genesis Wave's X and Joraga Warcaller, but generally you
+// want to pick just one of those and scale it up fully, minus perhaps a few 1-mana producing attackers. So there
+// might be a couple different relevant options, (i.e. do I tap this Llanowar Elves to scale it further or keep it as
+// an attacker, which can either be searched or heuristically pruned depending on the situation) but we shouldn't try
+// every possibility."
+//
+// THE SINKS (a "pay N times" count the plan pins): Genesis Wave's X (Action::chosen_x), Joraga Warcaller's
+// multikick count and Galadhrim Brigade's squad count (Action::kick_count; the DB's "(Kicked xK)" faces), and
+// Ezuri's MAIN-PHASE team pump count (ActivatePump mode 2, chosen_x; emitted only with floating mana -- Ezuri's
+// ordinary pump is the combat converter's leftover-mana spend, ApplyFirebreathing, which is not a plan count).
+// NOT sinks: Clancaller's and Shepherd's activations (one activation each, not a count), Magistrate's {T}.
+// A sink is SCALED in a plan when its count is > 0; Wave is always scaled (X = 0 is never offered autonomously),
+// a Warcaller / Brigade cast with K = 0 is the minimal unscaled cast and is free to ride along.
+//
+// THE RULE, per plan-list enumeration (root and continuation, main 1 and main 2; PlanListAdmitAt):
+//   (1) NO SPLITS: a plan with TWO OR MORE scaled sinks is removed (mana shared across two sinks at partial values).
+//   (2) ONE SINK AT THE MAX: group the remaining one-sink plans by everything EXCEPT the counts (the whole
+//       TurnSolver::Plan with every sink's count, the cost/eval it prices and the plan value blanked, compared with
+//       Plan::operator==, so two plans group only when they are the same line but for the counts). In a group,
+//       per sink card, the TOP count is the largest one enumerated -- every member was enumerated and kept as
+//       payable, so the top is exactly "as much as the mana left after the plan's other casts pays", priced by the
+//       whole-turn bill (the ReplicateTopCountOnly shape). Keep counts >= top - h, drop the rest.
+//   (3) THE HOLD-BACK h: k = the 1-mana producers that could attack this turn (ElvesHoldBackAttackers: our untapped
+//       mana_dork creatures with a static one-mana tap -- Llanowar Elves, Elvish Mystic; not the scaled Priest /
+//       Archdruid / Marwyn -- that CanAttackFull now: not summoning-sick, or hasted by Concordant Crossroads),
+//       capped at kElvesMaxHoldBack = 2 ("keep k small"); h = ceil(k / mana per count unit) (Wave 1, a kick or a
+//       squad copy 2, Ezuri's pump 5), so each held dork's mana is one step down where a step costs 1, and one
+//       kick down covers two dorks. PRUNED WHEN ATTACKING CANNOT MATTER: k = 0 in the post-combat main (the attack
+//       is over) and with no such attacker on the board -- then only the top survives.
+//   Untouched: every plan with no scaled sink (the idle pass is never in this list -- the hosts append it -- and a
+//   plan of non-scaling casts, or with Warcaller K = 0 beside them, is never removed).
+// The search still branches over every survivor; nothing here picks one.
+//
+// LINES IT CAN MISS (disclosed in docs/design/analysis-Elves.md "Provider heuristics"): two sinks scaled together
+// (Warcaller x2 + Brigade x1); a count below the hold-back band that leaves mana for something that is NOT a plan
+// action -- Leaf-Crowned Visionary's {G} draw triggers (paid at trigger time), Ezuri's combat pump from leftover
+// mana (the K = 0 / no-sink plan keeps "Ezuri fully scaled"), a next-main / post-combat activation; holding back a
+// scaled dork (Priest / Archdruid / Marwyn) or a third dork as an attacker; and a fewer-count line whose value is
+// the CARDS left in hand for a later turn (a smaller Wave that does not mill the other Waves).
+//
+// Lifted by MTG_ELVES_SCALING_PRUNE=0 (heurarm, per job), MTG_UNPRUNED, and MTG_UNPRUNE=replicate (the gate the
+// multikick fan already shares; the 64-gate mask is full) or =xspell (Genesis Wave's X); never in human play.
+
+namespace
+{
+constexpr int kElvesMaxHoldBack = 2;
+
+struct ElvesSink { int count = -1; int unit = 0; };   // count -1: not a sink
+
+ElvesSink ElvesSinkOf(const Action& a)
+{
+    if (a.kind == Action::Kind::CastFromHand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name.str());   // the BASE card (a kicked
+        if (d == nullptr) { return {}; }                                                // variant's name is the base)
+        if (HasRepeatKicker(d->params))
+        { return { a.kick_count, std::max(1, RepeatKickerCost(d->params)->ManaValue()) }; }
+        if (d->params.reveal_x_put_permanents)
+        { return { std::max(1, a.chosen_x), std::max(1, d->card.m_mana_cost.x_pips) }; }
+        return {};
+    }
+    if (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 2 && a.def != nullptr
+        && a.def->params.team_pump_cost.has_value())
+    { return { a.chosen_x, std::max(1, a.def->params.team_pump_cost->ManaValue()) }; }
+    return {};
+}
+
+// MTG_ELVES_SCALING_CENSUS=1 -- DIAGNOSTIC ONLY, never read by play: per process, the enumerations the rule ran on,
+// the plans they held, and the plans it removed as splits / below the band; one stderr line at exit.
+struct ElvesCensus
+{
+    std::atomic<long long> calls{0}, plans{0}, split{0}, band{0};
+    ~ElvesCensus()
+    {
+        if (calls.load() == 0) { return; }
+        std::fprintf(stderr, "[elves-scaling-census] enumerations=%lld plans=%lld dropped_split=%lld dropped_band=%lld "
+                     "kept=%lld\n", calls.load(), plans.load(), split.load(), band.load(),
+                     plans.load() - split.load() - band.load());
+    }
+};
+ElvesCensus& ElvesCensusSink() { static ElvesCensus c; return c; }
+bool ElvesCensusOn() { static const bool on = EnvOn("MTG_ELVES_SCALING_CENSUS"); return on; }
+
+void ElvesBlankSink(Action& a)
+{
+    a.kick_count = 0;
+    a.kicked     = false;
+    a.chosen_x   = 0;
+    a.cost       = ManaCost{};
+    a.eval       = 0;
+    a.def        = nullptr;
+}
+}   // namespace
+
+bool ElvesScalingPruneOn()
+{
+    static const bool s_env = EnvOn("MTG_ELVES_SCALING_PRUNE", true);   // DEFAULT ON; =0 -> every count and split
+    return heurarm::Flag(heurarm::ELVES_SCALING_PRUNE, s_env);
+}
+
+int ElvesHoldBackAttackers(const GameState& s, bool is_pre_combat)
+{
+    if (!is_pre_combat) { return 0; }   // the attack is over: a held dork attacks nothing
+    const int me = s.active_player_index;
+    int k = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped || !p.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->tmpl != CardTemplate::ManaDork || IsScaledManaDork(*d)) { continue; }
+        if (ManaProducedPerTap(*d) != 1) { continue; }
+        if (!CanAttackFull(p, s.battlefield, me)) { continue; }
+        if (++k >= kElvesMaxHoldBack) { break; }
+    }
+    return k;
+}
+
+void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
+                       const std::vector<DecisionProvider::PlanView>& plans, std::vector<char>& admit)
+{
+    struct Row { std::size_t i; std::string sink; int count; int unit; TurnSolver::Plan canon; };
+    std::vector<Row> rows;
+    long long n_split = 0, n_band = 0;
+    struct Flush
+    {
+        std::size_t n; long long& sp; long long& bd;
+        ~Flush()
+        {
+            if (!ElvesCensusOn()) { return; }
+            ElvesCensus& c = ElvesCensusSink();
+            c.calls.fetch_add(1); c.plans.fetch_add(static_cast<long long>(n)); c.split.fetch_add(sp); c.band.fetch_add(bd);
+        }
+    } flush{ plans.size(), n_split, n_band };
+    for (std::size_t i = 0; i < plans.size(); ++i)
+    {
+        if (!admit[i] || plans[i].actions == nullptr) { continue; }
+        int scaled = 0, at = -1;
+        ElvesSink one;
+        for (std::size_t k = 0; k < plans[i].actions->size(); ++k)
+        {
+            const ElvesSink e = ElvesSinkOf((*plans[i].actions)[k]);
+            if (e.count > 0) { ++scaled; at = static_cast<int>(k); one = e; }
+        }
+        if (scaled == 0) { continue; }                     // no scaled sink: untouched
+        if (scaled >= 2) { admit[i] = 0; ++n_split; continue; }   // (1) a split across two sinks
+        if (plans[i].plan == nullptr) { continue; }        // no identity to group on: keep (safe direction)
+        Row r;
+        r.i     = i;
+        r.sink  = (*plans[i].actions)[static_cast<std::size_t>(at)].card_name.str();
+        r.count = one.count;
+        r.unit  = one.unit;
+        r.canon = *static_cast<const TurnSolver::Plan*>(plans[i].plan);
+        for (Action& a : r.canon.actions) { if (ElvesSinkOf(a).count >= 0) { ElvesBlankSink(a); } }
+        r.canon.value          = 0;
+        r.canon.wins_this_turn = false;
+        r.canon.land_tie_key   = -1;
+        rows.push_back(std::move(r));
+    }
+    if (rows.empty()) { return; }
+    const int k = ElvesHoldBackAttackers(s, is_pre_combat);
+    // (2) Bucket by a cheap key (land + the sorted cast/activation names and slots + the sink), then split each
+    // bucket into exact classes with Plan::operator== on the blanked copies.
+    std::unordered_map<std::string, std::vector<std::size_t>> buckets;
+    for (std::size_t r = 0; r < rows.size(); ++r)
+    {
+        std::vector<std::string> parts;
+        for (const Action& a : rows[r].canon.actions)
+        {
+            parts.push_back(std::to_string(static_cast<int>(a.kind)) + ':' + a.card_name.str() + ':'
+                            + std::to_string(a.hand_index) + ':' + std::to_string(a.sac_source_id));
+        }
+        std::sort(parts.begin(), parts.end());
+        std::string key = rows[r].canon.land_to_play + '\x1f' + rows[r].sink;
+        for (const std::string& p : parts) { key += '\x1e'; key += p; }
+        buckets[key].push_back(r);
+    }
+    for (auto& [key, idx] : buckets)
+    {
+        (void)key;
+        std::vector<int> cls(idx.size(), -1);
+        int ncls = 0;
+        for (std::size_t a = 0; a < idx.size(); ++a)
+        {
+            if (cls[a] >= 0) { continue; }
+            cls[a] = ncls;
+            for (std::size_t b = a + 1; b < idx.size(); ++b)
+            { if (cls[b] < 0 && rows[idx[b]].canon == rows[idx[a]].canon) { cls[b] = ncls; } }
+            ++ncls;
+        }
+        std::vector<int> top(static_cast<std::size_t>(ncls), 0);
+        for (std::size_t a = 0; a < idx.size(); ++a)
+        { top[static_cast<std::size_t>(cls[a])] = std::max(top[static_cast<std::size_t>(cls[a])], rows[idx[a]].count); }
+        for (std::size_t a = 0; a < idx.size(); ++a)
+        {
+            const Row& r = rows[idx[a]];
+            const int h = (k + r.unit - 1) / r.unit;   // (3) the hold-back band in count steps
+            if (r.count < top[static_cast<std::size_t>(cls[a])] - h) { admit[r.i] = 0; ++n_band; }
+        }
+    }
+}
+
+std::vector<int> ElvesProvider::XCandidates(const GameState& s, const CardDefinition& def, int max_affordable) const
+{
+    if (!def.params.reveal_x_put_permanents) { return SelesnyaLifegainProvider::XCandidates(s, def, max_affordable); }
+    // Genesis Wave: every X, largest first (ORDER only). The engine bounds it by the turn's whole pool; the plan-list
+    // rule keeps the X each plan's other casts leave. The same menu with the rule lifted (=0 / unpruned) is the
+    // full range MTG_UNPRUNE=xspell gives every deck.
+    std::vector<int> xs;
+    for (int x = max_affordable; x >= 1; --x) { xs.push_back(x); }
+    return xs;
+}
+
+bool ElvesProvider::PlanListFilterLive(const GameState& s) const
+{
+    if (!ElvesScalingPruneOn() || DecisionUnpruned(UnprunedGate::Replicate) || DecisionUnpruned(UnprunedGate::XSpell))
+    { return false; }
+    // Live only when a sink can be in a plan: a Wave / multikicker / squad card in hand, or (floating mana) a main-
+    // phase team pump on the board. Otherwise the enumeration keeps its lazy layout untouched.
+    const Player& ap = s.players[static_cast<std::size_t>(s.active_player_index)];
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && (HasRepeatKicker(d->params) || d->params.reveal_x_put_permanents)) { return true; }
+    }
+    if (s.floating_mana.Total() > 0)
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && d->params.team_pump_cost.has_value()) { return true; }
+        }
+    }
+    return false;
+}
+
+void ElvesProvider::PlanListAdmitAt(const GameState& s, bool is_pre_combat, const std::vector<PlanView>& plans,
+                                    std::vector<char>& admit) const
+{
+    ElvesScalingAdmit(s, is_pre_combat, plans, admit);
 }
