@@ -5,7 +5,22 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
 
 ## CHECKPOINT (orchestrator, updated 2026-11-26, pre-compaction #2) -- read this first after a compaction
 
-* **LOCK STEP 8a DONE (2026-11-26): e0e74e894 + 44303575e + the ledger commit** (section "Lock-cluster step 8a"). It holds the
+* **LOCK STEP 8b DONE (2026-11-26): fd439c7af (WIP) + e51f75196 + the ledger commit** (section "Lock-cluster step
+  8b"). Shipped: Utopia Sprawl's colour axis held to {G, W} and the Parallax Wave Exploration fold (both proven, default
+  ON, no flag). The dead-land fold was WITHDRAWN (deleted): the held land can cost a nonland at a later cleanup,
+  because the deck's discard is the ranked pick. The census diagnostic was removed. Units 4248/4248; smoke 247/0,
+  play-changed=0 (no deck moves); A/B m8b vs 8a net +1 turn / 224, units -17..-31%. The 3 slower games recover at
+  d3 b0. hb1 gi=16 now finishes at b0 (T6, 74 min); ho1 gi=3 and gi=70 stay
+  b0-unfinished at 2 h.
+  NEXT = **step 8c**, in this order:
+  * hb1 gi=90 (d3 b0 T6 vs step 6 T5: the T5 main-1 Force of Vigor on opponent lands instead of Grove -> Opalescence);
+  * the null Calming Verse cast (hb1 gi=31 at b10: no opposing enchantment and no untapped land after payment, so it
+    resolves to nothing; the step-3+5 fold withdraws only KEEP, and SWEEP collapses to nothing here);
+  * the d3 b0 intractability of what stays unfinished: ho1 gi=3 (not the free-turn rule) and ho1 gi=70 (the free-turn
+    chain; counting free turns as plies at b0 would be the USER's call). hb1 gi=16 now finishes (T6);
+  * root-cause gi=12 / gi=13 (steps 3+5 notes).
+  Then step 9 (viewer `eot_cast` + ruling 14 + DECISIONS.md).
+* (superseded by step 8b) **LOCK STEP 8a DONE (2026-11-26): e0e74e894 + 44303575e + the ledger commit** (section "Lock-cluster step 8a"). It holds the
   free-turn standing pass (`MTG_FREE_TURN_STAND`, default ON, a re-price, inert at b0), the FoV own-target fold
   (Presence withdrawn from it in review), and `MTG_EE_FOV_EOT_OPP_ONLY` + the nesting diagnostic DELETED. Units
   4245/4245; smoke 247/0, play-changed=0 (no deck moves); A/B m8 vs step 7 net -1 turn / 224, units -12..-19%.
@@ -1037,6 +1052,117 @@ b10.
     units from step 4.
   * So the free-turn rule explains one of the three unfinished b0 games. The USER-accepted 2026-11-21 default (free
     turn = no ply) is unchanged. Counting free turns as plies at b0 would be the USER's call, with these numbers.
+
+## Lock-cluster step 8b (Utopia Sprawl colour fold; Parallax Wave Exploration fold; the dead-land fold WITHDRAWN) -- 2026-11-26
+
+Code: fd439c7af (WIP: three folds, the tests, a temporary census diagnostic) + the close commit (the dead-land fold
+DELETED in review, the census diagnostic `MTG_EE_CENSUS` removed, this section). Scratch: `build/scratch/ee/l8b/`.
+Handoff of the first agent: `logs/ee/lock8b-handoff.md`.
+
+**The folds as shipped (EE provider only, searched play only, never in human play; sound, default ON, no flag).**
+* **Utopia Sprawl's colour axis held to {G, W}** (`EnchantedEveningProvider::EtbChoiceCandidates`,
+  `EeSprawlProofBreaks`; the JumboCactuar / Beasts / Hydras precedent). Re-checked against `cards.json` for all 18
+  names of the list (one zone, no sideboard, no wish card): every coloured pip is {G}, {W} or Enchanted Evening's
+  hybrid {W/U}; every activation cost is generic ({1} for Sterling Grove) or life / a fade counter; nothing reads a
+  chosen colour or the colour of mana spent; Force of Vigor's pitch reads a GREEN CARD, not mana. A U mana pays
+  generic and {W/U}, both of which W pays; B and R pay only generic. So W dominates U and G (or W) dominates B and R,
+  exactly. A land Aura can enchant only our own lands here (`land_aura_can_target_opponent` false), so the colour
+  never feeds the opponent. The runtime proof check (any of our cards in any zone with a plain pip outside {G, W}, a
+  hybrid with no G/W half, phyrexian / twobrid, or a black or red colour -> full fan) and `MTG_UNPRUNE=etbcolor`
+  keep it list-specific. Proven.
+* **Parallax Wave: our Exploration withdrawn as a target while no Calming Verse is in our hand or library**
+  (`EnchantedEveningProvider::FadeExileCreatureTargets`). Exiling it costs a fade counter and a 1/1 attacker, and its
+  absence pays only in design F2 (exile it, then a Verse's clause 2 destroys the Wave and Exploration returns). With
+  no Verse left (no recursion in the list; neither tutor finds a sorcery) that line does not exist. Re-checked this
+  step: the one other thing the activation buys is a counter spent, i.e. the Wave dying a turn earlier at our
+  upkeep. Whenever Exploration is a legal target the Wave itself is too (both are Opalescence creatures, and a
+  Sterling Grove shrouds both alike), and the self-exile (kept) returns every linked card at once and costs the same
+  counter; nothing in the list rewards the Wave being gone rather than reset. Proven. Every other class stays a
+  target, each with its counterexample (code comment): the Wave itself, Grove, another Wave, Oblivion Ring, Enchanted
+  Evening / a second Opalescence (ends the lock), Enchantress's Presence (mandatory draw, CR 704.5b), and every
+  opponent creature (the free-turn check reads them; the end-step sweep is not always there).
+* **The dead-land fold is WITHDRAWN (deleted, not levered).** Under Enchanted Evening + Opalescence a land we play is
+  a 0/0 and dies before priority, so the WIP dropped "play the land" for its no-land twin when no mana was left and
+  the hand held <= 7. Holding the land does keep every later option in the RULES, but not in this ENGINE: this deck's
+  cleanup discard is the provider's ranked pick (highest mana value first, `CleanupDiscardSearchWidth` 1, so a land
+  is shed last), and the in-search cleanup does not branch. Counterexample inside a d3 horizon: hand 7 with a Forest,
+  two Presences out, a Wave with counters. Played line: the Forest dies (hand 6). Next turn both draw (7 / 8); the
+  Wave exiles our own Opalescence (the lock ends), both play a Forest and cast Wild Growth (two Presence draws):
+  played ends at 7, held at 8 and sheds its highest-MV card, a card the played line keeps. The WIP's induction
+  covered locked turns only; after the lock ends, a turn that uses every land drop and nets a card (Idyllic Tutor or
+  any enchantment with Presence out) leaves the held line one card over. The provable narrowings ("no later net card
+  gain possible", "the lock can never end") never hold with four Presences, two Idyllic Tutors, four Force of Vigor
+  and four Waves in the list, so the fold is deleted. Its census share was small (below). The unit case now pins that
+  the land play stays offered under the lock.
+  * Possible USER question (only if wanted; the rule is unchanged): a deck discard rule that sheds a land first when
+    the hand is over the limit would make the fold exact. That is a discard-policy change and the USER's to make.
+
+**Census (temporary `MTG_EE_CENSUS`, now removed; san1, 24 games, d3 b10; per-enumeration plan counts).**
+| count | c0 (step 8a + census) | c1 (all three folds) | change |
+|---|---|---|---|
+| plans enumerated | 3,395,013 | 2,572,138 | -24.2% |
+| enumerations | 284,501 | 225,462 | -20.8% |
+| Sprawl plans | 981,322 | 466,358 | -52.5% |
+| Sprawl plans with a colour outside {G, W} | 606,332 | **0** | the fold |
+| Wave-activation plans | 730,428 | 631,745 | -13.5% |
+| ... on our own permanents (not the Wave) | 320,273 | 296,658 | -7.4% |
+| ... self / opponent | 175,513 / 339,450 | 163,474 / 274,221 | |
+| dead-land plans | 8,927 | 3,286 | (fold withdrawn) |
+| lock enumerations / their plans | 3,609 / 24,394 | 2,964 / 16,295 | |
+| san1 result, units | 24/24, 5.5833, 4,538,357 | 24/24, 5.5833, 3,063,619 (-32.5%) | |
+At a fixed b10 budget the per-class counts mix the fold with budget re-spent elsewhere; the clean figures are the
+Sprawl colour copies (606k -> 0: the main waste the census found, 17.9% of all plans) and the total. The final tree
+(without the dead-land fold) measures san1 3,142,693 units (-30.8%), so the withdrawn fold was worth about 2.5% of
+san1 units. **Residual (the step-4 +27%):** the Wave's remaining branching is genuine. It spends a resource (fade
+counters) whose value depends on the rest of the turn, over targets that each have a counterexample above; only the
+Exploration sliver was provably wasted.
+
+**Units: 4248/4248** (3,679,880 assertions), on the final binary. `-tc='EE lock step 8b*'`: 3 passed (the dead-land
+case replaced by "the land play stays offered"; Sprawl {G, W} + full fan; Wave Exploration fold). `-tc='EE lock step
+8a*'`: 5 passed. (On the WIP binary with the census: 4250/4250, 8b 5/5, 8a 5/5.)
+
+**Smoke (Release, `MTG_PGO=0`, the final tree): 247 passed / 0 failed / 0 new; play-changed=0, searched AND d0;
+configs changed 0 / 247; scenarios 677/677. NO deck moves** (every change is in the EE provider; EE is not a suite
+deck yet). GT not accepted (nothing to accept).
+
+**A/B: ONE pooled batch `l8b/m8b`** (binary `mtg-f8b` = the final tree; san1 7000 x 24, ho1 8000 x 100, hb1 10000 x
+100; d3 b10, user prune ON, Grove prelock OFF, fairness ON; 224 games, batch wall ~5 min, so no 10-min heartbeat
+fell inside it), paired per game against step 8a's `l8/m8`.
+| family | n | won 8b / 8a | avg 8b | avg 8a | sum(8b-8a) | units 8b vs 8a | game-s 8b / 8a |
+|---|---|---|---|---|---|---|---|
+| san1 | 24 | 24 / 24 | 5.5833 | 5.5833 | 0 | 3.14M vs 4.54M (-30.8%) | 342 / 532 |
+| ho1 | 100 | 95 / 95 | 5.9000 | 5.8900 | +1 | 14.10M vs 17.00M (-17.1%) | 1671 / 2501 |
+| hb1 | 100 | 98 / 98 | 5.7600 | 5.7600 | 0 | 11.45M vs 16.03M (-28.6%) | 1133 / 1818 |
+(avg counts a non-win as 9; the losses are the same games as in 8a.) Net **+1 turn over 224 games**, units -17..-31%.
+* Faster (3): hb1 gi=49 7->6, gi=60 7->6, gi=79 7->6 (gi=79 was a step-8a slower game; it is back at step 7's T6).
+* Slower (3). Each diverges at an early root decision (T1 land, T2 cast), where the cheaper Sprawl and Wave subtrees
+  change how the b10 budget is spent (budget churn; the b0 repros below are the test):
+  * ho1 gi=15 5->6: diverges at the T1 land (Forest instead of Wooded Foothills).
+  * hb1 gi=31 4->6: at T2 the 8b line casts a **Calming Verse that does nothing** (no opposing enchantment, and the
+    payment taps every land, so clause 2 cannot fire) instead of Sterling Grove; EE lands a turn later. That is a
+    dominated cast which the step-3+5 fold does not catch: it withdraws Verse KEEP with no opposing enchantment, but
+    the SWEEP variant collapses to nothing when no untapped land survives the payment. Owed to step 8c.
+  * hb1 gi=32 7->8: T2 Temple Garden + Utopia Sprawl (8a: no T2 play) and a different T3.
+* Slowest game per family: 83 s (san1 gi=5), 176 s (ho1 gi=31), 98 s (hb1 gi=17); 8a: 158 / 168 / 143 s. No hung game.
+
+**d3 b0 repros (ONE pooled batch `l8b/b0p`, binary `mtg-f8b`, 6 games, per-game wall cap 2 h via
+`MTG_MAX_GAME_WALL_SEC=7200`, under the box flock).** The bar for a slower game is 8a's b10.
+| game | 8b b10 | bar | 8b d3 b0 | wall | units | verdict |
+|---|---|---|---|---|---|---|
+| ho1 gi=15 | T6 | 8a b10 T5 | **T5** | 1072 s | 23.27M | RECOVERS |
+| hb1 gi=31 | T6 | 8a b10 T4 | **T4** | 20 s | 0.40M | RECOVERS |
+| hb1 gi=32 | T8 | 8a b10 T7 | **T6** | 281 s | 5.24M | RECOVERS (beats the bar) |
+| hb1 gi=16 | T7 | step 7 b10 T6 | **T6** | 4420 s | 18.77M | RECOVERS, and now FINISHES at b0 (8a: unfinished at 2 h, 37.4M units, reached T3) |
+| ho1 gi=3 | T8 | step 6 b10 T7 | unfinished | > 2 h | 137.3M | **b0-UNFINISHED** (8a: 157.3M at 2 h) |
+| ho1 gi=70 | T8 | step 7 b10 T7 | unfinished | > 2 h | 72.2M | **b0-UNFINISHED**, the free-turn lock chain (8a: 84.8M at 2 h; 0.5 s with `MTG_FREE_TURNS=0`) |
+* Every slower game of the A/B recovers at d3 b0, so the moves are budget churn.
+* hb1 gi=16 is no longer b0-intractable: the step-8b folds removed enough of its tree for the game to finish
+  (T6, = step 7's b10) in 74 min.
+* ho1 gi=3 and gi=70 stay unfinished at 2 h (abandoned by the wall backstop, `ABANDONED-WALL`); both are step 8c.
+  hb1 gi=90 was not re-run (its b10 is T6 in both 8a and 8b, the same as 8a's b0 T6; the non-recovery vs step 6 is
+  step 8c).
+* The batch ran 6 workers on a 24-core box for 2 h: the tail was the two capped games, and nothing else of this step
+  was waiting to run.
 
 ## Done items (formerly provisional Q1 / Q2 -- settled by standing CLAUDE.md rules, not USER questions)
 
