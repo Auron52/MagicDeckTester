@@ -4,6 +4,8 @@
 #include "core/SpellEffects.h"
 #include "ai/TurnSolver.h"
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
+#include "core/WorkCounters.h"
 #include "core/HeuristicDefaults.h"
 #include <cstdio>
 #include <string>
@@ -814,4 +816,37 @@ TEST_CASE("Dredge choices remain available in a depth-one Gods draw search")
     CHECK(valid_pin_width);
     std::fprintf(stderr, "[gods-dredge-depth1] plans=%zu budget_used=%lld\n",
                  plans.size(), budget.Used());
+}
+
+// THE DEAD-FAN FOLD (TurnSolver DeadFanFold, MTG_DEAD_FAN_FOLD, default ON). A boundary fan whose axes are all decided
+// AFTER the turn advances (here the draw-step dredge: dredge or draw) crosses to the same turn on every pin. With
+// max_turns = the current turn every crossing is refused at FSLineWin's entry, so after the first refused crossing the
+// fold stops the fan: fewer dead crossings walked, the same answer.
+TEST_CASE("Dead-fan fold: a post-advance-only boundary fan stops at its first refused crossing")
+{
+    CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+    CardDefinition dredge_one;
+    dredge_one.params.dredge = 1;
+    GameState s;
+    s.turn_number = 2;
+    s.phase = Phase::PostCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].graveyard.push_back(MakeCard("Dredge One", 3, &dredge_one));
+    s.players[0].library.push_back(MakeCard("Forest", 4));
+    s.players[0].library.push_back(MakeCard("Plains", 5));
+    s.players[0].library.push_back(MakeCard("Island", 6));
+    REQUIRE(TurnSolver::DredgeBoundaryPinsForTest(s).size() == 2);
+    struct Run { long long dead; int win; };
+    auto run = [&](bool fold) {
+        heurarm::Clear();
+        heurarm::t_arm[heurarm::DEAD_FAN_FOLD] = fold ? 1 : 0;
+        const long long n0 = workctr::t_n[workctr::kDeadCross];
+        const TurnSolver::SearchLine line = TurnSolver::FullSearchLine(s, /*depth=*/1, /*max_turns=*/2, /*second_main=*/true);
+        heurarm::Clear();
+        return Run{ workctr::t_n[workctr::kDeadCross] - n0, line.win_turn };
+    };
+    const Run off = run(false), on = run(true);
+    CHECK(on.win == off.win);
+    CHECK(off.dead >= 2);           // the unfolded fan walks both pins
+    CHECK(on.dead < off.dead);      // the fold stops at the first refused one
 }
