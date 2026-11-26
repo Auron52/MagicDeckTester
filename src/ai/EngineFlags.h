@@ -648,6 +648,21 @@ inline bool LineKeepCritMultiOn()
     return heurarm::Flag(heurarm::LINE_KEEP_CRIT_MULTI, env_on);
 }
 
+// MTG_LINE_KEEP_CRIT_FILTER (DEFAULT ON; =0 restores the gate byte for byte) -- LineKeepCritGate's reach filter also runs
+// its last-source tests with every untapped hybrid-fed filter land (is_filter: Cascade Bluffs "{U/R}, {T}: Add {U}{U},
+// {U}{R}, or {R}{R}") left out of the colour supply. A filter land's colours are not its own: it makes them only from a
+// coloured unit of another source, which this bill can spend, and unfed it makes {C}. The gate counted each Bluffs as
+// one unit of each colour, so a payment that spent every unconditional source of the owed colour passed for "plenty
+// left". A superset of the tests before it (the supply only shrinks), so it only adds trials; the exact judge decides.
+// Treasure Hunt (mana-clean gate claude-queue-20261125a) s30133719 T8 {Cascade Bluffs + Land's Edge + Treasure Hunt}:
+// Land's Edge {1}{R}{R} off Thundering Falls + Temple of Epiphany + Reliquary Tower, two unfed Bluffs and a Reliquary
+// Tower left for Treasure Hunt's {1}{U}. docs/design/treasure-hunt-apply-drop-2026-11-26.md.
+inline bool LineKeepCritFilterOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_KEEP_CRIT_FILTER", true);
+    return heurarm::Flag(heurarm::LINE_KEEP_CRIT_FILTER, env_on);
+}
+
 // MTG_LINE_KEEP_SUSPEND (DEFAULT ON; =0 restores the unbound suspend byte for byte) -- LineKeepBound counts a PAID
 // suspend (Action::Kind::Suspend whose cost has mana value > 0: Keldon Halberdier / Rift Bolt {R}, Profane Tutor
 // {1}{B}) as one of the line's held payments, and LineNoncreatureMv counts its cost (a suspend cost is not a creature

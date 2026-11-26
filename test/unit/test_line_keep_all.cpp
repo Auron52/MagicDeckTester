@@ -200,3 +200,52 @@ TEST_CASE("Line keep (all lines): inert when the greedy already keeps the line, 
     CHECK_FALSE(LineKeepBound(one));
 }
 
+
+// MTG_LINE_KEEP_CRIT_FILTER (LineKeepCritGate, ManaPayment.cpp; docs/design/treasure-hunt-apply-drop-2026-11-26.md):
+// the crit-mode gate counted a hybrid-fed filter land (Cascade Bluffs) as a {U} source, so a bill that spent every
+// UNCONDITIONAL {U} passed for "plenty left" and the rung never tried it. Treasure Hunt s30133719 T8 (mana-clean gate
+// claude-queue-20261125a, APPLY-DROP x40): Thundering Falls#55, Cascade Bluffs#3, Temple of Epiphany#49, Reliquary
+// Tower#33, Reliquary Tower#32 and the land drop Cascade Bluffs#4; the line {Land's Edge {1}{R}{R}, Treasure Hunt
+// {1}{U}}. Oracle: Temple's {U} into Bluffs#4 for {R}{R} + a Reliquary {C} pay Land's Edge; Falls' {U} + the other
+// Reliquary pay Treasure Hunt.
+TEST_CASE("Line keep (crit, filter lands): Land's Edge leaves an unconditional {U} for Treasure Hunt (s30133719 T8)")
+{
+    ArmLka all_off(heurarm::LINE_KEEP_ALL, false);
+    ArmLka crit_on(heurarm::LINE_KEEP_CRIT, true);
+    ArmLka multi_on(heurarm::LINE_KEEP_CRIT_MULTI, true);
+    GameState s0 = BaseLka(8);
+    PutLka(s0, "Thundering Falls", 55);
+    PutLka(s0, "Cascade Bluffs", 3);
+    PutLka(s0, "Temple of Epiphany", 49);
+    PutLka(s0, "Reliquary Tower", 33);
+    PutLka(s0, "Reliquary Tower", 32);
+    PutLka(s0, "Cascade Bluffs", 4);
+    s0.players[0].hand.push_back(CardLka("Land's Edge", 25));
+    s0.players[0].hand.push_back(CardLka("Treasure Hunt", 7));
+    for (int k = 0; k < 20; ++k) { s0.players[0].library.push_back(CardLka(k % 2 ? "Island" : "Treasure Hunt", 900 + k)); }
+    const std::vector<Action> line = { CastLka(s0, "Land's Edge"), CastLka(s0, "Treasure Hunt") };
+    CHECK(LineKeepBound(line) == kLineKeepCrit);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmLka arm(heurarm::LINE_KEEP_CRIT_FILTER, on);
+        GameState s = s0;
+        CHECK(PayThenRest(s, line, 0, line[1].cost, /*rest_creature=*/false) == on);
+    }
+    // Control: an Island in play is a third unconditional {U}. The greedy's payment keeps the line on both arms, and
+    // both arms tap the same sources.
+    GameState c0 = s0;
+    PutLka(c0, "Island", 60);
+    std::vector<std::vector<bool>> taps;
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmLka arm(heurarm::LINE_KEEP_CRIT_FILTER, on);
+        GameState s = c0;
+        CHECK(PayThenRest(s, line, 0, line[1].cost, /*rest_creature=*/false));
+        std::vector<bool> t;
+        for (const Permanent& p : s.battlefield) { t.push_back(p.tapped); }
+        taps.push_back(t);
+    }
+    CHECK(taps[0] == taps[1]);
+}
