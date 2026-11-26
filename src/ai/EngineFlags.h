@@ -673,6 +673,38 @@ inline bool LineKeepCritFilterOn()
 // (LineCastCostTotal) already carries it, so the rung's rest is right; only the bound left a {suspend + one cast} line
 // out. Worldfire: {suspend Keldon Halberdier + Ponder} on Mercadian Bazaar + Steam Vents -- the greedy paid {R} with
 // Vents (storage taps last), Ponder had no {U}. docs/design/worldfire-apply-drop-2026-11-25.md.
+// MTG_GYRETURN_TAP_DEBIT (DEFAULT ON -- a sound collapse; =0 restores the menu byte for byte) -- the plan enumerators'
+// "{cost}, {T}" SELF-FUNDING debit (PermAbilityTapDebitOf, TurnSolver.cpp) also covers a GRAVEYARD-RETURN ability's
+// source: Haven of the Spirit Dragon ("{2}, {T}, Sacrifice: return target Dragon"), Haunted Fengraf ({3}, {T},
+// Sacrifice). Both apply worlds hold the source while paying its {2} (SelfTapSourceHoldBit), since its {T} is part of
+// the cost, so a rebuy that only the source's own mana could pay never activates: the plan equals the same plan
+// without it (Dragons mana-oracle gate, PHANTOM +4,422 once the drop was reported). The debit takes the source's
+// yield out of that plan's flat pool, exactly as it does for Shivan Gorge / Mariposa, so such a plan is not offered.
+// Inert on a board with no untapped gy-return MANA source (Cid, Freeflier Pilot makes no mana: debit 0).
+inline bool GyReturnTapDebitOn()
+{
+    static const bool env_on = EnvOn("MTG_GYRETURN_TAP_DEBIT", true);
+    return heurarm::Flag(heurarm::GYRETURN_TAP_DEBIT, env_on);
+}
+
+// MTG_DIG_FLOAT_HAND_DEMAND (DEFAULT ON; =0 restores the payment byte for byte) -- a SACRIFICE-DRAW dig (the dig loop's
+// "{1}, {T}, Sacrifice: draw" -- Mind Stone, a Fiery Islet), paid at the end of a plan's apply in both worlds, is the
+// line's last payment before its draw continuation re-solves on whatever mana is left. The line hold is empty there, so
+// the line-float rung (MTG_LINE_FLOAT_TAP_FIRST, LineFloatTapFirstPlan) saw no later demand and the drain spent the
+// floating colour on the dig's generic, even with an untapped colourless source beside it and a held card that needs
+// exactly that colour. Dragons s30096713 T3 {land=Gruul Turf} (mana-oracle APPLY-DROP, 262 lines in the dragons-ogap
+// gate): the Karoo float left {R}; the Mind Stone dig paid its {1} with it, Haven of the Spirit Dragon's {C} stayed up,
+// and the continuation's Lightning Bolt had no red. Under the lever the dig's payment counts, per colour, the most pips
+// any single nonland card in HAND carries (DigContDemandScope, ManaPayment.h) as the rung's later demand. A payment
+// choice only, in both worlds at every budget; the rung's held attempt falls through to the plain payment on failure.
+// Only the visible hand is read (never the library), and only while a colour floats. Inert unless
+// LineFloatTapFirstOn().
+inline bool DigFloatHandDemandOn()
+{
+    static const bool env_on = EnvOn("MTG_DIG_FLOAT_HAND_DEMAND", true);
+    return heurarm::Flag(heurarm::DIG_FLOAT_HAND_DEMAND, env_on);
+}
+
 inline bool LineKeepSuspendOn()
 {
     static const bool env_on = EnvOn("MTG_LINE_KEEP_SUSPEND", true);

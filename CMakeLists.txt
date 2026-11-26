@@ -315,6 +315,7 @@ add_executable(mtg-test
     test/unit/test_rollout_cut_store.cpp
     test/unit/test_shadowborn_lakeprof.cpp
     test/unit/test_mana_oracle.cpp
+    test/unit/test_dragons_eng.cpp
     test/unit/test_board_identity.cpp
     test/unit/test_sac_land_class_pin.cpp
     test/unit/test_bloodsun_fastbond.cpp

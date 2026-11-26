@@ -1149,6 +1149,8 @@ enum Slot : int
     DEAD_CROSS_UNITS,         // MTG_DEAD_CROSS_UNITS  dead (or failed) boundary-fan crossings charge the FINITE unit budget, one unit per MTG_DEAD_CROSS_UNIT_W (default 2) of one fan, and the fan stops when the budget is spent or the pass overruns (TurnSolver DeadCrossMeter; Maze's End 2HG s31301380 gi1380). SCOPED to fans with an axis decided before the turn advances (crossing land, morph flip, end-step grace): the dead-fan fold's fans are never billed. A budget price, inert at budget 0. Default ON; =0 charges nothing
     DEAD_FAN_FOLD,            // MTG_DEAD_FAN_FOLD  a boundary fan with no axis decided before the turn advances stops at its first refused crossing (every later one reaches the same turn and is refused too; TurnSolver DeadFanFold). A SOUND identity fold. Default ON; =0 walks the fan
     LINE_KEEP_CRIT_FILTER,    // MTG_LINE_KEEP_CRIT_FILTER  the crit-mode gate (LineKeepCritGate) also asks its last-source tests with every FED source's colours (a filter land: Cascade Bluffs; a {1}-fed converter: Ferrous Lake, Izzet Signet) left out of the supply: they need a feed the bill can spend (Treasure Hunt {Land's Edge + Treasure Hunt}: Thundering Falls + Temple paid Land's Edge, two unfed Bluffs made {C}{C}). The exact judge decides as before. DEFAULT ON; =0 -> byte-identical
+    GYRETURN_TAP_DEBIT,       // MTG_GYRETURN_TAP_DEBIT  the plan enumerators' self-funding debit (PermAbilityTapDebitOf) also covers a graveyard-return ability's source ({2}, {T}, sacrifice: Haven of the Spirit Dragon; {3}, {T}, sacrifice: Haunted Fengraf), so a rebuy only its own source could pay is not offered (a dead branch: the apply never pays a source's own {T} ability with that source). Sound collapse, DEFAULT ON; =0 -> byte-identical
+    DIG_FLOAT_HAND_DEMAND,    // MTG_DIG_FLOAT_HAND_DEMAND  a sacrifice-draw dig's payment (Mind Stone's {1}, {T}, sacrifice: draw), the last act of a line before its draw continuation re-solves, reads the coloured pips of the HAND's nonland cards as later demand in the line-float rung (LineFloatTapFirstPlan), so a floating colour a held card needs is kept and the generic is paid from a spare source (Dragons s30096713 T3: Gruul Turf's bounce floated {R}, the dig spent it, Haven's {C} stayed up and the continuation's Lightning Bolt had no red). DEFAULT ON; =0 -> byte-identical
     COUNT
 };
 
@@ -2242,6 +2244,8 @@ inline const char* Name(int slot)
         "MTG_DEAD_CROSS_UNITS",
         "MTG_DEAD_FAN_FOLD",
         "MTG_LINE_KEEP_CRIT_FILTER",
+        "MTG_GYRETURN_TAP_DEBIT",
+        "MTG_DIG_FLOAT_HAND_DEMAND",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

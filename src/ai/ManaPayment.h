@@ -1137,6 +1137,22 @@ struct LineUnseenCarriedScope
     LineUnseenCarriedScope& operator=(const LineUnseenCarriedScope&) = delete;
 };
 
+// THE DIG CONTINUATION'S VISIBLE DEMAND (MTG_DIG_FLOAT_HAND_DEMAND, EngineFlags.h). Bound around a sacrifice-draw dig's
+// payment in both apply worlds (TurnSolver's dig loop, AIEngine::PerformDigFull): per colour W,U,B,R,G, the most pips
+// any one nonland card in the active player's hand carries. Read by exactly one consumer, the line-float rung
+// (LineFloatTapFirstPlan), as later demand beside the line hold's; null everywhere else (and when the lever is off, a
+// colour does not float, or the hand demands none). Folded into PayContextDigest while bound.
+extern thread_local const int* g_dig_cont_demand;
+struct DigContDemandScope
+{
+    int d[5] = { 0, 0, 0, 0, 0 };
+    const int* prev;
+    explicit DigContDemandScope(const GameState& state);
+    ~DigContDemandScope() { g_dig_cont_demand = prev; }
+    DigContDemandScope(const DigContDemandScope&)            = delete;
+    DigContDemandScope& operator=(const DigContDemandScope&) = delete;
+};
+
 // RAII for g_line_opens_unseen, the LineUnpaidCostScope contract: a nested apply (a breakpoint
 // continuation) binds its own value and restores the outer one on exit.
 class LineOpensUnseenScope

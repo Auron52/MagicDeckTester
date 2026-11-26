@@ -10396,7 +10396,13 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
         ManaPool avail = AvailableManaPool(state);
         const int src_num = state.battlefield[idx].card.m_number;
         state.battlefield[idx].tapped = true;  // {T}; tap before paying so it isn't its own source
-        if (!TapForCost(state, sd->params.sacrifice_draw_cost.value(), avail, false))
+        bool dig_paid = false;
+        {
+            // MTG_DIG_FLOAT_HAND_DEMAND: the continuation's visible demand (lockstep: TurnSolver's dig loop).
+            const DigContDemandScope _dcd(state);
+            dig_paid = TapForCost(state, sd->params.sacrifice_draw_cost.value(), avail, false);
+        }
+        if (!dig_paid)
         {
             state.battlefield[idx].tapped = false;
             return DigOutcome::Failed;
