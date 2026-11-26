@@ -793,7 +793,7 @@ arm: s160001 d5 x1000, held-out s190001 d5 x1000 + d3 x500): 4 of 2,500 games fa
 Details in the AccomplishedAlchemist ledger, "Combo Off "win", then the attack lost: s160426 gi425".
 
 
-## #20 -- the Elves mana cluster: five SHARED-code mana defects, none a lockstep divergence (2026-11-26)
+## #22 -- the Elves mana cluster: five SHARED-code mana defects, none a lockstep divergence (2026-11-26)
 
 The Elves claude-play sweep (2026-11-26) flagged five mana-accounting defects. Each was checked against both worlds:
 every one sits in code the rollout and the executor SHARE (the enumerator's credit decides which plans either world
@@ -816,10 +816,10 @@ Known remaining gap (20e): only `TapForCostShared` honours the mark -- a float s
 `ConsumeFloatingAny`, `PayCostFromFloat`) does not, and a MIXED batch's creature-stage Cavern unit is marked too but
 its creature-only float routing (creature_mana_only) is unchanged.
 
-## #21 -- a continuation's MULTIKICK / SQUAD count was dropped from its breakpoint record (found + fixed 2026-11-26)
+## #23 -- a continuation's MULTIKICK / SQUAD count was dropped from its breakpoint record (found + fixed 2026-11-26)
 
-Exposed by #20d. Elves fd sweep (seeds 7001+off, gi off, d5 b20) seed 7161 gi160: `[fd-diverge] realized_win=4
-predicted_win=3`, and only with `MTG_UNTAP_FLOAT_FEED_RETRY` on (the other three #20 levers off still diverged; all
+Exposed by #22d. Elves fd sweep (seeds 7001+off, gi off, d5 b20) seed 7161 gi160: `[fd-diverge] realized_win=4
+predicted_win=3`, and only with `MTG_UNTAP_FLOAT_FEED_RETRY` on (the other three #22 levers off still diverged; all
 four off reproduced the pre-fix binary's digest byte for byte). `MTG_BP_TRACE`'s first difference, T3, after Genesis
 Wave's continuation:
 
@@ -830,6 +830,6 @@ Wave's continuation:
 
 The breakpoint recorder (`cast_by_name`'s record, beside #16's mode list) copied `rec.kicked` but not
 `rec.kick_count`, so a recorded "(Kicked x1)" squad cast replayed as the bare kicked face -- one Brigade token short,
-and a different float for the Crossroads after it. It was latent until #20d let the rollout afford the squad copy off
+and a different float for the Crossroads after it. It was latent until #22d let the rollout afford the squad copy off
 Wirewood Lodge's float-fed burst. Fix: `rec.kick_count = riders.kick_count` (no lever: a record that drops a searched
 cast axis is a pure defect, the #16 class). Unit-tested by the fd sweep returning 0 `[fd-diverge]`.

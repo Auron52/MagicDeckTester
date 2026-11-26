@@ -77116,7 +77116,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.evoke              = evoke;
             rec.adventure          = adventure;
             rec.kicked             = kicked;
-            // ...and the MULTIKICK / SQUAD count (Elves 2026-11-26, lockstep #21): `kicked` alone replayed a continuation's
+            // ...and the MULTIKICK / SQUAD count (Elves 2026-11-26, lockstep #23): `kicked` alone replayed a continuation's
             // Galadhrim Brigade squad x1 ({3}{G}{G}) as the bare kicked face, K = 0 ({2}{G}) -- one token short and a
             // different float (Elves fd sweep seed 7161 gi160: proven T3, realised T4).
             rec.kick_count         = riders.kick_count;
