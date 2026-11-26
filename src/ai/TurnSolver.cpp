@@ -96998,12 +96998,29 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             // puts at least one land. Conservative in the usual direction: a marked plan whose put
             // whiffs yields variants that collapse onto the base plan. A family added later still
             // ARMS; it lands here unmarked, the pre-existing conservative shape -- ADD IT HERE TOO.
+            //
+            // The land-search family is the one whose param does NOT always describe the CAST: three shapes
+            // carry land_search_count for a search the cast itself never performs, so their cast can never
+            // arm this half (the arming needs an own card permanent from outside the hand), and marking them
+            // would only emit variants that all collapse onto the base plan -- pure enumeration waste:
+            //   * an ACTIVATED search (land_search_activation_cost: the fetchlands, Evolving Wilds, Khalni
+            //     Heart Expedition's sacrifice) -- casting the permanent searches nothing;
+            //   * a cast WATCHER's search (karametra_cast_land_search) -- it fires on OTHER creature casts
+            //     with Karametra already out, never on Karametra's own cast (it is not on the battlefield);
+            //   * Path to Exile aimed at the OPPONENT's creature (RemovalSearchesForController, target 0):
+            //     the opponent searches, so nothing enters on our side. Under human play the target is
+            //     picked at resolution (enchant_target 0 for every cast), so it stays marked there.
+            // Exact by the same argument as the arming's no-op test: none of the three can put a card
+            // permanent onto our battlefield during THIS cast.
+            const bool land_put_by_cast = d->params.land_search_count > d->params.land_search_to_hand
+                && !d->params.land_search_activation_cost && !d->params.karametra_cast_land_search
+                && !(RemovalSearchesForController(*d) && a.enchant_target <= 0 && !HumanPlayActive());
             if (BpPutBattlefieldEnabled()
                 && (d->params.reveal_x_put_permanents || d->params.look_top_put_creature_count > 0
                     || !d->params.etb_reveal_put_subtypes.empty() || d->params.tutor_to_battlefield
                     || d->params.tutor_to_battlefield_single || d->params.reanimate_creature_max_mv > 0
                     || d->params.tutor_land_to_battlefield || d->params.scry_reveal_land_to_battlefield
-                    || d->params.land_search_count > d->params.land_search_to_hand))
+                    || land_put_by_cast))
             { mask |= 1 << 10; }
             // THE CREATURE-ENTERS WATCHER (Vaultborn Tyrant, "whenever another creature you control
             // enters, draw a card"). State-keyed exactly like the equipment and Aura watchers above,

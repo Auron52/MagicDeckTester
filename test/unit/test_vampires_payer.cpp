@@ -643,6 +643,10 @@ TEST_CASE("payer A/B gi24 (sac-land victim pays first): Crop Rotation's {G} taps
         line.land_decided = true;
         line.actions = { CastVp(s, "Birds of Paradise"), CastVp(s, "Crop Rotation") };
         line.actions[1].sacrifice_land = true;   // as the enumerator stamps it (the rollout sacrifices on the flag)
+        // Crop Rotation PUTS a land, which arms site 10's battlefield-put continuation; this test is about the
+        // payment, so the continuation is the EMPTY arm (its canonical default would cast the Scrying).
+        line.bp_choice = TurnSolver::kBpEmptyChoice;
+        line.bp_all    = true;
         auto check = [&](const GameState& st, const std::string& world)
         {
             std::string bf, gy;
