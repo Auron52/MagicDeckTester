@@ -1,0 +1,254 @@
+{
+ "jobs": [
+  {
+   "name": "off__cycloneplay__gi322",
+   "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+   "profile": "decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json",
+   "games": 1,
+   "seed": 4870322,
+   "game_index": 322,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": false,
+    "MTG_LINE_KEEP_SUSPEND": false,
+    "MTG_LINE_KEEP_RITUAL": false
+   },
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "on__cycloneplay__gi322",
+   "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+   "profile": "decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json",
+   "games": 1,
+   "seed": 4870322,
+   "game_index": 322,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": true,
+    "MTG_LINE_KEEP_SUSPEND": true,
+    "MTG_LINE_KEEP_RITUAL": true
+   },
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "off__selesnyav2play__gi178",
+   "deck": "decks/Selesnya Lifegain/Selesnya Lifegain.cod",
+   "profile": "decks/Selesnya Lifegain/Selesnya Lifegain.profile.json",
+   "games": 1,
+   "seed": 4870178,
+   "game_index": 178,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": false,
+    "MTG_LINE_KEEP_SUSPEND": false,
+    "MTG_LINE_KEEP_RITUAL": false
+   },
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "on__selesnyav2play__gi178",
+   "deck": "decks/Selesnya Lifegain/Selesnya Lifegain.cod",
+   "profile": "decks/Selesnya Lifegain/Selesnya Lifegain.profile.json",
+   "games": 1,
+   "seed": 4870178,
+   "game_index": 178,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": true,
+    "MTG_LINE_KEEP_SUSPEND": true,
+    "MTG_LINE_KEEP_RITUAL": true
+   },
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "off__worldfire2hgplay__gi1247",
+   "deck": "decks/Worldfire/Worldfire.cod",
+   "profile": "decks/Worldfire/Worldfire.profile.json",
+   "games": 1,
+   "seed": 4871247,
+   "game_index": 1247,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": false,
+    "MTG_LINE_KEEP_SUSPEND": false,
+    "MTG_LINE_KEEP_RITUAL": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2,
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "on__worldfire2hgplay__gi1247",
+   "deck": "decks/Worldfire/Worldfire.cod",
+   "profile": "decks/Worldfire/Worldfire.profile.json",
+   "games": 1,
+   "seed": 4871247,
+   "game_index": 1247,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": true,
+    "MTG_LINE_KEEP_SUSPEND": true,
+    "MTG_LINE_KEEP_RITUAL": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2,
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "off__worldfire2hgplay__gi1912",
+   "deck": "decks/Worldfire/Worldfire.cod",
+   "profile": "decks/Worldfire/Worldfire.profile.json",
+   "games": 1,
+   "seed": 4871912,
+   "game_index": 1912,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": false,
+    "MTG_LINE_KEEP_SUSPEND": false,
+    "MTG_LINE_KEEP_RITUAL": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2,
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "on__worldfire2hgplay__gi1912",
+   "deck": "decks/Worldfire/Worldfire.cod",
+   "profile": "decks/Worldfire/Worldfire.profile.json",
+   "games": 1,
+   "seed": 4871912,
+   "game_index": 1912,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": true,
+    "MTG_LINE_KEEP_SUSPEND": true,
+    "MTG_LINE_KEEP_RITUAL": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2,
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "off__worldfire2hgplay__gi1927",
+   "deck": "decks/Worldfire/Worldfire.cod",
+   "profile": "decks/Worldfire/Worldfire.profile.json",
+   "games": 1,
+   "seed": 4871927,
+   "game_index": 1927,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": false,
+    "MTG_LINE_KEEP_SUSPEND": false,
+    "MTG_LINE_KEEP_RITUAL": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2,
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "on__worldfire2hgplay__gi1927",
+   "deck": "decks/Worldfire/Worldfire.cod",
+   "profile": "decks/Worldfire/Worldfire.profile.json",
+   "games": 1,
+   "seed": 4871927,
+   "game_index": 1927,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": true,
+    "MTG_LINE_KEEP_SUSPEND": true,
+    "MTG_LINE_KEEP_RITUAL": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2,
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "off__worldfireplay__gi961",
+   "deck": "decks/Worldfire/Worldfire.cod",
+   "profile": "decks/Worldfire/Worldfire.profile.json",
+   "games": 1,
+   "seed": 4870961,
+   "game_index": 961,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": false,
+    "MTG_LINE_KEEP_SUSPEND": false,
+    "MTG_LINE_KEEP_RITUAL": false
+   },
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "on__worldfireplay__gi961",
+   "deck": "decks/Worldfire/Worldfire.cod",
+   "profile": "decks/Worldfire/Worldfire.profile.json",
+   "games": 1,
+   "seed": 4870961,
+   "game_index": 961,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": true,
+    "MTG_LINE_KEEP_SUSPEND": true,
+    "MTG_LINE_KEEP_RITUAL": true
+   },
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "off__worldfireplay__gi1347",
+   "deck": "decks/Worldfire/Worldfire.cod",
+   "profile": "decks/Worldfire/Worldfire.profile.json",
+   "games": 1,
+   "seed": 4871347,
+   "game_index": 1347,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": false,
+    "MTG_LINE_KEEP_SUSPEND": false,
+    "MTG_LINE_KEEP_RITUAL": false
+   },
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  },
+  {
+   "name": "on__worldfireplay__gi1347",
+   "deck": "decks/Worldfire/Worldfire.cod",
+   "profile": "decks/Worldfire/Worldfire.profile.json",
+   "games": 1,
+   "seed": 4871347,
+   "game_index": 1347,
+   "flags": {
+    "MTG_LINE_KEEP_CRIT_MULTI": true,
+    "MTG_LINE_KEEP_SUSPEND": true,
+    "MTG_LINE_KEEP_RITUAL": true
+   },
+   "depth": 8,
+   "budget_ms": 0,
+   "ignore_play_profile": true,
+   "abandon_units": 30000000
+  }
+ ]
+}
