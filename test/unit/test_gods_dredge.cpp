@@ -850,3 +850,39 @@ TEST_CASE("Dead-fan fold: a post-advance-only boundary fan stops at its first re
     CHECK(off.dead >= 2);           // the unfolded fan walks both pins
     CHECK(on.dead < off.dead);      // the fold stops at the first refused one
 }
+
+// THE DEAD-CROSSING UNIT PRICE IS SCOPED to fans with a pre-advance axis live (TurnSolver DeadCrossMeter /
+// FanPreAdvanceLive). The post-advance-only dredge fan above is the dead-fan fold's, so the price never bills it, even
+// with the fold OFF and a FINITE budget (unscoped, its two dead crossings cost one unit; Gods +19 / Gods 2HG +24 turns
+// over 600 held-out games each). Same units and answer with the price on as off.
+TEST_CASE("Dead-cross unit price: a fan the dead-fan fold covers is never billed")
+{
+    CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+    CardDefinition dredge_one;
+    dredge_one.params.dredge = 1;
+    GameState s;
+    s.turn_number = 2;
+    s.phase = Phase::PostCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].graveyard.push_back(MakeCard("Dredge One", 3, &dredge_one));
+    s.players[0].library.push_back(MakeCard("Forest", 4));
+    s.players[0].library.push_back(MakeCard("Plains", 5));
+    s.players[0].library.push_back(MakeCard("Island", 6));
+    REQUIRE(TurnSolver::DredgeBoundaryPinsForTest(s).size() == 2);
+    struct Run { long long used, dead; int win; };
+    auto run = [&](bool price) {
+        heurarm::Clear();
+        heurarm::t_arm[heurarm::DEAD_FAN_FOLD] = 0;   // walk both dead crossings
+        heurarm::t_arm[heurarm::DEAD_CROSS_UNITS] = price ? 1 : 0;
+        SearchBudget b(1000000);
+        const long long n0 = workctr::t_n[workctr::kDeadCross];
+        const TurnSolver::SearchLine line =
+            TurnSolver::FullSearchLine(s, /*depth=*/1, /*max_turns=*/2, /*second_main=*/true, nullptr, &b);
+        heurarm::Clear();
+        return Run{ b.Used(), workctr::t_n[workctr::kDeadCross] - n0, line.win_turn };
+    };
+    const Run on = run(true), off = run(false);
+    CHECK(off.dead >= 2);           // the fan walks two dead crossings (would be one unit, unscoped)
+    CHECK(on.win == off.win);
+    CHECK(on.used == off.used);     // never billed
+}

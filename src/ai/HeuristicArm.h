@@ -1145,6 +1145,7 @@ enum Slot : int
     LINE_KEEP_SUSPEND,        // MTG_LINE_KEEP_SUSPEND  LineKeepBound counts a PAID suspend (Keldon Halberdier / Rift Bolt {R}, Profane Tutor {1}{B}) as a held payment of the line, so {suspend + one cast} binds the rung (Worldfire: Halberdier's {R} off Steam Vents, Ponder left with no {U}); LineNoncreatureMv counts its cost. DEFAULT ON; =0 -> suspends unbound, byte-identical
     LINE_KEEP_RITUAL,         // MTG_LINE_KEEP_RITUAL  the line-keep rung judges the rest of the line with the float of the RITUAL this payment is for (ritual_floating_mana, at no splice) on the board, as MTG_LINE_KEEP_ROCK puts the rock there (Worldfire {Song, Song, Personal Tutor}: the second Song is the first's float). DEFAULT ON; =0 -> the float-blind rest, byte-identical
     LINE_KEEP_RITUAL_TIGHT,   // MTG_LINE_KEEP_RITUAL_TIGHT  with MTG_LINE_KEEP_RITUAL: the crit gate counts the ritual's float as the REST's supply, and the joint test asks the board alone for this bill plus the rest net of the float (a necessary condition of every repair). Worldfire / Dragonstorm probe: rung trials 355k -> 126k, strand-nofire 20,365 -> 403, the 112 games digest-identical. DEFAULT ON; =0 -> the loose ritual rung (A/B / identity arm)
+    DEAD_CROSS_UNITS,         // MTG_DEAD_CROSS_UNITS  dead (or failed) boundary-fan crossings charge the FINITE unit budget, one unit per MTG_DEAD_CROSS_UNIT_W (default 2) of one fan, and the fan stops when the budget is spent or the pass overruns (TurnSolver DeadCrossMeter; Maze's End 2HG s31301380 gi1380). SCOPED to fans with an axis decided before the turn advances (crossing land, morph flip, end-step grace): the dead-fan fold's fans are never billed. A budget price, inert at budget 0. Default ON; =0 charges nothing
     DEAD_FAN_FOLD,            // MTG_DEAD_FAN_FOLD  a boundary fan with no axis decided before the turn advances stops at its first refused crossing (every later one reaches the same turn and is refused too; TurnSolver DeadFanFold). A SOUND identity fold. Default ON; =0 walks the fan
     COUNT
 };
@@ -2235,6 +2236,7 @@ inline const char* Name(int slot)
         "MTG_LINE_KEEP_SUSPEND",
         "MTG_LINE_KEEP_RITUAL",
         "MTG_LINE_KEEP_RITUAL_TIGHT",
+        "MTG_DEAD_CROSS_UNITS",
         "MTG_DEAD_FAN_FOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
