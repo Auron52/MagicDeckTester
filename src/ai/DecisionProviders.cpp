@@ -75199,6 +75199,12 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         r.canon.value          = 0;
         r.canon.wins_this_turn = false;
         r.canon.land_tie_key   = -1;
+        // A breakpoint VARIANT (bp_choice / bp_at set) carries the INDEX of its base plan in the list (bp_base),
+        // which differs between the X=5 and X=3 copies of one Wave line, so without this blank every variant was
+        // a class of its own and the band let the variants of a pruned count through (the Wave's site-10 put
+        // half made its plans breakpoint-marked, 2026-11-26). Blanked, variant (k, at) of each count groups with
+        // the same (k, at) of the others: the rule applies to a variant exactly as to its base.
+        r.canon.bp_base        = -1;
         rows.push_back(std::move(r));
     }
     if (rows.empty()) { return; }
