@@ -296,6 +296,13 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**05:17 UTC 11-26:** worldfire-ad PASSES and is ready to land (verdict at logs/worldfire-ad/ab_verdict.md, 5cbf34e20).
+- A/B: 43,200 paired games, net -2, units +0.12%, CPU +0.30%.
+- 7 slower games: 6 recover at d8 b0. Selesnya v2 gi178 does not (4 / 5 at d8), but MTG_NC_SEARCH=1 at play settings gives 5 / 5, so it is clairvoyant.
+- I did not start a fresh agent; the parent did the analysis inline.
+- maze2hg-perf: the successor has 3dffb8a9c (MTG_DEAD_CROSS_UNITS, a play change) and its A/B is running on the box lock now. The mill-k A/B is queued behind it.
+- NEXT: when the maze2hg successor reports, integrate worldfire-ad (4238d6010..5cbf34e20) + maze2hg-perf (c5c8877d9, plus 3dffb8a9c if it passes) on a new branch off origin. Then join the queue, validate under hold, accept GT and land.
+
 **04:38 UTC 11-26:** status check.
 - **worldfire-ad A/B:** 7178 of 9480 jobs done, 32/32 busy (DONE marker: build/scratch/worldfire-ad/ab_out/DONE; my waiter is on it).
 - **Queued on the box lock behind it:** the maze2hg-perf successor's A/B, and the mill-k A/B (relaunched by me; marker build/scratch/mill-k/ab/DONE, my waiter is on it).
