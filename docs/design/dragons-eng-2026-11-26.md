@@ -78,9 +78,24 @@ Landfall std 1,500 net -1 (units -0.69%), 2HG 500 net 0, Kitty Equipment byte-id
 The dig lever moves 7 of 1,108 chunks (Dragons 4, Stuffy Doll 3) and no game's win turn: in play it is nearly inert,
 its effect is on the plans the oracle audits (gate above). No slower game in either pair, so nothing to replay at d8 b0.
 
+## CPU (callgrind Ir, one chunk per arm, `--threads 1`, the A/B's own jobs; `GameEngine::RunGame` inclusive)
+
+| chunk | play | off | on | delta |
+|---|---|---|---|---|
+| Dragons std o0, 25 games, MTG_DIG_FLOAT_HAND_DEMAND | byte-identical (digest + units) | 20,634,828,185 | 20,634,980,898 | +0.0007% |
+| Dragons std o0, 25 games, MTG_GYRETURN_TAP_DEBIT | same digest, units 156,549 -> 156,524 | 20,637,457,741 | 20,635,316,044 | -0.0104% |
+| Kitty Equipment std o0, 5 games, MTG_GYRETURN_TAP_DEBIT | byte-identical | 22,317,655,086 | 22,319,868,387 | +0.0099% |
+| same, after the `TapDebitCand` no-mana-source skip (1da554f49) | byte-identical | 22,328,842,247 | 22,328,493,302 | -0.0016% |
+
+The Kitty rows are noise, not the lever: the engine functions' SELF Ir is identical between the arms to within ~2k
+instructions (AvailableManaPool's Ir is the same to the instruction -- Cid's rebuy was never enumerated in those 5 games),
+and the inclusive delta sits in libc / libstdc++ I/O paths under RunGame. The no-mana-source skip is kept because it is
+free and exact (a gy-return source that makes no mana has debit 0), not because it was measured to cut a cost. Kitty's
+16 A/B chunks re-played with the skip are byte-identical (digest + units) to the A/B's gon arm.
+
 ## Status
 
 - d88f2e1d8: code for 1 and 2 + `test/unit/test_dragons_eng.cpp` (2 cases, 36 assertions, pass). Full unit suite
   4,210 / 4,213 under both the default and the levers-off env; the 3 failures (Windswept Heath / Boars card checks,
   bottom-pref bucket) fail identically on the dragons-ogap base binary, so they are environmental, not this change.
-- Next: unit tests on/off, Dragons gate base (both levers off) vs new, held-out play A/B (`logs/dragons-eng/mk_ab.py`).
+- Gate, A/B and CPU done (above). Both levers default ON. Nothing pending on this branch; GT is the parent's at landing.
