@@ -1,0 +1,24 @@
+d8 b0 check of the 19 slower games (new = f11f1cab7 default; base = MTG_BP_PUT_BATTLEFIELD=0, proven == committed GT by the 243/243 hatch smoke).
+ship = the A/B / smoke settings replayed single-game (seed = base+gi, game_index = gi); d8 = depth 8, budget 0, ignore_play_profile.
+recovered = new at d8 b0 wins no later than base at its shipped setting.
+
+game                                     seed  shipB  shipN    d8B    d8N  recovered
+ab_creature_giving2hg_gi107           9600108      5      6      5      5  YES
+ab_creature_giving_gi14               9600015      4      5      4      4  YES
+ab_creature_giving_gi247              9600248      4      5      4      4  YES
+ab_creature_giving_gi353              9600354      4      5      4      4  YES
+ab_elementals_gi209                   9600210      4      5      4      4  YES
+ab_elementals_gi293                   9600294      5      6      5      5  YES
+ab_landfall_gi356                     9600357      5      6      5      5  YES
+ab_landfall_gi92                      9600093      5      6      5      5  YES
+ab_pd2hg_gi9                          9600010      5      6      5      5  YES
+ab_pd_gi370                           9600371      6      7      6      6  YES
+sm_creature_giving2hg_d5_gi29            1030      5      6      5      5  YES
+sm_creature_giving2hg_d5_gi39            1040      5      6      5      5  YES
+sm_hydras_d3_gi30                        1031      5      6      5      5  YES
+sm_landfall_d3_gi4                       1005      5      6      5      5  YES
+sm_landfall_d5_gi16                      1017      5      6      5      5  YES
+sm_landfall_d5_gi88                      1089      5      6      5      5  YES
+sm_landfall_d5_gi90                      1091      5      6      5      5  YES
+sm_pd2hg_d5_gi20                         1021      5      6      5      5  YES
+sm_pd2hg_d5_gi21                         1022      5      6      5      5  YES

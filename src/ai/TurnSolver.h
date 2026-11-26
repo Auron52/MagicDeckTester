@@ -2569,7 +2569,7 @@ public:
     // (GameState::deck_has_gy_equipment_return), which makes the predicate false at its first test.
     static std::vector<int> GraveyardEquipmentNumbers(const GameState& state);
     static bool EquipmentReturnedFromGraveyard(const std::vector<int>& gy_snapshot, const GameState& state);
-    // THE BATTLEFIELD-PUT TWIN (Genesis Wave, Elves 2026-11-26; MTG_BP_PUT_BATTLEFIELD, default ON).
+    // THE BATTLEFIELD-PUT TWIN (Genesis Wave, Elves 2026-11-26).
     // A cast whose resolution PUT a card permanent onto the active player's battlefield from a zone
     // other than the hand -- the Wave's reveal-and-put, a look-top put (Turntimber), a tutor or
     // reanimation to the battlefield, an ETB mass put (Muxus), a land search to the battlefield --

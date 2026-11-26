@@ -1096,7 +1096,6 @@ enum Slot : int
     FREE_TURN_ANNIHILATOR_FAIR, // MTG_FREE_TURN_ANNIHILATOR_FAIR  a land-play turn's annihilator wipe is vetoed when castable nonland permanents would have kept one. Default ON
     FREE_TURN_REACH,          // MTG_FREE_TURN_REACH       the turn-edge prunes stand down for a lock-trait deck only where a free turn is REACHABLE (freeturn::FreeTurnMayFollow, a sound certificate). Default ON; =0 -> stand down at every node of a trait deck
     ELVES_SCALING_PRUNE,      // MTG_ELVES_SCALING_PRUNE   ElvesProvider (USER 2026-11-26 scaling-sink ruling): of the plans that differ only in their scaling counts (Genesis Wave X, Joraga Warcaller multikick, Galadhrim Brigade squad, Ezuri's main-phase pump count), keep ONE sink at the group's max plus hold-back counts for the 1-mana attackers; no partial splits across two sinks. A USER-directed provider prune. Default ON; =0 -> every count and every split searched
-    BP_PUT_BATTLEFIELD,       // MTG_BP_PUT_BATTLEFIELD    breakpoint site 10's BATTLEFIELD-PUT half (TurnSolver::CastPutACardPermanent): a cast that PUT a card permanent onto our battlefield from the library / graveyard / exile (Genesis Wave, a look-top put, a tutor or reanimation to the battlefield, a land search) arms the deferred re-solve, so the rest of the main is searched on the new board -- "Wave, then tap the hasted Archdruid it put" was unfindable at any budget (Elves seed 9500006). A completeness fix, both worlds in lockstep. DEFAULT ON; =0 -> as before (the A/B hatch)
     COUNT
 };
 
@@ -2137,7 +2136,6 @@ inline const char* Name(int slot)
         "MTG_FREE_TURN_ANNIHILATOR_FAIR",
         "MTG_FREE_TURN_REACH",
         "MTG_ELVES_SCALING_PRUNE",
-        "MTG_BP_PUT_BATTLEFIELD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
