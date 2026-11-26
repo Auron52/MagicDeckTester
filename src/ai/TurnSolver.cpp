@@ -3959,6 +3959,18 @@ static void SubtractPoolClamped(ManaPool& p, const ManaPool& d)
 static const bool g_tap_ability_debit = EnvOn("MTG_TAP_ABILITY_DEBIT", true);
 static bool TapAbilityDebitEnabled() { return g_tap_ability_debit; }
 
+// The candidates the debit covers: a {T} PermAbility mode (SacDraw / Drain / ExileTop have no {T}) and, under
+// MTG_GYRETURN_TAP_DEBIT (EngineFlags.h), a graveyard-return ability -- Haven of the Spirit Dragon's "{2}, {T},
+// Sacrifice", Haunted Fengraf's "{3}, {T}, Sacrifice". Its {T} is part of the cost (ApplyGraveyardReturnAbility
+// needs the source untapped, and both apply worlds hold it while paying the mana half), so its own yield can fund
+// neither the rebuy nor anything else in the plan. A source that makes no mana (Cid) debits 0 and stays free.
+static bool TapDebitCand(const Action& ta, bool gyr_debit)
+{
+    if (ta.sac_source_id < 0) { return false; }
+    if (ta.kind == Action::Kind::ActivatePermAbility) { return PermAbilityTaps(ta.ability_mode); }
+    return gyr_debit && ta.kind == Action::Kind::GraveyardReturnAbility && ta.sac_source_id > 0;
+}
+
 // Color-producibility gate for a chosen action subset. ManaPool::CanPay stores every
 // multi-color land as one "wild" mana that satisfies ANY single colored pip — an
 // over-approximation for a land that produces only a SUBSET of colors (e.g. Tournament
@@ -65984,18 +65996,23 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
     // twin of the scan in EnumeratePlans.
     std::vector<ManaPool> tap_debit;
     bool any_tap_debit = false;
+    // ...of which a PermAbility mode's (the inert-bit cache below stands down for those, as it always has). A
+    // gy-return debit (MTG_GYRETURN_TAP_DEBIT) rides on a costed action ({2} / {3}), which is never an inert bit, so
+    // the cache stays exact with it and is not given up.
+    bool any_perm_tap_debit = false;
     if (TapAbilityDebitEnabled())
     {
+        const bool gyr_debit = GyReturnTapDebitOn();   // per call: the heurarm arm is per job
         for (int j = 0; j < static_cast<int>(cands.size()); ++j)
         {
             const Action& ta = cands[j];
-            if (ta.kind != Action::Kind::ActivatePermAbility || ta.sac_source_id < 0) { continue; }
-            if (!PermAbilityTaps(ta.ability_mode)) { continue; }   // SacDraw/Drain/ExileTop: no {T}
+            if (!TapDebitCand(ta, gyr_debit)) { continue; }
             ManaPool d = PermAbilityTapDebitOf(state, pool, ta.sac_source_id);
             if (d.Total() <= 0) { continue; }                      // source produces no mana -> free
             if (tap_debit.empty()) { tap_debit.resize(cands.size()); }
             tap_debit[j]  = d;
             any_tap_debit = true;
+            if (ta.kind == Action::Kind::ActivatePermAbility) { any_perm_tap_debit = true; }
         }
     }
     // Same-turn affinity (Thrumming Hivepool). Inert unless an affinity card is castable this turn.
@@ -68685,7 +68702,7 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
         {
             // any_reveal_cost: a COSTLESS Vial put of a subtype card changes a Buccaneer's reveal
             // debit, so an "inert" independent bit is not inert for payability there.
-            const bool call_ok = !any_affinity && !any_reducer && !any_tap_debit && !any_filter
+            const bool call_ok = !any_affinity && !any_reducer && !any_perm_tap_debit && !any_filter
                               && !any_reveal_cost;
             unsigned inert_mask = 0;
             for (int b = 0; call_ok && b < num_ind; ++b)
@@ -85566,7 +85583,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (idx < 0) { break; }
                 const int src_num = state.battlefield[idx].card.m_number;
                 state.battlefield[idx].tapped = true;
-                if (!TapForCostDirect(state, sd->params.sacrifice_draw_cost.value(), false))
+                bool dig_paid = false;
+                {
+                    // MTG_DIG_FLOAT_HAND_DEMAND: the continuation's visible demand (lockstep: AIEngine::PerformDigFull).
+                    const DigContDemandScope _dcd(state);
+                    dig_paid = TapForCostDirect(state, sd->params.sacrifice_draw_cost.value(), false);
+                }
+                if (!dig_paid)
                 {
                     state.battlefield[idx].tapped = false;
                     break;
@@ -89751,11 +89774,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     bool any_tap_debit = false;
     if (TapAbilityDebitEnabled())
     {
+        const bool gyr_debit = GyReturnTapDebitOn();   // per call: the heurarm arm is per job
         for (int j = 0; j < static_cast<int>(cands.size()); ++j)
         {
             const Action& ta = cands[j];
-            if (ta.kind != Action::Kind::ActivatePermAbility || ta.sac_source_id < 0) { continue; }
-            if (!PermAbilityTaps(ta.ability_mode)) { continue; }   // SacDraw/Drain/ExileTop: no {T}
+            if (!TapDebitCand(ta, gyr_debit)) { continue; }
             ManaPool d = PermAbilityTapDebitOf(state, pool, ta.sac_source_id);
             if (d.Total() <= 0) { continue; }                      // source produces no mana -> free
             if (tap_debit.empty()) { tap_debit.resize(cands.size()); }

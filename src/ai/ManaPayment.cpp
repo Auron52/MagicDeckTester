@@ -9516,6 +9516,24 @@ thread_local int      g_line_keep_bound = 0;       // see ManaPayment.h (LineRed
 thread_local bool     g_line_hold_has_acts = false;   // see ManaPayment.h (LineUnpaidCostScope)
 thread_local bool     t_scarce_held_only = false;   // see ScarceHeldOnlyScope (ManaPayment.h)
 thread_local bool     g_line_opens_unseen = false;   // see ManaPayment.h (LineOpensUnseenScope)
+thread_local const int* g_dig_cont_demand = nullptr;   // see ManaPayment.h (DigContDemandScope)
+DigContDemandScope::DigContDemandScope(const GameState& state) : prev(g_dig_cont_demand)
+{
+    if (!DigFloatHandDemandOn() || !LineFloatTapFirstOn() || HumanPlayActive()) { return; }
+    const ManaPool& f = state.floating_mana;
+    if (f.white + f.blue + f.black + f.red + f.green == 0) { return; }   // the rung reads nothing then
+    int any = 0;
+    for (const Card& c : state.players[state.active_player_index].hand)
+    {
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+        const Card& hc = cd ? cd->card : c;
+        if (hc.IsLand()) { continue; }
+        const ManaCost& m = hc.m_mana_cost;
+        const int pip[5] = { m.white, m.blue, m.black, m.red, m.green };
+        for (int i = 0; i < 5; ++i) { d[i] = std::max(d[i], pip[i]); any |= pip[i]; }
+    }
+    if (any != 0) { g_dig_cont_demand = d; }
+}
 thread_local bool     g_line_unseen_carried = false; // see ManaPayment.h (LineUnseenCarriedScope)
 thread_local int      g_line_haste_takers = 0;       // see ManaPayment.h (LineHasteTakersScope)
 
@@ -14780,9 +14798,13 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
     if (lu.colorless > 0) { return false; }
     // Later demand: the line total minus this payment's own coloured pips (LineOwedAfterOwnPips' rule;
     // its own-pip scope is published only inside the attempt, so it is subtracted here directly).
-    const int later[5] = { std::max(0, lu.white - cost_in.white), std::max(0, lu.blue - cost_in.blue),
-                           std::max(0, lu.black - cost_in.black), std::max(0, lu.red - cost_in.red),
-                           std::max(0, lu.green - cost_in.green) };
+    int later[5] = { std::max(0, lu.white - cost_in.white), std::max(0, lu.blue - cost_in.blue),
+                     std::max(0, lu.black - cost_in.black), std::max(0, lu.red - cost_in.red),
+                     std::max(0, lu.green - cost_in.green) };
+    // A sacrifice-draw dig's continuation (MTG_DIG_FLOAT_HAND_DEMAND, DigContDemandScope): the dig is the line's last
+    // payment and its hold is empty, but the continuation re-solves on the float and may cast any card in hand.
+    if (g_dig_cont_demand != nullptr)
+    { for (int c = 0; c < 5; ++c) { later[c] = std::max(later[c], g_dig_cont_demand[c]); } }
     if (later[0] + later[1] + later[2] + later[3] + later[4] == 0) { return false; }
     // The line names only part of what the rest of the turn will owe (MTG_LINE_FLOAT_UNSEEN_GUARD; see
     // g_line_opens_unseen and the creature-only-colour test below).
@@ -16347,6 +16369,8 @@ std::uint64_t PayContextDigest()
         | (g_snow_pay_strict ? 64u : 0u) | (g_hold_colorless_in_payment ? 128u : 0u) | (g_in_blink_loop ? 256u : 0u)
         | (g_tap_speculating ? 512u : 0u) | (g_pay_need_live ? 1024u : 0u) | (g_paysac_cracked ? 2048u : 0u));
     if (g_cycle_seed_paying) { mix(0x4359434C45534545ull); }
+    if (g_dig_cont_demand != nullptr)   // MTG_DIG_FLOAT_HAND_DEMAND; unbound -> digest unchanged
+    { mix(0xD16C0D3Dull); for (int i = 0; i < 5; ++i) { mix(static_cast<std::uint32_t>(g_dig_cont_demand[i])); } }
     if (g_seed_pay_split != 0) { mix(0x5345454450415948ull); mix(static_cast<std::uint32_t>(g_seed_pay_split)); mix(g_seed_pay_hold); }
     mix(static_cast<std::uint32_t>(t_float_generic_hold));
     mix(static_cast<std::uint32_t>(g_human_untap_need));
