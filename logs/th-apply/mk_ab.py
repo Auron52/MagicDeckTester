@@ -42,7 +42,7 @@ for (tag, k, n, hg) in shapes:
                 j.update(HG)
             jobs.append(j)
 # costliest first so the pool's tail is short
-cost = {'hinata': 19, 'cyclone': 3.2, 'niv': 1.8, 'sea': 1.2, 'morph': 0.7, 'th': 0.3}
+cost = {'hinata': 19, 'mazesend': 5, 'snow': 3.9, 'cyclone': 3.2, 'niv': 1.8, 'sea': 1.2, 'bruna': 0.8, 'morph': 0.7, 'th': 0.3, 'galadriel': 0.2, 'fluctuator': 0.15, 'breaching': 0.03}
 jobs.sort(key=lambda j: -cost.get(j['name'].split('__')[1].replace('2hgplay', '').replace('play', ''), 1))
 json.dump({"jobs": jobs}, open(o.out, 'w'), indent=0)
 print(len(shapes), 'shapes', len(jobs), 'jobs', sum(j['games'] for j in jobs), 'games', '(base %d)' % o.base)
