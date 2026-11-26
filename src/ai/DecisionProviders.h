@@ -463,6 +463,16 @@ public:
     virtual CertStance Certificate() const = 0;
 };
 
+// Zombies starts with the generic search policy. Its own provider gives future
+// deck-specific pruning and certificates a distinct, auditable home.
+class ZombiesProvider : public DeckProvider
+{
+public:
+    const char* Name() const override { return "Zombies"; }
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Gravecrawler recursion and Gray Merchant devotion need a deck-specific upper bound." }; }
+};
+
 // Mill's own provider keeps its decisions on the Generic surface. The signature
 // is gated on library-mill effects, not on fetch lands shared by other decks.
 // Hedron's searched four-trigger periodic target policy is the deck's explicit

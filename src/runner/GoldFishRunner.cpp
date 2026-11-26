@@ -942,6 +942,7 @@ std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
         if (p.pharika_exile_cost.has_value()) { m |= GyR_BothCreatureNames; }
         if (p.gy_exile_creature_zombie_cost.has_value()) { m |= GyR_BothCreatureNames; }
         if (p.gy_self_return_battlefield_cost.has_value()) { m |= GyR_CreatureNames; }
+        if (!p.gy_self_cast_requires_control_subtype.empty()) { m |= GyR_GyCastNames; }
         // Forge Anew: the ETB returns a graveyard EQUIPMENT card (see GyR_EquipmentNames).
         if (p.etb_return_equipment_from_gy)  { m |= GyR_EquipmentNames; }
         // Bloodghast: a GRAVEYARD landfall watcher -- whether a copy sits in our graveyard decides
@@ -1525,6 +1526,22 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d && d->params.miracle_cost.has_value()) { return true; }
+        }
+        return false;
+    }();
+    state.deck_has_empty_hand_draw_replacement = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.empty_hand_draw_two_lose_one) { return true; }
+        }
+        return false;
+    }();
+    state.deck_has_self_gy_cast = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && !d->params.gy_self_cast_requires_control_subtype.empty()) { return true; }
         }
         return false;
     }();

@@ -35703,6 +35703,26 @@ enum : uint64_t {
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
 
+static std::optional<uint64_t> SelfGyCastKey(const GameState& state, int controller)
+{
+    if ((state.deck_gy_readers & GyR_GyCastNames) == 0) { return std::nullopt; }
+    int mana = -1;
+    for (const GyCastOption& o : GyCastOptionsNow(state, controller))
+    {
+        if (o.source_id != kGySelfCastSourceId) { continue; }
+        if (mana < 0)
+        {
+            ManaPool have = AvailableManaPool(state);
+            have.AddPool(state.floating_mana);
+            mana = static_cast<int>(have.Total());
+        }
+        if (GraveyardCastSpellCost(*o.def, state).ManaValue() > mana) { continue; }
+        return ActKey(o.card->m_number, kActGyCast)
+             ^ (static_cast<uint64_t>(state.gy_self_cast_epoch) << 40);
+    }
+    return std::nullopt;
+}
+
 // Lazily priced: the total is only needed once a permanent actually offers a mana-costed ability,
 // and most applies never reach one. Total-only (not colour-exact) for the reason the old gate gave:
 // a colour miss just yields an empty continuation, whereas a colour-exact test could disagree
@@ -36282,6 +36302,7 @@ std::vector<uint64_t> TurnSolver::SnapshotActivatableAbilities(const GameState& 
         if (p.controller_index != ctrl || p.card.m_number == 0) { continue; }
         CollectActivationKeys(state, ctrl, p, total_cache, out);
     }
+    if (const auto key = SelfGyCastKey(state, ctrl)) { out.push_back(*key); }
     // A companion moved from outside the game into hand is a new same-main
     // option. The selected copy keeps its number there; an ordinary main-deck
     // Kaheera or an unselected wish copy never carries this key.
@@ -36402,6 +36423,8 @@ bool TurnSolver::PostEntryActivationPending(const GameState& state,
             }
         }
     }
+    if (const auto key = SelfGyCastKey(state, ctrl))
+    { if (!std::binary_search(pre_plan_keys.begin(), pre_plan_keys.end(), *key)) { return true; } }
     for (const Card& c : state.players[ctrl].hand)
     {
         if (c.m_number != 300000 || c.m_name != "Kaheera, the Orphanguard") { continue; }
@@ -48890,6 +48913,29 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 Action v   = a;
                 v.chosen_x = t.card.m_number;
                 v.eval     = a.eval - 1;   // converting trades a permanent for one mana: rarely right
+                actions.push_back(std::move(v));
+            }
+            continue;
+        }
+        if (def.params.etb_each_player_sacrifice_creature)
+        {
+            // Zero names the entrant; positive IDs name live permanents. Negative
+            // hand pins let a creature cast earlier in this same plan be chosen.
+            { Action v = a; v.chosen_x = 0; actions.push_back(std::move(v)); }
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != state.active_player_index || !q.card.IsCreature()) { continue; }
+                Action v = a;
+                v.chosen_x = q.card.m_number;
+                actions.push_back(std::move(v));
+            }
+            for (const Card& c : ap.hand)
+            {
+                if (!c.IsCreature() || (a.hand_index >= 0
+                    && a.hand_index < static_cast<int>(ap.hand.size())
+                    && c.m_number == ap.hand[static_cast<std::size_t>(a.hand_index)].m_number)) { continue; }
+                Action v = a;
+                v.chosen_x = -1000000 - c.m_number;
                 actions.push_back(std::move(v));
             }
             continue;
@@ -75062,7 +75108,8 @@ static const char* HumanStepLabel(const Action& a)
     switch (a.kind)
     {
         case K::CastFromHand:      return "cast";
-        case K::CastFromGraveyard: return a.gy_cast_source_id >= 0 ? "graveyard cast (Lurrus)" : "retrace";
+        case K::CastFromGraveyard: return a.gy_cast_source_id == kGySelfCastSourceId
+            ? "graveyard cast" : a.gy_cast_source_id >= 0 ? "graveyard cast (Lurrus)" : "retrace";
         case K::ActivateVial:      return "Vial put";
         case K::DiscardToLandsEdge:return "Land's Edge discard";
         case K::Equip:             return "equip";
@@ -75346,7 +75393,7 @@ const char* TurnSolver::HumanStepVerbFor(Action::Kind k)
     switch (k)
     {
         case K::CastFromHand:           return "cast";
-        case K::CastFromGraveyard:      return "retrace";
+        case K::CastFromGraveyard:      return "gycast";
         case K::ActivateVial:           return "vial";
         case K::DiscardToLandsEdge:     return "le";
         case K::Suspend:                return "suspend";
@@ -80630,6 +80677,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (def.params.kicked_enters_with_plus_counters > 0)
                 { PutPlusCounters(state, perm, def.params.kicked_enters_with_plus_counters); }
             }
+            // The executor applies enters_tapped to every cast permanent. The
+            // creature rollout must do the same, including an enter-as-copy whose
+            // copied face (rather than the printed spell) supplies that ability.
+            const CardDefinition* entered_def = CardDatabase::Instance().LookupCached(perm.card);
+            if (entered_def && entered_def->params.enters_tapped) { perm.tapped = true; }
             // DEVOUR (CR 702.81, Mycoloth): an AS-ENTERS replacement, applied in this pre-push
             // window so the fodder is gone and the counters are on before the watchers see the body.
             // Lockstep twin: EffectHandler::EnterBattlefield. The counters route through
@@ -82472,7 +82524,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             const DrawAttemptResult draw = AttemptDrawIntoHand(state, me, HandEntryReason::Draw);
             if (!draw.satisfied) { state.player_lost_on_draw = true; }
-            if (draw.drew) { ++ap.cards_drawn_this_turn; }
+            ap.cards_drawn_this_turn += draw.drawn_count;
             if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
             ResolvePendingMiracle(state);
         }
@@ -83569,10 +83621,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 const DrawAttemptResult draw = AttemptDrawIntoHand(state, state.active_player_index,
                                                                     HandEntryReason::Draw);
                 if (!draw.satisfied) { state.player_lost_on_draw = true; }
-                if (draw.drew) { ++ap.cards_drawn_this_turn; }
+                ap.cards_drawn_this_turn += draw.drawn_count;
                 // Human-play accurate draw reporting (nulled by RevealLogPause during search).
-                if (draw.drew && g_play_draw_sink)
-                { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
+                if (g_play_draw_sink) { ForEachActualDraw(draw, [&](int, const InternedName& name, bool)
+                    { g_play_draw_sink->push_back({ state.turn_number, name.str() }); }); }
                 if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // the Niv loop (executor twin: PerformDig)
                 ResolvePendingMiracle(state);
             }
@@ -85908,13 +85960,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const DrawAttemptResult draw = AttemptDrawIntoHand(state, state.active_player_index,
                                                                 HandEntryReason::Draw);
             if (!draw.satisfied) { state.player_lost_on_draw = true; break; }
-            if (draw.drew) { ++ap.cards_drawn_this_turn; }
-            drew_land = draw.drew && draw.card_is_land;
-            if (drop_hook && drew_land && ap.lands_played_this_turn < ap.LandDropsAvailable())
+            ap.cards_drawn_this_turn += draw.drawn_count;
+            drew_land = false;
+            ForEachActualDraw(draw, [&](int number, const InternedName& name, bool is_land)
             {
-                chain_lands.push_back(draw.card_number);
-                drawn_land_name = draw.card_name.str();
-            }
+                if (!is_land) { return; }
+                drew_land = true;
+                if (drop_hook && ap.lands_played_this_turn < ap.LandDropsAvailable())
+                { chain_lands.push_back(number); drawn_land_name = name.str(); }
+            });
             if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // the Niv loop (executor twin: PerformDig)
             ResolvePendingMiracle(state);
             }
@@ -87370,7 +87424,7 @@ static bool SimulateUpkeepAfterArrivals(GameState& state)
     const DrawAttemptResult turn_draw = AttemptDrawIntoHand(state, state.active_player_index,
                                                             HandEntryReason::DrawStep);
     if (!turn_draw.satisfied) { return false; }
-    if (turn_draw.drew) { ap.cards_drawn_this_turn += 1; }
+    ap.cards_drawn_this_turn += turn_draw.drawn_count;
     if (state.deck_has_turn_gods) { FlushKeranosTriggers(state); }
     ResolvePendingMiracle(state);
     DrawHowlingMineCards(state, state.active_player_index);
@@ -88867,6 +88921,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.etb_blink_permanent) { w.Put("#F"); w.Int(act.chosen_x); }
                 if (d && CastCarriesEtbChoice(*d)) { w.Put("#EC"); w.Int(act.chosen_x); }
                 if (d && d->params.etb_treasurify_each_player) { w.Put("#L"); w.Int(act.chosen_x); }
+                if (d && d->params.etb_each_player_sacrifice_creature) { w.Put("#FB"); w.Int(act.chosen_x); }
                 if (act.devour_count >= 0) { w.Put("#D"); w.Int(act.devour_count); }
                 if (act.attach_equip_id != 0)
                 {
@@ -94567,6 +94622,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         // Kitesail Larcenist: distinct Treasure targets (and "none", and the
                         // human-only choose-on-resolution variant) are DISTINCT plans; gated.
                         if (cd && cd->params.etb_treasurify_each_player) { k += "#L"; k += std::to_string(act.chosen_x); }
+                        if (cd && cd->params.etb_each_player_sacrifice_creature) { k += "#FB"; k += std::to_string(act.chosen_x); }
                         // MYCOLOTH'S DEVOUR COUNT (CR 702.81): "devour 0" and "devour 5" are
                         // DIFFERENT SPELLS -- different board, different permanent, different clock.
                         // Exactly the #S/#V/#K/#B/#X/#F case, and it was simply never added here.
@@ -97393,7 +97449,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     // direction, as this predicate's contract requires: any non-cast action while a permission is open
     // on our battlefield or cast by this plan. A Lurrus CAST is marked by CardHasPostEntryActivation, a
     // graveyard cast of an activatable card by the same. Deck-gated (GyR_GyCastNames).
-    bool gy_cast_live = false;
+    bool gy_cast_live = state.deck_has_self_gy_cast;
     if ((state.deck_gy_readers & GyR_GyCastNames) != 0 && TurnSolver::PostEntryBreakpointClassOn())
     {
         for (const Permanent& perm : state.battlefield)
@@ -97421,6 +97477,17 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         if (gy_cast_live && a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
             && a.kind != Action::Kind::PlayLand && a.kind != Action::Kind::ActivateVial)
         { mask |= 1 << 9; }
+        if (state.deck_has_self_gy_cast
+            && (a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard))
+        {
+            const CardDefinition* cast = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (cast && cast->params.sac_additional_creature) { mask |= 1 << 9; }
+        }
+        if (state.deck_has_self_gy_cast && a.kind == Action::Kind::CastFromGraveyard)
+        {
+            const CardDefinition* cast = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (cast && !cast->params.gy_self_cast_requires_control_subtype.empty()) { mask |= 1 << 9; }
+        }
         if (a.kind == Action::Kind::ActivateLoyalty)
         {
             const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);

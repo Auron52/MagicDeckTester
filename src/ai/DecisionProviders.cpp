@@ -28103,6 +28103,7 @@ namespace
     // Stateless, read-only -> single shared const instances are thread-safe (same model as
     // CardDatabase). Process lifetime, so GameState's raw pointer stays valid.
     const GenericProvider        g_generic;
+    const ZombiesProvider        g_zombies;
     const MillProvider           g_mill;
     const ExtraTurnsProvider     g_extra_turns;
     const KithkinProvider        g_kithkin;
@@ -31847,7 +31848,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // has since gained real judgement hooks too (sac outlets, the devour ladder, the main-phase split,
     // the USER's cleanup-discard buckets), so it is no longer "Generic plus one override".
     if (gods)        { return g_gods; }
-    if (zombies)     { return g_generic; }
+    if (zombies)     { return g_zombies; }
     if (fungus)      { return g_fungus; }
     if (eldrazi)     { return g_eldrazi_flicker; }
     if (dragonstorm) { return g_dragonstorm; }

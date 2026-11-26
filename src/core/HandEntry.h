@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <vector>
 
 // ================================================================================================
 // ONE CHOKE POINT FOR EVERY CARD THAT ENTERS A HAND
@@ -374,10 +375,27 @@ struct DrawAttemptResult
     int card_number = 0;
     InternedName card_name;
     bool card_is_land = false;
+    struct ActualCard { int number; InternedName name; bool is_land; };
+    int drawn_count = 0;
+    // Empty on the ordinary one-card path. A replacement that draws several
+    // cards records all of them in order for counters, logs and dig decisions.
+    std::vector<ActualCard> replacement_draws;
 };
 
-inline DrawAttemptResult AttemptDrawIntoHand(GameState& state, int player_index,
-                                             HandEntryReason why, int prior_batch_draws = 0)
+template<class Fn>
+inline void ForEachActualDraw(const DrawAttemptResult& result, Fn&& fn)
+{
+    if (!result.replacement_draws.empty())
+    {
+        for (const auto& card : result.replacement_draws)
+        { fn(card.number, card.name, card.is_land); }
+    }
+    else if (result.drew)
+    { fn(result.card_number, result.card_name, result.card_is_land); }
+}
+
+inline DrawAttemptResult AttemptOneDrawIntoHand(GameState& state, int player_index,
+                                                HandEntryReason why, int prior_batch_draws)
 {
     Player& p = state.players[player_index];
     // THE PER-TURN DRAW CAP (Spirit of the Labyrinth; core/DrawCap.h). A draw past the cap is IGNORED:
@@ -484,6 +502,75 @@ inline DrawAttemptResult AttemptDrawIntoHand(GameState& state, int player_index,
     return {true, true, number, name, is_land};
 }
 
+inline DrawAttemptResult AttemptDrawReplacementChain(GameState& state, int player_index,
+                                                     HandEntryReason why, int prior_batch_draws,
+                                                     int remaining_scriveners)
+{
+    Player& p = state.players[player_index];
+    if (remaining_scriveners > 0 && p.hand.empty()
+        && !drawcap::Blocks(state, player_index, prior_batch_draws))
+    {
+        // One replacement changes this draw into two NEW draw events followed
+        // by one life loss. The same Scrivener cannot reapply to either event;
+        // each remaining copy may apply while the hand is still empty.
+        DrawAttemptResult out;
+        out.satisfied = true;
+        for (int i = 0; i < 2; ++i)
+        {
+            DrawAttemptResult part = AttemptDrawReplacementChain(
+                state, player_index, why, prior_batch_draws + out.drawn_count,
+                remaining_scriveners - 1);
+            out.satisfied = out.satisfied && part.satisfied;
+            if (part.drew && !out.drew)
+            {
+                out.drew = true;
+                out.card_number = part.card_number;
+                out.card_name = part.card_name;
+                out.card_is_land = part.card_is_land;
+            }
+            out.drawn_count += part.drawn_count;
+            if (part.replacement_draws.empty())
+            {
+                if (part.drew)
+                { out.replacement_draws.push_back({part.card_number, part.card_name, part.card_is_land}); }
+            }
+            else
+            {
+                out.replacement_draws.insert(out.replacement_draws.end(),
+                    part.replacement_draws.begin(), part.replacement_draws.end());
+            }
+        }
+        --p.life;
+        return out;
+    }
+    DrawAttemptResult one = AttemptOneDrawIntoHand(state, player_index, why, prior_batch_draws);
+    one.drawn_count = one.drew ? 1 : 0;
+    return one;
+}
+
+inline DrawAttemptResult AttemptDrawIntoHand(GameState& state, int player_index,
+                                             HandEntryReason why, int prior_batch_draws = 0)
+{
+    if (state.deck_has_empty_hand_draw_replacement
+        && (why == HandEntryReason::Draw || why == HandEntryReason::DrawStep)
+        && state.players[player_index].hand.empty()
+        && !drawcap::Blocks(state, player_index, prior_batch_draws))
+    {
+        int scriveners = 0;
+        for (const Permanent& permanent : state.battlefield)
+        {
+            if (permanent.controller_index != player_index || permanent.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(permanent.card);
+            if (d && d->params.empty_hand_draw_two_lose_one) { ++scriveners; }
+        }
+        if (scriveners > 0)
+        { return AttemptDrawReplacementChain(state, player_index, why, prior_batch_draws, scriveners); }
+    }
+    DrawAttemptResult one = AttemptOneDrawIntoHand(state, player_index, why, prior_batch_draws);
+    one.drawn_count = one.drew ? 1 : 0;
+    return one;
+}
+
 struct DrawBatchResult
 {
     int satisfied = 0;
@@ -497,11 +584,19 @@ inline DrawBatchResult DrawIntoHandDetailed(GameState& state, int player_index,
     for (int i = 0; i < n; ++i)
     {
         const DrawAttemptResult result = AttemptDrawIntoHand(state, player_index, why, batch.drawn);
+        batch.drawn += result.drawn_count;
+        if (actual_draws != nullptr)
+        {
+            if (!result.replacement_draws.empty())
+            {
+                for (const auto& card : result.replacement_draws)
+                { actual_draws->push_back({card.number, card.name}); }
+            }
+            else if (result.drew)
+            { actual_draws->push_back({result.card_number, result.card_name}); }
+        }
         if (!result.satisfied) { break; }
         ++batch.satisfied;
-        batch.drawn += result.drew ? 1 : 0;
-        if (result.drew && actual_draws != nullptr)
-        { actual_draws->push_back({result.card_number, result.card_name}); }
     }
     return batch;
 }

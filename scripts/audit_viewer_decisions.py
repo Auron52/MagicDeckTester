@@ -377,6 +377,9 @@ MANIFEST = {
     # Scavenging Ooze: WHICH graveyard card to exile (and how many activations) are independent
     # main_phase plan actions, one per distinct graveyard name (Action::GraveyardExileGrow).
     "gy_exile_grow_cost":    ("main_phase",           truthy),
+    "gy_exile_creature_zombie_cost": ("main_phase", truthy),  # Cemetery Reaper: target graveyard creature is a plan action
+    "gy_self_cast_requires_control_subtype": ("main_phase", truthy),  # Gravecrawler: graveyard cast is a plan action
+    "gy_self_return_battlefield_cost": ("main_phase", truthy),  # Dread Wanderer: graveyard activation is a plan action
     "grants_tap_mill_toughness": ("main_phase", truthy),
     "pharika_exile_cost":   ("main_phase",           truthy),
     "bronze_put_cost":      ("main_phase",           truthy),
@@ -393,6 +396,7 @@ MANIFEST = {
     # side (always) and the own side on an Aether Vial put surface the `treasurify` board-pick
     # chooser (g_play_treasurify_chooser in FireOwnEtbTriggers, reply -1 = none), wired 2026-09-26.
     "etb_treasurify_each_player": ("treasurify",      truthy),
+    "etb_each_player_sacrifice_creature": ("sacrifice", truthy),  # Fleshbag: board-click victim choice
     # Ranger of Eos: the up-to-two pick surfaces through the existing sac_tutor multi-pick
     # chooser at resolution (PerformEtbTutorToHandMulti), on the cast and the put path alike.
     "etb_tutor_hand_count":  ("sac_tutor",            positive),
@@ -1184,6 +1188,10 @@ INERT_PARAMS = {
     "team_base_pt_power": "Allosaurus Shepherd -- the printed 5 of 'base power and toughness 5/5' (rides team_base_pt_cost -> main_phase), no choice",
     "team_base_pt_tough": "Allosaurus Shepherd -- the printed 5 toughness (rides team_base_pt_cost), no choice",
     "team_base_pt_subtype": "Allosaurus Shepherd -- 'each Elf creature you control': every matching creature, fixed (rides team_base_pt_cost), no choice",
+    "empty_hand_draw_two_lose_one": "Blood Scrivener's mandatory draw replacement has no player choice",
+    "etb_drain_devotion_color": "Gray Merchant's mandatory devotion drain has no player choice",
+    "grants_deathtouch": "Death Baron's static keyword grant has no player choice",
+    "gy_self_return_hand_max": "Dread Wanderer's hand-size legality condition; the activation choice rides gy_self_return_battlefield_cost",
     # Maze's End (I1, 2026-11-17).
     "damage_all_creatures_x_per_subtype": "Gates Ablaze -- an untargeted symmetric sweep ('each creature'), X fixed by the Gates you control at resolution: no target, no mode, no division, no 'may'. The only decision is whether to cast it (main_phase)",
     "alt_win_distinct_named_subtype": "Maze's End's win condition subtype -- a mandatory rules check at resolution, no choice",

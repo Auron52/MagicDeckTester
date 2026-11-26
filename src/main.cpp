@@ -969,12 +969,26 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     else if (a.chosen_x == kEtbKxHeuristic) { tag += " (Treasure: choose on resolution)"; }
                     else { tag += " (no Treasure)"; }
                 }
+                else if (const CardDefinition* ld = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                         ld && ld->params.etb_each_player_sacrifice_creature)
+                {
+                    std::string victim = "Fleshbag Marauder";
+                    if (a.chosen_x > 0) { victim = AuraHostLabel(s, a.chosen_x); }
+                    else if (a.chosen_x <= -1000000)
+                    {
+                        const int number = -1000000 - a.chosen_x;
+                        for (const Card& c : s.players[s.active_player_index].hand)
+                        { if (c.m_number == number) { victim = c.m_name.str(); break; } }
+                    }
+                    tag += " (sacrifice " + victim + ")";
+                }
                 break;
             }
             case Action::Kind::CastFromGraveyard:
             {
                 const CardDefinition* gd = CardDatabase::Instance().Lookup(a.card_name.str());
-                tag = a.card_name + (a.gy_cast_source_id >= 0 ? " (from graveyard, Lurrus)"
+                tag = a.card_name + (a.gy_cast_source_id == kGySelfCastSourceId ? " (from graveyard)"
+                                   : a.gy_cast_source_id >= 0 ? " (from graveyard, Lurrus)"
                                    : gd && gd->params.flashback_cost ? " (flashback)" : " (retrace)");
                 break;
             }
@@ -1839,10 +1853,15 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
     // makes them clickable in the graveyard zone (the `gycast=` verb). Absent when there are none, so
     // every other deck's state JSON is byte-identical.
     {
-        std::vector<std::string> gc;
+        std::vector<std::string> gc, self_gc;
         for (const GyCastOption& o : GyCastOptionsNow(s, s.active_player_index))
-        { gc.push_back(o.card->m_name); }
+        {
+            gc.push_back(o.card->m_name);
+            if (o.source_id == kGySelfCastSourceId) { self_gc.push_back(o.card->m_name); }
+        }
         if (!gc.empty()) { std::sort(gc.begin(), gc.end()); os << ", \"gycast_gy\": "; JsonNameArray(os, gc); }
+        if (!self_gc.empty())
+        { std::sort(self_gc.begin(), self_gc.end()); os << ", \"self_gycast_gy\": "; JsonNameArray(os, self_gc); }
     }
     // Eternalize (Timeless Witness): graveyard cards with an eternalize cost -- the GUI makes them
     // clickable in the graveyard zone (the `eternalize=` verb). Absent when there are none, so every
@@ -3719,7 +3738,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 os << ", \"burn_target\": "; JsonStr(os, FixedBurnPinLabel(s, s.active_player_index, burn_pin));
             }
             else if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
-            if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
+            if (ac.chosen_x > 0 && !(ac.def && ac.def->params.etb_each_player_sacrifice_creature))
+            { os << ", \"x\": " << ac.chosen_x; }
             // Kitesail Larcenist: the searched own-side Treasure target (0 = none, -2 = choose on
             // resolution), named, so the GUI and a claude-play agent can tell the variants apart.
             if (const CardDefinition* ld = ac.def ? ac.def : CardDatabase::Instance().Lookup(ac.card_name);
@@ -3728,6 +3748,19 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 os << ", \"treasurify_target\": " << ac.chosen_x;
                 if (ac.chosen_x > 0)
                 { os << ", \"treasurify_target_label\": "; JsonStr(os, AuraHostLabel(s, ac.chosen_x)); }
+            }
+            if (const CardDefinition* ld = ac.def ? ac.def : CardDatabase::Instance().Lookup(ac.card_name);
+                ac.kind == Action::Kind::CastFromHand && ld && ld->params.etb_each_player_sacrifice_creature)
+            {
+                std::string victim = "Fleshbag Marauder";
+                if (ac.chosen_x > 0) { victim = AuraHostLabel(s, ac.chosen_x); }
+                else if (ac.chosen_x <= -1000000)
+                {
+                    const int number = -1000000 - ac.chosen_x;
+                    for (const Card& c : s.players[s.active_player_index].hand)
+                    { if (c.m_number == number) { victim = c.m_name.str(); break; } }
+                }
+                os << ", \"sacrifice_target_label\": "; JsonStr(os, victim);
             }
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
             // `soulfire_own_targets` is an OVERLOADED int (TurnSolver.h:335). For Soulfire Eruption it

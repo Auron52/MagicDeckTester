@@ -661,6 +661,9 @@ struct GameState
     // site moved to TurnSeq() is byte-identical by construction.
     bool                     deck_has_extra_turn          = false;
     bool                     deck_has_miracle             = false;
+    bool                     deck_has_empty_hand_draw_replacement = false;
+    std::uint16_t            gy_self_cast_epoch = 0;
+    bool                     deck_has_self_gy_cast = false;
     // -1 = unpinned playout; 0 = decline; 1 = cast if payable.
     std::int8_t              scripted_miracle_choice      = -1;
     bool                     in_extra_turn                = false;

@@ -10636,10 +10636,14 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
     const DrawAttemptResult draw = AttemptDrawIntoHand(state, state.active_player_index,
                                                        HandEntryReason::Draw);
     if (!draw.satisfied) { state.player_lost_on_draw = true; return DigOutcome::Failed; }
-    if (draw.drew) { ++ap.cards_drawn_this_turn; }
-    const bool drew_land = draw.drew && draw.card_is_land;
-    if (draw.drew && m_logger) { m_logger->LogDraw(draw.card_number, draw.card_name); }
-    const int drawn_num = draw.drew ? draw.card_number : 0;
+    ap.cards_drawn_this_turn += draw.drawn_count;
+    bool drew_land = false;
+    int drawn_num = 0;
+    ForEachActualDraw(draw, [&](int number, const InternedName& name, bool is_land)
+    {
+        if (is_land) { drew_land = true; drawn_num = number; }
+        if (m_logger) { m_logger->LogDraw(number, name); }
+    });
     if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // the Niv loop (rollout twins: both dig loops)
     ResolvePendingMiracle(state, m_logger);
     LandDrawCensusAfterDig(state, drew_land, drawn_num);   // MTG_LANDDRAW_CENSUS (diagnostic only)
@@ -11070,6 +11074,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // Param-gated: no other deck's stack entries move.
     if (chosen_x > 0 || chosen_x == kEtbKxHeuristic || def->params.etb_blink_permanent
         || def->params.etb_treasurify_each_player
+        || def->params.etb_each_player_sacrifice_creature
         || def->params.reveal_x_put_permanents)
     { entry.chosen_x = chosen_x; }
     // Soulfire Eruption: carry the searched own-creature target count so EffectHandler's dig

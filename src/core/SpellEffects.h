@@ -15243,10 +15243,17 @@ inline void DrawForPlayedLand(GameState& state, int player, GameLogger* logger =
             else { state.opponent_decked = true; }
             break;
         }
-        DrawIntoHand(state, player, 1, HandEntryReason::Draw);
-        ++state.players[player].cards_drawn_this_turn;
+        std::vector<std::pair<int, InternedName>> actual;
+        const DrawBatchResult drawn = DrawIntoHandDetailed(state, player, 1, HandEntryReason::Draw, &actual);
+        state.players[player].cards_drawn_this_turn += drawn.drawn;
         if (player == 0 && g_play_draw_sink)
-        { g_play_draw_sink->push_back({ state.turn_number, state.players[player].hand.back().m_name.str() }); }
+        { for (const auto& card : actual) { g_play_draw_sink->push_back({ state.turn_number, card.second.str() }); } }
+        if (drawn.satisfied == 0)
+        {
+            if (player == state.active_player_index) { state.player_lost_on_draw = true; }
+            else { state.opponent_decked = true; }
+            break;
+        }
         if (player == state.active_player_index) { ResolvePendingMiracle(state, logger); }
     }
 }
@@ -15276,10 +15283,17 @@ inline void DrawHowlingMineCards(GameState& state, int player, GameLogger* logge
             else { state.opponent_decked = true; }
             break;
         }
-        DrawIntoHand(state, player, 1, HandEntryReason::Draw);
-        ++state.players[player].cards_drawn_this_turn;
+        std::vector<std::pair<int, InternedName>> actual;
+        const DrawBatchResult drawn = DrawIntoHandDetailed(state, player, 1, HandEntryReason::Draw, &actual);
+        state.players[player].cards_drawn_this_turn += drawn.drawn;
         if (player == 0 && g_play_draw_sink)
-        { g_play_draw_sink->push_back({ state.turn_number, state.players[player].hand.back().m_name.str() }); }
+        { for (const auto& card : actual) { g_play_draw_sink->push_back({ state.turn_number, card.second.str() }); } }
+        if (drawn.satisfied == 0)
+        {
+            if (player == state.active_player_index) { state.player_lost_on_draw = true; }
+            else { state.opponent_decked = true; }
+            break;
+        }
         if (player == state.active_player_index) { ResolvePendingMiracle(state, logger); }
     }
 }
@@ -15339,6 +15353,8 @@ inline int ConsumeProphetsChampionPin()
         : g_prophets_champion_pins != nullptr ? -2 : -1;
 }
 inline void ResolveMerfolkChampion(GameState& state, int controller, int entered_index);
+inline void ResolveEachPlayerSacrificeCreatureEtb(GameState& state, int controller,
+                                                 int entering_number, int pinned_victim);
 namespace dmgrx { inline void EtbChoosePlayer(GameState& s, int controller, int entered_index,
                                               const CardDefinition& def, int etb_kx); }   // DamageReflection.h
 inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered_index,
@@ -16997,6 +17013,8 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     // reach of the body's early returns). One pointer test for every other entrant.
     const CardDefinition* devil_def = nullptr;
     int devil_number = 0;
+    bool fleshbag_etb = false;
+    int fleshbag_number = 0;
     if (entered_index >= 0 && entered_index < static_cast<int>(state.battlefield.size()))
     {
         const Permanent& ep = state.battlefield[static_cast<std::size_t>(entered_index)];
@@ -17004,11 +17022,15 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         if (ed != nullptr && !ed->params.champion_subtype.empty()) { champ_def = ed; champ_number = ep.card.m_number; }
         if (ed != nullptr && ed->params.etb_opp_may_take_damage_to_sac > 0
             && ep.controller_index == controller) { devil_def = ed; devil_number = ep.card.m_number; }
+        if (ed != nullptr && ed->params.etb_each_player_sacrifice_creature)
+        { fleshbag_etb = true; fleshbag_number = ep.card.m_number; }
     }
     ++g_own_etb_depth;
     FireOwnEtbTriggersBody(state, controller, entered_index, chosen_tutor, etb_kx);
     if (champ_def != nullptr) { ResolveChampionEtb(state, controller, champ_number, *champ_def); }
     if (devil_def != nullptr) { ResolveVexingDevilEtb(state, controller, devil_number, *devil_def); }
+    if (fleshbag_etb)
+    { ResolveEachPlayerSacrificeCreatureEtb(state, controller, fleshbag_number, etb_kx); }
     --g_own_etb_depth;
     if (g_own_etb_depth == 0 && !g_pending_look_top.empty()) { DrainPendingLookTop(state); }
 }
@@ -20909,6 +20931,20 @@ inline bool GyCastSpellLegal(int max_mv, const CardDefinition& spell)
     return c.m_mana_cost.ManaValue() <= max_mv;
 }
 
+inline constexpr int kGySelfCastSourceId = 32767; // reserved int16 action source
+inline bool GySelfCastLegal(const GameState& state, int controller, const CardDefinition& spell)
+{
+    const std::string& subtype = spell.params.gy_self_cast_requires_control_subtype;
+    if (subtype.empty() || state.active_player_index != controller) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.IsCreature()
+            && (p.AnimatedAllTypes() || CardHasSubtype(p.card, subtype)))
+        { return true; }
+    }
+    return false;
+}
+
 // The battlefield index of `controller`'s permission source `source_id` with its use still OPEN this
 // turn, or -1 (gone, not ours, used, or not a permission carrier). "Each of YOUR turns": only the
 // active player's own permission is ever live.
@@ -20932,6 +20968,8 @@ inline int GyCastPermissionSourceIndex(const GameState& state, int controller, i
 inline bool GyCastPermissionLegal(const GameState& state, int controller, int source_id,
                                   const CardDefinition& spell)
 {
+    if (source_id == kGySelfCastSourceId)
+    { return GySelfCastLegal(state, controller, spell); }
     const int i = GyCastPermissionSourceIndex(state, controller, source_id);
     if (i < 0) { return false; }
     const CardDefinition* d =
@@ -20943,6 +20981,13 @@ inline bool GyCastPermissionLegal(const GameState& state, int controller, int so
 // the graveyard). A source that left during payment has nothing left to spend.
 inline void ConsumeGyCastPermission(GameState& state, int controller, int source_id)
 {
+    if (source_id == kGySelfCastSourceId)
+    {
+        // A recast Gravecrawler can die again in this same main. Distinguish its
+        // renewed permission from the one available at plan start for site 9.
+        ++state.gy_self_cast_epoch;
+        return;
+    }
     const int i = GyCastPermissionSourceIndex(state, controller, source_id);
     if (i >= 0) { state.battlefield[static_cast<std::size_t>(i)].once_per_turn_used = true; }
 }
@@ -20974,6 +21019,18 @@ inline std::vector<GyCastOption> GyCastOptionsNow(const GameState& state, int co
             for (std::size_t k = first; k < out.size(); ++k) { if (out[k].card->m_name == gc.m_name) { dup = true; break; } }
             if (!dup) { out.push_back(GyCastOption{ p.card.m_number, &gc, gd }); }
         }
+    }
+    // Gravecrawler's self-permission has no battlefield source and no once-per-
+    // turn limit. Offer it alongside Lurrus casts, with its own reserved source.
+    const std::size_t self_first = out.size();
+    for (const Card& gc : gy)
+    {
+        const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
+        if (!gd || !GySelfCastLegal(state, controller, *gd)) { continue; }
+        bool duplicate = false;
+        for (std::size_t k = self_first; k < out.size(); ++k)
+        { if (out[k].card->m_name == gc.m_name) { duplicate = true; break; } }
+        if (!duplicate) { out.push_back(GyCastOption{ kGySelfCastSourceId, &gc, gd }); }
     }
     return out;
 }
@@ -21804,6 +21861,100 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     OnCreatureDies(state, controller, dead, was_tok, dead_m1, nullptr, dead_total, dead_owner);
     // A sacrificed LORD drops what it held above 0 toughness (item B (a); see SweepZeroToughnessSba).
     if (LordLeaveSbaOn() && CardIsLord(dead)) { SweepZeroToughnessSba(state); }
+}
+
+// Fleshbag Marauder's two choices are made from the same battlefield snapshot. Each player's
+// creature is then removed before either set of death triggers is delivered. A cast pin of zero
+// chooses Fleshbag itself; positive pins name another own creature. Put effects use the heuristic.
+inline void ResolveEachPlayerSacrificeCreatureEtb(GameState& state, int controller,
+                                                 int entering_number, int pinned_victim)
+{
+    struct Victim { Permanent permanent; int index; };
+    std::vector<Victim> victims;
+    for (int side = 0; side < 2; ++side)
+    {
+        const int who = side == 0 ? controller : 1 - controller;
+        std::vector<int> legal;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.controller_index == who && q.card.IsCreature()) { legal.push_back(i); }
+        }
+        if (legal.empty()) { continue; }
+        int choice = legal.front();
+        // A token is usually the least costly sacrifice; keep the choice deterministic in search.
+        for (int i : legal)
+        { if (state.battlefield[static_cast<std::size_t>(i)].is_token) { choice = i; break; } }
+        if (side == 0 && pinned_victim != -1)
+        {
+            if (pinned_victim == 0)
+            {
+                for (int i : legal)
+                { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == entering_number)
+                  { choice = i; break; } }
+            }
+            else if (pinned_victim <= -1000000)
+            {
+                const int wanted_number = -1000000 - pinned_victim;
+                for (int i : legal)
+                { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == wanted_number)
+                  { choice = i; break; } }
+            }
+            else
+            {
+                for (int i : legal)
+                { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == pinned_victim)
+                  { choice = i; break; } }
+            }
+        }
+        if (side == 0 && g_play_sacrifice_chooser && !g_tap_speculating && legal.size() > 1)
+        {
+            int def = 0;
+            for (int j = 0; j < static_cast<int>(legal.size()); ++j)
+            { if (legal[static_cast<std::size_t>(j)] == choice) { def = j; break; } }
+            const int selected = (*g_play_sacrifice_chooser)(state, who, "Fleshbag Marauder", legal, def);
+            if (selected >= 0 && selected < static_cast<int>(legal.size()))
+            { choice = legal[static_cast<std::size_t>(selected)]; }
+        }
+        victims.push_back({state.battlefield[static_cast<std::size_t>(choice)], choice});
+    }
+    if (victims.empty()) { return; }
+    // Remove in descending index order, then fire all sacrifice and dies triggers. This models
+    // simultaneous sacrifice even when a death trigger makes another creature.
+    std::sort(victims.begin(), victims.end(), [](const Victim& a, const Victim& b)
+        { return a.index > b.index; });
+    for (const Victim& v : victims)
+    {
+        if (v.permanent.unearthed)
+        { state.exile.push_back(v.permanent.card); }
+        else
+        { state.players[v.permanent.owner_index].graveyard.push_back(RevealedCard(v.permanent.card)); }
+        state.battlefield.erase(state.battlefield.begin() + v.index);
+    }
+    for (const Victim& v : victims)
+    {
+        for (Permanent& q : state.battlefield)
+        {
+            if (q.equipped_to == v.permanent.card.m_number) { q.equipped_to = 0; }
+            if (q.aura_attached_to == v.permanent.card.m_number) { q.aura_attached_to = 0; }
+        }
+    }
+    for (const Victim& v : victims)
+    {
+        FireSacrificeWatchers(state, v.permanent.controller_index);
+        if (v.permanent.unearthed) { UnearthedLeftBattlefield(state, v.permanent); }
+        else
+        {
+            OnCreatureDies(state, v.permanent.controller_index, v.permanent.card, v.permanent.is_token,
+                           MinusCountersOn(v.permanent), nullptr, DyingCountersTotal(v.permanent),
+                           v.permanent.owner_index);
+        }
+    }
+    if (LordLeaveSbaOn())
+    {
+        for (const Victim& v : victims)
+        { if (CardIsLord(v.permanent.card)) { SweepZeroToughnessSba(state); break; } }
+    }
 }
 
 inline void ResolveMerfolkChampion(GameState& state, int controller, int entered_index)
@@ -28518,9 +28669,9 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
         {
             const DrawAttemptResult draw = AttemptDrawIntoHand(state, controller, HandEntryReason::Draw);
             if (!draw.satisfied) { state.player_lost_on_draw = true; return; }
-            if (draw.drew) { ++pl.cards_drawn_this_turn; }
-            if (draw.drew && g_play_draw_sink)
-            { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
+            pl.cards_drawn_this_turn += draw.drawn_count;
+            if (g_play_draw_sink) { ForEachActualDraw(draw, [&](int, const InternedName& name, bool)
+                { g_play_draw_sink->push_back({ state.turn_number, name.str() }); }); }
         }
     }
     // SUMMON: LEVIATHAN II / III (Sea Creatures I3): "Until end of turn, whenever a Kraken, Leviathan, Merfolk,
@@ -28547,9 +28698,9 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
             {
                 const DrawAttemptResult draw = AttemptDrawIntoHand(state, controller, HandEntryReason::Draw);
                 if (!draw.satisfied) { state.player_lost_on_draw = true; return; }
-                if (draw.drew) { ++pl.cards_drawn_this_turn; }
-                if (draw.drew && g_play_draw_sink)
-                { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
+                pl.cards_drawn_this_turn += draw.drawn_count;
+                if (g_play_draw_sink) { ForEachActualDraw(draw, [&](int, const InternedName& name, bool)
+                    { g_play_draw_sink->push_back({ state.turn_number, name.str() }); }); }
             }
         }
     }
@@ -29281,12 +29432,12 @@ inline bool ResolveAttackChooseOneMode(GameState& state, int controller, const C
         if (!draw.satisfied) { state.player_lost_on_draw = true; return false; }
         if (draw.drew)
         {
-            ++pl.cards_drawn_this_turn;
+            pl.cards_drawn_this_turn += draw.drawn_count;
             if (controller == state.active_player_index)
             { state.combat_resource_turn = static_cast<std::int16_t>(state.TurnSeq()); }
         }
-        if (draw.drew && g_play_draw_sink)
-        { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
+        if (g_play_draw_sink) { ForEachActualDraw(draw, [&](int, const InternedName& name, bool)
+            { g_play_draw_sink->push_back({ state.turn_number, name.str() }); }); }
     }
     if (g_play_event_sink)
     {
@@ -31552,13 +31703,15 @@ inline void HellbentUpkeepResolve(GameState& state, int me, const CardParams& vp
     {
         const DrawAttemptResult draw = AttemptDrawIntoHand(state, me, HandEntryReason::Draw);
         if (!draw.satisfied) { state.player_lost_on_draw = true; break; }
-        if (draw.drew) { ++ap.cards_drawn_this_turn; }
-        if (draw.drew && g_play_draw_sink && !g_tap_speculating)
-        { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
-        if (draw.drew && g_reveal_logger)
-        { g_reveal_logger->LogDraw(draw.card_number, draw.card_name.str()); }
-        if (!drawn_names.empty()) { drawn_names += ", "; }
-        drawn_names += draw.card_name.str();
+        ap.cards_drawn_this_turn += draw.drawn_count;
+        ForEachActualDraw(draw, [&](int number, const InternedName& name, bool)
+        {
+            if (g_play_draw_sink && !g_tap_speculating)
+            { g_play_draw_sink->push_back({ state.turn_number, name.str() }); }
+            if (g_reveal_logger) { g_reveal_logger->LogDraw(number, name.str()); }
+            if (!drawn_names.empty()) { drawn_names += ", "; }
+            drawn_names += name.str();
+        });
     }
     ap.life -= vp.hellbent_upkeep_life_loss;
     if (g_play_event_sink && !g_tap_speculating)
@@ -31664,10 +31817,13 @@ inline void PerformEpharaUpkeep(GameState& state)
         if (!draw.satisfied) { state.player_lost_on_draw = true; return; }
         if (draw.drew)
         {
-            ++state.players[static_cast<std::size_t>(me)].cards_drawn_this_turn;
-            if (g_play_draw_sink && !g_tap_speculating)
-            { g_play_draw_sink->push_back({state.turn_number, draw.card_name.str()}); }
-            if (g_reveal_logger) { g_reveal_logger->LogDraw(draw.card_number, draw.card_name.str()); }
+            state.players[static_cast<std::size_t>(me)].cards_drawn_this_turn += draw.drawn_count;
+            ForEachActualDraw(draw, [&](int number, const InternedName& name, bool)
+            {
+                if (g_play_draw_sink && !g_tap_speculating)
+                { g_play_draw_sink->push_back({state.turn_number, name.str()}); }
+                if (g_reveal_logger) { g_reveal_logger->LogDraw(number, name.str()); }
+            });
         }
     }
 }
@@ -34649,10 +34805,13 @@ inline void FlushKeranosTriggers(GameState& state)
             if (!draw.satisfied) { state.player_lost_on_draw = true; return; }
             if (draw.drew)
             {
-                ++state.ActivePlayer().cards_drawn_this_turn;
+            state.ActivePlayer().cards_drawn_this_turn += draw.drawn_count;
+            ForEachActualDraw(draw, [&](int number, const InternedName& name, bool)
+            {
                 if (g_play_draw_sink && !g_tap_speculating)
-                { g_play_draw_sink->push_back({state.turn_number, draw.card_name.str()}); }
-                if (g_reveal_logger) { g_reveal_logger->LogDraw(draw.card_number, draw.card_name.str()); }
+                { g_play_draw_sink->push_back({state.turn_number, name.str()}); }
+                if (g_reveal_logger) { g_reveal_logger->LogDraw(number, name.str()); }
+            });
             }
             continue;
         }

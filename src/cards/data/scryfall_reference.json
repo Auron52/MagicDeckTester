@@ -784,6 +784,15 @@
     "toughness": null,
     "type_line": "Land — Swamp Mountain"
   },
+  "Blood Scrivener": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}",
+    "oracle_text": "If you would draw a card while you have no cards in hand, instead you draw two cards and you lose 1 life.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Zombie Wizard"
+  },
   "Blood Sun": {
     "cmc": 3.0,
     "keywords": [],
@@ -1286,6 +1295,15 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Legendary Creature — Human Wizard Knight"
+  },
+  "Cemetery Reaper": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}{B}",
+    "oracle_text": "Other Zombie creatures you control get +1/+1.\n{2}{B}, {T}: Exile target creature card from a graveyard. Create a 2/2 black Zombie creature token.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Zombie"
   },
   "Cenn's Heir": {
     "cmc": 2.0,
@@ -1798,6 +1816,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Death Baron": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}{B}",
+    "oracle_text": "Skeletons you control and other Zombies you control get +1/+1 and have deathtouch. (Any amount of damage they deal to a creature is enough to destroy it.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Zombie Wizard"
+  },
   "Deathbellow Raider": {
     "cmc": 2.0,
     "keywords": [
@@ -2000,6 +2027,15 @@
     "toughness": "2",
     "type_line": "Creature — Orc Pirate"
   },
+  "Diregraf Ghoul": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{B}",
+    "oracle_text": "This creature enters tapped.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Zombie"
+  },
   "Disenchant": {
     "cmc": 2.0,
     "keywords": [],
@@ -2101,6 +2137,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Human Wizard"
+  },
+  "Dread Wanderer": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{B}",
+    "oracle_text": "This creature enters tapped.\n{2}{B}: Return this card from your graveyard to the battlefield. Activate only as a sorcery and only if you have one or fewer cards in hand.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Zombie Jackal"
   },
   "Drifting Meadow": {
     "cmc": 0.0,
@@ -2738,6 +2783,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elemental Shaman"
+  },
+  "Fleshbag Marauder": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "When this creature enters, each player sacrifices a creature of their choice.",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Creature — Zombie Warrior"
   },
   "Flinthoof Boar": {
     "cmc": 2.0,
@@ -3466,6 +3520,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Gravecrawler": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{B}",
+    "oracle_text": "This creature can't block.\nYou may cast this card from your graveyard as long as you control a Zombie.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Zombie"
+  },
   "Graven Cairns": {
     "cmc": 0.0,
     "keywords": [],
@@ -3474,6 +3537,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Gray Merchant of Asphodel": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{3}{B}{B}",
+    "oracle_text": "When this creature enters, each opponent loses X life, where X is your devotion to black. You gain life equal to the life lost this way. (Each {B} in the mana costs of permanents you control counts toward your devotion to black.)",
+    "power": "2",
+    "toughness": "4",
+    "type_line": "Creature — Zombie"
   },
   "Green Sun's Zenith": {
     "cmc": 1.0,
@@ -4794,6 +4866,24 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Creature — Vampire"
+  },
+  "Lord of the Accursed": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "Other Zombies you control get +1/+1.\n{1}{B}, {T}: All Zombies gain menace until end of turn.",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Creature — Zombie"
+  },
+  "Lord of the Undead": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}{B}",
+    "oracle_text": "Other Zombie creatures get +1/+1.\n{1}{B}, {T}: Return target Zombie card from your graveyard to your hand.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Zombie"
   },
   "Lorthos, the Tidemaker": {
     "cmc": 8.0,
@@ -8630,6 +8720,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Undead Warchief": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{B}{B}",
+    "oracle_text": "Zombie spells you cast cost {1} less to cast.\nZombie creatures you control get +2/+1.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Zombie"
   },
   "Undercellar Myconid": {
     "cmc": 3.0,

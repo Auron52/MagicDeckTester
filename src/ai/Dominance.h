@@ -697,7 +697,10 @@ static_assert(sizeof(Player) == 216,
 // Same classification: a DECK CONSTANT stamped in StampDeckTraits, read only by that rank -- nothing to fold.
 // +8 bytes (2026-11-25, Enchanted Evening / Sterling Grove): the DECK CONSTANT deck_has_enchantment_shroud (stamped
 // once in the runner's deck-trait pass -- nothing to fold). No padding hole was left beside the Gargaroth bools.
-static_assert(sizeof(GameState) == 1744,   // combined upstream free turns and Beasts fields + Sterling Grove's stamp
+// +8 bytes (2026-11-26, Zombies): two stamped deck constants for Blood Scrivener and Gravecrawler,
+// and a post-entry Gravecrawler cast epoch. The epoch is a search continuation marker; equivalent
+// physical game states remain equivalent for dominance, so only the size guard changes.
+static_assert(sizeof(GameState) == 1752,   // Zombies continuation marker and deck constants
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

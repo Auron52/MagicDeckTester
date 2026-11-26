@@ -131,6 +131,42 @@
    }
   },
   {
+   "name": "Blood Scrivener",
+   "mana_cost": "{1}{B}",
+   "types": ["Creature"],
+   "subtypes": ["Zombie", "Wizard"],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "If you would draw a card while you have no cards in hand, instead you draw two cards and you lose 1 life.",
+   "template": "vanilla_creature",
+   "parameters": {"empty_hand_draw_two_lose_one": true}
+  },
+  {
+   "name": "Fleshbag Marauder",
+   "mana_cost": "{2}{B}",
+   "types": ["Creature"],
+   "subtypes": ["Zombie", "Warrior"],
+   "keywords": [],
+   "power": 3,
+   "toughness": 1,
+   "oracle_text": "When this creature enters, each player sacrifices a creature of their choice.",
+   "template": "vanilla_creature",
+   "parameters": {"etb_each_player_sacrifice_creature": true}
+  },
+  {
+   "name": "Gravecrawler",
+   "mana_cost": "{B}",
+   "types": ["Creature"],
+   "subtypes": ["Zombie"],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "This creature can't block.\nYou may cast this card from your graveyard as long as you control a Zombie. [PARTIAL, PROVISIONAL: can't block is inert against the fixed passive opponent, which never attacks. User sign-off pending.]",
+   "template": "vanilla_creature",
+   "parameters": {"gy_self_cast_requires_control_subtype": "Zombie"}
+  },
+  {
    "name": "Deeproot Pilgrimage",
    "mana_cost": "{1}{U}",
    "types": ["Enchantment"],

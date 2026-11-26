@@ -18,18 +18,16 @@ fetch-hold question.
 ## Investigation
 
 Live Scryfall Oracle and engine-pattern research completed for the 11 missing
-cards. Implementation has begun: Diregraf Ghoul, Undead Warchief, Gray Merchant,
-Lord of the Undead, Death Baron, Lord of the Accursed, Dread Wanderer, and
-Cemetery Reaper have entries. Shared
-ETB devotion drain, lord deathtouch, graveyard return, and viewer labels were
-extended. Dread Wanderer's conditional graveyard return and Cemetery Reaper's
-targeted exile/token activation now use the shared graveyard ability paths. The
-Warchief's lord bonus includes itself. Three cards remain missing: Blood
-Scrivener, Gravecrawler, and Fleshbag Marauder. These entries still need Stage
-2 review, cost audit, a completed build,
-and game checks. Lord of the Undead's opposing-Zombie buff and Lord of the
-Accursed's menace activation are provisionally omitted as goldfish inert; user
-sign-off remains pending under the analyze-deck workflow.
+cards. All eleven now have card entries and shared engine paths. The new paths
+cover devotion drain, lord deathtouch, empty-hand draw replacement, repeatable
+graveyard casting, conditional graveyard return, graveyard exile for a token,
+and simultaneous each-player sacrifice. The Warchief's lord bonus includes
+itself. The Zombies provider is owned by this deck and currently inherits the
+generic search policy. These entries still need Stage 2 review, cost/field
+audits, a completed build, and game checks. Lord of the Undead's
+opposing-Zombie buff, Lord of the Accursed's menace activation, and
+Gravecrawler's can't-block clause are provisionally omitted as goldfish inert;
+user sign-off remains pending under the analyze-deck workflow.
 
 | Card | Likely implementation | Choice / risk |
 | --- | --- | --- |
@@ -45,8 +43,10 @@ sign-off remains pending under the analyze-deck workflow.
 | Cemetery Reaper | Existing other-Zombie lord and token activation extended with graveyard creature exile target | Exile is an effect; chosen target changes recursion options |
 | Fleshbag Marauder | New ETB each-player creature sacrifice | All victims chosen from pre-sacrifice state; own choice searched and surfaced |
 
-Integration, build, baseline profile, viewer verification, and all three
-regression tiers remain. No proposed Oracle deferrals have been approved.
+Build, baseline profile, viewer verification, and all three regression tiers
+remain. No proposed Oracle deferrals have been approved. The static viewer
+manifest check passes; Cemetery Reaper's target wording remains an advisory
+item to verify dynamically.
 
 ### Shared-path design notes
 

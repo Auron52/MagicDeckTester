@@ -994,20 +994,23 @@ void GameEngine::DrawStep(GameState& state)
         return;
     }
     // Dredge replaces the draw; it does not count as a card drawn or fire draw triggers.
-    if (draw.drew) { ap.cards_drawn_this_turn += 1; }
+    ap.cards_drawn_this_turn += draw.drawn_count;
     if (state.deck_has_turn_gods) { FlushKeranosTriggers(state); }
-    if (draw.drew && state.deck_has_ripple) { ripplestats::NoteRead(state, draw.card_number); }
+    if (state.deck_has_ripple)
+    { ForEachActualDraw(draw, [&](int number, const InternedName&, bool){ ripplestats::NoteRead(state, number); }); }
     // Human-play (--claude-play) accurate draw reporting: record the per-turn draw so the viewer
     // can show exactly what was drawn this turn (nulled by RevealLogPause during search).
-    if (draw.drew && g_play_draw_sink)
-    { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
+    if (g_play_draw_sink)
+    { ForEachActualDraw(draw, [&](int, const InternedName& name, bool)
+        { g_play_draw_sink->push_back({ state.turn_number, name.str() }); }); }
     if (m_logger)
     {
         std::vector<GameLogger::PermSnapshot> bf, obf;
         std::vector<int> hand, gy, staged;
         CollectBoardState(state, bf, hand, obf, gy, staged);
         m_logger->StartPhase(state.turn_number, "DRAW", state.in_extra_turn ? state.extra_turns_taken : 0);
-        if (draw.drew) { m_logger->LogDraw(draw.card_number, draw.card_name); }
+        ForEachActualDraw(draw, [&](int number, const InternedName& name, bool)
+            { m_logger->LogDraw(number, name); });
         m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged, PhaseLibraryTop(state));
     }
     ResolvePendingMiracle(state, m_logger);

@@ -2928,6 +2928,7 @@ function renderBoard() {
     const rset = new Set(me.retrace_gy||[]);   // graveyard spells castable via Retrace or Flashback
     const fbset = new Set(me.flashback_gy||[]);
     const gset = new Set(me.gycast_gy||[]);    // graveyard permanents castable via Lurrus of the Dream-Den
+    const selfGset = new Set(me.self_gycast_gy||[]);
     const eset = new Set(me.eternalize_gy||[]); // graveyard creatures with Eternalize (Timeless Witness)
     const uset = new Set(me.unearth_gy||[]);    // graveyard creatures with Unearth (Hellspark Elemental)
     const selfReturnSet = new Set(me.self_return_gy||[]);
@@ -2944,9 +2945,9 @@ function renderBoard() {
         `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
         `<span class="rtbadge" title="${fbset.has(n)?'Flashback — cast from here, then exile':'Retrace — cast from here, discarding a land'}">↩</span><em>${esc(n)}</em></span>`
       : gset.has(n)
-      ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-gycast="1" title="click to CAST from the graveyard with Lurrus of the Dream-Den (pay its cost; once each turn)">`+
+      ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-gycast="1" title="${selfGset.has(n)?'click to CAST from the graveyard while you control a Zombie':'click to CAST from the graveyard with Lurrus of the Dream-Den (pay its cost; once each turn)'}">`+
         `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
-        `<span class="rtbadge" title="Lurrus — cast from here (once each turn)">↩</span><em>${esc(n)}</em></span>`
+        `<span class="rtbadge" title="${selfGset.has(n)?'Cast from graveyard':'Lurrus — cast from here (once each turn)'}">↩</span><em>${esc(n)}</em></span>`
       : bfThumb({name:n,is_land:false}));
     const hint = rset.size ? ` <span class="help">↩ click a Retrace or Flashback card to cast it from here</span>`
                : gset.size ? ` <span class="help">↩ click a highlighted permanent to cast it from here with Lurrus (once each turn)</span>` : '';
@@ -3638,7 +3639,10 @@ function gycastCard(name) {
     if (same) { renderBoard(); return; }
   }
   S.plan.push({name, kind:'retrace', gycast:true});
-  flashHint(`Casting ${name} from the graveyard with Lurrus (once this turn). Commit to resolve.`);
+  const selfCast = ((S.decision.me||{}).self_gycast_gy||[]).includes(name);
+  flashHint(selfCast
+    ? `Casting ${name} from the graveyard while you control a Zombie. Commit to resolve.`
+    : `Casting ${name} from the graveyard with Lurrus (once this turn). Commit to resolve.`);
   renderBoard();
 }
 

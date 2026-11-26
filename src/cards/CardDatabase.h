@@ -2863,6 +2863,9 @@ struct CardParams
     // Cemetery Reaper: tap to exile a creature card from either graveyard and
     // create a 2/2 black Zombie under the activator's control.
     std::optional<ManaCost> gy_exile_creature_zombie_cost;
+    // Gravecrawler: self-cast permission from graveyard while controlling a
+    // creature of this subtype. Unlike Lurrus, the permission is repeatable.
+    std::string gy_self_cast_requires_control_subtype;
     // CHAMPION (CR 702.72; Nova Chaser "Champion an Elemental"): "When this enters, sacrifice it unless you
     // exile another <subtype> you control. When this leaves the battlefield, that card returns to the
     // battlefield under its owner's control." The subtype is read LIVE (PermCountsAsSubtype: a Metallic
@@ -4650,6 +4653,7 @@ struct CardParams
     // Gray Merchant of Asphodel: life loss (not damage) for each opponent, then
     // one life-gain event equal to the total life actually lost this way.
     std::string etb_drain_devotion_color;
+    bool empty_hand_draw_two_lose_one = false; // Blood Scrivener replacement
 
     // Ragemonger: "Minotaur spells you cast cost {B}{R} less to cast. This effect reduces only the
     // amount of COLORED mana you pay." The coloured twin of reduces_spell_subtype (which reduces
@@ -5087,6 +5091,8 @@ struct CardParams
     // OPPONENT side resolve via DecisionProvider::TreasurifyTarget (default none), human-overridable
     // via the `treasurify` decision.
     bool                    etb_treasurify_each_player = false;
+    // Fleshbag Marauder: each player chooses and sacrifices a creature on entry.
+    bool                    etb_each_player_sacrifice_creature = false;
 
     // Training Grounds: "Activated abilities of creatures you control cost {2} less to activate.
     // This effect can't reduce the mana in that cost to less than one mana." A STATIC cost reducer

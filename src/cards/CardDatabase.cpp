@@ -2249,6 +2249,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     if (params.contains("gy_exile_creature_zombie_cost"))
         p.gy_exile_creature_zombie_cost = ManaCostFromString(
             params["gy_exile_creature_zombie_cost"].get<std::string>());
+    p.gy_self_cast_requires_control_subtype = params.value(
+        "gy_self_cast_requires_control_subtype", std::string{});
     p.champion_subtype = params.value("champion_subtype", std::string{});
     p.attack_trigger_reanimate         = params.value("attack_trigger_reanimate", false);
     p.attack_trigger_reanimate_subtype = params.value("attack_trigger_reanimate_subtype", std::string{});
@@ -2794,6 +2796,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     // ---- Minotaur tribal (see CardParams' block comment for each field's semantics) ----
     p.etb_damage_devotion_color       = params.value("etb_damage_devotion_color", std::string{});
     p.etb_drain_devotion_color        = params.value("etb_drain_devotion_color", std::string{});
+    p.empty_hand_draw_two_lose_one   = params.value("empty_hand_draw_two_lose_one", false);
     p.reduces_subtype_colored_subtype = params.value("reduces_subtype_colored_subtype", std::string{});
     if (params.contains("reduces_subtype_colored_cost"))
         p.reduces_subtype_colored_cost =
@@ -2864,6 +2867,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.blink_own_only                = params.value("blink_own_only", false);
     p.etb_blink_permanent           = params.value("etb_blink_permanent", false);
     p.etb_treasurify_each_player    = params.value("etb_treasurify_each_player", false);
+    p.etb_each_player_sacrifice_creature = params.value("etb_each_player_sacrifice_creature", false);
     p.reduces_creature_activation   = params.value("reduces_creature_activation", 0);
     p.reduces_cycling_activation    = params.value("reduces_cycling_activation", 0);
     p.cycle_trigger_damage_each_opponent =
