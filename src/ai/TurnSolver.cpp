@@ -140515,6 +140515,13 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
                                      + " â " + (tn.empty() ? "target" : tn));
                 continue;
             }
+            if (a.def != nullptr && !a.def->params.tap_target_counters_per_subtype.empty())
+            {   // Immaculate Magistrate: counters, no {X} (display only).
+                const int ctr = st ? TurnSolver::TapTargetCountersProjected(*st, p, a) : 0;
+                cast_names.push_back(a.card_name + ": " + (st ? std::to_string(ctr) : std::string("N")) + " +1/+1 counter"
+                                     + (ctr == 1 ? "" : "s") + " \xE2\x86\x92 " + (tn.empty() ? "target creature" : tn));
+                continue;
+            }
             const bool all = a.chosen_x == kTapTargetPumpXAll;
             const std::string xs = all ? std::string("all remaining mana") : std::to_string(a.chosen_x);
             const std::string pt = (a.def == nullptr || all) ? std::string("+X/+0")
@@ -140535,7 +140542,11 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
                        ? "look at top; put a snow card into hand"
                        : PermAbilityLabelFor(a.ability_mode, a.def)));
         }
-        else { cast_names.push_back(a.card_name.str() + (a.cast_from_top ? " (from library top)" : "")); }
+        else
+        {
+            cast_names.push_back(a.card_name.str() + (a.cast_from_top ? " (from library top)" : "")
+                                 + TurnSolver::RepeatKickSummaryTag(a));
+        }
     }
     s += "cast: ";
     if (cast_names.empty()) { s += "(nothing)"; }
@@ -140626,6 +140637,24 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         return false;
     };
     auto def_of = [](const std::string& name) { return CardDatabase::Instance().Lookup(name); };
+
+    // --- act= : a declared BOARD activation (LineSpec::board_acts). Its source must be a permanent we control, or
+    // one this line casts first (the soundness rule: a hand cast= of the same name is admitted as the enabler). A
+    // copy merely in HAND is not a source: the walk below used to fall back to pricing the token as a hand cast of
+    // it, so "act=Elvish Clancaller" with the Clancaller only in hand graded as the cast the human did not ask for.
+    {
+        std::map<std::string, int> hand_casts;   // cast= tokens per name, minus that name's act= tokens
+        for (const std::string& n : spec.casts) { ++hand_casts[n]; }
+        for (const std::string& n : spec.board_acts) { --hand_casts[n]; }
+        for (const std::string& name : spec.board_acts)
+        {
+            if (controls(name) || hand_casts[name] > 0) { continue; }
+            const bool held = std::any_of(ap.hand.begin(), ap.hand.end(),
+                                          [&](const Card& c) { return c.m_name.str() == name; });
+            return "act=" + name + " is a board activation, but you control no '" + name + "'"
+                 + (held ? std::string(" (the copy in hand must be cast first: cast=") + name + ")" : std::string());
+        }
+    }
 
     // --- taptoken= : Sliver Hive's "{5}, {T}: create a 1/1 Sliver. Activate only if you control a
     // Sliver." Source presence, the ability existing on that card, and the subtype gate.
@@ -142712,9 +142741,20 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                     addSub(a.card_name + " \xE2\x86\x92 " + hn, a.card_name + " pumps", hn, art,
                            "pumptarget", a.sac_victim_id);
                 }
-                const std::string xs = (a.chosen_x == kTapTargetPumpXAll) ? std::string("all remaining mana")
-                                                                            : std::to_string(a.chosen_x);
-                addSub(a.card_name + " X=" + xs, a.card_name + " X", "X=" + xs, a.card_name.str(), "x");
+                // Immaculate Magistrate has no {X}: its one variable is the counter COUNT, so name that, not "X=0"
+                // (display only -- the sub's key stays "<card> X", so the menu's grouping is unchanged).
+                std::string xt;
+                if (a.def != nullptr && !a.def->params.tap_target_counters_per_subtype.empty())
+                {
+                    const int ctr = TapTargetCountersProjected(state, p, a);
+                    xt = std::to_string(ctr) + " +1/+1 counter" + (ctr == 1 ? "" : "s");
+                }
+                else
+                {
+                    xt = "X=" + ((a.chosen_x == kTapTargetPumpXAll) ? std::string("all remaining mana")
+                                                                    : std::to_string(a.chosen_x));
+                }
+                addSub(a.card_name + " " + xt, a.card_name + " X", xt, a.card_name.str(), "x");
             }
             // A REPEATABLE battlefield activation enumerates its per-turn COUNT K as mutually-exclusive
             // variants carrying K on chosen_x (Call of the Wild's "{2}{G}{G}: reveal the top card",
@@ -143462,12 +143502,24 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         for (const std::string& name : spec.casts)
         {
             bool declared_act = false;
+            bool act_token = false;   // this token is an act= (vs a cast= of the same name)
             if (auto at = act_left.find(name); at != act_left.end() && at->second > 0)
             {
                 for (const Permanent& p : s.battlefield)
                 { if (p.controller_index == s.active_player_index && p.card.m_name == name) { declared_act = true; break; } }
-                if (declared_act) { --at->second; }
+                // With no copy on the battlefield the act= token is still an activation -- of the copy this line
+                // casts first (BoardActivationIllegalReason has already required one) -- never a hand cast. Unpriced
+                // here, like any activation whose source is not on the board yet.
+                if (!declared_act)
+                {
+                    int act_n = 0, tok_n = 0;
+                    for (const std::string& b : spec.board_acts) { act_n += b == name ? 1 : 0; }
+                    for (const std::string& c : spec.casts) { tok_n += c == name ? 1 : 0; }
+                    act_token = at->second > 0 && tok_n > act_n;
+                }
+                if (declared_act || act_token) { --at->second; }
             }
+            if (act_token) { continue; }
             auto it = hand_left.find(name);
             if (!declared_act && it != hand_left.end() && it->second > 0)
             { --it->second; click_seq.push_back(static_cast<int>(line_casts.size())); line_casts.push_back(name); continue; }
@@ -144735,6 +144787,32 @@ void TurnSolver::ApplyPlanWithRecordsForTest(GameState& state, Plan& plan, bool 
     std::vector<Action> records;
     ApplyPlanDirect(state, plan, is_pre_combat, &records);
     plan.breakpoint_actions = std::move(records);
+}
+
+std::string TurnSolver::RepeatKickSummaryTag(const Action& a)
+{
+    if (!a.kicked || (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard))
+    { return std::string(); }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+    if (d == nullptr || !HasRepeatKicker(d->params)) { return std::string(); }
+    const int k = std::max(0, static_cast<int>(a.kick_count));
+    return std::string(d->params.multikicker_cost.has_value() ? " (kicked x" : " (squad x") + std::to_string(k) + ")";
+}
+
+int TurnSolver::TapTargetCountersProjected(const GameState& state, const Plan& plan, const Action& a)
+{
+    if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::TapTargetPump
+        || a.def == nullptr || a.def->params.tap_target_counters_per_subtype.empty()) { return 0; }
+    const std::string& sub = a.def->params.tap_target_counters_per_subtype;
+    int n = CountOtherControlledWithSubtype(state, state.active_player_index, sub, INT_MIN);
+    for (const Action& c : plan.actions)
+    {
+        if (c.kind != Action::Kind::CastFromHand && c.kind != Action::Kind::CastFromGraveyard) { continue; }
+        const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name.str());
+        if (d == nullptr || !d->card.IsCreature() || !CardHasSubtype(d->card, sub)) { continue; }
+        n += 1 + ((c.kicked && d->params.squad_cost.has_value()) ? std::max(0, static_cast<int>(c.kick_count)) : 0);
+    }
+    return n;
 }
 
 std::string TurnSolver::PlanLineSummary(const Plan& plan, const GameState& state, bool swap_in_combat)

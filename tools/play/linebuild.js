@@ -1149,6 +1149,13 @@
                body: `You cast a Merfolk spell${first ? ` (${first})` : ''}. Pay {1} to create a 1/1 blue Merfolk creature token?`,
                yes: 'Pay {1} — create the token', no: "Don't pay" };
     }
+    // Leaf-Crowned Visionary: "Whenever you cast an Elf spell, you may pay {G}. If you do, draw a card." The
+    // examined card is the spell that was CAST, not a card to take (core/SpellEffects.h FireOnCastTriggers).
+    if ((m = src.match(/^(.*) \((\S+) cast: pay (.+) to draw a card\)$/)))
+      return { shape: 'yesno', title: `${m[1]} — pay ${m[3]}?`,
+               body: `You cast ${/^[AEIOU]/i.test(m[2]) ? 'an' : 'a'} ${m[2]} spell${first ? ` (${first})` : ''}. ` +
+                     `Pay ${m[3]} to draw a card?`,
+               yes: `Pay ${m[3]} — draw a card`, no: "Don't pay" };
     if ((m = src.match(/^(.*) \(pay (.+) or sacrifice it\)$/)))
       return { shape: 'yesno', title: `${m[1]} — pay ${m[2]} or sacrifice it`,
                body: `Pay ${m[2]} to keep ${m[1]}, or sacrifice it.`, yes: `Pay ${m[2]}`, no: `Sacrifice ${m[1]}` };
