@@ -57,6 +57,7 @@ hold different physical copies (#4 below was invisible until the trace showed `I
 | 17 | a breakpoint-node / prefix-cache RESUME re-bound the line's unpaid-cost hold from the WHOLE plan's bill, so the resumed continuation paid under a phantom demand for casts the prefix had already paid -- a payment no full apply (and so no executor) makes | **FIXED** 2026-10-20 behind `MTG_BP_RESUME_LINE_HOLD` (default ON; below) |
 | 18 | the executor's CLEAN-set cast loop replayed a committed DEFERRED-class segment (a Remand-ridden plain cantrip) at the cast, before the deferred Karoo drop; the rollout runs it after | **FIXED** 2026-10-20 behind `MTG_EXEC_CLEAN_BP_DEFERRED` (default ON; below) |
 | 19 | an UNBRANCHED-CANON continuation (`Plan::cont_canon`) applies its casts only, but the rollout (and the executor's re-derived continuation) built its PlanTraits from the WHOLE list -- so the activation-line hold held mana for an activation nothing makes, while the committed-line record replay (the canon's casts only) held nothing, and the two paid the same cast from different sources | **FIXED** 2026-10-22 behind `MTG_CANON_CONT_TRAITS` (default ON; below) |
+| 20 | the Elves mana cluster (hasted scaled-dork credit, prepay tapping grown scalers, the Lodge burst unfed, a Cavern unit paying a noncreature pip): SHARED-code defects -- both worlds equally wrong, so NOT a divergence; recorded so the class is ruled out | **FIXED** 2026-11-26, four default-ON levers (below) |
 
 Rate per 500 games (seed 4004, 8 decks, 4000 games) after 1-4: **0 everywhere, Hinata included.**
 (Dragonstorm was 4-5 at the suite gate budgets before #1; Auras was 3 before #2; Hinata was 4 before
@@ -885,3 +886,26 @@ Measured (pre-fix `7274bbc1e` vs fixed, one pooled batch per binary, same manife
   subset (`test_elves*`, the only unit file changed) on both binaries: the fixed binary passes 20/20 in each mode, and
   the pre-fix binary fails only the new case under UNPRUNED. (The full suite in those modes is not a gate: UNPRUNED
   runs 3 h+, and HUMAN_PLAY segfaults in `test_rfx_pipeline` with 414 failures on the pre-fix binary too.)
+
+## #20 -- the Elves mana cluster: five SHARED-code mana defects, none a lockstep divergence (2026-11-26)
+
+The Elves claude-play sweep (2026-11-26) flagged five mana-accounting defects. Each was checked against both worlds:
+every one sits in code the rollout and the executor SHARE (the enumerator's credit decides which plans either world
+can commit; the batch prepay `BatchPrepayMainCasts` serves both apply worlds; `TapForCostShared` is the one payer),
+so both worlds were equally wrong and no `[fd-diverge]` could fire on them. They are recorded here because they are
+the class this doc's method is used to rule out, and because the next agent reading an Elves `[bp-pay]` trace should
+know these are closed. The one side-specific piece is CheckLine (viewer-only, `--validate-line`).
+
+| # | defect | mechanism | fix (lever, default ON; heurarm slot of the same name) |
+|---|---|---|---|
+| 20a | a HASTED scaled dork cast this turn credited 1 mana (seed 9500015 T3: Concordant Crossroads; "Leaf-Crowned Visionary, Priest of Titania, Ezuri" never enumerated, and `--validate-line` said illegal) | the hasted-dork rock credit in `CollectActions` (`AddSourceToPool(a.rock_mana, state, def)`, no yield) fell to `ManaProducedPerTap` = 1, ignoring `mana_per_creature_subtype` / `mana_per_own_power`; CheckLine's real-payment walk put only rocks on its board copy, so no creature cast before Ezuri raised the count or tapped | `ScaledDorkEntryYield` (board count + itself; Marwyn = printed power + board lords) as the yield override (`MTG_HASTE_SCALED_YIELD`); CheckLine's `real_pays` resolves every creature onto its copy (summoning-sick, enter watchers fired) |
+| 20b | one plan "Visionary then Ezuri" floated {G}, the same casts as two plans {G}{G} (seed 9500015) | the batch prepay taps every source BEFORE the first cast; the grown-scaler decline (`MTG_PREPAY_SCALER_GROWN`) only armed when the solve tapped a FLAT creature, so a solve tapping only the Priests stood, at the plan-start Elf count | the decline also arms when the solve tapped a scaled dork the batch grows (`MTG_PREPAY_SCALER_FED_TAPPED`); the per-cast payer then taps it when needed (ManaSourceRank 61 = last) |
+| 20c | the prepay tapped Marwyn at power 2 before Taunting Elf grew it (seed 9500008 T6; paying the Visionary trigger then dropped Immaculate Magistrate) | the same decline's "fed" test read `mana_per_creature_subtype` only (empty for Marwyn) | `CastGrowsScaledDork`: an Elf its enter-watcher counts, or a lord covering it (same lever) |
+| 20d | Wirewood Lodge's untap burst was credited (`AvailableManaPool`) but not payable (seed 9500005 T3, Clancaller -> Brigade -> Brigade dropped the second Brigade) | the float drain spent the only floating {G} on the bill, the first backtracker ran with an empty float, and the float-fed retry ran only for filters / scaled lands | `AnyUntappedFilterSource` also admits an untapped Lodge with a TAPPED 2+ scaled Elf (`MTG_UNTAP_FLOAT_FEED_RETRY`), so the retry hands the float to the backtracker's burst branch |
+| 20e | a Cavern of Souls `wild` unit paid Leaf-Crowned Visionary's {G} trigger (seed 9500008 T6, float {G3, wild1}) -- CR 106.6 | an all-creature prepay books a colored_creature_only unit `wild`, legal for its bill, and an every-colour unit is not recorded by `PrepayWildTrue`, so a spend OUTSIDE the bill took it as {G} | `GameState::floating_cco_wild` (stamped subset count of the general wild) set by the prepay; `TapForCostShared`'s `CcoFloatScope` presents those units to a NONCREATURE payment as {C} and hands back only what the {C} count proves unspent; a creature payment is charged with them first (`MTG_CCO_FLOAT_WILD`) |
+
+Payer *policy* note left alone (the standing exemption): in the 9500005 frame the Lodge was tapped for {C} while a
+5-yield Priest was live, against its own reserve rule; it did not change payability once 20d landed.
+Known remaining gap (20e): only `TapForCostShared` honours the mark -- a float spend that bypasses it (Soulfire's
+`ConsumeFloatingAny`, `PayCostFromFloat`) does not, and a MIXED batch's creature-stage Cavern unit is marked too but
+its creature-only float routing (creature_mana_only) is unchanged.
