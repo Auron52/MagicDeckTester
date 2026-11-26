@@ -3958,6 +3958,12 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
                        const std::vector<DecisionProvider::PlanView>& plans, std::vector<char>& admit);
 // k: the hold-back attackers -- untapped 1-mana producer creatures of ours that can attack this turn.
 int ElvesHoldBackAttackers(const GameState& s, bool is_pre_combat);
+// The amended band (heurarm ELVES_SCALING_AMEND): every untapped attack-capable mana creature of ours, pre-combat,
+// with its live one-tap yield; the band frees the two largest yields (scaled ones grown by the plan's Elf casts).
+struct ElvesHoldBackSource { int yield = 0; bool scaled = false; };
+std::vector<ElvesHoldBackSource> ElvesHoldBackSources(const GameState& s, bool is_pre_combat);
+int ElvesHoldBackMana(const std::vector<ElvesHoldBackSource>& src, int plan_elf_casts);
+bool ElvesScalingAmendOn();
 class ElvesProvider : public SelesnyaLifegainProvider
 {
 public:

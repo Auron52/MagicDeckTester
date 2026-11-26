@@ -105,6 +105,14 @@ struct PruneArm
     ~PruneArm() { heurarm::t_arm[heurarm::ELVES_SCALING_PRUNE] = saved; }
 };
 
+struct AmendArm
+{
+    std::int8_t saved;
+    explicit AmendArm(int v) : saved(heurarm::t_arm[heurarm::ELVES_SCALING_AMEND])
+    { heurarm::t_arm[heurarm::ELVES_SCALING_AMEND] = static_cast<std::int8_t>(v); }
+    ~AmendArm() { heurarm::t_arm[heurarm::ELVES_SCALING_AMEND] = saved; }
+};
+
 bool RuleLive() { return !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::Replicate) && !DecisionUnpruned(UnprunedGate::XSpell); }
 
 // The full (rule-lifted) menu's facts this board must show, whatever lifted it.
@@ -224,6 +232,70 @@ TEST_CASE("Elves scaling rule: post-combat (and no attacker) keeps the top count
     for (const TurnSolver::Plan& p : kept) { unscaled_after += ScaledSinks(Casts(p)) == 0; }
     CHECK(unscaled_before == unscaled_after);
     CHECK(unscaled_before > 0);
+}
+
+TEST_CASE("Elves scaling rule (amended): the hold-back sources are every attack-capable mana creature, by live yield")
+{
+    GameState s = PBase();
+    PPut(s, "Priest of Titania", 202);                       // 2 Elves on the battlefield: taps for {G}{G}
+    PPut(s, "Elvish Archdruid", 203, /*sick=*/true);          // summoning-sick: cannot attack, not a source
+    PPut(s, "Marwyn, the Nurturer", 204, /*sick=*/true);
+    std::vector<ElvesHoldBackSource> src = ElvesHoldBackSources(s, true);
+    REQUIRE(src.size() == 2);                                 // the Llanowar and the Priest
+    // The Priest counts every Elf on the battlefield (4 now, sick ones included); the Llanowar makes 1.
+    CHECK(ElvesHoldBackMana(src, 0) == 4 + 1);
+    CHECK(ElvesHoldBackMana(src, 2) == 6 + 1);                // two Elf casts in the plan grow the Priest's tap
+    CHECK(ElvesHoldBackSources(s, false).empty());            // post-combat: the attack is over
+    PPut(s, "Concordant Crossroads", 205);                    // haste: Archdruid and Marwyn can attack now
+    src = ElvesHoldBackSources(s, true);
+    CHECK(src.size() == 4);
+    // Priest 4, Archdruid 4 (Elves you control: Llanowar, Priest, Archdruid, Marwyn), Marwyn 2 (1 + the Archdruid's
+    // +1), Llanowar 1: the two largest are 4 + 4.
+    CHECK(ElvesHoldBackMana(src, 0) == 4 + 4);
+}
+
+TEST_CASE("Elves scaling rule (amended): a held scaled dork widens the band by its yield; =0 keeps the 1-mana band")
+{
+    if (!RuleLive()) { return; }
+    PruneArm on(1);
+    GameState s = PBase();
+    PPut(s, "Priest of Titania", 202);                        // 7 Forests + Llanowar 1 + Priest 2 = 10 mana
+    s.players[0].hand.clear();
+    PHand(s, "Joraga Warcaller", 1);
+    std::set<CastSet> m;
+    {
+        AmendArm amend(1);
+        m = Menu(TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, nullptr));
+    }
+    // Top K 4 ((10 - 1) / 2). Holding back the Priest and the Llanowar frees 3 mana: ceil(3 / 2) = 2 kicks down.
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 4 } }) == 1);
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 3 } }) == 1);
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 2 } }) == 1);
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 1 } }) == 0);
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 0 } }) == 1);   // the unscaled cast is never touched
+    {
+        AmendArm amend(0);
+        m = Menu(TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, nullptr));
+    }
+    // The first cut: only the Llanowar counts, one kick down.
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 4 } }) == 1);
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 3 } }) == 1);
+    CHECK(m.count(CastSet{ { "Joraga Warcaller", 2 } }) == 0);
+    // Post-combat the amended band is the top alone, as before.
+    {
+        AmendArm amend(1);
+        PruneArm off(0);
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, nullptr);
+        std::vector<DecisionProvider::PlanView> views;
+        for (const TurnSolver::Plan& p : plans) { views.push_back({ &p.actions, &p.land_to_play, &p }); }
+        std::vector<char> admit(plans.size(), 1);
+        ElvesScalingAdmit(s, /*is_pre_combat=*/false, views, admit);
+        std::vector<TurnSolver::Plan> kept;
+        for (std::size_t i = 0; i < plans.size(); ++i) { if (admit[i]) { kept.push_back(plans[i]); } }
+        const std::set<CastSet> mk = Menu(kept);
+        CHECK(mk.count(CastSet{ { "Joraga Warcaller", 4 } }) == 1);
+        CHECK(mk.count(CastSet{ { "Joraga Warcaller", 3 } }) == 0);
+    }
 }
 
 // ---- 3. THE LIFT SWITCHES ----------------------------------------------------------------------------------------

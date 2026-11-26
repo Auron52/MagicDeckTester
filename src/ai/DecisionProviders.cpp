@@ -75125,6 +75125,13 @@ struct ElvesCensus
 };
 ElvesCensus& ElvesCensusSink() { static ElvesCensus c; return c; }
 bool ElvesCensusOn() { static const bool on = EnvOn("MTG_ELVES_SCALING_CENSUS"); return on; }
+// MTG_ELVES_SCALING_TRACE=<turn> -- DIAGNOSTIC ONLY, never read by play: every scaled row the rule sees on that turn
+// (its class, count, the class top, the band and the verdict), one stderr line each.
+int ElvesTraceTurn()
+{
+    static const int t = [] { const char* e = std::getenv("MTG_ELVES_SCALING_TRACE"); return e ? std::atoi(e) : 0; }();
+    return t;
+}
 
 void ElvesBlankSink(Action& a)
 {
@@ -75141,6 +75148,54 @@ bool ElvesScalingPruneOn()
 {
     static const bool s_env = EnvOn("MTG_ELVES_SCALING_PRUNE", true);   // DEFAULT ON; =0 -> every count and split
     return heurarm::Flag(heurarm::ELVES_SCALING_PRUNE, s_env);
+}
+
+// TEMPORARY A/B selector (heurarm ELVES_SCALING_AMEND, default ON; =0 -> the 1-mana-only band of the first cut).
+bool ElvesScalingAmendOn()
+{
+    static const bool s_env = EnvOn("MTG_ELVES_SCALING_AMEND", true);
+    return heurarm::Flag(heurarm::ELVES_SCALING_AMEND, s_env);
+}
+
+std::vector<ElvesHoldBackSource> ElvesHoldBackSources(const GameState& s, bool is_pre_combat)
+{
+    std::vector<ElvesHoldBackSource> out;
+    if (!is_pre_combat) { return out; }   // the attack is over: a held creature attacks nothing
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped || !p.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->tmpl != CardTemplate::ManaDork) { continue; }
+        if (!CanAttackFull(p, s.battlefield, me)) { continue; }
+        const bool scaled = IsScaledManaDork(*d);
+        out.push_back({ scaled ? ScaledDorkCount(s, me, *d) : ManaProducedPerTap(*d), scaled });
+    }
+    return out;
+}
+
+bool ElvesScalingHoldAllOn()
+{
+    static const bool s_env = EnvOn("MTG_ELVES_SCALING_HOLD_ALL");   // TEMPORARY A/B selector, default OFF
+    return heurarm::Flag(heurarm::ELVES_SCALING_HOLD_ALL, s_env);
+}
+
+int ElvesHoldBackMana(const std::vector<ElvesHoldBackSource>& src, int plan_elf_casts)
+{
+    if (ElvesScalingHoldAllOn())
+    {
+        int all = 0;
+        for (const ElvesHoldBackSource& h : src) { all += std::max(0, h.yield + (h.scaled ? plan_elf_casts : 0)); }
+        return all;
+    }
+    int a = 0, b = 0;   // the two largest yields
+    for (const ElvesHoldBackSource& h : src)
+    {
+        const int y = std::max(0, h.yield + (h.scaled ? plan_elf_casts : 0));
+        if (y > a) { b = a; a = y; }
+        else if (y > b) { b = y; }
+    }
+    return a + b;
 }
 
 int ElvesHoldBackAttackers(const GameState& s, bool is_pre_combat)
@@ -75163,7 +75218,7 @@ int ElvesHoldBackAttackers(const GameState& s, bool is_pre_combat)
 void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
                        const std::vector<DecisionProvider::PlanView>& plans, std::vector<char>& admit)
 {
-    struct Row { std::size_t i; std::string sink; int count; int unit; TurnSolver::Plan canon; };
+    struct Row { std::size_t i; std::string sink; int count; int unit; int elf_casts = 0; TurnSolver::Plan canon; };
     std::vector<Row> rows;
     long long n_split = 0, n_band = 0;
     struct Flush
@@ -75187,6 +75242,14 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
             if (e.count > 0) { ++scaled; at = static_cast<int>(k); one = e; }
         }
         if (scaled == 0) { continue; }                     // no scaled sink: untouched
+        int elf_casts = 0;   // the plan's OTHER Elf creature casts: each grows a scaled dork's tap (an upper bound)
+        for (std::size_t k = 0; k < plans[i].actions->size(); ++k)
+        {
+            const Action& a = (*plans[i].actions)[k];
+            if (static_cast<int>(k) == at || a.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name.str());
+            if (d != nullptr && d->card.IsCreature() && CardHasSubtype(d->card, "Elf")) { ++elf_casts; }
+        }
         if (scaled >= 2) { admit[i] = 0; ++n_split; continue; }   // (1) a split across two sinks
         if (plans[i].plan == nullptr) { continue; }        // no identity to group on: keep (safe direction)
         Row r;
@@ -75194,6 +75257,7 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         r.sink  = (*plans[i].actions)[static_cast<std::size_t>(at)].card_name.str();
         r.count = one.count;
         r.unit  = one.unit;
+        r.elf_casts = elf_casts;
         r.canon = *static_cast<const TurnSolver::Plan*>(plans[i].plan);
         for (Action& a : r.canon.actions) { if (ElvesSinkOf(a).count >= 0) { ElvesBlankSink(a); } }
         r.canon.value          = 0;
@@ -75208,7 +75272,23 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         rows.push_back(std::move(r));
     }
     if (rows.empty()) { return; }
-    const int k = ElvesHoldBackAttackers(s, is_pre_combat);
+    const bool amend = ElvesScalingAmendOn();
+    const int k = amend ? 0 : ElvesHoldBackAttackers(s, is_pre_combat);
+    const std::vector<ElvesHoldBackSource> held = amend ? ElvesHoldBackSources(s, is_pre_combat)
+                                                        : std::vector<ElvesHoldBackSource>{};
+    const int trace_turn = ElvesTraceTurn();
+    const bool trace = trace_turn > 0 && s.turn_number == trace_turn;
+    if (trace)
+    {
+        std::string bf;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index || p.card.IsLand()) { continue; }
+            bf += p.card.m_name.str(); bf += p.tapped ? "(T) " : " ";
+        }
+        std::fprintf(stderr, "[elves-scal-trace] turn=%d pre=%d amend=%d k=%d held=%zu plans=%zu bf: %s\n",
+                     s.turn_number, is_pre_combat ? 1 : 0, amend ? 1 : 0, k, held.size(), plans.size(), bf.c_str());
+    }
     // (2) Bucket by a cheap key (land + the sorted cast/activation names and slots + the sink), then split each
     // bucket into exact classes with Plan::operator== on the blanked copies.
     std::unordered_map<std::string, std::vector<std::size_t>> buckets;
@@ -75244,8 +75324,24 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         for (std::size_t a = 0; a < idx.size(); ++a)
         {
             const Row& r = rows[idx[a]];
-            const int h = (k + r.unit - 1) / r.unit;   // (3) the hold-back band in count steps
-            if (r.count < top[static_cast<std::size_t>(cls[a])] - h) { admit[r.i] = 0; ++n_band; }
+            const int hm = amend ? ElvesHoldBackMana(held, r.elf_casts) : k;   // mana the hold-backs free
+            const int h = (hm + r.unit - 1) / r.unit;   // (3) the hold-back band in count steps
+            const bool drop = r.count < top[static_cast<std::size_t>(cls[a])] - h;
+            if (drop) { admit[r.i] = 0; ++n_band; }
+            if (trace)
+            {
+                std::string casts;
+                for (const Action& x : (*plans[r.i].actions))
+                {
+                    casts += x.card_name.str();
+                    const ElvesSink e = ElvesSinkOf(x);
+                    if (e.count >= 0) { casts += "#" + std::to_string(e.count); }
+                    casts += " ";
+                }
+                std::fprintf(stderr, "[elves-scal-trace]   cls=%d sink=%s count=%d top=%d h=%d %s | %s\n", cls[a],
+                             r.sink.c_str(), r.count, top[static_cast<std::size_t>(cls[a])], h, drop ? "DROP" : "keep",
+                             casts.c_str());
+            }
         }
     }
 }
