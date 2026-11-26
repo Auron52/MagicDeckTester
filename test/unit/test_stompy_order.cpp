@@ -501,10 +501,9 @@ TEST_CASE("Payment fix (MTG_HOLD_RELEASE_YIELD): gi287's 6-mana turn holds BOTH 
     // lands pay 3 and Priest's one tap (3 Elves) the rest, so both 1/1s swing. The historical ladder tried
     // the single-attacker rung first (hold ONE Fyndhorn) and then tapped the other ahead of Priest when
     // Priest sat later on the battlefield.
-    // The joint solve's own hold ladder is under test: pin MTG_PREPAY_SCALER_FED_TAPPED off. With it on, the solve
-    // tapping Priest (3 Elves) under a batch of two Elves declines to the per-cast payer, which taps Priest after the
-    // first Archdruid at 4 -- the better payment, but not the ladder this test pins.
-    heurarm::t_arm[heurarm::PREPAY_SCALER_FED_TAPPED] = 0;
+    // The joint solve's own hold ladder is under test, so the two 3-drops are NON-Elf (Brindle Boar, {2}{G}): two
+    // Archdruids GROW Priest, and the prepay correctly hands a solve that taps a fed scaled dork to the per-cast
+    // payer (which taps Priest after the first Archdruid, at 4) -- the better payment, but not the ladder pinned here.
     for (const auto& ord : std::vector<std::vector<std::string>>{
              { kFyndhorn, kFyndhorn, kPriest }, { kPriest, kFyndhorn, kFyndhorn }, { kFyndhorn, kPriest, kFyndhorn } })
     {
@@ -519,8 +518,9 @@ TEST_CASE("Payment fix (MTG_HOLD_RELEASE_YIELD): gi287's 6-mana turn holds BOTH 
             p.card = DefSo("Forest").card;
             p.card.m_number = num;
         }
-        s.players[0].hand.push_back(CardSo(kArch, 12));
-        std::vector<Action> acts = { CastSo(s, kArch), CastSo(s, kArch) };
+        s.players[0].hand.push_back(CardSo("Brindle Boar", 12));
+        s.players[0].hand.push_back(CardSo("Brindle Boar", 13));
+        std::vector<Action> acts = { CastSo(s, "Brindle Boar"), CastSo(s, "Brindle Boar") };
         REQUIRE(TurnSolver::BatchPrepayMainCasts(s, acts));
         int fyndhorn_up = 0;
         for (const Permanent& p : s.battlefield)
@@ -529,7 +529,6 @@ TEST_CASE("Payment fix (MTG_HOLD_RELEASE_YIELD): gi287's 6-mana turn holds BOTH 
         CHECK(TappedSo(s, kPriest));
         heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD] = -1;
     }
-    heurarm::t_arm[heurarm::PREPAY_SCALER_FED_TAPPED] = -1;
 }
 
 TEST_CASE("Payment fix (MTG_HOLD_ATK_FALLBACK): when (b)'s pick is a colour the bill needs, an equal-power runner-up is held")

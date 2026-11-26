@@ -1096,10 +1096,6 @@ enum Slot : int
     FREE_TURN_ANNIHILATOR_FAIR, // MTG_FREE_TURN_ANNIHILATOR_FAIR  a land-play turn's annihilator wipe is vetoed when castable nonland permanents would have kept one. Default ON
     FREE_TURN_REACH,          // MTG_FREE_TURN_REACH       the turn-edge prunes stand down for a lock-trait deck only where a free turn is REACHABLE (freeturn::FreeTurnMayFollow, a sound certificate). Default ON; =0 -> stand down at every node of a trait deck
     ELVES_SCALING_PRUNE,      // MTG_ELVES_SCALING_PRUNE   ElvesProvider (USER 2026-11-26 scaling-sink ruling): of the plans that differ only in their scaling counts (Genesis Wave X, Joraga Warcaller multikick, Galadhrim Brigade squad, Ezuri's main-phase pump count), keep ONE sink at the group's max plus hold-back counts for the 1-mana attackers; no partial splits across two sinks. A USER-directed provider prune. Default ON; =0 -> every count and every split searched
-    HASTE_SCALED_YIELD,       // MTG_HASTE_SCALED_YIELD    a HASTED scaled mana dork cast this turn (Priest of Titania under Concordant Crossroads) is credited its entry yield (ScaledDorkEntryYield: the board's count + itself / Marwyn's printed power + lords), not one mana (Elves claude-play seed 9500015 T3). Default ON; =0 -> one mana
-    PREPAY_SCALER_FED_TAPPED, // MTG_PREPAY_SCALER_FED_TAPPED  the batch prepay's grown-scaler decline also fires when the solve tapped a scaled dork the batch GROWS (no flat body tapped), and "grows" covers Marwyn (an Elf entering, a lord) via CastGrowsScaledDork (seeds 9500015 / 9500008). Default ON; =0 -> the subtype shape, flat-tapped only
-    UNTAP_FLOAT_FEED_RETRY,   // MTG_UNTAP_FLOAT_FEED_RETRY  the payer's floating-fed retry also runs for a live untap-burst land (Wirewood Lodge + a TAPPED 2+ scaled Elf): the backtracker may spend the float on the burst's {G} feed instead of the bill (seed 9500005 T3). Default ON
-    CCO_FLOAT_WILD,           // MTG_CCO_FLOAT_WILD        the batch prepay marks its colored_creature_only (Cavern of Souls) `wild` units (GameState::floating_cco_wild); a noncreature payment spends them as {C} only (CR 106.6; seed 9500008 T6). Default ON; =0 -> unrestricted wild
     COUNT
 };
 
@@ -2140,10 +2136,6 @@ inline const char* Name(int slot)
         "MTG_FREE_TURN_ANNIHILATOR_FAIR",
         "MTG_FREE_TURN_REACH",
         "MTG_ELVES_SCALING_PRUNE",
-        "MTG_HASTE_SCALED_YIELD",
-        "MTG_PREPAY_SCALER_FED_TAPPED",
-        "MTG_UNTAP_FLOAT_FEED_RETRY",
-        "MTG_CCO_FLOAT_WILD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
