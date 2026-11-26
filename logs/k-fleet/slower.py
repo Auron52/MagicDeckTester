@@ -16,6 +16,7 @@ def wins(d):
     return W
 JOBS = {}
 for b in ("O", "S"):
+    if not os.path.exists(os.path.join(ab, f"ab_{b}.json")): continue
     for j in json.load(open(os.path.join(ab, f"ab_{b}.json")))["jobs"]:
         JOBS[j["name"]] = j
 def job(row, arm, seed): return JOBS[f"{row}_{arm}_s{seed}"]
