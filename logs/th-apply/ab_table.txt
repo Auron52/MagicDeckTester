@@ -1,0 +1,26 @@
+shape                       n    net  slow  fast       t    units      cpu
+breaching2hgplay          500     +0     0     0   +0.00   +0.00%   +1.79%
+breachingplay            2000     +0     0     0   +0.00   +0.00%   +0.87%
+bruna2hgplay              300     +0     0     0   +0.00   +0.00%   +0.57%
+brunaplay                1000     +0     0     0   +0.00   +0.00%   -1.07%
+cyclone2hgplay            500     +0     0     0   +0.00   +0.00%   +0.15%
+cycloneplay              2000     +0     0     0   +0.00   +0.00%   -0.75%
+fluctuator2hgplay         300     +0     0     0   +0.00   +0.00%   -2.86%
+fluctuatorplay           1000     +0     0     0   +0.00   +0.00%   -0.92%
+galadriel2hgplay          300     +0     0     0   +0.00   +0.00%   -0.12%
+galadrielplay            1000     +0     0     0   +0.00   +0.00%   -0.23%
+hinata2hgplay             200     +0     0     0   +0.00   +0.02%   +1.14%
+hinataplay                600     -1     0     1   -1.00   -0.12%   -0.02%
+mazesend2hgplay           100     +0     0     0   +0.00   +0.00%   +0.04%
+mazesendplay              400     +0     0     0   +0.00   +0.00%   +0.43%
+morph2hgplay              300     +0     0     0   +0.00   +0.00%   +0.66%
+morphplay                1000     +0     0     0   +0.00   +0.00%   -0.80%
+niv2hgplay                500     +0     0     0   +0.00   +0.00%   -0.13%
+nivplay                  2000     +0     0     0   +0.00   +0.00%   -0.12%
+sea2hgplay                300     +0     0     0   +0.00   +0.00%   +0.44%
+seaplay                  1000     +0     0     0   +0.00   +0.00%   -0.39%
+snow2hgplay               200     +0     0     0   +0.00   +0.00%   -0.56%
+snowplay                  600     +0     0     0   +0.00   +0.00%   +0.33%
+th2hgplay                4000     +0     0     0   +0.00   +0.00%   +0.01%
+thplay                  10000     +0     0     0   +0.00   +0.00%   +0.36%
+TOTAL                   30100     -1     0     1           -0.01%   -0.12%

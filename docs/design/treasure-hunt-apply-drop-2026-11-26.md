@@ -75,6 +75,29 @@ Niv's four non-`{U}` pips can take all four unconditional `{U}`), and a new bloc
 * ENUM-GAP `{no land + Treasure Hunt + Treasure Hunt}` (s30104998 T3): the second Treasure Hunt pays only with a land
   played after the first resolves (Ferrous Lake fed by the floating `{R}`), which the menu's mana gate does not see.
 
-## Measurements
+## Measurements (binary = e1096e6b7 Release, `MTG_PGO=0`)
 
-(filled in below)
+* Unit 4203 / 4203.
+* Repros (`MTG_MANA_ORACLE=3`, APPLY-DROP at the named turn), base (9e566000b) -> lever on: s30133719 T8 8 -> 0,
+  s30101328 T4 3 -> 0, s30100350 T5 8 -> 0, s30100258 T4 6 -> 5 (the 5 are undeclared), s30106408 T4 13 -> 5 (the 5
+  are undeclared), s30104784 T4 3 -> 0.
+* Gate (Treasure Hunt gi 100000-119999, seed 30000000 + gi, `MTG_MANA_ORACLE=2`, one pooled batch, lever per job):
+
+  | arm | APPLY-DROP | of them undeclared | APPLY-DROP-ORDER | ENUM-GAP | ORACLE-GAP |
+  |---|---|---|---|---|---|
+  | off | 582 | 257 | 62 | 76 | 0 |
+  | filter lands only (first cut, ac40cb59a) | 405 | 257 | 62 | 76 | 0 |
+  | on (filter lands + fed converters) | 326 | 257 | 62 | 76 | 0 |
+
+  Declared drops 325 -> 69 (-79%); 42 of the 69 are the Throes continuation re-plan above. Rollback census depth 1:
+  off 849 -> on 770 (it counts APPLY-DROP-ORDER and undeclared lines too).
+* CPU: `perf stat -e instructions:u`, 12 decks (every deck with a fed source), 200 games at play settings, 2 threads:
+  off 768.010 G, on 768.378 G = **+0.048%**. All 200 games digest-identical, searched units identical per deck. Crit
+  gate: 490,288 calls, passed 243,139 -> 260,911, repairs 3,218 -> 3,246.
+* Play-setting A/B (one pooled `mtg --batch`, 2,408 jobs / 60,200 games, seed base 5130000 + gi, game_index gi, lever
+  off / on per job, profile depth and budget, 2HG = 30 team life + two heads; `logs/th-apply/mk_ab.py`, table
+  `logs/th-apply/ab_table.txt`; heartbeat 32/32): **30,100 pairs, net -1 turn, 0 slower, 1 faster** (Hinata play),
+  searched units -0.01%, batch cpu -0.12% (wall-derived, noise). Every shape of the 12 decks is net 0 except Hinata
+  play -1; Treasure Hunt 10,000 standard + 4,000 2HG pairs net 0 / 0. Digests moved in 15 of 1,204 chunk pairs (Treasure
+  Hunt 11, Hinata 3, Morph 1): the corrected payments are mostly in lines the search does not end up playing.
+* No slower game, so nothing to replay at `--depth 8 --budget-ms 0`.
