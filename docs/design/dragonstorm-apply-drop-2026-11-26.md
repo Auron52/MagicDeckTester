@@ -113,3 +113,17 @@ Held-out play A/B, Dragonstorm only (the lump rule is Dragonstorm-only and the s
 above), seed base 5160000, 3000 std + 3000 2HG per arm: net 0, 0 slower, 0 faster in both formats; units -0.00% /
 +0.00%. The first A/B's slower game (2HG s5131993) is byte-identical to the off arm at play settings and d8 b0. Full
 units on e07c7849c: 4205 / 4205.
+
+### Third lever: `MTG_LINE_FLOAT_RITUAL_NET` (ca4ee7d53, landed as part of land-1128)
+
+The LINE_FLOAT_TAP_FIRST rung's spare-source colour test nets the paying ritual's own float out of `later[]` (the
+float pays part of the later bill, so a source the rung keeps for that part is not spare). Mana-payment choice in the
+shared payer, default ON, `=0` byte-identical; unit test on/off in `test_dragonstorm_line_keep.cpp`.
+
+Gate (same slice, `on3`): declared events 62, need-later 48, ENUM-GAP 33, AD flags 291 / 306 (on2: 64 / 48 / 33,
+296 / 304).
+
+Held-out play A/B of ALL THREE levers off vs on (`mk_ab.py --n 400 --hg 200 --wf 3000 --base 5190000`, every suite
+deck, 86,400 games): **43,200 pairs, net 0, 0 slower, 0 faster in every shape**; Dragonstorm std 3000 / 2HG 3000 pairs
+0 / 0; units -0.00% total (no shape moves more than +0.02%); cpu +0.03% (wall, noise). No slower game, so no d8 b0
+replay is owed.
