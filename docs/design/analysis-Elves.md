@@ -211,7 +211,19 @@ opaque `plan` pointer for the group key. Nothing in generic enumeration changed.
   scaled"), a post-combat activation; holding back a scaled dork (Priest / Archdruid / Marwyn) or a third 1-mana
   dork to attack; a smaller Wave chosen to keep the other Waves in the library. The hold-back variants only help
   if the mana payer then leaves the attacker untapped (they at least leave the mana for Ezuri's combat pump).
-* **Measurement:** NOT YET RUN (handoff `logs/elves/provider-handoff.md`). Manifest: `logs/elves/scaling_probe_manifest.py`.
+* **Measurement (2026-11-26, quick probe, NOT the adoption A/B):** ONE pooled `mtg --batch`, 30 blocks x 10 games
+  per arm, arms innermost, seed 7007+off / game_index off, d5 b20, no profile (none exists yet). Manifest:
+  `logs/elves/scaling_probe_manifest.py`.
+
+  | arm | won | avg win turn | units/game | ms/game |
+  |---|---|---|---|---|
+  | rule ON (`MTG_ELVES_SCALING_PRUNE=1`) | 299/300 | 4.3311 | 16,756 | 715 |
+  | rule OFF | 299/300 | 4.3311 | 17,677 | 720 |
+
+  0 of 300 paired games moved; units x0.948. Census: 6,457,023 plans enumerated over 270,776 enumerations,
+  256,084 dropped as two-sink splits and 581,873 as out-of-band counts (13.0% of plans). Play-neutral on this
+  sample and removes work. The OFF arm is wider than the pre-provider play (every Wave X), so this is not a
+  comparison against the old play. The definitive with/without A/B (larger, held-out) is Stage 5e/5f.
 * **Signature key:** the autonomous plan-dedup signature did not key Genesis Wave's X, so the dedup kept ONE X per cast set (the first enumerated). ElvesProvider opts in to a `#WX` key (`DecisionProvider::PlanSignatureKeysWaveX`, `t_sig_wave_x` in TurnSolver.cpp), so the rule sees every X; every other deck's signature is byte-identical. OWED, for the USER: the same collapse is still live for Landfall and Selesnya Lifegain (their XCandidates offer the un-grown and the grown max, and first-enumerated wins, i.e. the un-grown one), a generic limiter by the core invariant; fixing it moves their play.
 * The definitive with/without A/B (Stage 5e/5f) is the coordinator's.
 
