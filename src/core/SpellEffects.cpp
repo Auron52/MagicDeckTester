@@ -1278,6 +1278,7 @@ void PerformReplenish(GameState& state, int controller, const std::string& sourc
     // same event. None of the enter triggers has resolved yet.
     for (const ReturnCard& item : regular) { put(item, 0); }
     RefreshDevotionCreatures(state);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     for (const ReturnCard& item : auras)
     {
         std::vector<int> legal;
@@ -1298,6 +1299,7 @@ void PerformReplenish(GameState& state, int controller, const std::string& sourc
         const int host_index = legal[static_cast<std::size_t>(host_pick)];
         put(item, state.battlefield[static_cast<std::size_t>(host_index)].card.m_number);
         RefreshDevotionCreatures(state);
+        RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     }
     if (placed.empty()) { return; }
 
@@ -1310,6 +1312,7 @@ void PerformReplenish(GameState& state, int controller, const std::string& sourc
         if (entered) { ap.graveyard.erase(ap.graveyard.begin() + static_cast<std::ptrdiff_t>(i)); }
     }
     RefreshDevotionCreatures(state);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     auto find_slot = [&](const Placed& item)
     {
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)

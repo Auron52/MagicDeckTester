@@ -1328,6 +1328,131 @@ inline void DestroyTokensCreatedBy(GameState& state, int source_number);
 inline bool UnearthExileInstead(GameState& state, std::size_t idx, const char* event);
 inline bool UnearthExileDeferred(GameState& state, std::size_t idx, const char* event,
                                  std::vector<Permanent>& left);
+
+// ==== TYPE STATICS: Enchanted Evening + Opalescence (lock cluster step 1, 2026-11-26) ==========================
+// docs/design/enchanted-evening-lock-design.md §4.1. Two layered statics applied to every battlefield permanent's
+// OWN Card copy (the Heliod / RefreshDevotionCreatures precedent), so the ~750 copy readers (IsCreature,
+// IsEnchantment, EffectivePower / Toughness, CanAttack, both SBA passes, the shroud predicates through
+// PermanentIsEnchantmentNow) see them at once:
+//   * Enchanted Evening (static_all_permanents_enchantments), LAYER 4: every permanent is also an enchantment.
+//   * Opalescence (static_animate_other_nonaura_enchantments_mv), LAYER 4 then 7b: every OTHER non-Aura enchantment
+//     is also a creature with base P/T = its mana value. It DEPENDS on Enchanted Evening (CR 613.8: EE changes what
+//     it applies to), so EE applies first whatever the timestamps. Two Opalescences animate each other.
+// THE REFRESH (RefreshTypeStatics) only retypes: it is called at the battlefield-membership chokepoints beside
+// RefreshDevotionCreatures, some of which (the enter cascade's top) run while callers hold battlefield slot
+// indices, so it never erases. THE DEATHS (a land, a token or an MV-0 permanent made a 0/0 creature; CR 704.5f;
+// and the Auras that fell off them, CR 704.5m) happen at the SHARED SBA CHECKPOINT (TypeStaticsSbaCheckpoint),
+// which runs at points that hold no battlefield index, in BOTH worlds at the same instants: inside
+// LegendRuleSbaCheckpoint (after every stack resolution -- GameEngine::ResolveStack / the rollout's apply_one exit;
+// the land drop, LandPlay.cpp; the end step), after the opponent's land drop (ResolvePassiveOpponentLandTurn,
+// shared), after the opponent's scheduled spawns (both untap sites) and at both turn starts. Everything is behind
+// the per-game stamp GameState::deck_has_type_statics: every other deck pays one bool test.
+inline bool RefreshTypeStatics(GameState& state);
+inline void TypeStaticsSbaCheckpoint(GameState& state);
+// Which type statics are on the battlefield right now (either controller: both statics read "all" / "each other").
+struct TypeStaticsPresent
+{
+    bool ee    = false;   // an Enchanted Evening
+    int  opals = 0;       // the number of Opalescences
+};
+inline TypeStaticsPresent TypeStaticsOnBattlefield(const GameState& state)
+{
+    TypeStaticsPresent out;
+    if (!state.deck_has_type_statics) { return out; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.static_all_permanents_enchantments) { out.ee = true; }
+        if (d->params.static_animate_other_nonaura_enchantments_mv) { ++out.opals; }
+    }
+    return out;
+}
+// Would a LAND with this definition die the moment it enters (Enchanted Evening + Opalescence: it is a non-Aura
+// enchantment, so a 0/0 creature -- a land's mana value is 0 -- and the toughness SBA kills it before any player
+// receives priority, CR 117.5 / 704.3)? Then no activated ability of it can ever be activated: a FETCHLAND cannot be
+// cracked (both our land drop, LandPlay.cpp's PlayLandCore, and the opponent's, PlayLeftmostLandFrom) and a Karoo's
+// return trigger finds no land (OpponentLandEnters). An enchantment land (Urza's Saga) dies under Opalescence alone.
+// ASSUMPTION, disclosed: no static toughness bonus (an anthem) holds the land above 0 -- none in this deck or its
+// opponent pool; a deck that adds one must revisit this predicate (it is a prediction of the SBA's verdict).
+// The verdict for a given set of statics (the pre-float below asks it with and without the entrant).
+inline bool LandDiesUnderTypeStatics(const TypeStaticsPresent& ts, const CardDefinition& land)
+{
+    if (land.params.is_aura) { return false; }
+    if (ts.opals <= 0 || !(ts.ee || land.card.IsEnchantment())) { return false; }
+    return land.card.m_mana_cost.ManaValue() <= 0;
+}
+inline bool LandDiesToTypeStatics(const GameState& state, const CardDefinition& land)
+{
+    if (!state.deck_has_type_statics) { return false; }
+    return LandDiesUnderTypeStatics(TypeStaticsOnBattlefield(state), land);
+}
+// THE PRE-FLOAT AT THE LOCK (Enchanted Evening lock cluster step 2, 2026-11-26; design §4.2): a SOUND DOMINANCE
+// FOLD, not a choice. When an entrant (the second of Enchanted Evening / Opalescence, or anything else that makes the
+// land-death static newly apply) is about to turn our lands into 0/0 creatures, each untapped land we control that
+// dies to it is tapped for mana FIRST: we hold priority while the spell that puts it there is on the stack and may
+// activate mana abilities then (CR 605.3a / 117.1d); the mana stays in the pool to the end of the step or phase
+// (CR 106.4 / 500.4 -- both worlds empty it at every boundary, CrossManaBoundary) and empties with no mana burn.
+// Every such land dies untapped otherwise at the next SBA checkpoint (TypeStaticsSbaCheckpoint) and has no other
+// use left: it can never untap, attack, block or pay anything again. So the float only ADDS mana to this phase and
+// changes nothing else -- the Saproling Burst doomed-body pre-float argument (MTG_FADE_PREFLOAT_DOOMED). Utopia
+// Sprawl / Wild Growth's extra mana rides each tap (the payer's own Aura credit).
+// COLOUR (no greedy pick): a single-face land floats its face. A multi-colour land floats `wild`, which is EXACT only
+// under GameState::deck_float_wild_exact (every coloured pip of the list is a colour it makes); without the stamp it
+// is left to die untapped, as before step 2 (the searched colour-split axis the design names is not built: no deck
+// needs it yet). A fetchland has no mana ability and is NOT cracked (thinning is not dominated; it stays the searched
+// action it already is). A land that already dies without the entrant (a land drop under the lock) is never
+// floated: it dies before anyone receives priority.
+// WHERE: the top of the universal enter cascade (FireEtbWatchers), BEFORE RefreshTypeStatics retypes the lands --
+// one shared site for the executor, the rollout and every put path, so the two worlds stay in lockstep -- and the
+// tap itself goes through the payer's pre-tap route (ApplyEnginePreTap, installed by ManaPayment.cpp), which only
+// taps (no source here is a sacrifice route; those are refused). A land a whole-turn prepay (BatchPrepayMainCasts)
+// or the cast's own payment already tapped is skipped: its mana is already in the float or spent, never counted
+// twice. Gated on the per-game stamp deck_has_type_statics and on the entrant carrying a type static: every other
+// deck pays one bool test.
+inline void (*g_lock_prefloat_hook)(GameState& state, int controller, int num) = nullptr;
+inline void PrefloatLandsAtTypeStaticsLock(GameState& state, int entered_index)
+{
+    if (!state.deck_has_type_statics || g_lock_prefloat_hook == nullptr) { return; }
+    if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    const Permanent& e = state.battlefield[static_cast<std::size_t>(entered_index)];
+    if (e.def_absent) { return; }
+    const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
+    if (ed == nullptr) { return; }
+    const bool e_ee = ed->params.static_all_permanents_enchantments;
+    const bool e_op = ed->params.static_animate_other_nonaura_enchantments_mv;
+    if (!e_ee && !e_op) { return; }
+    const int controller = e.controller_index;
+    if (controller != state.active_player_index) { return; }
+    // The statics now and without the entrant (TypeStaticsPresent counts Opalescences only, so count EEs here).
+    TypeStaticsPresent now;
+    int ees = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.static_all_permanents_enchantments) { ++ees; }
+        if (d->params.static_animate_other_nonaura_enchantments_mv) { ++now.opals; }
+    }
+    now.ee = ees > 0;
+    TypeStaticsPresent before = now;
+    if (e_ee) { before.ee = ees > 1; }
+    if (e_op) { --before.opals; }
+    std::vector<int> doomed;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        if (i == entered_index) { continue; }
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != controller || p.tapped || p.def_absent || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (LandDiesUnderTypeStatics(now, *d) && !LandDiesUnderTypeStatics(before, *d))
+        { doomed.push_back(p.card.m_number); }
+    }
+    for (int num : doomed) { g_lock_prefloat_hook(state, controller, num); }
+}
 inline void FireUnearthedLeaves(GameState& state, const std::vector<Permanent>& left);
 inline void ReturnOrphanedLinkedExiles(GameState& state);
 inline void NormalizeLeftDayboundFace(GameState& state, int controller, const Card& left, const CardDefinition& d);
@@ -1342,6 +1467,10 @@ inline void ExileOppCreatureUntilLeaves(GameState& state, int controller, int so
 inline void ResolveEtbExileUpToOne(GameState& state, int controller, int source_number, int max_mv,
                                    const std::string& src_name);
 inline void FireExiledOwnerIllusion(GameState& state, const Card& left);
+// Oblivion Ring (CardParams::etb_exile_nonland_until_leaves), defined beside Skyclave's resolver below.
+inline void ResolveEtbExileNonlandUntilLeaves(GameState& state, int controller, int source_number,
+                                              const std::string& src_name, const std::string& pin = std::string());
+inline void ReturnExiledUntilLeaves(GameState& state, const Card& left);
 // CHAMPION (CR 702.72; CardParams::champion_subtype -- Nova Chaser), defined beside
 // PermCountsAsSubtype below. The searched pick rides g_champion_pin: `entrant` = the champion's
 // card.m_number; `pick` = the IDENTITY to exile (> 0: a card.m_number -- a battlefield permanent at
@@ -2758,6 +2887,18 @@ inline bool CardMatchesTypeName(const Card& card, const std::string& type_name)
     return false;
 }
 
+// Enchantress's Presence (CardParams::draw_on_cast_types): does a cast of `cast` set off this
+// watcher's "whenever you cast a <type> spell, draw a card"? Read off the CAST card's printed type
+// line (the spell on the stack -- a static changing permanents' types never reaches a spell). The
+// ONE predicate FireOnCastTriggers (the effect) and TurnSolver's site-10 clause (the breakpoint
+// fan-out) both read, so the two cannot drift.
+inline bool CastTypeDrawWatcherMatches(const CardParams& watcher, const Card& cast)
+{
+    for (const std::string& t : watcher.draw_on_cast_types)
+    { if (CardMatchesTypeName(cast, t)) { return true; } }
+    return false;
+}
+
 // Tutor decision (Idyllic / Enlightened): returns the ORDERED list of library card NAMES the
 // tutor should consider fetching. This is the first instance of the intended general pattern --
 // a deck/archetype heuristic returns a CANDIDATE SET, and the caller treats it as:
@@ -3461,7 +3602,10 @@ inline void OpponentLandEnters(GameState& state, const Card& entering, const Car
 
     // KAROO (etb_bounce_land): "return a land you control to its owner's hand" -- that head's land, to
     // that head's hand (its right end).
-    if (face.params.etb_bounce_land && !suppressed)
+    // ENCHANTED EVENING + OPALESCENCE: the trigger finds NO land -- the Karoo itself and every land the head held
+    // are 0/0 creatures that the toughness SBA removes before the trigger resolves (a trigger survives its source,
+    // but its "return a land you control" has nothing left to return).
+    if (face.params.etb_bounce_land && !suppressed && !LandDiesToTypeStatics(state, face))
     {
         int pick = -1, karoo = -1;
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -3597,7 +3741,11 @@ inline LandPlayResult PlayLeftmostLandFrom(GameState& state, std::vector<Card>& 
         ? std::max(1, fp.land_search_activation_life_cost)
         : fp.land_search_activation_life_cost;
     // BLOOD SUN (G4): a fetchland has lost its fetch -- it simply stays.
-    if ((!typed_fetch && !basic_fetch) || opp.life <= life_cost || LandNonManaAbilitiesSuppressed(state))
+    // ENCHANTED EVENING + OPALESCENCE: the fetchland is a 0/0 creature as it enters and dies to the toughness SBA
+    // before the opponent receives priority (CR 117.5 / 704.3), so its fetch can never be activated: it enters (and
+    // ResolvePassiveOpponentLandTurn's type-statics checkpoint puts it into the graveyard).
+    if ((!typed_fetch && !basic_fetch) || opp.life <= life_cost || LandNonManaAbilitiesSuppressed(state)
+        || LandDiesToTypeStatics(state, *face))
     {
         OpponentLandEnters(state, card, *face, false, head, hand, graveyard, result.notes, result.life_gains);
         return result;
@@ -3741,6 +3889,12 @@ inline void ResolvePassiveOpponentLandTurn(GameState& state)
             { OpponentGainsLife(state, 0, g.second, g.first); }
         }
     }
+    // ENCHANTED EVENING + OPALESCENCE: the land(s) just played are 0/0 enchantment creatures and die to the
+    // toughness SBA (CR 704.5f) before the opponent receives priority; an Aura on one goes with it (CR 704.5m).
+    // OpponentLandEnters pushes onto the battlefield directly (no enter cascade), so the refresh + sweep run HERE,
+    // after both heads' drops, where no battlefield index is held. Shared by both worlds (lockstep); a no-op
+    // without deck_has_type_statics.
+    TypeStaticsSbaCheckpoint(state);
     if (!searched) { return; }
     // Archive Trap: "if an opponent searched their library this turn" -- either head; the trap's
     // mill targets players[1], the targeted head.
@@ -6572,9 +6726,40 @@ inline bool CreatureHasAura(const Permanent& creature, const GameState& state)
 // (CR 303.4a), so a land already carrying a shroud-granting aura can take no further auras. It is
 // deliberately NOT filtered on controller: shroud is symmetric, and an opponent's aura on our land
 // would shroud it just the same.
+// Is this permanent an ENCHANTMENT right now? The ONE reader the Sterling Grove grant uses, so every shroud
+// predicate follows it. It reads the permanent's own Card COPY, which is where the type-changing statics write:
+// Enchanted Evening ("All permanents are enchantments in addition to their other types") adds Enchantment to every
+// battlefield copy in RefreshTypeStatics (layer 4), so under Enchanted Evening the Grove's grant covers every other
+// permanent we control -- lands included (an Aura spell can then no longer target our land, CR 702.18a). Kept as a
+// copy read, not a board walk for an Enchanted Evening: the refresh runs at every battlefield-membership chokepoint
+// and SBA checkpoint, so the copy is current wherever a target is chosen.
+inline bool PermanentIsEnchantmentNow(const Permanent& p, const GameState& state)
+{
+    (void)state;
+    return p.card.IsEnchantment();
+}
+
+// Sterling Grove: "Other enchantments you control have shroud." TRUE iff `p` is an enchantment and its
+// controller controls ANOTHER permanent carrying grants_other_enchantments_shroud (a Grove never shrouds
+// itself; two Groves shroud each other). Shroud is symmetric (CR 702.18a): it stops OUR targeting too.
+// Behind the deck stamp, so a deck without the card pays one bool test.
+inline bool EnchantmentShroudFromGrant(const Permanent& p, const GameState& state)
+{
+    if (!state.deck_has_enchantment_shroud) { return false; }
+    if (!PermanentIsEnchantmentNow(p, state)) { return false; }
+    for (const Permanent& g : state.battlefield)
+    {
+        if (g.controller_index != p.controller_index || g.card.m_number == p.card.m_number) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(g.card);
+        if (d && d->params.grants_other_enchantments_shroud) { return true; }
+    }
+    return false;
+}
+
 inline bool LandHasShroud(const Permanent& land, const GameState& state)
 {
     if (!land.card.IsLand()) { return false; }
+    if (EnchantmentShroudFromGrant(land, state)) { return true; }   // Sterling Grove (an enchantment land)
     for (const Permanent& a : state.battlefield)
     {
         if (a.aura_attached_to != land.card.m_number) { continue; }
@@ -7032,7 +7217,18 @@ inline bool CreatureHasShroud(const Permanent& creature, const GameState& state,
             return true;
         }
     }
-    return false;
+    // Sterling Grove's grant on an enchantment creature (Opalescence). Not an Equipment, so src_out stays
+    // 0: there is no shroud source the equip enumerator could move away.
+    return EnchantmentShroudFromGrant(creature, state);
+}
+
+// Shroud on ANY permanent (a noncreature, nonland one included -- Oblivion Ring's "target nonland
+// permanent"): the land and creature predicates above, plus Sterling Grove's enchantment grant.
+inline bool PermanentHasShroud(const Permanent& p, const GameState& state)
+{
+    if (p.card.IsLand() && LandHasShroud(p, state)) { return true; }
+    if ((p.card.IsCreature() || p.is_animated) && CreatureHasShroud(p, state)) { return true; }
+    return EnchantmentShroudFromGrant(p, state);
 }
 
 // Can an Aura SPELL cast by `controller` TARGET this creature? (CR 303.4a: an Aura spell targets the
@@ -8440,6 +8636,15 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
                 { if (cs == want) { sram_subtype_hit = true; break; } }
                 if (sram_subtype_hit) { break; }
             }
+        }
+        // Enchantress's Presence: "Whenever you cast an enchantment spell, draw a card." MANDATORY,
+        // "whenever YOU cast" (watcher controller == active player), one draw per Presence. The cast
+        // card is on the stack, so a Presence being cast never sees itself. A real CR-121 draw
+        // (TrickDraw: counted, viewer + saved log, deck-out flagged), lockstep in both cast paths.
+        if (!def->params.draw_on_cast_types.empty() && p.controller_index == active
+            && CastTypeDrawWatcherMatches(def->params, cast_def.card))
+        {
+            TrickDraw(state, p.controller_index, 1);
         }
         if ((def->params.draw_on_aura_cast && cast_def.params.is_aura) || sram_subtype_hit)
         {
@@ -13232,6 +13437,25 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                               + " +1/+1 counter" + (PlusCountersOn(e) == 1 ? "" : "s"));
             }
         }
+        // FADING N (CR 702.32a; Saproling Burst, Parallax Wave; CardParams::fading_counters): "This permanent enters with N
+        // fade counters on it" -- an as-enters replacement. Both CAST sites put it on the not-yet-pushed Permanent
+        // (EffectHandler's enter window, the rollout's apply_one enter branch), so a cast entrant arrives here already
+        // carrying them and is skipped; every OTHER enter route reaches it only here -- above all a Parallax Wave that
+        // its own leave trigger returns (lock cluster step 4: the self-exile loop returns it with five). Through
+        // PutFadeCounters (Doubling Season doubles it). Param-gated: one int test for every other entrant.
+        if (ed != nullptr && ed->params.fading_counters > 0 && e.fade_counters == 0
+            && (g_enters_with_preapplied == nullptr
+                || std::find(g_enters_with_preapplied->begin(), g_enters_with_preapplied->end(),
+                             e.card.m_number) == g_enters_with_preapplied->end()))
+        {
+            PutFadeCounters(state, e, ed->params.fading_counters);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "etb",
+                              e.card.m_name.str() + " enters with " + std::to_string(e.fade_counters)
+                              + " fade counter" + (e.fade_counters == 1 ? "" : "s") + " (fading)");
+            }
+        }
         // VANISHING N (CR 702.63a, Keldon Marauders; CardParams::vanishing_counters): "This permanent enters
         // with N time counters on it" -- the same as-enters replacement shape as the +1/+1 counters above,
         // at the same site so every enter route reaches it (executor and rollout). A counter given as the
@@ -13302,6 +13526,9 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     // later permanent lifting devotion to 5 flips an older Heliod on WITHOUT it "entering" (only
     // the actual entrant is passed to the creature-enter watchers). Param-gated early-out.
     RefreshDevotionCreatures(state);
+    // The lock pre-float (step 2): our doomed lands tap into the float BEFORE the refresh makes them 0/0 creatures.
+    PrefloatLandsAtTypeStaticsLock(state, entered_index);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     // ASCEND (Ocelot Pride): a permanent just ENTERED, which is the only way the count can rise, so
     // this is where the city's-blessing state trigger is checked (CR 702.131b). Above the watchers
@@ -14208,6 +14435,86 @@ inline void RefreshDevotionCreatures(GameState& state)
         if (is_creature) { p.card.AddType(CardType::Creature); }
         else             { p.card.RemoveType(CardType::Creature); }
     }
+}
+
+// Undo what the last type-statics refresh added to this card (Card::m_ts_mask): exactly the bits it records, never a
+// type the card had of its own. Safe on any card in any zone; a no-op on a clean card.
+inline void RestoreTypeStatics(Card& c)
+{
+    const std::uint8_t m = c.m_ts_mask;
+    if (m == 0) { return; }
+    if (m & Card::kTsAddedEnchantment) { c.RemoveType(CardType::Enchantment); }
+    if (m & Card::kTsAddedCreature)    { c.RemoveType(CardType::Creature); }
+    if (m & Card::kTsSetPt)
+    {
+        c.m_power     = (m & Card::kTsHadPower) ? std::optional<int>(c.m_ts_saved_power) : std::nullopt;
+        c.m_toughness = (m & Card::kTsHadTough) ? std::optional<int>(c.m_ts_saved_tough) : std::nullopt;
+    }
+    c.m_ts_mask = 0;
+    c.m_ts_saved_power = 0;
+    c.m_ts_saved_tough = 0;
+}
+
+// Enchanted Evening + Opalescence, re-derived from the board (see the block comment at the forward declaration).
+// RESTORE then RE-APPLY, so the result is a pure function of the board and idempotent: every permanent's card first
+// drops what the previous refresh added (its own m_ts_mask bits -- a card that re-entered from exile carrying stale
+// bits is undone the same way), then layer 4 (EE) and layers 4 + 7b (each Opalescence) apply in dependency order.
+// "Each OTHER": a lone Opalescence never animates itself; with two, each animates the other (Scryfall 2004-10-04).
+// Non-Aura: Utopia Sprawl / Wild Growth stay plain Auras. The base P/T OVERWRITES a creature's printed P/T (layer
+// 7b); counters (7d) and until-EOT pumps (7c) still apply on top through EffectivePower / Toughness. Mana value =
+// the COPY's mana cost (X = 0 on the battlefield, CR 202.3e; tokens and lands 0). Summoning sickness needs nothing
+// new: it tracks CONTROL duration (entered_this_turn / gained_control_this_turn, CR 302.6; Scryfall 2008-08-01), so
+// an enchantment controlled since the turn began may attack the turn Opalescence arrives.
+// Returns true when any type static is on the battlefield OR some card carried bits from the last refresh (the
+// caller's cue that a 0-toughness death or an orphaned Aura is possible); false for every board without either.
+// Never erases (see the forward declaration). KNOWN LIMIT, disclosed: another refresh that rewrites a copy's base
+// P/T between two of these (Saproling Burst's fade tokens, a characteristic-defining P/T) is overwritten while an
+// Opalescence applies and restored to the value saved before it -- no such card is in this deck or its pool.
+inline bool RefreshTypeStatics(GameState& state)
+{
+    if (!state.deck_has_type_statics) { return false; }
+    bool dirty = false;
+    for (const Permanent& p : state.battlefield) { if (p.card.m_ts_mask != 0) { dirty = true; break; } }
+    const TypeStaticsPresent ts = TypeStaticsOnBattlefield(state);
+    if (!ts.ee && ts.opals == 0 && !dirty) { return false; }
+    for (Permanent& p : state.battlefield) { RestoreTypeStatics(p.card); }
+    // Layer 4, Enchanted Evening: every permanent, both sides.
+    if (ts.ee)
+    {
+        for (Permanent& p : state.battlefield)
+        {
+            if (p.card.IsEnchantment()) { continue; }
+            p.card.AddType(CardType::Enchantment);
+            p.card.m_ts_mask |= Card::kTsAddedEnchantment;
+        }
+    }
+    // Layers 4 + 7b, Opalescence.
+    if (ts.opals > 0)
+    {
+        for (Permanent& p : state.battlefield)
+        {
+            Card& c = p.card;
+            if (!c.IsEnchantment()) { continue; }
+            const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->params.is_aura) { continue; }
+            const bool self = d != nullptr && d->params.static_animate_other_nonaura_enchantments_mv;
+            if (ts.opals - (self ? 1 : 0) <= 0) { continue; }
+            if (!c.IsCreature())
+            {
+                c.AddType(CardType::Creature);
+                c.m_ts_mask |= Card::kTsAddedCreature;
+            }
+            if (c.m_power.has_value())     { c.m_ts_mask |= Card::kTsHadPower; }
+            if (c.m_toughness.has_value()) { c.m_ts_mask |= Card::kTsHadTough; }
+            c.m_ts_saved_power = static_cast<std::int8_t>(std::clamp(c.m_power.value_or(0), -128, 127));
+            c.m_ts_saved_tough = static_cast<std::int8_t>(std::clamp(c.m_toughness.value_or(0), -128, 127));
+            c.m_ts_mask |= Card::kTsSetPt;
+            const int mv = c.m_mana_cost.ManaValue();
+            c.m_power     = mv;
+            c.m_toughness = mv;
+        }
+    }
+    return true;
 }
 
 // A permanent just entered under `controller` at battlefield slot `entered_index`: fire ITS OWN
@@ -15798,6 +16105,15 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         ResolveEtbExileUpToOne(state, controller, state.battlefield[entered_index].card.m_number,
                                p.etb_exile_opp_nonland_nontoken_max_mv, def->card.m_name.str());
     }
+    // Oblivion Ring: "exile another target nonland permanent" (until it leaves) -- every entry path, both
+    // worlds. Erases a permanent: entered_index may be stale after it (nothing below reads it for this card).
+    // `chosen_tutor` = the cast's SEARCHED target pin ("OR<n>", TurnSolver's Oblivion Ring post-pass);
+    // empty (a put path, the unpinned base, a rollout leaf) = the provider's pick off the live board.
+    if (p.etb_exile_nonland_until_leaves)
+    {
+        ResolveEtbExileNonlandUntilLeaves(state, controller, state.battlefield[entered_index].card.m_number,
+                                          def->card.m_name.str(), chosen_tutor);
+    }
     if (p.etb_tap_opp_creature)     { TapLargestOppCreature(state, controller); }
 
     // Shriekmaw ("destroy target nonartifact, nonblack creature") / Acidic Slime ("destroy target
@@ -16651,6 +16967,11 @@ inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, cons
     const CardDefinition* d = CardDatabase::Instance().LookupCached(left);
     OnStaticLandDropSourceLeft(state, controller, d);   // Exploration / Fastbond: its drops end with it (step 4)
     if (d && d->params.champion_merfolk) { ReturnMerfolkChampion(state, left.m_number); }
+    // Oblivion Ring's LEAVE half: the linked card returns now (CR 610.3c). Param-gated (one bool test).
+    // Parallax Wave's LEAVE half rides the same marker and return (lock cluster step 4): every card exiled with THIS
+    // object -- the Wave itself after a self-exile -- returns now.
+    if (d && (d->params.etb_exile_nonland_until_leaves || d->params.fade_exile_target_creature))
+    { ReturnExiledUntilLeaves(state, left); }
     // Brutal Cathar // Moonrage Brute (either face): "until this creature leaves the battlefield"
     // ends NOW (CR 610.3) -- the linked card returns at the leave, not at the next day/night turn
     // boundary (which stays as the backstop sweep for leave paths that bypass this hook). And a
@@ -17307,6 +17628,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
     // you control dies" lifegain (Daxos) fires. Both ABOVE the `reactions.empty()` early-out
     // below, which only knows subtype-keyed watchers.
     RefreshDevotionCreatures(state);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     FireCreatureDiesWatchers(state, dead_controller, dwatch);
 
@@ -17957,6 +18279,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
                 ResolveAthreosExile(state, leaving);
             }
             RefreshDevotionCreatures(state);   // Ajani's {W}{W} left devotion
+            RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
             RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
             if (g_play_event_sink && !g_tap_speculating)
             {
@@ -18469,6 +18792,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         state.players[q.owner_index].graveyard.push_back(RevealedCard(dead_card));
         state.battlefield.erase(state.battlefield.begin() + i);
         RefreshDevotionCreatures(state);   // a dead walker's pips leave devotion (Ajani {2}{W}{W})
+        RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
         RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
         break;
     }
@@ -20850,7 +21174,8 @@ inline bool CardIsLord(const Card& c)
     const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
     return d != nullptr && IsLordPermanent(*d);
 }
-inline int SweepZeroToughnessSba(GameState& state)
+// `why` names the cause in the viewer's play event only (no digest reads it).
+inline int SweepZeroToughnessSba(GameState& state, const char* why = "a lord left")
 {
     struct Dead { Card card; int controller; bool was_token; int minus; int total; int owner; };
     std::vector<Dead> died;
@@ -20873,7 +21198,7 @@ inline int SweepZeroToughnessSba(GameState& state)
     if (!died.empty() && g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "death", "\xE2\x98\xA0 " + std::to_string(died.size())
-                      + " creature(s) die at 0 toughness (a lord left)");
+                      + " creature(s) die at 0 toughness (" + why + ")");
     }
     FireUnearthedLeaves(state, unearth_left);
     for (const Dead& d : died)
@@ -20950,6 +21275,7 @@ inline void UnearthedLeftBattlefield(GameState& state, const Permanent& leaving)
     { state.permanent_left_under_control_this_turn = true; }
     FireLeavesBattlefieldTriggers(state, leaving.controller_index, leaving.card);
     RefreshDevotionCreatures(state);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);
     ResolveAthreosExile(state, leaving);
 }
@@ -20995,6 +21321,7 @@ inline void PermanentsLeftBattlefieldTogether(GameState& state, const std::vecto
         if (mark != marked.end()) { marked.erase(mark); }
     }
     RefreshDevotionCreatures(state);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);
 }
 
@@ -21397,6 +21724,7 @@ inline void PerformEndStepDelayedReturns(GameState& state)
             FireLeavesBattlefieldTriggers(state, d.second, returned);
             EnterHand(state, owner, returned, HandEntryReason::Bounce);
             RefreshDevotionCreatures(state);
+            RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
             RefreshReconfigureCreatures(state);
             break;
         }
@@ -22160,10 +22488,326 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
             if (destroy) { FireGraveyardEntryTriggers(state, dead_owner, dead); }
             FireLeavesBattlefieldTriggers(state, dead_ctrl, dead);
             RefreshDevotionCreatures(state);
+            RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
             RefreshReconfigureCreatures(state);
         }
     }
     SweepOrphanedAuras(state);   // an Aura on an exiled / destroyed host (CR 704.5m)
+}
+
+// ==== SIMULTANEOUS DESTROY (Enchanted Evening lock cluster steps 3 / 5: Calming Verse, Force of Vigor) ===========
+// ONE destroy event over several permanents, in two halves so a spell with a mid-resolution check (Calming Verse's
+// "Then if you control an untapped land") can read the board between its clauses before any trigger resolves
+// (CR 603.3: triggered abilities wait until the spell has finished resolving).
+//   * DestroyRemoveTogether: each listed permanent (by m_number; one that is gone is skipped, CR 608.2b) leaves:
+//     an indestructible one stays (CR 702.12b), an unearthed one is exiled instead (CR 702.84a, deferred), a TOKEN
+//     ceases to exist (CR 111.7 -- an opponent spawn body is a token though it carries no is_token), a card goes to
+//     its OWNER's graveyard (CR 400.3). Attachments pointing at it fall off (CR 301.5c); an orphaned Aura goes at the
+//     sweep below (CR 704.5m).
+//   * DestroyFireTogether: then, in battlefield order, each departure's cascade: a creature DIES (OnCreatureDies:
+//     leaves-the-battlefield + dies watchers + the board refreshes; FireOppCreatureDies for the opponent's), a
+//     noncreature only LEAVES (graveyard-entry triggers, FireLeavesBattlefieldTriggers -- an Oblivion Ring returns its
+//     card, an Exploration takes its drops with it -- and the refreshes). Every leave reaches the chokepoints, so the
+//     type statics are re-derived and step 1's checkpoint runs after the resolution in both worlds.
+struct DestroyedTogether
+{
+    Card card;
+    int  controller;
+    int  owner;
+    bool creature;
+    bool token;
+    int  minus_counters;
+    int  total_counters;
+};
+inline int DestroyRemoveTogether(GameState& state, const std::vector<int>& numbers, const std::string& src_name,
+                                 std::vector<DestroyedTogether>& gone, std::vector<Permanent>& unearth_left)
+{
+    int n = 0;
+    for (int num : numbers)
+    {
+        int bi = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == num) { bi = i; break; } }
+        if (bi < 0) { continue; }
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+        if (q.HasKeyword(Keyword::Indestructible))
+        {
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              src_name + ": " + q.card.m_name.str() + " is indestructible -- it stays");
+            }
+            continue;
+        }
+        if (UnearthExileDeferred(state, static_cast<std::size_t>(bi), "destroyed", unearth_left)) { ++n; continue; }
+        DestroyedTogether g{ q.card, q.controller_index, q.owner_index, q.card.IsCreature() || q.is_animated,
+                             q.is_token || q.card.m_number >= GameState::kFirstOppSpawnNumber,
+                             MinusCountersOn(q), DyingCountersTotal(q) };
+        if (!g.token) { state.players[static_cast<std::size_t>(g.owner)].graveyard.push_back(RevealedCard(g.card)); }
+        state.battlefield.erase(state.battlefield.begin() + bi);
+        for (Permanent& o : state.battlefield)
+        {
+            if (o.equipped_to      == num) { o.equipped_to      = 0; }
+            if (o.aura_attached_to == num) { o.aura_attached_to = 0; }
+        }
+        gone.push_back(std::move(g));
+        ++n;
+    }
+    return n;
+}
+inline void DestroyFireTogether(GameState& state, int controller, const std::vector<DestroyedTogether>& gone,
+                                const std::vector<Permanent>& unearth_left)
+{
+    GyShuffleBatch _gyb(state);   // simultaneous destroys: a graveyard shuffle waits for all of them
+    FireUnearthedLeaves(state, unearth_left);
+    bool noncreature_left = false;
+    for (const DestroyedTogether& g : gone)
+    {
+        if (g.creature)
+        {
+            OnCreatureDies(state, g.controller, g.card, g.token, g.minus_counters, nullptr, g.total_counters, g.owner);
+            if (g.controller != controller) { FireOppCreatureDies(state, g.controller); }
+            continue;
+        }
+        if (g.controller == state.active_player_index) { state.permanent_left_under_control_this_turn = true; }
+        if (!g.token) { FireGraveyardEntryTriggers(state, g.owner, g.card); }
+        FireLeavesBattlefieldTriggers(state, g.controller, g.card);
+        noncreature_left = true;
+    }
+    if (noncreature_left)
+    {
+        RefreshDevotionCreatures(state);
+        RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
+        RefreshReconfigureCreatures(state);
+    }
+    SweepOrphanedAuras(state);   // an Aura on a destroyed host (CR 704.5m)
+}
+
+// ---- CALMING VERSE (lock cluster step 3; design §4.3) --------------------------------------------------------
+// "Destroy all enchantments you don't control. Then if you control an untapped land, destroy all enchantments you
+// control." No target (hexproof and shroud are no defence, USER ruling 11). Clause 1: every permanent we do not
+// control that is an enchantment ON ITS COPY (under Enchanted Evening: every opposing permanent -- lands, spawn
+// bodies). Clause 2 is checked DURING resolution, after clause 1 (Scryfall 2004-10-04): any land we control that
+// is untapped (an uncracked fetchland counts) -> every enchantment we control (under EE: everything, lands too).
+//
+// THE TAP-ALL CHOICE is a two-variant cast axis, a SOUND fold of the 2^n tap subsets (design §4.3): we hold
+// priority with the Verse on the stack and may activate mana abilities (CR 605.3a); the mana floats to the end of
+// the phase (CR 106.4 / 500.4). Only one bit of the subset matters to clause 2 -- whether ANY untapped land
+// remains -- and among the subsets that leave one, leaving every land untapped weakly dominates. So:
+//   KEEP ("VK"): before resolution, every untapped land we control is tapped into the float through the lock
+//     pre-float route (g_lock_prefloat_hook: the payer's own pre-tap route and colour rule, a dual as `wild` only
+//     under deck_float_wild_exact). A land it cannot float (a fetchland: no mana ability; a dual without the stamp)
+//     stays untapped, so clause 2 fires -- the literal result; crack the fetch earlier in the line (the existing
+//     searched action) to keep.
+//   SWEEP-SELF ("VS"): the lands as they are.
+// Both are offered by TurnSolver's post-pass in the decision space and in human play (NO-GREEDY: SWEEP-SELF is
+// legal and almost never right, so the engine still offers it). An UNPINNED cast (a rollout leaf beyond the
+// horizon, the d0 runner) takes DecisionProvider::CalmingVerseKeepDefault. Destroys go through the simultaneous
+// destroy halves above, so every leave reaches the chokepoints (an Oblivion Ring returns its card).
+// (The lock modelling's virtual-board clear, design §3.4.3, is NOT on this branch: Enchanted Evening is parked,
+// docs/design/enchanted-evening-parked.md; it is on backup/2026-11-26/ee-analysis-lock.)
+inline bool CalmingVersePinKeep(const std::string& pin, bool& keep)
+{
+    if (pin == "VK") { keep = true;  return true; }
+    if (pin == "VS") { keep = false; return true; }
+    return false;
+}
+inline void ResolveCalmingVerse(GameState& state, int controller, const CardDefinition& def, const std::string& pin)
+{
+    const std::string src = def.card.m_name.str();
+    bool keep = true;
+    if (!CalmingVersePinKeep(pin, keep)) { keep = ResolveProvider(state).CalmingVerseKeepDefault(state, controller); }
+    if (keep && g_lock_prefloat_hook != nullptr)
+    {
+        std::vector<int> lands;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == controller && p.card.IsLand() && !p.tapped) { lands.push_back(p.card.m_number); }
+        }
+        for (int num : lands) { g_lock_prefloat_hook(state, controller, num); }
+    }
+    std::vector<DestroyedTogether> gone;
+    std::vector<Permanent> unearth_left;
+    std::vector<int> theirs;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller && p.card.IsEnchantment()) { theirs.push_back(p.card.m_number); }
+    }
+    const int n1 = DestroyRemoveTogether(state, theirs, src, gone, unearth_left);
+    bool untapped_land = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.IsLand() && !p.tapped) { untapped_land = true; break; }
+    }
+    int n2 = 0;
+    if (untapped_land)
+    {
+        std::vector<int> ours;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == controller && p.card.IsEnchantment()) { ours.push_back(p.card.m_number); }
+        }
+        n2 = DestroyRemoveTogether(state, ours, src, gone, unearth_left);
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "removal",
+                      "\xF0\x9F\x92\x80 " + src + (keep ? " (lands tapped first)" : " (lands left untapped)")
+                      + ": destroys " + std::to_string(n1) + " opposing enchantment(s)"
+                      + (untapped_land ? ", then " + std::to_string(n2) + " of yours (you control an untapped land)"
+                                       : "; you control no untapped land, so yours survive"));
+    }
+    DestroyFireTogether(state, controller, gone, unearth_left);
+}
+
+// ---- FORCE OF VIGOR clause 2 (lock cluster step 5; design §4.5) ----------------------------------------------
+// "Destroy up to two target artifacts and/or enchantments." Targets are chosen as it is CAST (CR 601.2c), 0..N
+// DISTINCT permanents (CR 115.3), either side, each an artifact or an enchantment on its copy (under Enchanted
+// Evening: every permanent). Shroud binds our own targeting (CR 702.18a: Sterling Grove's grant -- PermanentHasShroud),
+// an opponent's hexproof stops us (CR 702.11b). On resolution each target is re-checked (CR 608.2b): an illegal one
+// is unaffected, the rest are destroyed together; an indestructible one stays.
+// THE TARGET SET IS SEARCHED (NO-GREEDY): DestroyUpToArtEnchOptions folds the legal set into identity classes
+// (CastTriggerTargetFoldKey -- two identical untapped Forests are one target), orders the class representatives
+// (CastTriggerTargetOrder, destroy) and lists every option -- the empty set, each class, two members of one class,
+// each pair of classes; TurnSolver's post-pass emits one cast variant per option, pinned "FV<n>[,<m>]" ("FV" alone =
+// no target, a legal "up to" choice). An UNPINNED cast (a rollout leaf, the d0 runner) takes
+// DecisionProvider::DestroyUpToArtEnchPick. The off-turn pitch (clause 1) is NOT modelled (hard cast only): its lock
+// step 7 build is on backup/2026-11-26/ee-analysis-lock (docs/design/enchanted-evening-parked.md).
+inline bool DestroyUpToArtEnchTargetLegal(const GameState& state, int controller, const Permanent& q)
+{
+    if (!(q.card.HasType(CardType::Artifact) || q.card.IsEnchantment())) { return false; }
+    if (PermanentHasShroud(q, state)) { return false; }
+    if (q.controller_index != controller && q.HasKeyword(Keyword::Hexproof)) { return false; }
+    return true;
+}
+// Every option (battlefield indices; option 0 = the empty set), at most `n_max` targets each.
+inline std::vector<std::vector<int>> DestroyUpToArtEnchOptions(const GameState& state, int controller, int n_max)
+{
+    std::vector<std::vector<int>> classes;
+    std::vector<std::uint64_t> keys;
+    std::vector<int> linked;
+    LandfallTargetLinks(state, linked);
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (!DestroyUpToArtEnchTargetLegal(state, controller, q)) { continue; }
+        std::uint64_t k = 0;
+        const bool foldable = CastTriggerTargetFoldKey(state, q, k, &linked) && k != 0;
+        bool placed = false;
+        if (foldable)
+        {
+            for (std::size_t c = 0; c < classes.size(); ++c)
+            { if (keys[c] == k) { classes[c].push_back(i); placed = true; break; } }
+        }
+        if (!placed) { classes.push_back({ i }); keys.push_back(foldable ? k : 0); }
+    }
+    if (classes.size() >= 2)
+    {
+        std::vector<int> reps;
+        for (const auto& c : classes) { reps.push_back(c.front()); }
+        ResolveProvider(state).CastTriggerTargetOrder(state, controller, /*destroy=*/true, reps);
+        std::vector<std::vector<int>> ordered;
+        for (int r : reps)
+        { for (const auto& c : classes) { if (c.front() == r) { ordered.push_back(c); break; } } }
+        if (ordered.size() == classes.size()) { classes.swap(ordered); }   // a provider must not add / drop
+    }
+    std::vector<std::vector<int>> out;
+    out.push_back({});
+    if (n_max >= 1) { for (const auto& c : classes) { out.push_back({ c[0] }); } }
+    if (n_max >= 2)
+    {
+        for (std::size_t a = 0; a < classes.size(); ++a)
+        {
+            if (classes[a].size() >= 2) { out.push_back({ classes[a][0], classes[a][1] }); }
+            for (std::size_t b = a + 1; b < classes.size(); ++b) { out.push_back({ classes[a][0], classes[b][0] }); }
+        }
+    }
+    return out;   // (no card of the pool asks for more than two; a larger N would extend the multisets here)
+}
+// The pin: "FV" + the targets' m_numbers, comma-separated. ONE encoder / parser for the enumerator, the resolver,
+// the plan signatures (#DV) and the viewer label.
+inline std::string DestroyUpToArtEnchPin(const std::vector<int>& numbers)
+{
+    std::string s = "FV";
+    for (std::size_t i = 0; i < numbers.size(); ++i)
+    {
+        if (i > 0) { s += ','; }
+        s += std::to_string(numbers[i]);
+    }
+    return s;
+}
+inline bool DestroyUpToArtEnchPinTargets(const std::string& pin, std::vector<int>& numbers)
+{
+    numbers.clear();
+    if (pin.size() < 2 || pin[0] != 'F' || pin[1] != 'V') { return false; }
+    int n = 0;
+    bool any = false;
+    for (std::size_t i = 2; i < pin.size(); ++i)
+    {
+        const char ch = pin[i];
+        if (ch == ',')
+        {
+            if (!any) { numbers.clear(); return false; }
+            numbers.push_back(n); n = 0; any = false;
+            continue;
+        }
+        if (ch < '0' || ch > '9') { numbers.clear(); return false; }
+        n = n * 10 + (ch - '0');
+        any = true;
+    }
+    if (!any && pin.size() > 2) { numbers.clear(); return false; }   // a trailing comma ("FV1,") is malformed
+    if (any) { numbers.push_back(n); }
+    return true;
+}
+inline void ResolveDestroyUpToArtEnch(GameState& state, int controller, const CardDefinition& def,
+                                      const std::string& pin)
+{
+    const std::string src = def.card.m_name.str();
+    const int n_max = def.params.destroy_up_to_artifacts_enchantments;
+    std::vector<int> chosen;
+    if (!DestroyUpToArtEnchPinTargets(pin, chosen))
+    {
+        // Unpinned: the provider's beyond-horizon pick over the live options.
+        const std::vector<std::vector<int>> opts = DestroyUpToArtEnchOptions(state, controller, n_max);
+        int k = ResolveProvider(state).DestroyUpToArtEnchPick(state, controller, opts);
+        if (k < 0 || k >= static_cast<int>(opts.size())) { k = 0; }
+        for (int bi : opts[static_cast<std::size_t>(k)])
+        { chosen.push_back(state.battlefield[static_cast<std::size_t>(bi)].card.m_number); }
+    }
+    // CR 608.2b: re-check each target on resolution; an illegal one is unaffected.
+    std::vector<int> live;
+    for (int num : chosen)
+    {
+        if (static_cast<int>(live.size()) >= n_max) { break; }
+        if (std::find(live.begin(), live.end(), num) != live.end()) { continue; }
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.card.m_number == num && DestroyUpToArtEnchTargetLegal(state, controller, q))
+            { live.push_back(num); break; }
+        }
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        std::string names;
+        for (int num : live)
+        {
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.card.m_number != num) { continue; }
+                if (!names.empty()) { names += ", "; }
+                names += (q.controller_index == controller ? "your " : "the opponent's ") + q.card.m_name.str();
+                break;
+            }
+        }
+        EmitPlayEvent(state.turn_number, "removal",
+                      "\xF0\x9F\x92\x80 " + src + (live.empty() ? std::string(": destroys nothing")
+                                                               : ": destroys " + names));
+    }
+    if (live.empty()) { return; }
+    std::vector<DestroyedTogether> gone;
+    std::vector<Permanent> unearth_left;
+    DestroyRemoveTogether(state, live, src, gone, unearth_left);
+    DestroyFireTogether(state, controller, gone, unearth_left);
 }
 // "When you cast this spell, creatures you control get +P/+T and gain trample until end of turn" (Decimator of
 // the Provinces, cast_trigger_team_pump_*): resolving the trigger -- THE one resolver for both worlds (the
@@ -22441,6 +23085,488 @@ inline void FireExiledOwnerIllusion(GameState& state, const Card& left)
         }
         return;
     }
+}
+
+// ---- Oblivion Ring (Enchanted Evening, 2026-11-25) ------------------------------------------------
+// "When this enchantment enters, exile another target nonland permanent. When this enchantment leaves
+// the battlefield, return the exiled card to the battlefield under its owner's control."
+//
+// The ETB is MANDATORY (no "up to", no "may"): with any legal target one must be chosen (CR 603.3d), on
+// EITHER side -- so against the goldfish it hits OUR OWN nonland permanent whenever the opponent has
+// none (2 of every 10 game indices schedule no spawn). Legal = every nonland permanent but the source,
+// that this controller may target: shroud stops our own targeting too (Sterling Grove's grant on our
+// other enchantments, Lightning Greaves -- PermanentHasShroud, CR 702.18a), an opponent's hexproof stops
+// ours (CR 702.11b). WHICH one = DecisionProvider::EtbExileNonlandTargetPick (default: the Acidic Slime
+// / Shriekmaw dominance ladder -- an opponent's permanent first, else our least costly); human play
+// board-clicks it over the full legal set (the mandatory-ETB `target` shape). No legal target -> the
+// trigger is removed.
+//
+// The LINK (CR 607.2a): the card is parked in exile with m_staged_expiry = kExileUntilLeavesBase -
+// (2 * source_number + owner) -- a range disjoint from every other linked-exile marker (Cathar's,
+// Skyclave's, the champions') -- and the source records it in Permanent::linked_exile_number (folded
+// into both state keys and dominance). A TOKEN exiled ceases to exist (CR 111.8): nothing to return. If
+// the source is already gone when the trigger resolves the exile is forever (the leave trigger already
+// resolved with nothing linked) -- unreachable here (both worlds resolve the ETB on entry).
+constexpr int kExileUntilLeavesBase = -0x40000000;
+inline bool CardIsExileUntilLeaves(const Card& c)
+{
+    return !c.m_is_staged && c.m_staged_expiry <= kExileUntilLeavesBase
+        && c.m_staged_expiry > kExileUntilLeavesBase - 0x08000000;
+}
+inline int ExileUntilLeavesSource(const Card& c) { return (kExileUntilLeavesBase - c.m_staged_expiry) >> 1; }
+inline int ExileUntilLeavesOwner(const Card& c)  { return (kExileUntilLeavesBase - c.m_staged_expiry) & 1; }
+
+// The SEARCHED target pin (Action::tutor_target / StackEntry::tutor_target): "OR<n>" = the permanent numbered
+// n. ONE encoder / parser for the enumerator (TurnSolver's Oblivion Ring post-pass), the resolver and the
+// plan signatures (#OR) -- the Archdruid's Charm AX<n> shape.
+inline std::string ExileUntilLeavesPin(int number) { return "OR" + std::to_string(number); }
+inline int ExileUntilLeavesPinTarget(const std::string& pin)
+{
+    if (pin.size() < 3 || pin[0] != 'O' || pin[1] != 'R') { return 0; }
+    int n = 0;
+    for (std::size_t i = 2; i < pin.size(); ++i)
+    {
+        if (pin[i] < '0' || pin[i] > '9') { return 0; }
+        n = n * 10 + (pin[i] - '0');
+    }
+    return n;
+}
+
+inline std::vector<int> EtbExileNonlandLegal(const GameState& state, int controller, int source_number)
+{
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.card.m_number == source_number || q.card.IsLand()) { continue; }   // "another", "nonland"
+        if (PermanentHasShroud(q, state)) { continue; }
+        if (q.controller_index != controller && q.HasKeyword(Keyword::Hexproof)) { continue; }
+        legal.push_back(i);
+    }
+    return legal;
+}
+
+inline void ResolveEtbExileNonlandUntilLeaves(GameState& state, int controller, int source_number,
+                                              const std::string& src_name, const std::string& pin)
+{
+    const std::vector<int> legal = EtbExileNonlandLegal(state, controller, source_number);
+    if (legal.empty())
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "trigger", src_name + ": no legal target -- the trigger is removed"); }
+        return;
+    }
+    // The searched pin first (a target the search branched on); a pin whose permanent is gone or no longer
+    // legal (it left, or gained shroud earlier in the plan) falls back to the unpinned pick -- that variant
+    // then only duplicates the base, which the post-apply dedup drops.
+    int k = -1;
+    if (const int pn = ExileUntilLeavesPinTarget(pin); pn > 0)
+    {
+        for (int j = 0; j < static_cast<int>(legal.size()); ++j)
+        {
+            if (state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(j)])].card.m_number == pn)
+            { k = j; break; }
+        }
+    }
+    if (k < 0) { k = ResolveProvider(state).EtbExileNonlandTargetPick(state, controller, legal); }
+    if (k < 0 || k >= static_cast<int>(legal.size())) { k = 0; }
+    if (g_play_loyalty_chooser && legal.size() > 1)
+    {
+        const int c = (*g_play_loyalty_chooser)(state, controller, src_name,
+                                                "exiled until " + src_name
+                                                + " leaves (another target nonland permanent -- mandatory)",
+                                                legal, k);
+        if (c >= 0 && c < static_cast<int>(legal.size())) { k = c; }
+    }
+    const int bi = legal[static_cast<std::size_t>(k)];
+    const Permanent gone = state.battlefield[static_cast<std::size_t>(bi)];
+    for (Permanent& e : state.battlefield)
+    {
+        if (e.aura_attached_to == gone.card.m_number) { e.aura_attached_to = 0; }
+        if (e.equipped_to      == gone.card.m_number) { e.equipped_to      = 0; }
+    }
+    state.battlefield.erase(state.battlefield.begin() + bi);
+    bool source_here = false;
+    for (const Permanent& sp : state.battlefield) { if (sp.card.m_number == source_number) { source_here = true; break; } }
+    if (!gone.is_token)
+    {
+        Card c = RevealedCard(gone.card);
+        c.m_is_staged     = false;
+        c.m_staged_expiry = source_here ? kExileUntilLeavesBase - (2 * source_number + (gone.owner_index & 1)) : 0;
+        state.exile.push_back(c);
+        if (source_here)
+        {
+            for (Permanent& sp : state.battlefield)
+            { if (sp.card.m_number == source_number) { sp.linked_exile_number = c.m_number; break; } }
+        }
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      src_name + ": exiles "
+                      + (gone.controller_index == controller ? std::string("your ") : std::string("the opponent's "))
+                      + gone.card.m_name.str() + " until it leaves the battlefield");
+    }
+    // The exiled permanent's own leave triggers (a returning Oblivion Ring's linked card, a Grove...).
+    FireLeavesBattlefieldTriggers(state, gone.controller_index, gone.card);
+}
+
+// The LEAVES half, called from FireLeavesBattlefieldTriggers the moment the source leaves (CR 610.3c).
+// The card returns as a NEW object (CR 400.7) under its OWNER: ours through the shared put (both enter
+// cascades -- its own ETBs fire again), the passive opponent's spawn as a plain body under the
+// opponent (the Brutal Cathar return: FireCreatureEnterWatchers only). Cards linked to THIS leave are
+// collected before any return, so a returning Oblivion Ring that exiles afresh is a new link.
+inline void ReturnExiledUntilLeaves(GameState& state, const Card& left)
+{
+    std::vector<std::pair<Card, int>> back;
+    for (std::size_t i = 0; i < state.exile.size(); )
+    {
+        const Card& c = state.exile[i];
+        if (!CardIsExileUntilLeaves(c) || ExileUntilLeavesSource(c) != left.m_number) { ++i; continue; }
+        Card r = c;
+        r.m_staged_expiry = 0;
+        const int owner = ExileUntilLeavesOwner(c);
+        state.exile.erase(state.exile.begin() + static_cast<std::ptrdiff_t>(i));
+        back.emplace_back(std::move(r), owner);
+    }
+    for (const auto& [card, owner] : back)
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          card.m_name.str() + " returns to the battlefield (" + left.m_name.str() + " left)");
+        }
+        if (owner == state.active_player_index)
+        {
+            PutCardOntoBattlefield(state, owner, card, left.m_name.str() + " left the battlefield", 0, false, owner);
+            continue;
+        }
+        Permanent p;
+        p.card = card;
+        p.controller_index = owner;
+        p.owner_index      = owner;
+        state.battlefield.push_back(p);
+        FireCreatureEnterWatchers(state, owner, static_cast<int>(state.battlefield.size()) - 1);
+    }
+}
+
+// ==== PARALLAX WAVE (Enchanted Evening lock cluster step 4; docs/design/enchanted-evening-lock-design.md §4.4) ======
+// "Fading 5 / Remove a fade counter from this enchantment: Exile target creature. / When this enchantment leaves the
+// battlefield, each player returns to the battlefield all cards they own exiled with it."
+//   * Fading 5: fading_counters (put as it enters on every route; PerformUpkeepFading at our upkeep).
+//   * The activation (PermAbilityMode::FadeExileCreature): no {T}, no mana; the fade counter is the COST (CR 602.2b).
+//     TARGET = any creature on the battlefield, either side, that we may target: shroud stops our own targeting too
+//     (Sterling Grove's grant on our other enchantments, CR 702.18a -- PermanentHasShroud), an opponent's hexproof
+//     stops ours (CR 702.11b). Under Opalescence the Wave is a creature and may target ITSELF.
+//   * The LINK (CR 607.2a): a card it exiles is parked with the exile-until-leaves marker of the Wave's number
+//     (kExileUntilLeavesBase, Oblivion Ring's), so the shared leave hook returns every linked card under its owner as
+//     a new object on ANY leave route (FireLeavesBattlefieldTriggers -> ReturnExiledUntilLeaves). A TOKEN exiled
+//     ceases to exist (CR 111.7; an opponent spawn body counts as one). The source records an ORDER-FREE DIGEST of its
+//     linked set in Permanent::linked_exile_number (>= 0x40000000, never a card number; 0 = nothing linked), so every
+//     state key and dominance fold that already reads that field separates two Waves with different linked sets.
+//   * SELF-EXILE (CR 607.2a + 400.7): the Wave exiled by its own ability is itself a card exiled with it, so its leave
+//     trigger returns it -- a NEW object entering with five fade counters. An activation that resolves after the old
+//     object left exiles for good: its "exiled with it" names an object whose leave trigger already resolved. This
+//     engine resolves each activation at once, so that stack order is modelled only inside the loop batch of the sweep
+//     below (the non-self exiles are written unlinked, then the self-exile); an explicit activation is always linked.
+inline bool FadeExileTargetLegal(const GameState& state, const Permanent& q, int controller)
+{
+    if (q.card.m_number == 0) { return false; }
+    if (!(q.card.IsCreature() || q.is_animated)) { return false; }
+    if (PermanentHasShroud(q, state)) { return false; }
+    if (q.controller_index != controller && q.HasKeyword(Keyword::Hexproof)) { return false; }
+    return true;
+}
+
+// The legal set, battlefield indices. `fold` keeps ONE representative per identity class (CastTriggerTargetFoldKey: the
+// same characteristics, counters and state, nothing attached -- exiling either copy reaches boards that differ only in
+// which per-copy number left, a relabelling no rule observes). The SOURCE is never folded (a self-exile returns the
+// Wave; exiling an identical other copy links it), and LandfallTargetFoldKey already refuses any permanent with fade
+// counters or a link. Human play passes fold = false (every legal permanent is its own choice).
+inline std::vector<int> FadeExileLegalTargets(const GameState& state, int controller, int source_number, bool fold)
+{
+    std::vector<int> out;
+    std::vector<std::uint64_t> keys;
+    std::vector<int> links;
+    if (fold) { LandfallTargetLinks(state, links); }
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (!FadeExileTargetLegal(state, q, controller)) { continue; }
+        std::uint64_t k = 0;
+        if (fold && q.card.m_number != source_number && CastTriggerTargetFoldKey(state, q, k, &links) && k != 0)
+        {
+            if (std::find(keys.begin(), keys.end(), k) != keys.end()) { continue; }
+            keys.push_back(k);
+        }
+        out.push_back(i);
+    }
+    return out;
+}
+
+// Recompute the source's linked-set digest from the exile zone (order-free: a commutative sum). 0 = nothing linked.
+inline void RestampFadeExileLinks(GameState& state, int source_number)
+{
+    std::uint64_t acc = 0;
+    bool any = false;
+    for (const Card& c : state.exile)
+    {
+        if (!CardIsExileUntilLeaves(c) || ExileUntilLeavesSource(c) != source_number) { continue; }
+        std::uint64_t h = (static_cast<std::uint64_t>(static_cast<std::uint32_t>(c.m_number)) << 1)
+                        | static_cast<std::uint64_t>(ExileUntilLeavesOwner(c));
+        h = (h + 0x9E3779B97F4A7C15ull) * 0xBF58476D1CE4E5B9ull;
+        acc += h ^ (h >> 31);
+        any = true;
+    }
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number != source_number) { continue; }
+        p.linked_exile_number = any ? static_cast<int>((acc & 0x3FFFFFFFull) | 0x40000000ull) : 0;
+        break;
+    }
+}
+
+// One exile by the Wave's ability. `linked`: park a card with the source's marker (an explicit activation, the loop's
+// enablers and the self-exile) or exile it for good (the loop batch's opponent targets, whose activations resolve after
+// the old object left). Every leave reaches the chokepoints: attachments fall off (an orphaned Aura goes at the sweep,
+// CR 704.5m), the departed card's own leave trigger (an Oblivion Ring returns its card; a Wave exiled returns ITS
+// cards -- itself included after a self-exile) and the board refreshes (the type statics re-derive). Returns false when
+// the target is gone (CR 608.2b).
+inline bool FadeExilePermanent(GameState& state, int controller, int source_number, const std::string& src_name,
+                               int target_number, bool linked)
+{
+    int bi = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == target_number) { bi = i; break; } }
+    if (bi < 0) { return false; }
+    const Permanent leaving = state.battlefield[static_cast<std::size_t>(bi)];
+    const Card dead = leaving.card;
+    const bool token = leaving.is_token || dead.m_number >= GameState::kFirstOppSpawnNumber;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      "\xF0\x9F\x8C\x8C " + src_name + ": exiles "
+                      + (target_number == source_number ? std::string("itself")
+                         : (leaving.controller_index == controller ? std::string("your ") : std::string("the opponent's "))
+                           + dead.m_name.str())
+                      + (token ? std::string(" (a token: it ceases to exist)")
+                               : linked ? std::string(" until it leaves the battlefield") : std::string(" for good")));
+    }
+    if (!token)
+    {
+        Card c = RevealedCard(dead);
+        c.m_is_staged     = false;
+        c.m_staged_expiry = linked ? kExileUntilLeavesBase - (2 * source_number + (leaving.owner_index & 1)) : 0;
+        state.exile.push_back(c);
+    }
+    state.battlefield.erase(state.battlefield.begin() + bi);
+    ResolveAthreosExile(state, leaving);
+    for (Permanent& o : state.battlefield)
+    {
+        if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
+        if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
+    }
+    if (leaving.controller_index == state.active_player_index) { state.permanent_left_under_control_this_turn = true; }
+    if (linked && target_number != source_number) { RestampFadeExileLinks(state, source_number); }
+    FireLeavesBattlefieldTriggers(state, leaving.controller_index, dead);
+    RefreshDevotionCreatures(state);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
+    RefreshReconfigureCreatures(state);
+    SweepOrphanedAuras(state);
+    return true;
+}
+
+// The searched pin -> the resolution (both worlds, through ApplyPermAbility). The target was chosen on activation and
+// the cost paid then (CR 602.2b): one fade counter off the source. A pinned target that is gone or no longer legal is
+// caught by PermAbilitySourceLive before anything is paid; an unpinned call (never emitted: every searched and human
+// activation carries its target) takes the first legal target.
+inline void ResolveFadeExileCreature(GameState& state, int controller, int source_id, int target_num)
+{
+    int si = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.card.m_number == source_id && p.controller_index == controller) { si = i; break; }
+    }
+    if (si < 0 || state.battlefield[static_cast<std::size_t>(si)].fade_counters < 1) { return; }
+    const std::string src_name = state.battlefield[static_cast<std::size_t>(si)].card.m_name.str();
+    if (target_num == 0)
+    {
+        const std::vector<int> legal = FadeExileLegalTargets(state, controller, source_id, /*fold=*/false);
+        if (legal.empty()) { return; }
+        target_num = state.battlefield[static_cast<std::size_t>(legal.front())].card.m_number;
+    }
+    bool legal = false;
+    for (const Permanent& q : state.battlefield)
+    { if (q.card.m_number == target_num) { legal = FadeExileTargetLegal(state, q, controller); break; } }
+    if (!legal) { return; }
+    --state.battlefield[static_cast<std::size_t>(si)].fade_counters;   // the COST
+    FadeExilePermanent(state, controller, source_id, src_name, target_num, /*linked=*/true);
+}
+
+// ---- The USER's ruling-7 deck default: the Wave + Opalescence sweep at the OPPONENT's end step (design §4.4.1) -------
+// USER: *"The default for Parallax Wave and Opalescence in this deck should be to exile all opponent creatures. Then
+// when Enchanted Evening drops all of the opponent permanents are creatures. This means that they should all be
+// exiled."* A deck rule (EnchantedEveningProvider::WaveOpalSweepRule -> GameState::deck_has_wave_opal_sweep), called in
+// BOTH opponent_turn lambdas (GameEngine::RunTurnFrom, TurnSolver::SimulateEndAndStartNextTurn) after the opponent's
+// land drop, before the rest of its end-step window, so before freeturn::NoteOpponentTurnEnd reads the lock. Inside the
+// opponent's turn (a no-{T} activated ability at instant speed: CR 602.2 / 117.1).
+//
+// THE LOOP, modelled on the TARGETING LEGALITY (never a counter formula): a cycle is
+//   (1) exile, linked, each of our permanents whose shroud grant covers the Wave (Sterling Grove), one counter each --
+//       only those the Wave can itself target (WaveSelfTargetEnablers); then
+//   (2) exile for good up to (counters - enablers - 1) targetable opponent creatures (hexproof ones are skipped); then
+//   (3) the Wave exiles ITSELF with its last needed counter: its leave trigger returns the enablers and the Wave, which
+//       re-enters with five fade counters (the enter cascade), and the next cycle runs while a target remains.
+// With one Grove the Grove goes first and comes back; with two or more each Grove shrouds the others and the Wave, so
+// no enabler is targetable and the loop is IMPOSSIBLE. NO LOOP -> THE SWEEP DOES NOTHING (USER ruling 17, 2026-11-25:
+// *"No, we don't want to spend them until the combo is active again."*): no counter is spent on a finite run of
+// exiles; the Wave keeps its counters until the loop is possible again (one Grove sacrificed / exiled, or the Wave
+// back to enough counters). The same holds with one Grove and too few counters for Grove + self. (A step-4
+// orchestrator default once spent the counters one linked exile per target -- the "finite tail" -- deleted.) The
+// loop also needs the Wave to be a creature (Opalescence).
+// NO TARGET: a Wave below its fading count, with nothing linked and nothing attached, is TOPPED UP by one cycle of (1)
+// and (3) alone. That cycle returns exactly what it exiled (the Groves and the Wave, at the opponent's end step, so
+// each can attack on our next turn) and only raises the counters -- a weakly dominant top-up, and it is what keeps a
+// Wave beside an Opalescence from fading away (design §4.4: "so fading never kills a Wave that sits beside an
+// Opalescence"). A Wave with something linked is left alone when there is no target (its return is the player's own
+// earlier choice). Ends with RefreshTypeStatics + TypeStaticsSbaCheckpoint (this point holds no battlefield index).
+// (The lock modelling's virtual opponent creatures, design §3.4.4, are NOT on this branch: see
+// docs/design/enchanted-evening-parked.md.)
+inline bool WaveSelfTargetEnablers(const GameState& state, int controller, int wave_index, std::vector<int>& enablers)
+{
+    enablers.clear();
+    const Permanent& w = state.battlefield[static_cast<std::size_t>(wave_index)];
+    if (!(w.card.IsCreature() || w.is_animated)) { return false; }
+    // Shroud the grant does not explain (an Aura, an Equipment) cannot be removed by exiling a Grove.
+    if (PermanentHasShroud(w, state) && !EnchantmentShroudFromGrant(w, state)) { return false; }
+    // Simulate exiling grant sources one at a time: is `p` shrouded by a grant source still on the battlefield?
+    auto granted = [&](const Permanent& p) {
+        if (!state.deck_has_enchantment_shroud || !PermanentIsEnchantmentNow(p, state)) { return false; }
+        for (const Permanent& g : state.battlefield)
+        {
+            if (g.controller_index != p.controller_index || g.card.m_number == p.card.m_number) { continue; }
+            if (std::find(enablers.begin(), enablers.end(), g.card.m_number) != enablers.end()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(g.card);
+            if (d && d->params.grants_other_enchantments_shroud) { return true; }
+        }
+        return false;
+    };
+    for (std::size_t guard = 0; guard <= state.battlefield.size(); ++guard)
+    {
+        if (!granted(w)) { return true; }
+        int pick = 0;
+        for (const Permanent& g : state.battlefield)
+        {
+            if (g.controller_index != controller || g.card.m_number == w.card.m_number) { continue; }
+            if (std::find(enablers.begin(), enablers.end(), g.card.m_number) != enablers.end()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(g.card);
+            if (!d || !d->params.grants_other_enchantments_shroud) { continue; }
+            if (!(g.card.IsCreature() || g.is_animated)) { continue; }
+            if (PermanentHasShroud(g, state) && !EnchantmentShroudFromGrant(g, state)) { continue; }
+            if (granted(g)) { continue; }   // another un-exiled Grove shrouds it: not targetable
+            pick = g.card.m_number;
+            break;
+        }
+        if (pick == 0) { enablers.clear(); return false; }   // every grant source is shrouded by another
+        enablers.push_back(pick);
+    }
+    enablers.clear();
+    return false;
+}
+
+inline void PerformWaveOpalSweep(GameState& state)
+{
+    if (!state.deck_has_wave_opal_sweep) { return; }
+    const int me = state.active_player_index;   // ours: it stays ours through the passive opponent's turn
+    bool opal = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.static_animate_other_nonaura_enchantments_mv) { opal = true; break; }
+    }
+    if (!opal) { return; }
+    // The opponent's turn may have put a permanent the type statics have not retyped yet (a card returned by a fading
+    // sacrifice's leave trigger, a spawn): which opponent permanents are creatures must be current before targeting,
+    // and a 0/0 the retype makes dies first (SBA, CR 704.5f) -- it is never worth a counter.
+    RefreshTypeStatics(state);
+    TypeStaticsSbaCheckpoint(state);
+    int exiled = 0, cycles = 0;
+    std::string wave_name;
+    for (int guard = 0; guard < 64; ++guard)
+    {
+        std::vector<int> opp;   // card numbers of the targetable opponent creatures
+        for (const Permanent& q : state.battlefield)
+        { if (q.controller_index != me && FadeExileTargetLegal(state, q, me)) { opp.push_back(q.card.m_number); } }
+        int wi = -1;
+        std::vector<int> enablers;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()) && wi < 0; ++i)
+        {
+            const Permanent& w = state.battlefield[static_cast<std::size_t>(i)];
+            if (w.controller_index != me || w.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(w.card);
+            if (!d || !d->params.fade_exile_target_creature) { continue; }
+            if (opp.empty())
+            {
+                // The top-up: below the fading count, nothing linked, nothing attached to it.
+                if (w.fade_counters >= d->params.fading_counters || w.linked_exile_number != 0) { continue; }
+                bool attached = false;
+                for (const Permanent& o : state.battlefield)
+                { if (o.aura_attached_to == w.card.m_number || o.equipped_to == w.card.m_number) { attached = true; break; } }
+                if (attached) { continue; }
+            }
+            std::vector<int> en;
+            if (!WaveSelfTargetEnablers(state, me, i, en)) { continue; }
+            if (w.fade_counters < static_cast<int>(en.size()) + 1) { continue; }
+            if (opp.empty())
+            {
+                bool clean = true;   // a top-up enabler must come back as it left: nothing linked, nothing attached
+                for (const Permanent& g : state.battlefield)
+                {
+                    if (std::find(en.begin(), en.end(), g.card.m_number) == en.end()) { continue; }
+                    if (g.linked_exile_number != 0) { clean = false; break; }
+                    for (const Permanent& o : state.battlefield)
+                    { if (o.aura_attached_to == g.card.m_number || o.equipped_to == g.card.m_number) { clean = false; break; } }
+                }
+                if (!clean) { continue; }
+            }
+            wi = i;
+            enablers = std::move(en);
+        }
+        if (wi < 0) { break; }
+        const int wave_num = state.battlefield[static_cast<std::size_t>(wi)].card.m_number;
+        wave_name = state.battlefield[static_cast<std::size_t>(wi)].card.m_name.str();
+        const int room = state.battlefield[static_cast<std::size_t>(wi)].fade_counters
+                       - static_cast<int>(enablers.size()) - 1;
+        auto pay = [&]() {
+            for (Permanent& p : state.battlefield)
+            { if (p.card.m_number == wave_num && p.controller_index == me) { --p.fade_counters; return true; } }
+            return false;
+        };
+        for (int g : enablers) { if (pay()) { FadeExilePermanent(state, me, wave_num, wave_name, g, /*linked=*/true); } }
+        for (int j = 0; j < static_cast<int>(opp.size()) && j < room; ++j)
+        { if (pay() && FadeExilePermanent(state, me, wave_num, wave_name, opp[static_cast<std::size_t>(j)], /*linked=*/false)) { ++exiled; } }
+        if (pay()) { FadeExilePermanent(state, me, wave_num, wave_name, wave_num, /*linked=*/true); }
+        ++cycles;
+        if (opp.empty()) { continue; }   // a top-up: the next pass finds this Wave at its count (another may need one)
+    }
+    if (cycles == 0) { return; }   // no loop possible (or nothing to do): USER ruling 17 -- keep the counters
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        int counters = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || p.card.m_name.str() != wave_name) { continue; }
+            counters = std::max(counters, p.fade_counters);
+        }
+        EmitPlayEvent(state.turn_number, "ability",
+                      "\xF0\x9F\x8C\x8C " + wave_name + " + Opalescence (opponent's end step): exiles "
+                      + std::to_string(exiled) + " opponent creature" + (exiled == 1 ? "" : "s")
+                      + "; the Wave returns with " + std::to_string(counters) + " fade counters");
+    }
+    RefreshTypeStatics(state);
+    TypeStaticsSbaCheckpoint(state);
 }
 
 // ---- White Orchid Phantom (Spirits, 2026-11-13) --------------------------------------------------
@@ -32489,6 +33615,7 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     { state.battlefield.erase(state.battlefield.begin() + *it); }
     SweepOrphanedAuras(state);
     RefreshDevotionCreatures(state);   // a doomed white permanent lowers devotion (Heliod x2)
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     // One SBA batch: every graveyard-shuffle trigger it fires resolves after ALL the deaths (inert elsewhere).
     GyShuffleBatch _gyb(state);
@@ -32528,8 +33655,29 @@ inline bool HasDuplicateLegend(const GameState& state, int controller)
 // the end of the end step (GameEngine::EndStep / SimulateEndAndStartNextTurn). The keep is LegendKeepPick's: the
 // turn's searched pin (Plan::legend_keep_turn) for the active player. Every player is checked (SBAs are global);
 // a no-op without a duplicate.
+// THE TYPE-STATICS SBA (Enchanted Evening + Opalescence; see the block comment at RefreshTypeStatics' forward
+// declaration). Refresh the statics, then -- only when a static is out or a card still carried bits from one -- run
+// CR 704.5f (SweepZeroToughnessSba: every 0-toughness creature dies at once, owner's graveyard, OnCreatureDies, so
+// each death reaches FireLeavesBattlefieldTriggers: an Oblivion Ring that dies returns its card) until nothing more
+// dies (a death re-runs the refresh inside OnCreatureDies, so an Opalescence dying re-derives the rest), then
+// CR 704.5m (SweepOrphanedAuras: Utopia Sprawl / Wild Growth on a land that died). Runs ONLY at points that hold no
+// battlefield index, in both worlds at the same instants (the list is at the forward declaration). The executor's
+// own GameEngine::CheckStateBasedActions, which precedes it after a resolution, kills the same 0/0s the same way
+// (owner's graveyard, OnCreatureDies in battlefield order), so the sweep then finds none but the Aura sweep still
+// runs -- the rollout, which has no SBA pass, reaches the identical board. One bool test for every other deck.
+inline void TypeStaticsSbaCheckpoint(GameState& state)
+{
+    if (!state.deck_has_type_statics) { return; }
+    if (!RefreshTypeStatics(state)) { return; }
+    while (SweepZeroToughnessSba(state, "a 0/0 under Opalescence") > 0) {}
+    SweepOrphanedAuras(state);
+}
+
 inline void LegendRuleSbaCheckpoint(GameState& state)
 {
+    // The type statics' toughness / orphaned-Aura SBA first (CR 704.3: all SBAs are one check; the legend rule then
+    // sees the board after the 0/0s are gone). A no-op without deck_has_type_statics.
+    TypeStaticsSbaCheckpoint(state);
     for (int c = 0; c < static_cast<int>(state.players.size()); ++c)
     { if (HasDuplicateLegend(state, c)) { EnforceLegendRule(state, c); } }
 }
@@ -40821,6 +41969,21 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
             }
             if (!target_ok) { return false; }
         }
+        // Parallax Wave: a fade counter is the cost, and the pinned creature must still be a legal target (it left,
+        // or gained shroud from a Grove cast earlier in the plan) -- a stale plan is a clean no-op.
+        if (mode == PermAbilityMode::FadeExileCreature)
+        {
+            const CardDefinition* wd = CardDatabase::Instance().LookupCached(p.card);
+            if (wd == nullptr || !wd->params.fade_exile_target_creature || p.fade_counters < 1) { return false; }
+            const int want = g_tap_target_pump_pin.target;
+            bool target_ok = false;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (want != 0 && q.card.m_number != want) { continue; }
+                if (FadeExileTargetLegal(state, q, controller)) { target_ok = true; break; }
+            }
+            if (!target_ok) { return false; }
+        }
         if (mode == PermAbilityMode::PingLoop)
         {
             ManaCost extra;
@@ -40955,6 +42118,27 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
         // {T} now (summoning sickness, CR 302.6) -- the one predicate every folded ping reads. A stale plan
         // (it was tapped by an earlier step, or left) is a clean no-op.
         if (mode == PermAbilityMode::TapPing && !TapPingerReady(state, p, controller, nullptr)) { return false; }
+        // Sterling Grove: the source must carry the ability, and a pinned candidate must still be in the
+        // library as an enchantment card (a stale pin is a clean no-op: nothing is paid or sacrificed).
+        if (mode == PermAbilityMode::SacTutorTop)
+        {
+            const CardDefinition* ad = CardDatabase::Instance().LookupCached(p.card);
+            if (ad == nullptr || ad->activated_tutor == nullptr) { return false; }
+            const std::string* target = g_sac_named_pin.target;
+            if (target != nullptr && !target->empty() && *target != kTutorDeclineTarget)
+            {
+                bool found = false;
+                for (const Card& c : state.players[controller].library)
+                {
+                    const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+                    if (c.m_name.str() != *target) { continue; }
+                    for (const std::string& t : ad->activated_tutor->tutor_types)
+                    { if (CardMatchesTypeName(cd ? cd->card : c, t)) { found = true; break; } }
+                    if (found) { break; }
+                }
+                if (!found) { return false; }
+            }
+        }
         if (mode == PermAbilityMode::TapTutorPut)
         {
             const CardDefinition* ad = CardDatabase::Instance().LookupCached(p.card);
@@ -41147,6 +42331,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::TargetPump:     return "target creature gets a pump until end of turn";
         case PermAbilityMode::UntapLand:      return "untap target land";
         case PermAbilityMode::TapTutorPut:     return "search for a Merfolk permanent and put it onto the battlefield";
+        case PermAbilityMode::SacTutorTop:    return "sacrifice it: search for an enchantment, put it on top of your library";
         case PermAbilityMode::SelfPing:       return "it deals 1 damage to itself";
         case PermAbilityMode::TapPing:        return "it deals 1 damage to target player or planeswalker";
         case PermAbilityMode::TapFight:       return "target Beast creature you control fights target creature an opponent controls";
@@ -41156,6 +42341,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::FigureEight: return "become an 8/8 Kithkin Spirit Warrior Avatar";
         case PermAbilityMode::CounterPing:    return "remove a +1/+1 counter: 1 damage to any target";
         case PermAbilityMode::CounterDestroyArtEnch: return "remove a +1/+1 counter: destroy target artifact or enchantment";
+        case PermAbilityMode::FadeExileCreature:     return "remove a fade counter: exile target creature";
         case PermAbilityMode::PingLoop:       return "Heliod loop: ping until the opponent is dead";
         case PermAbilityMode::SacNamedTutorPut:
                                               return "sacrifice six of them: search for a Demon, put it onto the battlefield";
@@ -41379,6 +42565,56 @@ inline void ResolveAltWinDistinctNamed(GameState& state, int controller, const C
                       "\xF0\x9F\x8F\x86 " + src_name + ": " + std::to_string(pp.alt_win_distinct_named_count)
                       + " or more " + pp.alt_win_distinct_named_subtype + "s with different names -- you win the game");
     }
+}
+
+// "Sacrifice this <permanent>" paid as an activation COST (CR 601.2h / 602.2b) by a source that may or
+// may not be a creature right now. A CREATURE (Opalescence makes Sterling Grove a 2/2) dies through the
+// shared chokepoint (SacrificePermanentAt: dies watchers, the leave trigger). A NONCREATURE goes to its
+// owner's graveyard without any creature-dies watcher (the Blighted Steppe inline pattern), then the
+// sacrifice watchers (a sac cost IS a sacrifice, CR 701.17) and its own leave triggers (Exploration's
+// drop, a linked exile returning).
+inline void SacrificeSourceAsCost(GameState& state, int controller, int idx)
+{
+    Permanent& sq = state.battlefield[static_cast<std::size_t>(idx)];
+    if (sq.card.IsCreature() || sq.is_animated) { SacrificePermanentAt(state, controller, idx); return; }
+    const int  snum = sq.card.m_number;
+    const Card dead = sq.card;
+    const bool tok  = sq.is_token;
+    const int  own  = sq.owner_index;
+    state.battlefield.erase(state.battlefield.begin() + idx);
+    for (Permanent& o : state.battlefield)   // CR 301.5c
+    {
+        if (o.equipped_to      == snum) { o.equipped_to      = 0; }
+        if (o.aura_attached_to == snum) { o.aura_attached_to = 0; }
+    }
+    if (!tok) { state.players[own].graveyard.push_back(RevealedCard(dead)); }
+    FireSacrificeWatchers(state, controller);
+    FireLeavesBattlefieldTriggers(state, controller, dead);
+}
+
+// Sterling Grove's activation AFTER its {1} is paid (CardParams::sac_tutor_top_cost): sacrifice the
+// source (the rest of the cost), then "search your library for an enchantment card, reveal it, then
+// shuffle and put that card on top" through the shared PerformTutor on the derived spec
+// (CardDefinition::activated_tutor), so the candidate list, the shuffle, the reveal log and the
+// fail-to-find shuffle (CR 701.19b) are exactly every tutor-to-top's. `target` = the searched pick
+// (empty = the provider's front -- beyond the horizon only; kTutorDeclineTarget = fail to find, which
+// still shuffles). ONE body for both timings: the main-phase SacTutorTop mode and the upkeep window.
+inline bool ResolveSacTutorTop(GameState& state, int controller, int idx, const std::string& target)
+{
+    if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(idx)].card);
+    if (d == nullptr || d->activated_tutor == nullptr) { return false; }
+    const std::string src_name = d->card.m_name.str();
+    if (g_play_event_sink && !g_tap_speculating)
+    { EmitPlayEvent(state.turn_number, "sacrifice", "\xF0\x9F\x94\xAA " + src_name + " -- sacrificed (activation)"); }
+    SacrificeSourceAsCost(state, controller, idx);
+    if (target == kTutorDeclineTarget)
+    {
+        ShuffleAfterSearch(state, controller);   // a required library search that finds nothing still shuffles
+        return true;
+    }
+    PerformTutor(state, controller, *d->activated_tutor, target, src_name);
+    return true;
 }
 
 inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode)
@@ -41675,6 +42911,9 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
         case PermAbilityMode::CounterDestroyArtEnch:
             ResolveCounterDestroyArtEnch(state, controller, source_id, g_tap_target_pump_pin.target);
             break;
+        case PermAbilityMode::FadeExileCreature:   // Parallax Wave (lock cluster step 4)
+            ResolveFadeExileCreature(state, controller, source_id, g_tap_target_pump_pin.target);
+            break;
         case PermAbilityMode::PingLoop:
             RunPingLoop(state, controller, source_id);
             break;
@@ -41777,6 +43016,15 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // activations that hit a land, which is the difference between the deck-out existing
             // and not. The param is read so the clause is visibly modelled rather than dropped.
             (void)d->params.exile_opponent_top_may_bounce_on_land;
+            break;
+        }
+        case PermAbilityMode::SacTutorTop:
+        {
+            // Sterling Grove. The {1} was paid by the caller; the pin (the searched candidate) rides
+            // g_sac_named_pin.target, installed by both trailing passes, and is CONSUMED here.
+            const std::string target = g_sac_named_pin.target != nullptr ? *g_sac_named_pin.target : std::string();
+            g_sac_named_pin = SacNamedPin{};
+            (void)ResolveSacTutorTop(state, controller, idx, target);
             break;
         }
         case PermAbilityMode::SacDraw:
@@ -60965,6 +62213,7 @@ inline bool ReturnPermanentToOwnersHand(GameState& state, int bf_index, const st
     }
     FireLeavesBattlefieldTriggers(state, p.controller_index, p.card);
     RefreshDevotionCreatures(state);
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     RefreshReconfigureCreatures(state);
     return true;
 }
@@ -61750,6 +62999,7 @@ inline void ResolveCreatureRemovalAt(GameState& state, int bi, const CardDefinit
     state.battlefield.erase(state.battlefield.begin() + bi);
     if (def.params.damage > 0 || unearth_exile) { ResolveAthreosExile(state, leaving); }
     RefreshDevotionCreatures(state);   // an own white permanent leaving lowers devotion (Heliod)
+    RefreshTypeStatics(state);   // Enchanted Evening / Opalescence (layer 4 / 7b; retypes only)
     for (Permanent& e : state.battlefield)
     {
         if (e.equipped_to      == dead_num) { e.equipped_to      = 0; }

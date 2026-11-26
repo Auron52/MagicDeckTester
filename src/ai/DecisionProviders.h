@@ -5181,6 +5181,98 @@ public:
 // threat counts once it arrives by next turn). A restriction; the search branches over what is kept (<= 4
 // names, inside the base width 6). Nothing missing -> the tutor is not cast. Replaced a width-32 hook.
 // MTG_WORLDFIRE_TUTOR_PIECES=0 -> the base list.
+// =============================================================================================
+// EnchantedEveningProvider -- the Enchanted Evening deck (GW enchantress / lock; ledger
+// docs/design/analysis-Enchanted Evening.md). Created at onboarding (2026-11-25) because every shipped
+// deck owns a provider (analyze-deck Stage 4a). An EMPTY derivation of DeckProvider (the Generic
+// surface), so it inherits every judgement hook byte-for-byte: play-neutral by construction. The lock
+// cluster (Enchanted Evening, Opalescence, Calming Verse, Parallax Wave, Force of Vigor) extends it.
+class EnchantedEveningProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. A winless-turn bound must price Enchantress's Presence draws off every "
+               "enchantment cast (each can find a castable card mid-turn), Sterling Grove's tutor-to-top "
+               "feeding those draws, and the Opalescence attack (every non-Aura enchantment a P/T = MV "
+               "creature, Enchanted Evening making every permanent one) before claiming no line wins." }; }
+    const char* Name() const override { return "EnchantedEvening"; }
+
+    // SOUND DOMINANCE FOLDS (lock steps 3 / 5, 2026-11-25; default ON, no flag -- CLAUDE.md "collapse wasted search").
+    // Premise, true of this list: nothing in it rewards casting an instant or sorcery as such (Enchantress's
+    // Presence draws on ENCHANTMENT spells only; no storm / prowess / graveyard count), so a cast that changes no
+    // permanent only spends mana and a card, and NOT casting it (always offered) reaches a weakly better state.
+    //   * Calming Verse KEEP with no enchantment we don't control: clause 1 destroys nothing, and KEEP's floated
+    //     lands leave the board as it was (an untapped land is at least as good as the mana it floats), or -- a
+    //     land it cannot float -- clause 2 fires, which is SWEEP-SELF's result (still offered). Withdrawn.
+    //   * Force of Vigor with no target (the "up to" empty set): resolves to nothing. Withdrawn; with no legal
+    //     target the cast is not offered at all.
+    // A list that adds a cast-count payoff must drop both.
+    void CalmingVerseVariants(const GameState& s, int controller, bool& keep, bool& sweep) const override
+    {
+        (void)sweep;
+        bool opposing = false;
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index != controller && p.card.IsEnchantment()) { opposing = true; break; } }
+        if (!opposing) { keep = false; }
+    }
+    void DestroyUpToArtEnchTargetOptions(const GameState& s, int controller,
+                                         std::vector<std::vector<int>>& options) const override
+    {
+        (void)s; (void)controller;
+        options.erase(std::remove_if(options.begin(), options.end(),
+                                     [](const std::vector<int>& o) { return o.empty(); }),
+                      options.end());
+    }
+    // USER ruling 7 (2026-11-25): *"The default for Parallax Wave and Opalescence in this deck should be to exile all
+    // opponent creatures."* -- the deck default, so this provider adopts PerformWaveOpalSweep (SpellEffects.h) at the
+    // opponent's end step (lock cluster step 4).
+    bool WaveOpalSweepRule() const override { return true; }
+
+    // ---- USER rulings 15 / 16 (2026-11-25/26): the GROVE / TUTOR PRUNE, one lever MTG_EE_USER_PRUNE (heurarm
+    // EE_USER_PRUNE, DEFAULT ON, USER-requested; =0 -> the unrestricted search, the A/B arm; adoption is the USER's).
+    // Restrict / order only; the search branches over every option kept. Never consulted in human play or under the
+    // unpruned gate (the human sees every legal name; the tutor menu puts this ranking first). Definitions in
+    // DecisionProviders.cpp ("EnchantedEveningProvider: the USER's Grove / tutor prune").
+    //   (A) PlanListAdmit: no plan puts a SECOND Sterling Grove onto the battlefield while one stays -- a plan that
+    //       casts a Grove is kept only when (our Groves + Groves it casts - Grove sacrifice activations it holds) <= 1.
+    //   (B) TutorCandidates (Grove's sacrifice tutor AND Idyllic Tutor): missing lock pieces (Enchanted Evening,
+    //       Opalescence, Parallax Wave), then ONE mana Aura (Wild Growth / Utopia Sprawl) while mana is short, then
+    //       Enchantress's Presence (only while no lock piece is fetchable or mana is short); nothing else, no copy of
+    //       a piece already in hand or on our battlefield. Empty -> the tutor is not cast / the Grove not activated
+    //       (TutorNeedsCandidate).
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
+    bool TutorNeedsCandidate(const GameState& s, int controller, const CardParams& pp) const override;
+    bool PlanListFilterLive(const GameState& s) const override;
+    void PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans, std::vector<char>& admit) const override;
+};
+
+// The Enchanted Evening tutor prune's census and pick (USER rulings 15 / 16), exposed for the unit tests.
+namespace eeprune
+{
+bool On();   // MTG_EE_USER_PRUNE (heurarm EE_USER_PRUNE), DEFAULT ON; false in human play / under the unpruned gate
+struct Census
+{
+    int total = 0;      // our mana sources' units: each land 1 (an uncracked fetch 1), + each land Aura's extra
+    int white = 0;      // ...of which can be white
+    int forests = 0;    // our lands with the Forest subtype (Utopia Sprawl's host)
+    bool fetch_forest = false;   // an uncracked fetch that can find a Forest (a Sprawl host next)
+    bool have_ee = false, have_opal = false, have_wave = false, have_presence = false;   // hand or our battlefield
+    bool lib_ee = false, lib_opal = false, lib_wave = false, lib_presence = false;
+    bool lib_wild_growth = false, lib_sprawl = false;
+};
+Census CensusOf(const GameState& s, int controller);
+bool LockPieceFetchable(const Census& c);
+bool ManaNeeded(const Census& c);           // B4: < 4 or < 2 white; at exactly 4 only with no lock piece fetchable
+bool PreferSprawl(const Census& c);         // B3: short of white (with a Forest host) or 2+ Forests
+// The amendment arm MTG_EE_GROVE_PRELOCK (heurarm EE_GROVE_PRELOCK, DEFAULT OFF): the pre-lock Grove beater exception
+// is live -- the amendment on, Enchanted Evening not on our battlefield, an Opalescence ours or in hand.
+bool GrovePrelockException(const GameState& s, int controller);
+// ...and its SECOND-OPALESCENCE extension: EE not ours, an Opalescence on our battlefield, none in hand -> the enchantment
+// tutors may fetch a second Opalescence (after the missing lock pieces). Seed 10000 gi=50.
+bool SecondOpalExtension(const GameState& s, int controller);
+}
+
 class WorldfireProvider : public DeckProvider
 {
 public:

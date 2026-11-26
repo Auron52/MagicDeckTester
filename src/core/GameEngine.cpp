@@ -366,6 +366,10 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
         // ...and Maze's End's off-main WIN after a Burgeoning put on their turn (F1 defect 4; rollout twin).
         TryOffMainAltWinActivation(state);
+        // Parallax Wave + Opalescence at the OPPONENT's end step (USER ruling 7, the deck default; lock cluster step 4):
+        // every targetable opponent creature exiled for good through the self-exile loop, before the rest of the
+        // end-step window and so before the lock check below. Deck-gated (deck_has_wave_opal_sweep). Rollout twin.
+        PerformWaveOpalSweep(state);
         // Sire of Insanity at the OPPONENT's notional end step ("each end step"): after their draw.
         // Our hand is empty by then in this pool (our own end step discarded it), so it is faithful and
         // inert; the opponent discards a dealt hand. Lockstep twin in the rollout; deck-gated.
@@ -435,6 +439,7 @@ void GameEngine::UntapStep(GameState& state)
     DrainPendingLookTop(state);         // safety net (lockstep w/ SimulateEndAndStartNextTurn): a watcher-only entry's Risen Reef trigger
     DrainPendingSagaEnters(state);      // safety net (lockstep w/ SimulateEndAndStartNextTurn): Saga enters take their counter by turn start
     SweepOrphanedAuras(state);          // CR 704.5m SBA checkpoint (lockstep w/ SimulateEndAndStartNextTurn)
+    TypeStaticsSbaCheckpoint(state);    // Enchanted Evening / Opalescence SBA safety net (lockstep w/ SimulateEndAndStartNextTurn)
     state.casts_remaining_this_turn = -1; // Irencrag "one more spell" budget clears each turn (see GameState); no-op for non-restrictor decks
     state.hand_size_at_combat   = -1;   // post-combat productivity markers are per turn (see GameState);
     state.battlefield_at_combat = -1;   // -1 = no combat yet this turn = "assume productive"
@@ -592,6 +597,10 @@ void GameEngine::UntapStep(GameState& state)
     // (assume each is tapped for mana). Same point + order as the rollout (TurnSolver SimulateToEnd)
     // so the executor and the search stay in lockstep. On-play copies are handled in TryPlaySpecificLand.
     SpawnForbiddenOrchardTokensTurnStart(state);
+    // ENCHANTED EVENING + OPALESCENCE: a spawn body (and an Orchard Spirit) is a definition-less token of mana value
+    // 0 -- under both statics a 0/0 enchantment creature, dead to the toughness SBA as it appears (these sites push
+    // directly, no enter cascade). Lockstep twin: the rollout's spawn site. A no-op without deck_has_type_statics.
+    TypeStaticsSbaCheckpoint(state);
 }
 
 void GameEngine::UpkeepStep(GameState& state)
@@ -679,6 +688,35 @@ std::vector<std::pair<int, std::string>> GameEngine::UpkeepTutorOptions(const Ga
                                                    state.active_player_index, d->params);
         // Every name the provider's candidate rule returns (no tutor width -- the rule is the breadth).
         for (std::size_t i = 0; i < names.size(); ++i) { out.emplace_back(c.m_number, names[i]); }
+    }
+    // Sterling Grove ("{1}, Sacrifice this enchantment: search ... put that card on top"): the same
+    // priority window, an ACTIVATION from the battlefield, so the tutored card is THIS turn's draw. The
+    // option's int is the source PERMANENT's card number (disjoint from every hand number: m_number is
+    // unique per card); AIEngine::CastUpkeepTutor dispatches on where that number is. One source per
+    // NAME (two Groves are the same ability of identical cards: the window takes one activation).
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->activated_tutor == nullptr || !d->params.sac_tutor_top_cost.has_value()) { continue; }
+        if (std::find(seen_sources.begin(), seen_sources.end(), p.card.m_name.str()) != seen_sources.end())
+        { continue; }
+        GameState trial = state;
+        bool payable = false;
+        {
+            RevealLogPause pause;
+            payable = TapForCostShared(trial, EffectiveActivationCost(state, state.active_player_index, p.card,
+                                                                      *d->params.sac_tutor_top_cost),
+                                       /*for_creature=*/false, nullptr, /*honor_legacy_cco=*/true);
+        }
+        if (!payable) { continue; }
+        seen_sources.push_back(p.card.m_name.str());
+        const auto names = RankedTutorCandidates(ResolveProvider(state), state,
+                                                 state.active_player_index, *d->activated_tutor);
+        std::vector<std::string> uniq;
+        for (const std::string& n : names)
+        { if (std::find(uniq.begin(), uniq.end(), n) == uniq.end()) { uniq.push_back(n); } }
+        for (const std::string& n : uniq) { out.emplace_back(p.card.m_number, n); }
     }
     return out;
 }
@@ -884,6 +922,34 @@ void GameEngine::UpkeepTail(GameState& state)
             if (selected < 0 || selected >= static_cast<int>(names.size())) { continue; }
             // The upkeep prompt already selected the target. Suppress the normal cast's
             // redundant resolution-time repick while preserving event and reveal logging.
+            auto* chooser = g_play_tutor_chooser;
+            g_play_tutor_chooser = nullptr;
+            CastUpkeepTutor(state, number, names[static_cast<std::size_t>(selected)]);
+            g_play_tutor_chooser = chooser;
+        }
+        // Sterling Grove's activation in the same window (the autonomous options' battlefield half).
+        std::vector<int> grove_numbers;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->activated_tutor != nullptr && d->params.sac_tutor_top_cost.has_value())
+            { grove_numbers.push_back(p.card.m_number); }
+        }
+        for (int number : grove_numbers)
+        {
+            const auto opts = UpkeepTutorOptions(state);
+            std::vector<std::string> names;
+            for (const auto& o : opts) { if (o.first == number) { names.push_back(o.second); } }
+            if (names.empty()) { continue; }
+            const CardDefinition* d = nullptr;
+            for (const Permanent& p : state.battlefield)
+            { if (p.card.m_number == number) { d = CardDatabase::Instance().LookupCached(p.card); break; } }
+            if (!d) { continue; }
+            const std::string source = d->card.m_name.str() + " (upkeep activation)";
+            const int selected = (*g_play_tutor_chooser)(state, state.active_player_index,
+                                                          source, names, /*default: hold=*/-1, {});
+            if (selected < 0 || selected >= static_cast<int>(names.size())) { continue; }
             auto* chooser = g_play_tutor_chooser;
             g_play_tutor_chooser = nullptr;
             CastUpkeepTutor(state, number, names[static_cast<std::size_t>(selected)]);

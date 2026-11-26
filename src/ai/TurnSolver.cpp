@@ -6938,6 +6938,25 @@ static std::vector<int> CounterDestroyAdmittedTargets(const GameState& state, in
     return out;
 }
 
+// PARALLAX WAVE's admitted exile targets (battlefield indices; lock cluster step 4): in human play every legal target,
+// else one representative per identity class (FadeExileLegalTargets' sound fold) restricted by the provider
+// (DecisionProvider::FadeExileCreatureTargets -- an index outside the legal set is dropped: a provider may only restrict
+// or order). ONE function for the CollectActions emission, the breakpoint availability bits and the site-9 key.
+static std::vector<int> FadeExileAdmittedTargets(const GameState& state, int ctrl, const Permanent& src)
+{
+    const bool human = HumanPlayActive();
+    std::vector<int> legal = FadeExileLegalTargets(state, ctrl, src.card.m_number, /*fold=*/!human);
+    if (legal.empty() || human) { return legal; }
+    std::vector<int> out;
+    for (int ti : ResolveProvider(state).FadeExileCreatureTargets(state, ctrl, src, legal))
+    {
+        if (std::find(legal.begin(), legal.end(), ti) != legal.end()
+            && std::find(out.begin(), out.end(), ti) == out.end()) { out.push_back(ti); }
+    }
+    return out;
+}
+static_assert(static_cast<int>(PermAbilityMode::FadeExileCreature) < 64, "PermAbilityMode availability bits are a uint64");
+
 static bool SelfBounceOffered(const GameState& state, const CardDefinition& def)
 {
     return HumanPlayActive() || ResolveProvider(state).OffersSelfBounce(state, def);
@@ -7087,6 +7106,10 @@ static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const P
         && pool.CanPay(EffectiveActivationCost(state, ctrl, src.card, *sd.params.remove_counter_destroy_art_ench_cost))
         && !CounterDestroyAdmittedTargets(state, ctrl, src).empty())
     { bits |= 1ull << static_cast<int>(PermAbilityMode::CounterDestroyArtEnch); }
+    // Parallax Wave: the out-of-band block's condition, mirrored (a fade counter and an ADMITTED target). No mana.
+    if (sd.params.fade_exile_target_creature && src.fade_counters >= 1
+        && !FadeExileAdmittedTargets(state, ctrl, src).empty())
+    { bits |= 1ull << static_cast<int>(PermAbilityMode::FadeExileCreature); }
     // Walking Ballista's counter ping and the Heliod loop: the out-of-band blocks' conditions, mirrored
     // (the shared CollectCounterPingOffers / PingLoopLiveNow). See CollectActions, "WALKING BALLISTA".
     if (sd.params.remove_counter_ping_damage > 0)
@@ -15389,6 +15412,29 @@ void TurnSolver::ApplyFaceUpLeadActs(GameState& state, const std::vector<Action>
         }
         if (g_line_hold_has_acts) { SubManaCost(g_line_unpaid_cost, a.cost); }   // joint pay's act hold (ManaPayment.h)
         const FaceUpRegrowPinScope _fu_pin(a.tutor_target.empty() ? nullptr : &a.tutor_target.str());
+        ApplyPermAbility(state, me, a.sac_source_id, a.ability_mode);
+        if (log != nullptr)
+        { log->LogAbility(a.sac_source_id, a.card_name.str(), PermAbilityLabelFor(a.ability_mode, a.def), false); }
+    }
+}
+
+bool TurnSolver::IsSacTutorTopLead(const Action& a)
+{
+    return a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacTutorTop
+        && a.chosen_x == 1;
+}
+
+void TurnSolver::ApplySacTutorTopLeadActs(GameState& state, const std::vector<Action>& acts, GameLogger* log)
+{
+    if (!state.deck_has_enchantment_shroud) { return; }   // the Sterling Grove deck stamp (one bool test)
+    const int me = state.active_player_index;
+    for (const Action& a : acts)
+    {
+        if (!IsSacTutorTopLead(a)) { continue; }
+        const SacNamedPinScope _sac_named_pin(0, &a.tutor_target.str());
+        if (!PermAbilitySourceLive(state, me, a.sac_source_id, a.ability_mode)) { continue; }
+        if (!TapForCostDirect(state, a.cost, /*for_creature=*/false)) { continue; }
+        if (g_line_hold_has_acts) { SubManaCost(g_line_unpaid_cost, a.cost); }   // joint pay's act hold (ManaPayment.h)
         ApplyPermAbility(state, me, a.sac_source_id, a.ability_mode);
         if (log != nullptr)
         { log->LogAbility(a.sac_source_id, a.card_name.str(), PermAbilityLabelFor(a.ability_mode, a.def), false); }
@@ -35352,7 +35398,10 @@ enum : uint64_t {
     // is newly activatable (no {T}, legal while sick), which opens site 9 so the same main can pump it (Garruk,
     // Primal Hunter's -3 reads the greatest power).
     kActOilPump = 223,
-    kActCompanionHand = 224
+    kActCompanionHand = 224,
+    // Parallax Wave (EE lock step 4): a fade counter and an admitted exile target -- a Wave cast this main is newly
+    // activatable, which opens site 9 so the same main can exile with it.
+    kActFadeExile = 225
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -35550,6 +35599,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::TapTreasure, &pp.tap_treasure_cost },   // Heap Gate (Maze's End I4) -- appended LAST
         { PermAbilityMode::SelfPing,    &pp.self_ping_cost     },   // Stuffy Doll -- appended LAST (slots = table INDEX)
         { PermAbilityMode::TapFight,    &pp.tap_fight_cost     },   // Contested Cliffs (Beasts B) -- appended LAST
+        { PermAbilityMode::SacTutorTop, &pp.sac_tutor_top_cost },   // Sterling Grove (no {T}) -- appended LAST
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -35598,6 +35648,9 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     if (heurarm::Flag(heurarm::BP_FADE_POST_ENTRY, s_fade_post_entry)
         && pp.fade_saproling_cost > 0 && p.fade_counters >= pp.fade_saproling_cost)
     { out.push_back(ActKey(num, kActFadeSaproling)); }
+    // Parallax Wave: presence-only, like the fade pop above (a counter and an admitted target).
+    if (pp.fade_exile_target_creature && p.fade_counters >= 1 && !FadeExileAdmittedTargets(state, ctrl, p).empty())
+    { out.push_back(ActKey(num, kActFadeExile)); }
 
     // Lavamancer may gain fuel when the plan's earlier spells resolve. The graveyard signature
     // makes newly available fuel pairs visible even when an older pair was already available.
@@ -52894,6 +52947,61 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
             }
 
+            // Sterling Grove: "{1}, Sacrifice this enchantment: search your library for an enchantment card ...
+            // put that card on top." NO {T} (legal the turn it enters). WHICH card is SEARCHED: one Action per
+            // candidate of the provider's tutor rule (RankedTutorCandidates -- every legal name in human play,
+            // ranked first), carried on tutor_target (the SacNamedPin target in both trailing passes). A
+            // fail-to-find (it only shuffles) is offered to the human alone: against the autonomous search it
+            // is dominated by holding the Grove. No candidate -> nothing to search for -> no emission.
+            if (sd->activated_tutor != nullptr && sd->params.sac_tutor_top_cost.has_value())
+            {
+                ManaPool others = turn_pool();
+                others.AddPool(state.floating_mana);
+                const ManaCost cost = EffectiveActivationCost(
+                    state, state.active_player_index, src.card, *sd->params.sac_tutor_top_cost);
+                if (others.CanPay(cost))
+                {
+                    std::vector<std::string> targets = RankedTutorCandidates(
+                        ResolveProvider(state), state, state.active_player_index, *sd->activated_tutor);
+                    std::vector<std::string> uniq;
+                    for (const std::string& t : targets)
+                    { if (std::find(uniq.begin(), uniq.end(), t) == uniq.end()) { uniq.push_back(t); } }
+                    if (HumanPlayActive()) { uniq.push_back(kTutorDeclineTarget); }
+                    if (uniq.size() == 1 && uniq.front() == kTutorDeclineTarget) { uniq.clear(); }
+                    // ...and, in the DECISION space, a LEAD twin of each (chosen_x = 1: the pre-cast pass,
+                    // TurnSolver::ApplySacTutorTopLeadActs) -- "tutor to top, THEN cast an enchantment so
+                    // Enchantress's Presence draws it" in the same turn (COMPLETENESS: the trailing pass runs
+                    // after every cast, so that line was unfindable at any budget). Both are members of the
+                    // source's ONE activation family (ActivationFamilyKey): a plan holds at most one, and
+                    // chosen_x keeps them apart in every signature. Human play orders its own steps (no
+                    // twin); rollout leaves keep the trailing form (the beyond-horizon playout).
+                    const bool lead_space = (g_search_candidate_enum || g_condemn_root_turn < 0)
+                                         && !HumanPlayActive();
+                    for (const std::string& name : uniq)
+                    {
+                        Action a;
+                        a.kind           = Action::Kind::ActivatePermAbility;
+                        a.card_name      = src.card.m_name;
+                        a.def            = sd;
+                        a.hand_index     = -1;
+                        a.sac_source_id  = src.card.m_number;
+                        a.ability_mode   = Action::AbilityMode::SacTutorTop;
+                        a.tutor_target   = name;
+                        a.cost           = cost;
+                        a.is_noncreature = true;
+                        if (lead_space && name != kTutorDeclineTarget)
+                        {
+                            Action lead = a;
+                            lead.chosen_x = 1;
+                            actions.push_back(std::move(a));
+                            actions.push_back(std::move(lead));
+                            continue;
+                        }
+                        actions.push_back(std::move(a));
+                    }
+                }
+            }
+
             // ---- Nylea: mana-only, repeatable targeted +2/+2 until end of turn.
             // Target is a searched axis, count is a searched mana-sink axis. Human
             // play sees every legal target and re-prompts after each activation.
@@ -52980,6 +53088,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.is_noncreature = true;
                         actions.push_back(std::move(a));
                     }
+                }
+            }
+
+            // ---- PARALLAX WAVE (lock cluster step 4): "Remove a fade counter from this enchantment: Exile target
+            // creature." No {T}, no mana (legal the turn it lands, repeatable); the counter is the cost. One action per
+            // ADMITTED target (FadeExileAdmittedTargets: one per identity class, the provider's restriction; human play
+            // every legal target), the target pinned on sac_victim_id -- the Steelbane shape, so each activation is its
+            // own decision and the phase re-prompts (a loop is a sequence of them). Under Opalescence the Wave itself is a
+            // target (the self-exile returns it with five counters). NO-GREEDY: every target branches; "do nothing more"
+            // stays offered by the phase as always.
+            if (sd->params.fade_exile_target_creature && src.fade_counters >= 1)
+            {
+                for (int ti : FadeExileAdmittedTargets(state, state.active_player_index, src))
+                {
+                    Action a;
+                    a.kind = Action::Kind::ActivatePermAbility;
+                    a.card_name = src.card.m_name;
+                    a.def = sd;
+                    a.hand_index = -1;
+                    a.sac_source_id = src.card.m_number;
+                    a.sac_victim_id = state.battlefield[static_cast<std::size_t>(ti)].card.m_number;
+                    a.ability_mode = Action::AbilityMode::FadeExileCreature;
+                    a.cost = ManaCost{};   // the cost is a fade counter, not mana
+                    a.eval = 0;
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
                 }
             }
 
@@ -57569,6 +57703,179 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 actions.push_back(std::move(v));
             }
         }
+    }
+
+    // OBLIVION RING post-pass (Enchanted Evening, 2026-11-25): "When this enchantment enters, exile another
+    // target nonland permanent" is MANDATORY and targets EITHER side, so WHICH permanent is a real decision
+    // (an opponent's body, or -- when it has none -- one of OURS). NO-GREEDY: in the DECISION space each
+    // legal target at emission is a cast variant pinned on tutor_target "OR<n>" (#OR in both plan
+    // signatures keeps the dedup lossless); the provider may only restrict/order
+    // (DecisionProvider::EtbExileNonlandTargets). The base keeps an EMPTY pin = the provider's pick off the
+    // LIVE board at resolution -- the only route to a permanent that enters earlier in the same plan -- so
+    // a single legal target needs no variant (the base takes it), and a pinned variant whose permanent is
+    // gone duplicates the base (dropped by the post-apply dedup). A REMAND variant never resolves: no
+    // variants. Same decision-space gate and human-play rule as the Witness post-pass: rollout leaves keep
+    // the base (the beyond-horizon pick); human play board-clicks the full legal set at resolution.
+    // Gated on the param.
+    {
+        const bool or_decision_space = (g_search_candidate_enum || g_condemn_root_turn < 0)
+                                    && !HumanPlayActive();
+        const std::size_t or_n = actions.size();
+        bool or_built = false;
+        std::vector<int> or_nums;
+        for (std::size_t i = 0; or_decision_space && i < or_n; ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand || actions[i].def == nullptr
+                || !actions[i].def->params.etb_exile_nonland_until_leaves
+                || !actions[i].tutor_target.str().empty()) { continue; }
+            if (!actions[i].remand_by.empty() && actions[i].remand_chain_by.empty()
+                && !actions[i].def->params.cant_be_countered) { continue; }
+            if (!or_built)
+            {
+                const int me = state.active_player_index;
+                const std::vector<int> legal = EtbExileNonlandLegal(state, me, /*source_number=*/0);
+                if (legal.size() >= 2)
+                {
+                    for (int ti : ResolveProvider(state).EtbExileNonlandTargets(state, me, legal))
+                    {
+                        if (std::find(legal.begin(), legal.end(), ti) == legal.end()) { continue; }   // restrict only
+                        const int num = state.battlefield[static_cast<std::size_t>(ti)].card.m_number;
+                        if (num > 0 && std::find(or_nums.begin(), or_nums.end(), num) == or_nums.end())
+                        { or_nums.push_back(num); }
+                    }
+                }
+                or_built = true;
+            }
+            for (int num : or_nums)
+            {
+                Action v = actions[i];               // copy BEFORE push_back (reallocation)
+                v.tutor_target = ExileUntilLeavesPin(num);
+                actions.push_back(std::move(v));
+            }
+        }
+    }
+
+    // CALMING VERSE / FORCE OF VIGOR post-pass (Enchanted Evening lock cluster steps 3 / 5, 2026-11-26). NO-GREEDY:
+    // each resolution choice of these casts is a SEARCHED axis, so in the DECISION space (and in human play, where
+    // the viewer's main_phase menu lists the variants) every option is its own cast variant (same hand_index, so
+    // mutually exclusive), pinned on tutor_target; #DV in both plan signatures keeps the dedup lossless.
+    //   * Calming Verse: KEEP "VK" (tap every untapped land into the float first, so clause 2 finds none) and
+    //     SWEEP-SELF "VS" (lands as they are). Both whenever we control an untapped land at emission; a KEEP that
+    //     a later cast of the line leaves with nothing to float coincides with SWEEP-SELF's board and is dropped by
+    //     the post-apply dedup. An untapped fetchland does NOT withhold KEEP: the line may crack it before the
+    //     Verse (the existing searched action), and the emission state cannot see that.
+    //   * Force of Vigor: one variant per option of DestroyUpToArtEnchOptions (the empty set, every class, two of
+    //     one class, every pair of classes; identity-folded, CastTriggerTargetOrder), which the provider may only
+    //     restrict / order (DecisionProvider::DestroyUpToArtEnchTargetOptions). The base carries the provider's
+    //     beyond-horizon option first (DestroyUpToArtEnchPick), so a budgeted search spends on it first. Targets
+    //     are taken off the EMISSION board: a permanent entering earlier in the same main phase is targetable from
+    //     the next main phase's root (each main is its own search root), never unfindable.
+    // Rollout leaves keep the UNPINNED base (the provider's beyond-horizon pick), EXCEPT a cast whose beyond-horizon
+    // resolution does nothing (FoV's pick is the empty set; a Verse KEEP the provider withdrew as a no-op): the
+    // playout does not spend mana and a card on it (2026-11-25: the playout's no-op casts spend the mana of real
+    // plays). Measured neutral on 200 held-out EE games (seed 9000, d3 b10: 6.92 vs 6.93, -0.01 +- 0.03 turns,
+    // 17 faster / 16 slower); kept as wasted-work removal, no lever. A REMAND variant never resolves: no
+    // variants. Gated on the two params.
+    {
+        const bool dv_space = (g_search_candidate_enum || g_condemn_root_turn < 0) || HumanPlayActive();
+        const std::size_t dv_n = actions.size();
+        const int me = state.active_player_index;
+        bool fv_built = false, fv_noop_built = false, fv_noop = false;
+        std::vector<std::string> fv_pins;
+        std::vector<std::size_t> dv_drop;   // base casts withdrawn (descending erase after the loop)
+        for (std::size_t i = 0; i < dv_n; ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand || actions[i].def == nullptr
+                || !actions[i].tutor_target.str().empty()) { continue; }
+            const CardParams& pp = actions[i].def->params;
+            const bool verse = pp.destroy_opp_enchantments_then_own_if_untapped_land;
+            const bool fov   = pp.destroy_up_to_artifacts_enchantments > 0;
+            if (!verse && !fov) { continue; }
+            if (!actions[i].remand_by.empty() && actions[i].remand_chain_by.empty()
+                && !pp.cant_be_countered) { continue; }
+            if (verse)
+            {
+                bool untapped = false;
+                for (const Permanent& p : state.battlefield)
+                { if (p.controller_index == me && p.card.IsLand() && !p.tapped) { untapped = true; break; } }
+                bool keep = true, sweep = untapped;
+                ResolveProvider(state).CalmingVerseVariants(state, me, keep, sweep);   // restrict only
+                sweep = sweep && untapped;
+                if (!dv_space)
+                {
+                    // Beyond the horizon the unpinned cast resolves on the provider default: a withdrawn KEEP
+                    // there is a cast the provider proved does nothing (DecisionProvider::CalmingVerseVariants).
+                    if (!keep && ResolveProvider(state).CalmingVerseKeepDefault(state, me)) { dv_drop.push_back(i); }
+                    continue;
+                }
+                if (!keep && !sweep) { dv_drop.push_back(i); continue; }   // not casting covers it
+                actions[i].tutor_target = std::string(keep ? "VK" : "VS");
+                if (keep && sweep)
+                {
+                    Action v = actions[i];               // copy BEFORE push_back (reallocation)
+                    v.tutor_target = std::string("VS");
+                    actions.push_back(std::move(v));
+                }
+                continue;
+            }
+            if (!dv_space)
+            {
+                // Beyond the horizon: the unpinned cast resolves on DestroyUpToArtEnchPick; when that pick is the
+                // empty set the cast only spends mana and the card (dominated by not casting it), so the playout
+                // does not make it.
+                if (!fv_noop_built)
+                {
+                    const std::vector<std::vector<int>> all
+                        = DestroyUpToArtEnchOptions(state, me, pp.destroy_up_to_artifacts_enchantments);
+                    const int k = ResolveProvider(state).DestroyUpToArtEnchPick(state, me, all);
+                    fv_noop = !(k >= 0 && k < static_cast<int>(all.size()))
+                           || all[static_cast<std::size_t>(k)].empty();
+                    fv_noop_built = true;
+                }
+                if (fv_noop) { dv_drop.push_back(i); }
+                continue;
+            }
+            if (!fv_built)
+            {
+                const std::vector<std::vector<int>> all
+                    = DestroyUpToArtEnchOptions(state, me, pp.destroy_up_to_artifacts_enchantments);
+                std::vector<std::vector<int>> offered = all;
+                ResolveProvider(state).DestroyUpToArtEnchTargetOptions(state, me, offered);
+                const int front = ResolveProvider(state).DestroyUpToArtEnchPick(state, me, all);
+                auto pin_of = [&](const std::vector<int>& opt)
+                {
+                    std::vector<int> nums;
+                    for (int bi : opt) { nums.push_back(state.battlefield[static_cast<std::size_t>(bi)].card.m_number); }
+                    return DestroyUpToArtEnchPin(nums);
+                };
+                std::vector<std::string> legal_pins;
+                for (const auto& o : all) { legal_pins.push_back(pin_of(o)); }
+                const std::string front_pin = (front >= 0 && front < static_cast<int>(all.size()))
+                                            ? legal_pins[static_cast<std::size_t>(front)] : std::string();
+                for (const auto& o : offered)
+                {
+                    const std::string pin = pin_of(o);
+                    if (std::find(legal_pins.begin(), legal_pins.end(), pin) == legal_pins.end()) { continue; }   // restrict only
+                    if (std::find(fv_pins.begin(), fv_pins.end(), pin) != fv_pins.end()) { continue; }
+                    fv_pins.push_back(pin);
+                }
+                const auto fit = std::find(fv_pins.begin(), fv_pins.end(), front_pin);
+                if (fit != fv_pins.end() && fit != fv_pins.begin()) { std::rotate(fv_pins.begin(), fit, fit + 1); }
+                fv_built = true;
+            }
+            // A provider that withheld EVERY option withdrew the cast (not casting covers it). The unpinned base
+            // must never stay: it would resolve on the provider's pick inside the search window (NO-GREEDY).
+            if (fv_pins.empty()) { dv_drop.push_back(i); continue; }
+            actions[i].tutor_target = fv_pins.front();
+            for (std::size_t k = 1; k < fv_pins.size(); ++k)
+            {
+                Action v = actions[i];
+                v.tutor_target = fv_pins[k];
+                actions.push_back(std::move(v));
+            }
+        }
+        for (auto it = dv_drop.rbegin(); it != dv_drop.rend(); ++it)
+        { actions.erase(actions.begin() + static_cast<std::ptrdiff_t>(*it)); }
     }
 
     // ETB CHOICE AXIS post-pass (AccomplishedAlchemist, 2026-10-18). A choice the card makes AS IT
@@ -80832,6 +81139,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!remand_countered
             && (def.params.exile_all_permanents_hands_graveyards || def.params.each_player_life_becomes >= 0))
         { ResolveExileAllAndSetLife(state, def.params); }
+        // Calming Verse / Force of Vigor (Enchanted Evening lock cluster steps 3 / 5): the shared resolvers with the
+        // cast's searched pin -- executor twin in EffectHandler::ResolveImpl beside its Worldfire call (lockstep).
+        if (!remand_countered && def.params.destroy_opp_enchantments_then_own_if_untapped_land)
+        { ResolveCalmingVerse(state, state.active_player_index, def, tutor_target); }
+        if (!remand_countered && def.params.destroy_up_to_artifacts_enchantments > 0)
+        { ResolveDestroyUpToArtEnch(state, state.active_player_index, def, tutor_target); }
 
         // A resolved instant or sorcery goes to the graveyard (mirrors the real game's
         // MoveToGraveyard). This makes a retrace card recur and keeps the inline
@@ -82741,8 +83054,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // every other mode (never read). Lockstep twin in the other world.
             const bool sac_named = a.ability_mode == Action::AbilityMode::SacNamedTutorPut;
             const bool tap_tutor = a.ability_mode == Action::AbilityMode::TapTutorPut;
+            // Sterling Grove's searched tutor candidate (SacTutorTop) rides the same target slot. Twin in the other world.
+            const bool sac_tutor_top = a.ability_mode == Action::AbilityMode::SacTutorTop;
             const SacNamedPinScope _sac_named_pin(sac_named ? a.sac_victim_id : 0,
-                                                  (sac_named || tap_tutor) ? &a.tutor_target.str() : nullptr);
+                                                  (sac_named || tap_tutor || sac_tutor_top) ? &a.tutor_target.str() : nullptr);
             // Maze's End I2: the fetched land's searched as-enters choice (chosen_x = pin + 1). Twin in the other world.
             const LandEntryPinScope _le_pin(tap_tutor && a.chosen_x > 0 ? a.chosen_x - 1 : -1);
             // Den Protector's searched regrowth (a turn-face-up action's tutor_target); null for every other
@@ -82753,7 +83068,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // payment (TapTargetPumpPay) and the resolver. {0, 0} for every other mode (never read).
             const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
             const bool target_pump = a.ability_mode == Action::AbilityMode::TargetPump
-                                  || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch;   // Steelbane's target
+                                  || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch   // Steelbane's target
+                                  || a.ability_mode == Action::AbilityMode::FadeExileCreature;      // Parallax Wave's
             const bool untap_land = a.ability_mode == Action::AbilityMode::UntapLand;
             const TapTargetPumpPinScope _tpump_pin((tpump || target_pump || untap_land) ? a.sac_victim_id : 0,
                                                    tpump ? a.chosen_x : 0);
@@ -83710,6 +84026,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
         }
         TurnSolver::ApplyFaceUpLeadActs(state, plan.actions);
+        // Sterling Grove's LEAD activations (SacTutorTop, chosen_x == 1), at the same point. Executor twin:
+        // AIEngine::TakeTurn's pre-cast pass. No-op for a plan without one.
+        TurnSolver::ApplySacTutorTopLeadActs(state, plan.actions);
         for (std::size_t i = 0; i < lead_live.size(); ++i)
         {
             const Action& a = plan.actions[i];
@@ -85669,6 +85988,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
         if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
         TryOffMainAltWinActivation(state);   // ...after a Burgeoning put (F1 defect 4; executor twin)
+        PerformWaveOpalSweep(state);   // Parallax Wave + Opalescence, USER ruling 7 (executor twin: RunTurnFrom)
         freeturn::NoteSireBeforeDiscard(state);   // MTG_FREE_TURN_SIRE_FAIR (executor twin: RunTurnFrom)
         PerformEndStepDiscardHands(state, state.active_player_index);   // Sire at the opponent's end step (twin)
         PerformEndStepSelfSacrifices(state);   // morph at the opponent's end step (twin of RunTurnFrom's)
@@ -85745,6 +86065,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     DrainPendingLookTop(state);                    // safety net (lockstep w/ UntapStep): a watcher-only entry's Risen Reef trigger
     DrainPendingSagaEnters(state);                 // safety net: an off-cascade Saga enter takes its counter by turn start
     SweepOrphanedAuras(state);                     // CR 704.5m SBA checkpoint (lockstep w/ GameEngine::UntapStep)
+    TypeStaticsSbaCheckpoint(state);               // Enchanted Evening / Opalescence SBA safety net (lockstep w/ GameEngine::UntapStep)
     state.casts_remaining_this_turn = -1;          // Irencrag "one more spell" budget clears each turn (see GameState)
     state.hand_size_at_combat   = -1;              // post-combat productivity markers are per turn (see
     state.battlefield_at_combat = -1;              // GameState); lockstep with GameEngine's turn start
@@ -85900,6 +86221,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // (assume each is tapped for mana). Mirrors GameEngine (executor) at the same turn-start point
     // -> lockstep. Gated by s_fd_opp_spawns so MTG_LEGACY_SEARCH stays byte-identical to the old model.
     if (s_fd_opp_spawns) { SpawnForbiddenOrchardTokensTurnStart(state); }
+    // ENCHANTED EVENING + OPALESCENCE: an MV-0 spawn body dies as it appears (lockstep twin: GameEngine::UntapStep's
+    // spawn site). A no-op without deck_has_type_statics.
+    TypeStaticsSbaCheckpoint(state);
 
     // Suspend (Lotus Bloom): cast off suspend any card whose last time counter is removed at THIS
     // upkeep (arrive_turn <= turn). Runs after untap so the arrived artifact is untapped and available
@@ -87536,6 +87860,10 @@ static bool DiesTuckTagLive(const std::vector<Action>& acts, const Action& act)
 // ledger). Shared by both signature builders.
 static bool TapTutorPutTargetTagged(const Action& act)
 {
+    // Sterling Grove (SacTutorTop): WHICH enchantment goes on top is the activation's searched axis -- one
+    // Action per candidate, so without the tag every candidate folded onto the first (the Maze's End lesson).
+    if (act.kind == Action::Kind::ActivatePermAbility && act.ability_mode == Action::AbilityMode::SacTutorTop)
+    { return true; }
     if (act.kind != Action::Kind::ActivatePermAbility || act.ability_mode != Action::AbilityMode::TapTutorPut)
     { return false; }
     const CardDefinition* d = act.def ? act.def : CardDatabase::Instance().LookupInterned(act.card_name);
@@ -87639,6 +87967,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.enters_with_x_plus_counters) { w.Put("#BX"); w.Int(act.chosen_x); }   // Walking Ballista's X
                 if (d && d->params.etb_modal_fight_opp_creature) { w.Put("#VM"); w.Put(act.tutor_target); }   // Voracious mode
                 if (d && d->params.modal_exile_target_artifact_enchantment) { w.Put("#AX"); w.Put(act.tutor_target); }   // Archdruid's Charm mode
+                if (d && (d->params.destroy_opp_enchantments_then_own_if_untapped_land || d->params.destroy_up_to_artifacts_enchantments > 0)) { w.Put("#DV"); w.Put(act.tutor_target); }   // Calming Verse KEEP/SWEEP, Force of Vigor target set
                 if (d && d->params.evoke_cost.has_value()) { w.Put(act.evoke ? "#E1" : "#E0"); }
                 if (d && d->params.emerge_cost.has_value()) { w.Put(act.emerge ? "#EM1" : "#EM0"); }   // Decimator (I4)
                 if (DiesTuckTagLive(p.actions, act)) { w.Put((act.dies_tuck & 1) ? "#DT1" : "#DT2"); }   // Ilharg's death (I5b)
@@ -87647,6 +87976,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.etb_return_gy_to_hand) { w.Put("#G"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_destroy_nonbasic_land_optional) { w.Put("#WO"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_return_equipment_from_gy) { w.Put("#FE"); w.Put(act.tutor_target); }
+                if (d && d->params.etb_exile_nonland_until_leaves) { w.Put("#OR"); w.Put(act.tutor_target); }   // Oblivion Ring target
                 // (|| sacfod_credit: a fodder-credited plan's land-Aura host never folds into another host --
                 // see TurnSolver::Plan::sacfod_credit; lockstep with plan_signature_legacy.)
                 if (d && d->params.is_land_aura && act.enchant_target > 0 && (host_sig || p.sacfod_credit)) { w.Put("#H"); w.Int(act.enchant_target); }
@@ -87817,7 +88147,8 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (act.ability_mode == Action::AbilityMode::TapTargetPump
                     || act.ability_mode == Action::AbilityMode::TargetPump
                     || act.ability_mode == Action::AbilityMode::UntapLand
-                    || act.ability_mode == Action::AbilityMode::CounterDestroyArtEnch)
+                    || act.ability_mode == Action::AbilityMode::CounterDestroyArtEnch
+                    || act.ability_mode == Action::AbilityMode::FadeExileCreature)
                 { w.Put("#P"); w.Int(act.sac_victim_id); }
                 // Contested Cliffs' fight: WHICH of ours and WHICH of theirs are distinct plans. Lockstep with
                 // the legacy builder. Every other ability: no tag.
@@ -93418,6 +93749,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         if (cd && cd->params.etb_modal_fight_opp_creature) { k += "#VM"; k += act.tutor_target.str(); }
                         // Archdruid's Charm: mode 1 vs exile <target> are DISTINCT plans (the #VM precedent).
                         if (cd && cd->params.modal_exile_target_artifact_enchantment) { k += "#AX"; k += act.tutor_target.str(); }
+                        if (cd && (cd->params.destroy_opp_enchantments_then_own_if_untapped_land || cd->params.destroy_up_to_artifacts_enchantments > 0)) { k += "#DV"; k += act.tutor_target.str(); }   // Calming Verse KEEP/SWEEP, Force of Vigor target set
                         // Evoke (Reveillark): the evoke cast and the hard cast are two different
                         // spells sharing a name (different cost, the body self-sacs) -- the
                         // bestow lesson. Gated on the param, so no existing deck moves.
@@ -93440,6 +93772,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         // (one cast variant per distinct graveyard Equipment name + the unpinned
                         // resolution pick) -- the #G precedent. Gated on the param.
                         if (cd && cd->params.etb_return_equipment_from_gy) { k += "#FE"; k += act.tutor_target.str(); }
+                        // Oblivion Ring: WHICH permanent the mandatory ETB exiles (one cast variant per legal
+                        // target + the unpinned live-board pick) -- the #AX precedent. Gated on the param.
+                        if (cd && cd->params.etb_exile_nonland_until_leaves) { k += "#OR"; k += act.tutor_target.str(); }
                         // LAND-AURA HOST (MTG_EDF_AURA_HOST_SIG, default ON; 2026-09-15): WHICH land
                         // carries a Wild Growth / Trace of Abundance is a real decision, not a
                         // sub-decision the host heuristic can be trusted with -- a karoo in the same
@@ -93691,7 +94026,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                                   + ((act.ability_mode != Action::AbilityMode::TapTargetPump
                                       && act.ability_mode != Action::AbilityMode::TargetPump
                                       && act.ability_mode != Action::AbilityMode::UntapLand
-                                      && act.ability_mode != Action::AbilityMode::CounterDestroyArtEnch)
+                                      && act.ability_mode != Action::AbilityMode::CounterDestroyArtEnch
+                                      && act.ability_mode != Action::AbilityMode::FadeExileCreature)
                                      ? std::string() : "#P" + std::to_string(act.sac_victim_id))
                                   // Contested Cliffs' fight pair (TapFight). Every other ability: no tag.
                                   + (act.ability_mode != Action::AbilityMode::TapFight ? std::string()
@@ -95690,6 +96026,9 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
         || pp.tap_draw_cost.has_value() || pp.sac_draw_cost.has_value()
         || pp.drain_cost.has_value() || pp.exile_opponent_top_cost.has_value()
         || pp.ice_counter_cost.has_value() || pp.lifelink_grant_cost.has_value()) { return true; }
+    // Sterling Grove: a {T}-less activation, so a Grove CAST this plan can be activated in the same phase
+    // (CollectActivationKeys' SacTutorTop row).
+    if (pp.sac_tutor_top_cost.has_value()) { return true; }
     // Blighted Steppe / Wellwisher: once their modes are in CollectActivationKeys the site-9 gate
     // CAN accept a key from them, and this predicate's contract is to be the SUPERSET of what the
     // gate accepts. Wellwisher is the live one -- a creature the plan cast this turn whose {T}
@@ -95898,10 +96237,19 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     // line here (the cast order deliberately ranks the watcher at 6 and Equipment at 8). A
     // battlefield-only test would miss exactly that case.
     std::vector<std::string> watched_cast_subtypes;
+    std::vector<const CardDefinition*> type_watchers;   // Enchantress's Presence (draw_on_cast_types)
     if (BpPutInHandEnabled() && BpCastSubtypeEnabled())
     {
         auto absorb = [&](const CardDefinition* w)
         {
+            // Enchantress's Presence (draw_on_cast_types): the same WATCHER route, keyed on the cast
+            // card's TYPE. Collected beside the subtypes; matched by CastTypeDrawWatcherMatches (the
+            // effect's own predicate). Empty for every other deck -> nothing collected.
+            if (w && !w->params.draw_on_cast_types.empty())
+            {
+                if (std::find(type_watchers.begin(), type_watchers.end(), w) == type_watchers.end())
+                { type_watchers.push_back(w); }
+            }
             if (!w || w->params.draw_on_cast_subtypes.empty()) { return; }
             for (const std::string& t : w->params.draw_on_cast_subtypes)
             {
@@ -95923,6 +96271,8 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     }
     auto cast_subtype_watched = [&](const CardDefinition& cd)
     {
+        for (const CardDefinition* w : type_watchers)
+        { if (CastTypeDrawWatcherMatches(w->params, cd.card)) { return true; } }
         for (const std::string& want : watched_cast_subtypes)
         {
             for (const std::string& cs : cd.card.m_subtypes)
@@ -107682,7 +108032,8 @@ static std::string PlanDomKey(const Action& a)
         && (a.ability_mode == Action::AbilityMode::TapTargetPump
             || a.ability_mode == Action::AbilityMode::TargetPump
             || a.ability_mode == Action::AbilityMode::UntapLand
-            || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch))
+            || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch
+            || a.ability_mode == Action::AbilityMode::FadeExileCreature))
     { k += "|T"; k += std::to_string(a.sac_victim_id); }   // Kessig Wolf Run: the pump's target
     if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapFight)
     { k += "|F"; k += std::to_string(a.sac_victim_id); k += '/'; k += std::to_string(a.enchant_target); }   // Contested Cliffs
@@ -119829,6 +120180,16 @@ public:
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (d && d->card.IsInstant() && d->params.tutor_to_top)
                 { tutor_ = true; break; }
+            }
+            // Sterling Grove's activation shares the window (GameEngine::UpkeepTutorOptions' battlefield half).
+            if (!tutor_)
+            {
+                for (const Permanent& p : pre.battlefield)
+                {
+                    if (p.controller_index != pre.active_player_index) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                    if (d && d->activated_tutor != nullptr) { tutor_ = true; break; }
+                }
             }
         }
         // PROFANE TUTOR's fetch (MTG_PROFANE_RESOLVE_FAN): a suspended to-hand tutor arriving at the next upkeep,

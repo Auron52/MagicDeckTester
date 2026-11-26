@@ -695,7 +695,9 @@ static_assert(sizeof(Player) == 216,
 // payment taps (MazesEndProvider::ManaSourceRank); the tapped sources are already folded.
 // +0 bytes (2026-11-24, Maze's End rank tie-breaks): `deck_spell_major_color` (uint8, the next byte of the same hole).
 // Same classification: a DECK CONSTANT stamped in StampDeckTraits, read only by that rank -- nothing to fold.
-static_assert(sizeof(GameState) == 1736,   // combined upstream free turns and Beasts fields
+// +8 bytes (2026-11-25, Enchanted Evening / Sterling Grove): the DECK CONSTANT deck_has_enchantment_shroud (stamped
+// once in the runner's deck-trait pass -- nothing to fold). No padding hole was left beside the Gargaroth bools.
+static_assert(sizeof(GameState) == 1744,   // combined upstream free turns and Beasts fields + Sterling Grove's stamp
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

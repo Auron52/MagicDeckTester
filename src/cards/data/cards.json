@@ -19527,6 +19527,146 @@
     "tutor_shuffle_after": true,
     "tutor_optional": true
    }
+  },
+  {
+   "name": "Sunpetal Grove",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control a Forest or a Plains.\n{T}: Add {G} or {W}. [Check land: enters untapped iff a controlled land has subtype Forest or Plains (checkland_subtypes, evaluated in the shared LandWouldEnterTapped predicate so enumeration pricing and the real drop agree). Temple Garden (Forest Plains) and the basics enable it; the fetchlands do not (no land types).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "W"
+    ],
+    "checkland_subtypes": [
+     "Forest",
+     "Plains"
+    ]
+   }
+  },
+  {
+   "name": "Oblivion Ring",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "When this enchantment enters, exile another target nonland permanent.\nWhen this enchantment leaves the battlefield, return the exiled card to the battlefield under its owner's control. [TWO LINKED TRIGGERS (CR 607.2a; etb_exile_nonland_until_leaves). ETB: MANDATORY and targeted over BOTH sides (CR 603.3d) -- every nonland permanent except itself that we may target (shroud binds our own targeting, CR 702.18a: Sterling Grove's grant makes our OTHER enchantments illegal targets; an opponent's hexproof). Against the goldfish the legal opponent targets are its scheduled spawn bodies (8 of every 10 game indices); with none, the trigger MUST exile one of OUR nonland permanents. WHICH one is SEARCHED: one cast variant per legal target at emission, pinned OR<n> (#OR in the plan signatures; the provider may only restrict/order them, DecisionProvider::EtbExileNonlandTargets); the unpinned base, put paths and rollout leaves take DecisionProvider::EtbExileNonlandTargetPick off the live board (an opponent permanent first, else our least costly -- the Acidic Slime ladder). Human play board-clicks the full legal set (`target`). The card waits in exile linked to this object (kExileUntilLeavesBase marker + Permanent::linked_exile_number, folded into the state keys); a token exiled ceases to exist. LTB: on ANY leave that reaches FireLeavesBattlefieldTriggers (sacrifice, destroy, exile, bounce -- every engine leave chokepoint), the linked card returns at once as a NEW object under its OWNER (ours through the full enter cascade, so its ETBs fire again; a spawn under the opponent). Opalescence makes this a 3/3 enchantment creature; that is the lock cluster's static, not this card's.]",
+   "template": "custom",
+   "parameters": {
+    "etb_exile_nonland_until_leaves": true
+   }
+  },
+  {
+   "name": "Enchantress's Presence",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Whenever you cast an enchantment spell, draw a card. [CAST-TYPE DRAW WATCHER (draw_on_cast_types [\"Enchantment\"]): the Sram, Senior Edificer shape keyed on the cast card's printed TYPE. Fires in FireOnCastTriggers (both cast paths, executor and rollout) when WE cast a spell whose type line has Enchantment -- Auras (Utopia Sprawl, Wild Growth) included; a Presence being cast is on the stack, so it never sees itself; each Presence on the battlefield draws one. The draw is MANDATORY (no 'may'), a real CR-121 draw through TrickDraw (counted, logged, deck-out flagged) -- nothing to surface in the viewer. The card drawn mid-turn is SEARCHED the same turn: site 10 (the put-in-hand breakpoint) fans any plan whose cast this watcher sees (CastTypeDrawWatcherMatches, the effect's own predicate), so 'cast Wild Growth, draw, cast what was drawn' is findable. Enchanted Evening makes every PERMANENT an enchantment, never a SPELL: a creature or instant spell is still not an enchantment spell on the stack, so it does not trigger this.]",
+   "template": "custom",
+   "parameters": {
+    "draw_on_cast_types": [
+     "Enchantment"
+    ]
+   }
+  },
+  {
+   "name": "Sterling Grove",
+   "mana_cost": "{G}{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Other enchantments you control have shroud. (They can't be the targets of spells or abilities.)\n{1}, Sacrifice this enchantment: Search your library for an enchantment card, reveal it, then shuffle and put that card on top. [STATIC (grants_other_enchantments_shroud): every shroud predicate (CreatureHasShroud / LandHasShroud / PermanentHasShroud) sees our OTHER enchantments as shrouded while a Grove is ours (behind the deck stamp deck_has_enchantment_shroud). NOT inert: the passive opponent never targets, but shroud binds OUR OWN targeting too (CR 702.18a) -- with a Grove out, Oblivion Ring cannot exile one of our other enchantments, and once Enchanted Evening makes every permanent an enchantment an Aura spell (Utopia Sprawl, Wild Growth) cannot target our land and Parallax Wave cannot target our creatures (the lock cluster reads the same predicates via PermanentIsEnchantmentNow). A Grove does not shroud itself; two Groves shroud each other. ACTIVATED TUTOR-TO-TOP (sac_tutor_top_cost {1}, sac_tutor_top_types Enchantment): no {T} (usable the turn it enters); the sacrifice is part of the cost (to the graveyard; a creature under Opalescence dies through the shared chokepoint), then the shared PerformTutor puts the card on top after the shuffle ('reveal' is inert: nothing reads reveals). TWO SEARCHED TIMINGS: (1) a main-phase activation, one plan variant per tutor candidate (the provider's TutorCandidates; every legal name in human play) -- the card is next turn's draw unless a mid-turn draw (Enchantress's Presence) takes it; (2) the UPKEEP priority window before the draw (the Enlightened Tutor window GameEngine::UpkeepTutorOptions, searched in both worlds) -- the card is THIS turn's draw. Instant-speed activation on the opponent's turn is folded into (1): against the goldfish nothing happens between our main phase and our next upkeep except combat (where only an Opalescence-animated Grove's own attack differs -- [PROVISIONAL: a Grove activated in main 1 does not attack that turn; USER sign-off]).]",
+   "template": "custom",
+   "parameters": {
+    "grants_other_enchantments_shroud": true,
+    "sac_tutor_top_cost": "{1}",
+    "sac_tutor_top_types": [
+     "Enchantment"
+    ]
+   }
+  },
+  {
+   "name": "Enchanted Evening",
+   "mana_cost": "{3}{W/U}{W/U}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "All permanents are enchantments in addition to their other types. [LAYER-4 TYPE STATIC (static_all_permanents_enchantments; RefreshTypeStatics, SpellEffects.h): every battlefield permanent of BOTH sides -- lands, tokens, the opponent's spawn bodies -- gets Enchantment on its own Card copy (the Heliod precedent), at every battlefield-membership chokepoint and SBA checkpoint, in both worlds, behind the deck stamp deck_has_type_statics. Applied BEFORE Opalescence (CR 613.8 dependency: it changes what Opalescence applies to). Alone it changes only what reads 'enchantment' (Scryfall 2008-05-01): Sterling Grove's shroud then covers every other permanent we control, lands included (an Aura spell can no longer target our land); Calming Verse and Force of Vigor reach every opposing permanent (lock-cluster steps 3 / 5). It does not touch SPELLS, so Enchantress's Presence still counts only enchantment spells. With Opalescence out every land on both sides is a 0/0 creature and dies to the toughness SBA (CR 704.5f), our own mana included; a land played later dies as it enters (a fetchland cannot be cracked), and every MV-0 token dies as it appears. Hybrid {W/U}{W/U}: this list pays both pips with W. Mana value 5, so a 5/5 under Opalescence.]",
+   "template": "custom",
+   "parameters": {
+    "static_all_permanents_enchantments": true
+   }
+  },
+  {
+   "name": "Opalescence",
+   "mana_cost": "{2}{W}{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Each other non-Aura enchantment is a creature in addition to its other types and has base power and base toughness each equal to its mana value. [LAYER-4 + 7b TYPE STATIC (static_animate_other_nonaura_enchantments_mv; RefreshTypeStatics, SpellEffects.h): every OTHER non-Aura enchantment on the battlefield (either side) gets Creature and base P/T = its copy's mana value (X = 0; tokens and lands 0) on its own Card copy; counters and until-EOT pumps still apply on top. Never itself; two Opalescences animate each other (Scryfall 2004-10-04). Auras (Utopia Sprawl, Wild Growth) are never animated. Summoning sickness is CONTROL duration (CR 302.6; Scryfall 2008-08-01): an enchantment controlled since the turn began may attack the turn Opalescence arrives, one that entered this turn may not. Here: Enchantress's Presence 3/3, Sterling Grove 2/2, Exploration 1/1, Oblivion Ring 3/3, Parallax Wave 4/4, Enchanted Evening 5/5, another Opalescence 4/4. A creature it makes 0/0 (an MV-0 enchantment, or every land under Enchanted Evening) dies at the shared SBA checkpoint (TypeStaticsSbaCheckpoint: after every resolution, the land drop, the end step, the opponent's land drop and spawns, both turn starts), through OnCreatureDies, so its leave triggers fire (an Oblivion Ring that dies returns its card); an Aura on a land that died goes to the graveyard (CR 704.5m). Without Enchanted Evening the passive opponent has no enchantment, so only our side changes.]",
+   "template": "custom",
+   "parameters": {
+    "static_animate_other_nonaura_enchantments_mv": true
+   }
+  },
+  {
+   "name": "Calming Verse",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Destroy all enchantments you don't control. Then if you control an untapped land, destroy all enchantments you control. [OWN PARAM destroy_opp_enchantments_then_own_if_untapped_land (never destroy_all_enchantments, which ManaPayment's wipe recheck keys on); shared resolver ResolveCalmingVerse (SpellEffects.h) at both worlds' sorcery resolution site. No target, so hexproof / shroud are no defence. Clause 1 destroys every permanent we don't control that is an enchantment on its copy -- under Enchanted Evening every opposing permanent (lands, spawn bodies; tokens cease to exist). Clause 2 is checked DURING resolution after clause 1 (Scryfall 2004-10-04): any untapped land we control (an uncracked fetchland counts) -> every enchantment we control (under Enchanted Evening: everything, lands included). The tap-all-lands-first choice is a SEARCHED two-variant cast axis (a sound fold of the 2^n tap subsets): KEEP (VK) taps every untapped land into the float first through the lock pre-float route (a dual as wild under deck_float_wild_exact; a fetchland cannot float, so crack it earlier in the line), SWEEP-SELF (VS) leaves the lands; both are offered in the decision space and the viewer's main_phase menu; an unpinned rollout-leaf cast takes the provider default (KEEP). Every destroy reaches the leave chokepoints (an Oblivion Ring returns its card); indestructible stays. (The lock modelling's virtual-board clear is not on the shared branch: the deck is parked, docs/design/enchanted-evening-parked.md.)]",
+   "template": "custom",
+   "parameters": {
+    "destroy_opp_enchantments_then_own_if_untapped_land": true
+   }
+  },
+  {
+   "name": "Force of Vigor",
+   "mana_cost": "{2}{G}{G}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "If it's not your turn, you may exile a green card from your hand rather than pay this spell's mana cost.\nDestroy up to two target artifacts and/or enchantments. [CLAUSE 2 (destroy_up_to_artifacts_enchantments: 2; ResolveDestroyUpToArtEnch, both worlds' instant resolution site): 0, 1 or 2 DISTINCT targets, either side, each an artifact or an enchantment on its copy (under Enchanted Evening: every permanent); shroud binds our own targeting (Sterling Grove's grant, PermanentHasShroud), an opponent's hexproof stops it; re-checked on resolution (an illegal target is unaffected); indestructible stays; every destroy reaches the leave chokepoints (an Oblivion Ring returns its card). The target SET is SEARCHED: one cast variant per identity-folded option, the empty set included (pin FV<n>[,<m>]); an unpinned rollout-leaf cast takes the provider's pick (the most opponent targets). Hard cast {2}{G}{G} on our turn as a main-phase instant (a passive opponent gives an instant no other window on our turn). CLAUSE 1 (the off-turn pitch: exile a green card from hand instead of paying, in the opponent's end-step window) is NOT MODELLED: the deck is parked (docs/design/enchanted-evening-parked.md); its lock-step-7 build is on backup/2026-11-26/ee-analysis-lock.]",
+   "template": "custom",
+   "parameters": {
+    "destroy_up_to_artifacts_enchantments": 2
+   }
+  },
+  {
+   "name": "Parallax Wave",
+   "mana_cost": "{2}{W}{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Fading 5 (This enchantment enters with five fade counters on it. At the beginning of your upkeep, remove a fade counter from it. If you can't, sacrifice it.)\nRemove a fade counter from this enchantment: Exile target creature.\nWhen this enchantment leaves the battlefield, each player returns to the battlefield all cards they own exiled with it. [FADING 5: fading_counters 5 (put as it enters on EVERY route -- a cast and the universal enter cascade, so a Wave returned by its own leave trigger re-enters with five; Doubling Season doubles it), the shared upkeep PerformUpkeepFading (remove one, or sacrifice it when it has none; its leave trigger fires). ACTIVATION fade_exile_target_creature (PermAbilityMode::FadeExileCreature; ResolveFadeExileCreature, SpellEffects.h): no {T}, no mana, the counter is the COST; legal the turn it lands and repeatable. TARGET = any creature on either side (under Opalescence the Wave itself and our other non-Aura enchantments), never one with shroud (Sterling Grove's grant on our other enchantments, PermanentHasShroud) or an opponent's hexproof one; a SEARCHED axis (one activation per identity class of legal target; human play: every legal target). A token exiled ceases to exist; a card is LINKED to this object (CR 607.2a) with the exile-until-leaves marker, and on ANY leave route (fading's sacrifice, a destroy, its own exile) every linked card returns under its owner as a new object through the enter cascade (FireLeavesBattlefieldTriggers -> ReturnExiledUntilLeaves). SELF-EXILE under Opalescence: the Wave is exiled with itself, so its leave trigger returns it with five fade counters; activations that resolve after the old object left exile for good (CR 607.2a / 400.7). With one Sterling Grove the Grove must be exiled first (it shrouds the Wave; it returns too); with two or more Groves each shrouds the others and the Wave, so the loop is impossible. DECK DEFAULT (USER ruling 7; PerformWaveOpalSweep, EnchantedEveningProvider, deck_has_wave_opal_sweep): at the OPPONENT'S end step, with a Wave and an Opalescence on our side and the loop legal, every targetable opponent creature (under Enchanted Evening every opponent permanent) is exiled for good through the loop and the Wave returns with five; with no opponent creature and nothing linked, a Wave below five is topped up the same way. Hexproof opponent creatures are skipped. The viewer's decline entry for the sweep is not built (the deck is parked, docs/design/enchanted-evening-parked.md; the lock modelling's virtual board is on backup/2026-11-26/ee-analysis-lock).]",
+   "template": "custom",
+   "parameters": {
+    "fading_counters": 5,
+    "fade_exile_target_creature": true
+   }
   }
 ]
 }

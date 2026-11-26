@@ -4879,6 +4879,86 @@ public:
         return best;
     }
 
+    // Oblivion Ring's MANDATORY "exile another target nonland permanent" (until it leaves;
+    // CardParams::etb_exile_nonland_until_leaves) is a SEARCHED axis (NO-GREEDY): TurnSolver's Oblivion Ring
+    // post-pass emits one cast variant per target EtbExileNonlandTargets returns, each pinned "OR<n>".
+    // EtbExileNonlandTargets -- the targets the SEARCH is offered. `legal` = battlefield indices of every
+    // legal target at emission (EtbExileNonlandLegal). A provider may only RESTRICT or ORDER (an index
+    // outside `legal` is never emitted). Base: every legal target. Human play never consults it (the viewer
+    // board-clicks the full legal set at resolution).
+    virtual std::vector<int> EtbExileNonlandTargets(const GameState& s, int controller,
+                                                    const std::vector<int>& legal) const
+    { (void)s; (void)controller; return legal; }
+
+    // EtbExileNonlandTargetPick -- the target when NO searched pin rode the entry (a put path, the unpinned
+    // base cast -- which also covers a permanent that entered earlier in the same plan -- a rollout leaf
+    // beyond the horizon, or a pin whose permanent is gone). `legal` never empty; returns an index INTO
+    // `legal`. DEFAULT = the EtbDestroyTargetPick ladder (an opponent permanent first, else our least
+    // costly one). A beyond-horizon ORDER, never a pick inside the search window.
+    virtual int EtbExileNonlandTargetPick(const GameState& s, int controller,
+                                          const std::vector<int>& legal) const
+    { return EtbDestroyTargetPick(s, controller, legal); }
+
+    // CALMING VERSE (CardParams::destroy_opp_enchantments_then_own_if_untapped_land; lock cluster step 3). Whether
+    // to tap every untapped land for mana before it resolves (KEEP: clause 2 then finds no untapped land and our
+    // board survives) or to leave the lands (SWEEP-SELF) is a SEARCHED two-variant cast axis (TurnSolver's
+    // Calming Verse post-pass pins "VK" / "VS" in the decision space and in human play). This hook decides ONLY an
+    // UNPINNED cast: a rollout leaf beyond the horizon and the d0 runner (the permitted playout greedy). Base: KEEP.
+    virtual bool CalmingVerseKeepDefault(const GameState& s, int controller) const
+    { (void)s; (void)controller; return true; }
+    // ...and the variant MENU (restrict only: a provider may clear `keep` / `sweep`, never set one). TurnSolver's
+    // post-pass emits KEEP while `keep`, SWEEP-SELF while `sweep` and we control an untapped land; with neither the
+    // cast is not offered (not casting covers it). A withdrawn KEEP also stops the beyond-horizon (unpinned, KEEP
+    // default) cast. Base: both.
+    virtual void CalmingVerseVariants(const GameState& s, int controller, bool& keep, bool& sweep) const
+    { (void)s; (void)controller; (void)keep; (void)sweep; }
+
+    // FORCE OF VIGOR clause 2 (CardParams::destroy_up_to_artifacts_enchantments; lock cluster step 5). "Destroy up to
+    // N target artifacts and/or enchantments": the target SET is a SEARCHED cast axis -- TurnSolver's post-pass emits
+    // one cast variant per option (DestroyUpToArtEnchOptions: every 0..N multiset of identity classes, ordered by
+    // CastTriggerTargetOrder), pinned "FV<n>[,<m>]". DestroyUpToArtEnchTargetOptions may only RESTRICT or ORDER that
+    // list (an option not in it is never emitted). Base: every option.
+    virtual void DestroyUpToArtEnchTargetOptions(const GameState& s, int controller,
+                                                 std::vector<std::vector<int>>& options) const
+    { (void)s; (void)controller; (void)options; }
+    // ...and the target set of an UNPINNED cast (a rollout leaf beyond the horizon, the d0 runner): an index into
+    // `options` (battlefield indices; option 0 is the empty set). A beyond-horizon order, never a pick inside the
+    // search window. Base: the first option that takes the most targets, all of them the opponent's (destroying an
+    // opponent's permanent costs us nothing against a passive opponent); none -> the empty set.
+    virtual int DestroyUpToArtEnchPick(const GameState& s, int controller,
+                                       const std::vector<std::vector<int>>& options) const
+    {
+        int best = 0;
+        std::size_t best_n = 0;
+        for (std::size_t o = 0; o < options.size(); ++o)
+        {
+            bool opp_only = true;
+            for (int bi : options[o])
+            {
+                if (bi < 0 || bi >= static_cast<int>(s.battlefield.size())
+                    || s.battlefield[static_cast<std::size_t>(bi)].controller_index == controller)
+                { opp_only = false; break; }
+            }
+            if (opp_only && options[o].size() > best_n) { best = static_cast<int>(o); best_n = options[o].size(); }
+        }
+        return best;
+    }
+
+    // FadeExileCreatureTargets -- the exile targets the SEARCH is offered for Parallax Wave's "Remove a fade counter
+    // from this enchantment: Exile target creature" (lock cluster step 4; one activation action per returned target).
+    // `legal` = battlefield indices of one representative per identity class of legal target, both sides, the Wave
+    // itself included under Opalescence (FadeExileAdmissibleTargets). RESTRICT / ORDER only. Base: every legal target.
+    // (Design §4.4's own-target folds are NOT applied: each has a counterexample in this list -- see the ledger's
+    // "Lock-cluster step 4" notes -- so they are step-8 work, not a sound default.)
+    virtual std::vector<int> FadeExileCreatureTargets(const GameState& s, int controller, const Permanent& src,
+                                                      const std::vector<int>& legal) const
+    { (void)s; (void)controller; (void)src; return legal; }
+    // WaveOpalSweepRule -- does this deck adopt the USER's ruling-7 default (lock cluster step 4; PerformWaveOpalSweep):
+    // at the OPPONENT's end step, with a Parallax Wave and an Opalescence on our side, exile every targetable opponent
+    // creature through the Wave's self-exile loop. A DECK rule, read once into GameState::deck_has_wave_opal_sweep at
+    // the stamp. Base: no.
+    virtual bool WaveOpalSweepRule() const { return false; }
+
     // EtbDestroyTargetPick -- a MANDATORY "When this enters, destroy target <X>" trigger whose legal
     // set (BOTH sides, CR 603.3d: a trigger with a legal target must take one) can be only OUR OWN
     // permanents against the goldfish: Shriekmaw (nonartifact, nonblack creature) and Acidic Slime

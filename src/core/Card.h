@@ -557,6 +557,26 @@ struct Card
     // a full 64 bytes, so the tail is mana(48) + subtypes(10) + 2 bools = 60, and this int fills bytes
     // 124-127 in the original 128-byte Card; six hybrid slots now make Card 136 bytes.
     int         m_staged_expiry = 0; // last turn this staged card may be played (CR 406); valid when m_is_staged
+    // TYPE STATICS (Enchanted Evening / Opalescence, RefreshTypeStatics in SpellEffects.h; 2026-11-26): what the
+    // last refresh ADDED to this battlefield copy, so the next one can undo exactly that and re-apply. Bits:
+    // kTsAddedEnchantment (EE's layer-4 type), kTsAddedCreature (Opalescence's layer-4 type), kTsSetPt
+    // (Opalescence's layer-7b base P/T = mana value; the overwritten base is in m_ts_saved_power / _tough, with
+    // kTsHadPower / kTsHadTough recording whether that base was set at all -- std::optional's has_value).
+    // ON THE CARD, NOT THE PERMANENT, ON PURPOSE: a permanent that leaves carries its card (the graveyard, exile,
+    // an O-Ring / Parallax Wave link) and a copy effect copies it, so a dirty card re-entering is undone by its
+    // own bits at the first refresh (CR 400.7: a new object; CR 706.2: the copiable values exclude layer-4 / 7b
+    // effects). In Card's tail padding (bytes 132-134 of 136): sizeof(Card) and sizeof(Permanent) unchanged.
+    // Zero for every card of every deck without a type static -> byte-identical there. Derived from the board
+    // (which statics are out and which cards they apply to), so no key folds it. The saved base is an int8:
+    // a printed P/T outside [-128, 127] does not exist.
+    static constexpr uint8_t kTsAddedEnchantment = 1;
+    static constexpr uint8_t kTsAddedCreature    = 2;
+    static constexpr uint8_t kTsSetPt            = 4;
+    static constexpr uint8_t kTsHadPower         = 8;
+    static constexpr uint8_t kTsHadTough         = 16;
+    uint8_t     m_ts_mask        = 0;
+    int8_t      m_ts_saved_power = 0;
+    int8_t      m_ts_saved_tough = 0;
 
     // The enum value's ordinal is its bit index. CardType/Supertype/Color have < 32 values; Keyword
     // has > 32, so its mask and Bit() are 64-bit (a 32-bit `1u << 32` is UB -- see enum Keyword).

@@ -2217,6 +2217,32 @@ struct GameState
     //     (DecisionProvider::AttackChooseOneModes). DEFAULT FALSE, the safe direction (keeps the mode).
     bool                     deck_has_attack_choose_one   = true;
     bool                     deck_life_inert              = false;
+    // STERLING GROVE (Enchanted Evening, 2026-11-25): an ENCHANTMENT SHROUD GRANT on the mainboard
+    // (CardParams::grants_other_enchantments_shroud), gating EnchantmentShroudFromGrant's board walk inside every
+    // shroud predicate, so a clear bit PROVES it finds nothing. DEFAULT TRUE (an unstamped state -- a unit test --
+    // still sees the grant). A DECK CONSTANT, never folded (+8 bytes: see the Dominance.h size note).
+    bool                     deck_has_enchantment_shroud  = true;
+    // ENCHANTED EVENING / OPALESCENCE (lock cluster step 1, 2026-11-26): the deck holds a TYPE STATIC
+    // (CardParams::static_all_permanents_enchantments / static_animate_other_nonaura_enchantments_mv), gating
+    // RefreshTypeStatics' board walk and TypeStaticsSbaCheckpoint, so a clear bit PROVES neither finds anything.
+    // DEFAULT TRUE (an unstamped state -- a unit test, a scenario -- still sees the statics; the walk only changes
+    // a board that holds one, so other decks' unstamped states are unchanged too). A DECK CONSTANT, never folded.
+    // In the pad byte before scripted_attack_choose_mode: sizeof(GameState) unchanged.
+    bool                     deck_has_type_statics        = true;
+    // THE LOCK PRE-FLOAT'S DUAL-LAND COLOUR (lock cluster step 2, 2026-11-26; PrefloatLandsAtTypeStaticsLock in
+    // SpellEffects.h). True when floating a multi-colour land of this deck as `wild` is EXACT: for every land in the
+    // list that makes two or more colours, every coloured pip of every card of the list (main + sideboard) is a
+    // colour that land makes (a hybrid pip: either half). Then `wild` pays nothing the land could not have paid.
+    // DEFAULT FALSE, the safe direction: an unstamped state (a unit test, a scenario) floats single-colour lands only
+    // and leaves a dual to die untapped, as before step 2. A DECK CONSTANT, never folded. In the same pad as the bit
+    // above (sizeof(GameState) unchanged).
+    bool                     deck_float_wild_exact        = false;
+    // THE PARALLAX WAVE + OPALESCENCE SWEEP (lock cluster step 4, USER ruling 7; PerformWaveOpalSweep in SpellEffects.h).
+    // True when the deck's PROVIDER adopts the sweep as its rule (DecisionProvider::WaveOpalSweepRule) AND the list
+    // holds both a fade_exile_target_creature card and an Opalescence-param card. Stamped after the provider is
+    // attached (GameSetup). DEFAULT FALSE: an unstamped state (a unit test, a scenario) never sweeps. A DECK CONSTANT,
+    // never folded. In the same pad as the two bits above (sizeof(GameState) unchanged; Dominance.h's assert).
+    bool                     deck_has_wave_opal_sweep     = false;
     // THE SEARCHED ELDER GARGAROTH MODE (Plan::attack_choose_mode_choice): PACKED 2 bits per attack-trigger
     // ordinal (ordinal 0 lowest; a field of 0 = that ordinal unpinned, m + 1 = mode m: 0 token / 1 life /
     // 2 draw); -1 = nothing pinned (every trigger takes DecisionProvider::AttackChooseOneModes' front).

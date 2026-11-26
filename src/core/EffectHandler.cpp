@@ -842,6 +842,13 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 // rollout twin in apply_one just before its graveyard move (lockstep). Two param tests else.
                 if (def.params.exile_all_permanents_hands_graveyards || def.params.each_player_life_becomes >= 0)
                 { ResolveExileAllAndSetLife(state, def.params); }
+                // Calming Verse / Force of Vigor (Enchanted Evening lock cluster steps 3 / 5): the shared resolvers,
+                // the searched variant / target set on entry.tutor_target ("VK"/"VS", "FV<n>[,<m>]"). Rollout twin
+                // in apply_one beside its Worldfire call (lockstep). Two param tests else.
+                if (def.params.destroy_opp_enchantments_then_own_if_untapped_land)
+                { ResolveCalmingVerse(state, entry.controller_index, def, entry.tutor_target); }
+                if (def.params.destroy_up_to_artifacts_enchantments > 0)
+                { ResolveDestroyUpToArtEnch(state, entry.controller_index, def, entry.tutor_target); }
                 MoveToGraveyard(state, entry);
             }
             return true;

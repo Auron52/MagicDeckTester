@@ -1162,6 +1162,15 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Calming Verse": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "Destroy all enchantments you don't control. Then if you control an untapped land, destroy all enchantments you control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Canyon Slough": {
     "cmc": 0.0,
     "keywords": [
@@ -2284,6 +2293,24 @@
     "toughness": "15",
     "type_line": "Legendary Creature — Eldrazi"
   },
+  "Enchanted Evening": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{3}{W/U}{W/U}",
+    "oracle_text": "All permanents are enchantments in addition to their other types.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
+  "Enchantress's Presence": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Whenever you cast an enchantment spell, draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "End-Raze Forerunners": {
     "cmc": 8.0,
     "keywords": [
@@ -2738,6 +2765,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Force of Vigor": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}{G}",
+    "oracle_text": "If it's not your turn, you may exile a green card from your hand rather than pay this spell's mana cost.\nDestroy up to two target artifacts and/or enchantments.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Forerunner of the Coalition": {
     "cmc": 3.0,
@@ -5540,6 +5576,15 @@
     "toughness": null,
     "type_line": "Artifact — Equipment"
   },
+  "Oblivion Ring": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "When this enchantment enters, exile another target nonland permanent.\nWhen this enchantment leaves the battlefield, return the exiled card to the battlefield under its owner's control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Oboro, Palace in the Clouds": {
     "cmc": 0.0,
     "keywords": [],
@@ -5583,6 +5628,15 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Legendary Creature — Elemental"
+  },
+  "Opalescence": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}{W}",
+    "oracle_text": "Each other non-Aura enchantment is a creature in addition to its other types and has base power and base toughness each equal to its mana value.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Open the Armory": {
     "cmc": 2.0,
@@ -5670,6 +5724,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact — Equipment"
+  },
+  "Parallax Wave": {
+    "cmc": 4.0,
+    "keywords": [
+      "Fading"
+    ],
+    "mana_cost": "{2}{W}{W}",
+    "oracle_text": "Fading 5 (This enchantment enters with five fade counters on it. At the beginning of your upkeep, remove a fade counter from it. If you can't, sacrifice it.)\nRemove a fade counter from this enchantment: Exile target creature.\nWhen this enchantment leaves the battlefield, each player returns to the battlefield all cards they own exiled with it.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Parallel Lives": {
     "cmc": 4.0,
@@ -7539,6 +7604,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Sterling Grove": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{W}",
+    "oracle_text": "Other enchantments you control have shroud. (They can't be the targets of spells or abilities.)\n{1}, Sacrifice this enchantment: Search your library for an enchantment card, reveal it, then shuffle and put that card on top.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Stingscourger": {
     "cmc": 2.0,
     "keywords": [
@@ -7689,6 +7763,15 @@
     "keywords": [],
     "mana_cost": "",
     "oracle_text": "{T}, Pay 1 life: Add {R} or {W}.\n{1}, {T}, Sacrifice this land: Draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Sunpetal Grove": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control a Forest or a Plains.\n{T}: Add {G} or {W}.",
     "power": null,
     "toughness": null,
     "type_line": "Land"
