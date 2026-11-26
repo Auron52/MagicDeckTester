@@ -462,8 +462,8 @@ push_queue join/land, CI watch. 2-hourly status cron 61a8eb73 (session-only).
 | scaling-sink rule: one scaled sink per plan at its max minus hold-back counts for <=2 attacking 1-mana dorks; no partial splits (Wave X, Warcaller K, Brigade squad, Ezuri main pump) | `ElvesScalingAdmit` (USER rule) | PRUNING | held-out A/B net +0.0025/+0.0040 (std/2HG), 2 faster / 11 slower over 3,000 fresh-seed games, lines unfindable at d8 b0: it misses holding back SCALED dorks or a 3rd+ dork as attackers. Amended "hold-all" version measured net 0.0000 both formats (`wip/elves-scal`) -- USER decision |
 | Genesis Wave X menu widened to every X, largest first | `ElvesProvider::XCandidates` | ordering/completeness | makes "Wave for what is left" exist; nothing removed |
 | Genesis Wave put-all (every revealed permanent with MV <= X is put) | ElvesProvider put policy 948933d6c | correctness shortcut | every permanent in this pool is weakly better in play than milled; byte-identical to the engine default here |
-| plan-dedup signature keys Wave's X (`#WX`) | `PlanSignatureKeysWaveX` | completeness | Elves only; the same collapse is still live for Landfall / SelesnyaLifegain (OWED, moves their play) |
-| filter-before-axes (memory) | `PlanListFilterBeforeAxes` (next landing) | identity | play byte-identical; only bounds memory |
+| plan-dedup signature keys every {X} cast's X (`#XV<x>`) | engine (5ff9de56a; the Elves-only `PlanSignatureKeysWaveX` opt-in deleted) | completeness | every deck; A/B d5 b20: selesnyav2 / 2HG 2,000 games each net +0.0000, 0 slower; landfall byte-identical; +0.1% units |
+| filter-before-axes (memory) | `PlanListFilterBeforeAxes` (landed 5194cedda) | identity | play byte-identical; only bounds memory |
 | inherited SelesnyaLifegain hooks incl. its USER-settled discard buckets | base class | inherited | Elves' own draft moved 0/800 games; real cleanup discards ~1 per 400 games |
 | multikick / squad faces capped at K=16 | card DB | model bound | 33 mana for a Warcaller x16; never reached in measured games |
 | Visionary unpinned = decline beyond the horizon | Mihail semantics | playout policy | leaves undervalue Visionary slightly; searched turns branch both ways |
@@ -489,3 +489,14 @@ Running agents: wip/wavex-sig (Genesis Wave X signature completeness for every d
 "hold-all" amendment (wip/elves-scal 8de45a937, net 0.0000 both formats vs prune-off; current rule +0.0025/+0.0040,
 lines unfindable at d8 b0); discard draft (recommend not adopting); MTG_ATTACK_LORD_CAST re-test; PROVISIONALs.
 Mulligan profile deferred until the hold-all decision (Rule 0: no pending play change). Cron 61a8eb73 still armed.
+
+## Coordinator checkpoint 7 (2026-11-26 ~23:40 UTC) -- RESUME HERE
+
+LANDED 5194cedda (batch 2: memory bound + Stage 6 + checkpoint 6; units 4310/4310, smoke 251/251 0 changed; CI
+45907751071 watched). Batch 3 on wip/elves-int: 5ff9de56a Wave-X dedup completeness for every deck (wip/wavex-sig
+30208dee7; units 4311/4311 + smoke 251/251 0 changed on the integrated tree) and e6cca73e1 site-10 inert-land fold
+(wip/bpput-cost 54756c7dc; sound identity fold, default ON; units/game 1.000 on four ramp decks, 0.997 hydras --
+the put continuation's cost is real new mana / creatures, which no sound fold may remove; widening candidates
+listed in docs/design/bpput-inert-land-fold.md each need their own proof). Next: combined build -> units -> smoke
+(0 changed expected), push_queue join/land, CI watch. Both agents are finished. USER decisions open: unchanged
+from checkpoint 6.
