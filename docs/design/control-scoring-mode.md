@@ -836,6 +836,18 @@ the aggro decks' own interaction) can supply.
 `goldfish: true`. It would widen to every `goldfish: true` deck at d3 b10 once the cost is known. Reason: cost
 (section 7.4) and the opponent pool's existing equal weights. A real-meta weighting is your call.
 
+*USER answer (2026-11-26), verbatim:* "All of the decks we have been adding should be part of it. The only question is
+whether they are balanced enough as-is. I suppose we may need to redo the gauntlet to recalculate numbers in the
+future." -> The gauntlet is EVERY `goldfish: true` deck (63 suite decks on 2026-11-26), not a cheap subset. Two
+consequences. (1) Every delay table / fitted model records the gauntlet it was measured on (deck list + each
+deck's decklist hash), so a changed gauntlet is detected and the numbers are regenerated, like any other
+generated artifact. (2) Cost: the suite's measured play-setting cost per game spans 23 ms (Breaching) to 33.7 s
+(Beasts) (`test/suite_cost.json`), so replaying the whole gauntlet inside every scored control game is not
+affordable at play settings. The full gauntlet is therefore used OFFLINE (stage 1 table, stage 3 model), and a
+per-game replay (designs A/C) uses a fixed sampled subset or cheaper opponent settings. Still open: whether the
+decks as they stand are balanced enough, i.e. equal weights per deck or weights per archetype cluster (so that
+many similar aggro decks do not dominate the average).
+
 **Q3. Which target does a board effect hit in the measured replay (stages 1-2), when the control deck cannot see
 the opponent's board?** Options: (a) a fixed policy (largest power creature; for land destruction, the land of the
 colour the opponent's hand needs most); (b) the target that delays the opponent most, found by replaying every
@@ -845,6 +857,16 @@ under-credits a competent control player. Stage 4 (co-simulation) replaces all t
 the real board. The same question applies to counters, where the probe shows it matters MORE than the number of
 counters cast (section 8.3). Default for (a) there: the first spell of the round whose mana value is at least the
 gauntlet deck's own median nonland mana value, rather than the first spell of all.
+
+*USER answer (2026-11-26), verbatim:* "The goal is to hit the highest value card the opponent has when we cast it.
+That is a little tricky to determine. It also is somewhat clairvoyant for anything cast on the opponents' turn
+since a normal player doesn't know what they will cast later, but perhaps that is okay when using our clairvoyant
+mode." -> Target = the highest-value card the opponent has AT CAST TIME (on the board, or the spell on the stack
+for a counter). "Value" is defined operationally as option (b): the candidate whose removal delays that opponent
+most, found by trying each candidate in the replay. That is exact and needs no hand-written value heuristic. It
+is clairvoyant (it uses the opponent's future draws to score a target, and for an off-turn counter it knows
+what comes later), which the USER accepts under the clairvoyant mode. The fixed policy (a) stays as a reported
+non-clairvoyant variant. Cost: one extra replay per candidate target, at each control decision only.
 
 **Q4. How should the search's integer credit be rounded (stage 3)?** The search credits modelled delay as banked
 free turns, which must be whole rounds. Default: bank the FLOOR of the cumulative modelled delay (credits of 0.4
@@ -880,6 +902,13 @@ the same races), it satisfies your turn-5 floor by construction, it gives the "s
 of section 4.3a, and the plain average-first reading gives a different and cap-dependent number (section 4.4).
 The difference from a literal "W minus the average delay" is the floor and the per-pair min, and that is your
 decision.
+
+*USER answer (2026-11-26), verbatim:* "I don't know what you mean by per-deck formula, but the value of average
+control impact does need to be calculated in the context of the deck." -> Consistent with section 4.1 as built:
+"average control impact" is not a fixed number per card. It is measured from what THIS control deck actually did
+in THIS game (which effects, on which turns, all applied together), against each gauntlet deck in turn, and
+combined with this deck's own win turn W before averaging over the gauntlet. To confirm with the USER in plain
+terms (see the chat explanation of 2026-11-26).
 
 ## 10. Provenance
 
