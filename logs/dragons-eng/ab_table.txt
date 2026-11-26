@@ -1,0 +1,45 @@
+# dragons-eng play A/B, held-out base 5260000 (seed = base + gi, game_index = gi), play settings (each profile's depth/budget), ONE pooled batch (3,048 jobs, 76,200 games; 32/32 at the 10-min heartbeat). Unwon = 9.
+
+## MTG_GYRETURN_TAP_DEBIT (goff vs gon; MTG_DIG_FLOAT_HAND_DEMAND at default ON)
+shape                       n    net  slow  fast       t    units      cpu
+dragonsgy2hgplay         2000     +0     0     0   +0.00   -0.37%   -0.48%
+dragonsgyplay            6000     +0     0     0   +0.00   -0.38%   -0.35%
+kittyv3gy2hgplay          100     +0     0     0   +0.00   +0.00%   -0.38%
+kittyv3gyplay             300     +0     0     0   +0.00   +0.00%   -0.07%
+landfallgy2hgplay         500     +0     0     0   +0.00   +0.06%   +0.28%
+landfallgyplay           1500     -1     0     1   -1.00   -0.69%   -0.58%
+TOTAL                   10400     -1     0     1           -0.40%   -0.30%
+
+## MTG_DIG_FLOAT_HAND_DEMAND (doff vs don; MTG_GYRETURN_TAP_DEBIT at default ON)
+shape                       n    net  slow  fast       t    units      cpu
+aurasdig2hgplay           600     +0     0     0   +0.00   +0.00%   -0.39%
+aurasdigplay             2000     +0     0     0   +0.00   +0.00%   -0.20%
+dragonsdig2hgplay        2000     +0     0     0   +0.00   -0.04%   -0.04%
+dragonsdigplay           6000     +0     0     0   +0.00   -0.01%   -0.07%
+elementalsdig2hgplay      200     +0     0     0   +0.00   -0.00%   -0.77%
+elementalsdigplay         600     +0     0     0   +0.00   +0.00%   +0.43%
+extraturnsdig2hgplay      100     +0     0     0   +0.00   +0.00%   +0.06%
+extraturnsdigplay         300     +0     0     0   +0.00   +0.00%   +0.97%
+merfolkdig2hgplay         500     +0     0     0   +0.00   +0.00%   +0.50%
+merfolkdigplay           1500     +0     0     0   +0.00   +0.00%   +0.18%
+midrangeburndig2hgplay    200     +0     0     0   +0.00   -0.00%   -0.17%
+midrangeburndigplay       600     +0     0     0   +0.00   +0.00%   -0.24%
+modernrwburndig2hgplay    200     +0     0     0   +0.00   +0.00%   -0.32%
+modernrwburndigplay       600     +0     0     0   +0.00   +0.00%   +0.09%
+onedropburndig2hgplay     300     +0     0     0   +0.00   +0.00%   -0.77%
+onedropburndigplay       1000     +0     0     0   +0.00   +0.00%   +0.49%
+piratesdig2hgplay         500     +0     0     0   +0.00   +0.00%   +0.09%
+piratesdigplay           1500     +0     0     0   +0.00   +0.00%   -0.05%
+redelemdig2hgplay         500     +0     0     0   +0.00   +0.00%   +0.38%
+redelemdigplay           1500     +0     0     0   +0.00   +0.00%   -0.35%
+selesnyav2dig2hgplay      500     +0     0     0   +0.00   -0.00%   -0.62%
+selesnyav2digplay        1500     +0     0     0   +0.00   -0.00%   -0.36%
+soldiersdig2hgplay        500     +0     0     0   +0.00   +0.00%   -0.43%
+soldiersdigplay          1500     +0     0     0   +0.00   +0.00%   -0.08%
+stuffydig2hgplay          100     +0     0     0   +0.00   +0.22%   -0.46%
+stuffydigplay             300     +0     0     0   +0.00   -0.26%   -1.66%
+thdig2hgplay              600     +0     0     0   +0.00   +0.00%   +0.25%
+thdigplay                2000     +0     0     0   +0.00   +0.00%   +0.28%
+TOTAL                   27700     +0     0     0           -0.01%   -0.15%
+
+Slower games: none in either pair (nothing to replay at d8 b0).

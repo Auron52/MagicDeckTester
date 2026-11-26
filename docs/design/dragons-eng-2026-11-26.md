@@ -66,6 +66,18 @@ two-Mind-Stone dig chains `{land=Gruul Turf}` beside Sol Ring, where a dropped c
 would need the oracle's order of two digs; the 1 remaining dig-float line (s30155709 T3) is a two-dig chain too
 (ROLLBACK depth2). Not chased: 3 lines against 323 decisions gone.
 
+## Play A/B (held-out, base 5260000, play settings, one pooled batch of 76,200 games; `logs/dragons-eng/ab_table.txt`)
+
+| lever | pairs | net turns | slower | faster | units | CPU, byte-identical chunks |
+|---|---|---|---|---|---|---|
+| MTG_GYRETURN_TAP_DEBIT (Dragons, Landfall, Kitty Equipment; std + 2HG) | 10,400 | -1 | 0 | 1 | -0.40% | -0.31% Dragons std, -0.42% Dragons 2HG |
+| MTG_DIG_FLOAT_HAND_DEMAND (14 sacrifice-draw decks; std + 2HG) | 27,700 | 0 | 0 | 0 | -0.01% | noise (-1.7% .. +1.0% per shape) |
+
+Per shape: Dragons gy std 6,000 / 2HG 2,000 pairs net 0 (units -0.38% / -0.37%; 11 of 320 chunks change their digest),
+Landfall std 1,500 net -1 (units -0.69%), 2HG 500 net 0, Kitty Equipment byte-identical (Cid makes no mana: debit 0).
+The dig lever moves 7 of 1,108 chunks (Dragons 4, Stuffy Doll 3) and no game's win turn: in play it is nearly inert,
+its effect is on the plans the oracle audits (gate above). No slower game in either pair, so nothing to replay at d8 b0.
+
 ## Status
 
 - d88f2e1d8: code for 1 and 2 + `test/unit/test_dragons_eng.cpp` (2 cases, 36 assertions, pass). Full unit suite
