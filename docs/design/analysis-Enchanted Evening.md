@@ -5,6 +5,16 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
 
 ## CHECKPOINT (orchestrator, updated 2026-11-26, pre-compaction #2) -- read this first after a compaction
 
+* **LOCK STEP 7 DONE (2026-11-26): a26942ea0 + c69cb9da9 + 1ad7ca2da (the pending fix) + the ledger commit.** NEXT =
+  **step 8**: folds (a) the land play under EE + Opalescence, (b) Wave own-target dominance. Also, in this order:
+  * the end-step FoV own-target dominance fold (the full menu's slower games ho1 gi 3 / 40 / 44 / 84 / 9 are
+    own-target casts);
+  * the free-turn x end-step-fan cost blowup (step-7 section, "Pending fix + re-measure"): price the fan in the
+    budget, or a sound fold under a locked opponent;
+  * root-cause hb1 gi=90 (d3 b0: step 7 T6 vs step 6 T5) and gi=12 / gi=13 (steps 3+5 notes).
+  Then step 9 (viewer `eot_cast` + ruling 14 + DECISIONS.md). OPEN USER question: delete the temporary
+  `MTG_EE_FOV_EOT_OPP_ONLY` (recommended: quality neutral, cost pathological) or adopt it (numbers in the step-7
+  section). It stays in the tree, default OFF, until the answer.
 * Done: Stage 1 coverage; lock-cluster DESIGN 84a576461 (with the orchestrator's Grove correction below); four simple
   cards DONE (f986f6e19, 61e5bc848, b5b8dd3cb, d7885c7fe: units, smoke 247/0 play-changed=0, coverage full); lock
   steps 1, 2, 3+5 DONE (entries below).
@@ -765,6 +775,88 @@ spells-cast counters (Presence counts enchantment spells only). No violation fou
 **USER question (default taken, nothing blocked).** Should the end-step Force of Vigor be restricted to opponent
 targets? It is a lossy narrowing (an own target can matter: a second Sterling Grove's shroud blocks the Wave loop), so
 it is the USER's. Default: the full menu (as committed); the opponent-only arm is measured after the pending fix.
+
+**Pending fix + re-measure (1ad7ca2da, 2026-11-25 late).** `FaceUpUncoveredPending` now ORs `EotFovMayOffer`
+(SpellEffects.h) instead of "a FoV in hand". It is a sound over-approximation of "the end-step FoV menu is non-empty",
+tested on the state BEFORE the crossing, in the same shape as morph and Soulstoke. Its two conditions:
+* PAYMENT: another green card in hand, or {2}{G}{G} payable from untapped sources now.
+* TARGET: one of
+  * an artifact or enchantment on the battlefield now;
+  * a land the opponent may still play that will be one (Enchanted Evening out, or an artifact / enchantment land in
+    its dealt list);
+  * a virtual Aura the fairness check may deploy (armed, and the list holds a creature Aura and a hexproof card);
+  * a Burgeoning put.
+
+Unknown list cards count as everything. Unit case `EE lock step 7: the crossing is pending only when the end step can
+offer a cast` (7 sub-cases; each "not pending" also asserts that the window has no option). The old code fails it on
+the first sub-case. New seam `TurnSolver::FaceUpPendingForTest`. The temporary lever became a per-job heurarm slot
+(`EE_FOV_EOT_OPP_ONLY`), so both arms ran in ONE pooled batch. Units 4240/4240. Smoke (Release, `MTG_PGO=0`): 247/0/0,
+play-changed=0 (searched and d0), scenarios 677/677. GT not accepted (nothing moved).
+
+ONE pooled batch `l7/m7b` (full menu: san1 / ho1 / hb1; opponent-only: san1o / ho1o / hb1o), d3 b10, fairness ON;
+analysers `l7/an7c.py` and `l7/an7b.py`. The baseline is step 6's fairness-ON arm (`l6/m6b`) on the same games. Columns
+are won / avg / units vs step 6; faster and slower are paired per game against step 6.
+
+| family | full menu (post-fix) | opponent-only | faster / slower vs s6 (full; opp) |
+|---|---|---|---|
+| sanity 7000 x24 | 24 / 5.6250 / 5.19M (+8.8%) | 24 / 5.6250 / 4.87M (+2.1%) | 2 / 0 ; 2 / 0 |
+| held-out 8000 x100 | 95 / 5.89 / 19.42M (+17.6%) | 96 finished: 91 / 5.8646 / +8.4%; **4 unbounded** | 2 / 5 ; 2 / 1 |
+| held-out 10000 x100 | 98 / 5.76 / 19.73M (+23.2%) | 95 finished: 93 / 5.7474 / **+197%**; **5 unbounded** | 9 / 2 ; 6 / 0 |
+
+* **The fix does not move the full menu's play.** Its digests equal the pre-fix m7 exactly (48cde385 / 7e72cc14 /
+  2592585f). Units fell by only 0.00-0.19%, so the over-wide pending was NOT what made m7 cost +9..+23% over step 6.
+  That cost is the menu's real width while a FoV is held (own targets). All 39 real casts were mana-paid again: 23
+  opponent targets, 17 own, 2 virtual.
+* **The opponent-only arm is STILL degenerate after the fix.** 9 of 224 games ran past 15 min at b10 (ho1o gi 9, 62,
+  70, 95; hb1o gi 17, 30, 67, 71, 99). In the full menu those same games take a few seconds to minutes. The batch sat
+  at 9/24 workers, and I killed it after ~25 min (own experiment). **Root cause** (two single-game probes, `l7/dg-*`):
+  * The same games with `MTG_FREE_TURNS=0` finish: gi=9 in 0.7 s, gi=62 in 93 s.
+  * A free turn gets the depth give-back (DepthAcrossTurn, and SimulateToEndImpl's `roll_entry_extra`; USER-accepted
+    2026-11-21: a free turn is not a new round). So along a projected lock's chain of free turns the rollout depth
+    never decreases.
+  * Under the opponent-only menu a FoV with a live target stays in hand: under Enchanted Evening the opponent's land is
+    a fresh target every turn, and the search rarely casts at it. So every free-turn boundary of every nested rollout
+    fans the FoV menu (width W), and the cost grows like W^(free turns). The gdb stack from m7o (13+ nested
+    BoundaryChooseByRollout -> SimulateToEnd -> SolveWithLookahead levels) is that chain.
+  * The full menu escapes only because a FoV is usually cast soon (on something), which ends the fan.
+  * So it is NOT a pending defect any more: the menu really is wide. It is a cost interaction between the step-7 fan
+    and the free-turn give-back, and the b10 budget does not bound it. It is latent for the full menu too: any game
+    where a FoV with options is held through a projected lock would show it.
+  * Owed to step 8, budget-shaped (re-price, never refuse): charge the fan's per-branch rollouts to the decision
+    budget (the `ChargeDecisionUnits` shape, inert at unlimited), or find a sound fold for the end-step FoV under a
+    locked opponent.
+* **Quality, paired on the same finished games.**
+  * ho1: opp 5.8646 vs full 5.8958 (3 faster, 0 slower: gi 40, 44, 84 are full-menu own-target casts).
+  * hb1: opp 5.7474 vs full 5.7263 (2 faster: gi 32, 90; 3 slower: gi 31, 52, 79).
+  * Over the 191 games together the net is about -1 turn in total, i.e. neutral. Opp-arm casts: 20, all mana-paid
+    (20 opponent targets, 2 virtual).
+  * Verdict: no better in aggregate, and pathological in cost. **Recommendation: delete `MTG_EE_FOV_EOT_OPP_ONLY`**
+    ("delete, don't lever") and treat the own-target curse in step 8 (own-target dominance fold). The default (full
+    menu) stays. The lever is still in the tree, default OFF, until the USER answers.
+* d3 b0 repros on the fixed binary `build/Release/mtg-b7f` (= 1ad7ca2da), written to `l7/b0f-*`. The b0 step-6
+  baseline is `build/Release/mtg-b6`, built from a6c65504e in the scratch worktree `.claude/worktrees/ee-s6`, written to
+  `l7/b06-*`.
+  * ho1 gi=40: **T6 = step 6's b10 T6, RECOVERS** (42 s).
+  * hb1 gi=90: **T6 vs step 6 at d3 b0 T5, does NOT recover.** Mechanism: the board after turn 4's main 1 is identical
+    (EE down, Sterling Grove out, hand = FoV, every land tapped).
+    * Step 6 sacrifices Grove at the T5 upkeep for Opalescence, casts it, locks and wins T5.
+    * Step 7 keeps Grove, draws Enchantress's Presence, hard-casts FoV in main 1 on two opponent lands (Grand
+      Coliseum, Ancient Tomb), and wins T6.
+    * So the FoV lines (destroying opponent lands, which also cuts the fairness check's virtual mana) out-rank the
+      certain Grove -> Opalescence kill in the d3 b0 search. Likely the optimizer's curse over the wide FoV menu.
+      Root-cause in step 8.
+  * Earlier verdicts (pre-fix binary; the fix does not move the full menu's play): gi=9 T4, gi=44 T5, hb1 gi=32 T6 --
+    all recover. Pre-fix gi=3: **b0 unfinished** (4 h 57 m, killed).
+  * **b0 PENDING at close (left running, owned by this step; the step-8 agent reads them).** Each has a 2-h cap
+    (`l7/cap2h.sh`); a cap writes "b0-unfinished" to `l7/b0cap.progress`.
+    * ho1 gi=3 on `mtg-b7f`: mtg PID 1994870, out `l7/b0f-ho-3.{out,err}` + `l7/b0f-ho-3/`. Marker: a
+      `s7-ho-3 exited|b0-unfinished` line in `l7/b0cap.progress`. Started 23:29 UTC, capped at 01:29 UTC.
+    * ho1 gi=84 on `mtg-b7f`: lane PID 2007071 (its mtg child is started on admission), out `l7/b0f-ho-84.*`. Markers:
+      `ho-84 done` in `l7/b0f.progress` and `s7-ho-84 ...` in `l7/b0cap.progress`.
+    * ho1 gi=84 step-6 baseline on `mtg-b6`: mtg PID 2003192, out `l7/b06-ho-84.*`. Markers: `ho-84 done` in
+      `l7/b06.progress`, then `l7/b06.DONE`; `s6-ho-84 ...` in `l7/b0cap.progress`. It had run > 15 min at close.
+    * Verdict rule: gi=84 recovers if step 7 at b0 <= step 6's b10 T6, or <= step 6's own b0. gi=3: step 6's b10 T7.
+    * Remove `.claude/worktrees/ee-s6` with `scripts/safe_worktree_remove.sh` once the step-6 repro has finished.
 
 ## Done items (formerly provisional Q1 / Q2 -- settled by standing CLAUDE.md rules, not USER questions)
 
