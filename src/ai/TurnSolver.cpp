@@ -76283,7 +76283,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // The plan's post-apply STATE pins (combat triggers, next draw / upkeep), write-when-set -- the
     // shared body (TurnSolver::WritePostApplyStatePins), which the executor runs for its committed plan
     // and for a breakpoint re-solve's plan.
+    //
+    // A RESUMED apply (bp_resume) keeps the snapshot's CAST-TRIGGER ORDINAL. The pins themselves are the
+    // same plan's (a node child is the captured base plan with only its bp fields changed), so re-writing
+    // them is idempotent -- except scripted_mihail_trigger_ordinal, the one cursor here that the MAIN-PHASE
+    // casts consume (FireOnCastTriggers: Mihail's {1}, Leaf-Crowned Visionary's {G} pay-to-draw). The
+    // prefix already fired its casts' triggers, so re-zeroing it hands the continuation's casts the bits of
+    // triggers that have resolved. Elves seed 7036 gi5 d5 b20: the T4 base plan pays bit 0 for Llanowar
+    // Elves' trigger (draws Taunting Elf -> site-10 breakpoint); the from-scratch apply and the executor
+    // read ordinal 1 for the continuation's Taunting Elf (past the pin -> decline), but the breakpoint-node
+    // child resumed at ordinal 0, paid again and drew Wirewood Lodge -- a world one card ahead, scored as a
+    // T5 kill that realised T6 ([fd-diverge] proven_at_turn=3).
+    const std::size_t resume_trigger_ordinal = state.scripted_mihail_trigger_ordinal;
     TurnSolver::WritePostApplyStatePins(state, plan);
+    if (bp_resume != nullptr) { state.scripted_mihail_trigger_ordinal = resume_trigger_ordinal; }
     // Searched cleanup discard: same reasoning -- the shed happens in SimulateEndAndStartNextTurn,
     // after this function returns, so it rides the STATE rather than a scoped guard. (The executor
     // holds this one, and the Vial charge below, in AIEngine members.)
@@ -98905,7 +98918,8 @@ static void NodeNestedToWalker(BpWaveWalker& w, const CandSeq& plans,
 // See the declaration in TurnSolver.h. The node host's capture + resume, minus the scoring.
 bool TurnSolver::BpResumeLineHoldForTest(const GameState& state, const Plan& plan, bool is_pre_combat,
                                          ManaCost& at_capture, ManaCost& at_resume,
-                                         GameState* complete_state, GameState* resumed_state)
+                                         GameState* complete_state, GameState* resumed_state,
+                                         int child_choice)
 {
     GameState s1 = state;
     BpPrefixSnap snap;
@@ -98914,7 +98928,7 @@ bool TurnSolver::BpResumeLineHoldForTest(const GameState& state, const Plan& pla
     if (!snap.pending) { return false; }
     at_capture = snap.line_unpaid;
     Plan v = plan;
-    v.bp_choice = kBpEmptyChoice;
+    v.bp_choice = child_choice;
     v.bp_at     = snap.bp_seen;
     GameState s3 = snap.state;
     std::vector<Action> bp3;
