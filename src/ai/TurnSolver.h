@@ -779,6 +779,14 @@ struct Action
                                        // for four and competes for exactly the turn-4/5 mana that
                                        // casts Saproling Burst or a Doubling Season. Under one
                                        // Season that is 8 bodies against 4. false = unkicked.
+    std::int8_t kick_count       = 0;
+                                       // MULTIKICKER / SQUAD (Joraga Warcaller, Galadhrim Brigade): with
+                                       // kicked == true on a card carrying multikicker_cost / squad_cost,
+                                       // the number of kicks K (1..kMaxMultikick); the cast resolves the
+                                       // "<name> (Kicked xK)" face (KickedFaceFor). One variant per K,
+                                       // sharing hand_index, so the SEARCH picks K. 0 for a single-kicker
+                                       // card and every unkicked cast. Every signature / key / equality
+                                       // that distinguishes kicked distinguishes this.
     std::int8_t face_down        = 0;
                                        // 1 = face-down cast; 2 = face-down cast TURNED FACE UP AT ONCE --
                                        // the hand-source LEAD flip, realized at resolution (right after its
@@ -1253,6 +1261,8 @@ struct CastRiders
     int      trick_redirect    = 0;
     // Action::face_down (morph): the FACE-DOWN cast -- {3} and the "<name> (Face-down)" face.
     std::int8_t face_down      = 0;
+    // Action::kick_count (multikicker / squad): which "(Kicked xK)" face the kicked cast swaps in.
+    std::int8_t kick_count     = 0;
     // Action::emerge (Decimator of the Provinces): pay EmergeCastCost and sacrifice the pinned victim
     // (own_targets) BEFORE the cast triggers fire -- both worlds' cast paths read it here.
     bool     emerge            = false;
@@ -1275,6 +1285,7 @@ struct CastRiders
         r.legend_keep       = a.legend_keep;
         r.scry_pin          = a.scry_pin;
         r.face_down         = a.face_down;
+        r.kick_count        = a.kick_count;
         r.trick_redirect    = a.trick_redirect;
         r.gy_cast_source_id = a.gy_cast_source_id;
         r.awaken = a.awaken;

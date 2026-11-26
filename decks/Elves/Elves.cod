@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="2" name="Immaculate Magistrate"/>
+        <card number="4" name="Joraga Warcaller"/>
+        <card number="4" name="Llanowar Elves"/>
+        <card number="15" name="Forest"/>
+        <card number="4" name="Elvish Archdruid"/>
+        <card number="4" name="Priest of Titania"/>
+        <card number="4" name="Genesis Wave"/>
+        <card number="2" name="Elvish Mystic"/>
+        <card number="2" name="Allosaurus Shepherd"/>
+        <card number="1" name="Taunting Elf"/>
+        <card number="4" name="Elvish Clancaller"/>
+        <card number="2" name="Concordant Crossroads"/>
+        <card number="1" name="Ezuri, Renegade Leader"/>
+        <card number="4" name="Galadhrim Brigade"/>
+        <card number="4" name="Leaf-Crowned Visionary"/>
+        <card number="1" name="Marwyn, the Nurturer"/>
+        <card number="1" name="Wirewood Lodge"/>
+        <card number="1" name="Cavern of Souls"/>
+    </zone>
+</cockatrice_deck>

@@ -10848,12 +10848,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // `hand_card` (removed below by number, never by def name), so this is the exact executor twin
     // of the rollout's apply_one swap -- lockstep by construction. Inert for every card without a
     // kicker.
-    if (kicked && def->params.kicker_cost.has_value())
-    {
-        const CardDefinition* kdef =
-            CardDatabase::Instance().Lookup(def->card.m_name.str() + " (Kicked)");
-        if (kdef != nullptr) { def = kdef; }
-    }
+    // Multikicker / squad (Elves): the "(Kicked xK)" face, K = riders.kick_count (KickedFaceFor) --
+    // the exact twin of the rollout's apply_one swap.
+    if (const CardDefinition* kdef = KickedFaceFor(*def, kicked, riders.kick_count)) { def = kdef; }
     // MORPH (CR 702.37a): the FACE-DOWN cast -- swap in the synthesized "<name> (Face-down)" vanilla 2/2
     // for the whole cast; entry.source is then the face, so EffectHandler::EnterBattlefield enters the
     // face-down permanent under the hand card's number. Exact twin of the rollout's apply_one swap.
