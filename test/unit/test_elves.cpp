@@ -282,10 +282,17 @@ TEST_CASE("Immaculate Magistrate: the target gets one +1/+1 counter per Elf we c
         { if (IsAct(a, Action::AbilityMode::TapTargetPump)) { targets.insert(a.sac_victim_id); } }
     }
     CHECK_FALSE(targets.empty());
-    const TurnSolver::Plan* on_elf = EFind(plans, [](const TurnSolver::Plan& p)
+    // Human play (process-static MTG_HUMAN_PLAY) offers ONE representative target per X, by design: the human
+    // picks the real target on the live board at activation (ChooseTapTargetPumpTargetAtActivation), so the
+    // menu does not fan targets out. That representative is the first legal creature -- the Magistrate itself,
+    // also an Elf -- so the counter count is checked on whichever Elf the mode offers.
+    const bool human = HumanPlayActive();
+    if (human) { CHECK(targets.size() == 1u); }
+    const TurnSolver::Plan* on_elf = EFind(plans, [human](const TurnSolver::Plan& p)
     {
-        return p.actions.size() == 1 && IsAct(p.actions[0], Action::AbilityMode::TapTargetPump)
-            && (p.actions[0].sac_victim_id == 3 || p.actions[0].sac_victim_id == 4);
+        if (p.actions.size() != 1 || !IsAct(p.actions[0], Action::AbilityMode::TapTargetPump)) { return false; }
+        const int v = p.actions[0].sac_victim_id;
+        return v == 3 || v == 4 || (human && v == 1);
     });
     REQUIRE(on_elf != nullptr);
     const int tgt = on_elf->actions[0].sac_victim_id;
@@ -359,6 +366,26 @@ TEST_CASE("Leaf-Crowned Visionary: the {G} pay-to-draw is a searched pin -- paid
     EPut(s, "Leaf-Crowned Visionary", 1);
     EHand(s, "Llanowar Elves", 20);
     const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    // Human play (process-static MTG_HUMAN_PLAY) emits NO pay-pin variants, by design: the viewer asks the human
+    // at the trigger (the dig-chooser yes/no in FireOnCastTriggers). Unpinned with no chooser installed = decline,
+    // in both worlds.
+    if (HumanPlayActive())
+    {
+        CHECK(std::none_of(plans.begin(), plans.end(),
+                           [](const TurnSolver::Plan& q) { return q.mihail_pay_choice.IsPinned(); }));
+        const TurnSolver::Plan* p = EFind(plans, [](const TurnSolver::Plan& q)
+        { return ECountCasts(q) == 1 && IsCast(q.actions[0], "Llanowar Elves"); });
+        REQUIRE(p != nullptr);
+        GameState roll, real;
+        EBoth(s, *p, roll, real);
+        for (const GameState* g : { &roll, &real })
+        {
+            CHECK(g->players[0].hand.empty());
+            CHECK(ETapped(*g) == 1);
+            CHECK(EN(*g, 20) != nullptr);
+        }
+        return;
+    }
     for (const bool pay : { true, false })
     {
         CAPTURE(pay);
