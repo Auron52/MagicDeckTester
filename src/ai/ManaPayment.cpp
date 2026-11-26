@@ -14919,6 +14919,15 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
         }
         return false;
     };
+    // MTG_LINE_FLOAT_RITUAL_NET (EngineFlags.h): the later pips the ritual this payment is for pays with its own output
+    // do not make a source of that colour non-spare.
+    int later_spare[5] = { later[0], later[1], later[2], later[3], later[4] };
+    if (LineFloatRitualNetOn())
+    {
+        const ManaPool rf = LineKeepRockFor(state).ritual;
+        const int rc[5] = { rf.white, rf.blue, rf.black, rf.red, rf.green };
+        for (int ci = 0; ci < 5; ++ci) { later_spare[ci] = std::max(0, later[ci] - rc[ci]); }
+    }
     int spare = 0;
     const int n = static_cast<int>(state.battlefield.size());
     // STORAGE TIER candidates (MTG_LINE_SPARE_STORAGE): battlefield index and live yield (= its counters).
@@ -14939,7 +14948,7 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
         if (ok && !float_covers)
         {
             for (Color c : ProducesForPayment(state, active, *d, for_creature, &p))
-            { const int ci = colour_idx(c); if (ci >= 0 && later[ci] > 0) { ok = false; break; } }
+            { const int ci = colour_idx(c); if (ci >= 0 && later_spare[ci] > 0) { ok = false; break; } }
         }
         if (ok && d->params.colored_creature_only && !for_creature)
         {

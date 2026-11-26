@@ -1146,7 +1146,8 @@ enum Slot : int
     LINE_KEEP_RITUAL,         // MTG_LINE_KEEP_RITUAL  the line-keep rung judges the rest of the line with the float of the RITUAL this payment is for (ritual_floating_mana, at no splice) on the board, as MTG_LINE_KEEP_ROCK puts the rock there (Worldfire {Song, Song, Personal Tutor}: the second Song is the first's float). DEFAULT ON; =0 -> the float-blind rest, byte-identical
     LINE_KEEP_RITUAL_TIGHT,   // MTG_LINE_KEEP_RITUAL_TIGHT  with MTG_LINE_KEEP_RITUAL: the crit gate counts the ritual's float as the REST's supply, and the joint test asks the board alone for this bill plus the rest net of the float (a necessary condition of every repair). Worldfire / Dragonstorm probe: rung trials 355k -> 126k, strand-nofire 20,365 -> 403, the 112 games digest-identical. DEFAULT ON; =0 -> the loose ritual rung (A/B / identity arm)
     LEFTOVER_SWAP_WIDE,       // MTG_LEFTOVER_SWAP_WIDE  MTG_LEFTOVER_LINE_SWAP's re-attribution also moves a leftover unit that floated BEFORE the payment (not only one the payment produced), and its strand test credits the float of the ritual the payment is for (Dragonstorm s30087280 T4: Irencrag Feat's {1} ate the floating {B} Dragonlord Kolaghan owes while Sandstone Needle's second {R} floated). DEFAULT ON; =0 -> the produced-only swap, byte-identical
-    ONDEMAND_VISIBLE_LUMP_EXACT, // MTG_ONDEMAND_VISIBLE_LUMP_EXACT  Dragonstorm's visible-closer lump rule cracks a Lotus Bloom early only when the ordinary payment leaves the later bill unpayable and the early crack does not (both judged with every crack of the lumps left and the ritual's float); its colour comparison read an uncracked Bloom as no supply (s30152662 T5: Irencrag Feat cracked the second Bloom for {B} with {B} already floating, and Karrthus's {G} had no source). DEFAULT ON; =0 -> the comparison alone, byte-identical
+    ONDEMAND_VISIBLE_LUMP_EXACT, // MTG_ONDEMAND_VISIBLE_LUMP_EXACT  Dragonstorm's visible-closer lump rule refuses an early Lotus Bloom crack that STRANDS the later bill: the ordinary payment pays it and the early crack does not (both judged with every crack of the lumps left and the ritual's float; when both pay, the crack still saves a source for later mana use, 2HG s5131993 firebreathing); its colour comparison read an uncracked Bloom as no supply (s30152662 T5: Irencrag Feat cracked the second Bloom for {B} with {B} already floating, and Karrthus's {G} had no source). DEFAULT ON; =0 -> the comparison alone, byte-identical
+    LINE_FLOAT_RITUAL_NET,    // MTG_LINE_FLOAT_RITUAL_NET  the LINE_FLOAT_TAP_FIRST rung's spare-source colour test nets the later pips of the float of the ritual this payment is for: a source whose colours the ritual's own output covers is spare (Dragonstorm s30096957 T4 {Ruby Medallion, Seething Song, Karrthus}: Song's {1} drained the floating {B} Karrthus owes because the Mountain read as Karrthus's {R}, which Song's {R}x5 pays). DEFAULT ON; =0 -> the float-blind spare test, byte-identical
     COUNT
 };
 
@@ -2238,6 +2239,7 @@ inline const char* Name(int slot)
         "MTG_LINE_KEEP_RITUAL_TIGHT",
         "MTG_LEFTOVER_SWAP_WIDE",
         "MTG_ONDEMAND_VISIBLE_LUMP_EXACT",
+        "MTG_LINE_FLOAT_RITUAL_NET",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

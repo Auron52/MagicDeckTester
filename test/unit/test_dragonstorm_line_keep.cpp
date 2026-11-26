@@ -245,3 +245,25 @@ TEST_CASE("Dragonstorm line keep: s5131993 2HG T5 -- both boards pay, the early 
         CHECK(needle_up);
     }
 }
+
+// Dragonstorm s30096957 gi96957 T4 m1 {Ruby Medallion, Seething Song, Karrthus}: Ruby was paid by a Lotus Bloom cracked
+// for {B}; one {B} floats beside two untapped Mountains and the second Bloom. Song's {1}{R} (Ruby) drained the {B} into
+// its {1}, because both Mountains read as non-spare (Karrthus owes {R}), though Song's own {R}x5 pays that {R}; the Bloom
+// then had to make Karrthus's {B} and {G} at once. MTG_LINE_FLOAT_RITUAL_NET: the Mountains are spare, the {B} is held.
+TEST_CASE("Dragonstorm line keep: s30096957 T4 -- Song's own float makes the Mountains spare, the {B} is kept")
+{
+    GameState s0 = BaseDlk(4);
+    PutDlk(s0, "Ruby Medallion", 44);
+    PutDlk(s0, "Mountain", 29);
+    PutDlk(s0, "Mountain", 30);
+    PutDlk(s0, "Lotus Bloom", 18);
+    s0.floating_mana.black = 1;
+    const std::vector<Action> line = { CastDlk(s0, "Seething Song"), CastDlk(s0, "Karrthus, Tyrant of Jund") };
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmDlk as(heurarm::LINE_FLOAT_RITUAL_NET, on);
+        GameState s = s0;
+        CHECK(PayRitualThenCreature(s, line, 5) == on);
+    }
+}
