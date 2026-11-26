@@ -528,6 +528,43 @@ TEST_CASE("F3c lord stack: a squad's token copies are hasty lords too (Galadhrim
                     [](const TurnSolver::Plan& p) { return BrigadeSquad(p, 1); }) == 6);
 }
 
+// ---- F3d: a creature sacrificed for mana does not attack ------------------------------------------------
+// Goblins d0 gi275 (seed 9900276) T3, opponent at 19: {Goblin King, Skirk Prospector, Skirk's "Sacrifice a Goblin:
+// Add {R}"} read 19 -- every Goblin on the board still swinging -- while the payment sacrificed both Goblin Lackeys
+// and Muxus, and the attack dealt 12. The exact lord credit of F3c (King pumping the hasty Skirk) was the point
+// that tipped 18 to 19. Here: three ready Skirk Prospectors and one Mountain; Goblin King ({1}{R}{R}) needs two
+// sacrifices, which take the two other Skirks (CanonicalSacVictim: the source last), so one 1/1 attacks.
+namespace
+{
+GameState SkirkBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Goblin King" }, "Mountain");
+    Put(s, "Skirk Prospector", 40);
+    Put(s, "Skirk Prospector", 41);
+    Put(s, "Skirk Prospector", 42);
+    Put(s, "Mountain", 50);
+    return s;
+}
+bool KingWithSacs(const TurnSolver::Plan& p)
+{
+    bool king = false, sac = false;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Goblin King") { king = true; continue; }
+        if (a.kind == Action::Kind::SacForMana) { sac = true; continue; }
+        return false;
+    }
+    return king && sac;
+}
+}
+
+TEST_CASE("F3d sacrifice for mana: the sacrificed Goblins are out of the attack")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    CHECK(Threshold([](int l) { return SkirkBoard(l, 0); }, KingWithSacs) == 1);
+}
+
 // ---- F4a: a spent dork loses its team-pump share too (MTG_ATTACK_TAP_REPROJECT) ------------------
 // Blossoming Bogbeast + Llanowar Elves attack: Bogbeast gains 2, then +2/+2 to each attacker -> 3 + 1
 // + 2 x 2 = 8. Elvish Mystic's {G} can only come from the Llanowar, which then cannot attack and gets
