@@ -5,6 +5,10 @@ Decklist: `decks/Enchanted Evening/Enchanted Evening.cod` (60 cards, GW enchantr
 
 ## CHECKPOINT (orchestrator, updated 2026-11-26, pre-compaction #2) -- read this first after a compaction
 
+* **PARKED: lock modelling being removed; see the parking doc** (USER rulings 26 / 27, 2026-11-26). Ruling 22's lock
+  playout was built and validated (0508a9c11: units 4255/4255, smoke 247/0 play-changed=0) and measured (m22, below);
+  it will not be kept. Nothing below this line is active work.
+
 * **USER RULING 22 (the lock playout) BUILT, ON (2026-11-26): code 0508a9c11** (section "USER ruling 22: the lock
   playout + step 8c"). Rulings 23-25 recorded (USER_PRUNE adopted ON; clause-4 power >= 1 kept; the O-Ring
   virtual-target precondition kept). Units 4255/4255; smoke (Release, `MTG_PGO=0`, 0508a9c11) 247 passed / 0 failed / 0 new, play-changed=0 searched AND d0, scenarios 677/677 (no deck moves; EE is not a suite deck); GT not accepted. A/B m22 (224 games, d3
@@ -378,6 +382,12 @@ flying, Spirit Mantle protection from creatures) break the lock without trample 
    introducing Enchanted Evening for goldfishing, so we might want to park it in some form. The deck is very good in
    real play, but pretty poor even with attempts to model the lock."* -> step 8c's remaining items are ON HOLD pending
    the USER's park decision (ruling 22 was finished and committed first, as asked).
+27. **(dropping the lock modelling from goldfish, 2026-11-26):** USER, verbatim: *"We might want to drop the weird logic
+   with the fake permanent stuff from goldfish arguably. The stuff we did for Worldfire is good, though."* /
+   *"Some free turn machinery does come from worldfire."* / *"Essentially Worldfire is easy to consider because it
+   wipes everything and leaves no trace. The other lock stuff we did here was super complex and becoming more than
+   golfishing really should be."* -> the deck is being marked goldfish-disabled; the ruling-22 lock playout will not be
+   kept (preserved in history at 0508a9c11).
 
 Reading: the lock is credited through the EXISTING free-turn rule (`MTG_FREE_TURNS`, default ON,
 `src/core/FreeTurns.h`, `docs/design/opponent-lockdown-free-turns.md`): a locked opponent turn does not advance the
@@ -1485,7 +1495,7 @@ nolp arm is byte-identical to the shipped tree (san digest 6eb2aaf31332bca5 = st
 | hb gi=60 | 6 | 8 | **6** | 297 s / 3.28M | RECOVERS. Diverges at T3 (Exploration vs Grove): budget churn |
 | ho1 gi=70 | 7 (step 7) | 8 | RUNNING at the handoff (30 min in: still on T1/T2) | -- | see `logs/ee/lock8c-handoff.md` |
 | ho1 gi=3 | 7 (step 6) | 8 | RUNNING at the handoff (30 min in: still on T1/T2) | -- | see `logs/ee/lock8c-handoff.md` |
-* gi=70 / gi=3 are NOT expected to be fixed by ruling 22: at 30 min neither had reached a credited lock in the real
+* gi=70 / gi=3 are NOT fixed by ruling 22: stopped unfinished at 58 min (the scope change; ruling 27). At 30 min neither had reached a credited lock in the real
   game, so their b0 work is spent before any full lock exists (the projected chains under the PARTIAL Calming Verse +
   EE lock, which the playout deliberately leaves searched, and gi=3's non-free-turn cost found in step 8a). Results:
   `build/scratch/ee8c/b0a.{out,err}`, marker `b0a.DONE`.
