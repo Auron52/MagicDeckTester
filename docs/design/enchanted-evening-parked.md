@@ -210,3 +210,10 @@ permanent. `EnchantedEveningProvider` still routes the deck when it is run on an
 ## Commits
 
 See the `ee-park` branch log: the card/behaviour + provider port, the marker, and the docs.
+
+## USER rulings after parking (2026-11-26)
+
+* `MTG_EE_GROVE_PRELOCK` (second-Opalescence amendment, default OFF). USER, verbatim: "We can leave it off for now,
+  but in the future we may delete it as a clean-up."
+* The deck's play heuristics (EnchantedEveningProvider, tutor prune `MTG_EE_USER_PRUNE` ON). USER, verbatim: "Let's
+  keep them. Many of them may still be useful in the new mode."

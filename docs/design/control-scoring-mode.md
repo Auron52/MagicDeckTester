@@ -715,6 +715,11 @@ decks costs about 148 core-s at the suite's play settings (sum of `cost_per_game
 mean 2.4 s, median 0.7 s per deck), so a stable average (~50 games per deck) is about 2 core-hours per evaluated
 control sequence.
 
+USER, verbatim (2026-11-26): "I don't know if we need as many as 50 games per deck, but yes it should be at least
+20 games per deck I suppose. Equally is fine." -> Every mapping measurement uses AT LEAST 20 games per gauntlet
+deck (about 0.8 core-hours per full-joint key at play settings), and the gauntlet decks are weighted EQUALLY
+(this settles the balance question left open under Q2).
+
 The mapping spectrum, most to least exact:
 1. **Full joint table.** Key = the whole sequence of control effects with their turns (and targets as chosen by
    the Q3 rule). Value = per-gauntlet-deck delays, measured by playing the sequence through the gauntlet. Exact,
@@ -878,8 +883,8 @@ consequences. (1) Every delay table / fitted model records the gauntlet it was m
 deck's decklist hash), so a changed gauntlet is detected and the numbers are regenerated, like any other
 generated artifact. (2) Cost: the suite's measured play-setting cost per game spans 23 ms (Breaching) to 33.7 s
 (Beasts) (`test/suite_cost.json`), so replaying the whole gauntlet inside every scored control game is not
-affordable at play settings. The full gauntlet is therefore used OFFLINE (stage 1 table, stage 3 model), and a
-per-game replay (designs A/C) uses a fixed sampled subset or cheaper opponent settings. Still open: whether the
+affordable at play settings. The full gauntlet is therefore used ONLY OFFLINE, to build the mapping that scoring
+consults (section 7.5; the USER ruled out per-game replay). Still open: whether the
 decks as they stand are balanced enough, i.e. equal weights per deck or weights per archetype cluster (so that
 many similar aggro decks do not dominate the average).
 
