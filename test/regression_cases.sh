@@ -104,6 +104,7 @@ declare -A DECK_FILE=(
   [worldfire]=decks/Worldfire/Worldfire.cod
   [elves]=decks/Elves/Elves.cod
   [stuffy]="decks/Stuffy Doll/Stuffy Doll.cod"
+  [zombies]=decks/Zombies/Zombies.cod
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
@@ -170,6 +171,7 @@ declare -A DECK_PROF=(
   [worldfire]=decks/Worldfire/Worldfire.profile.json
   [elves]=decks/Elves/Elves.profile.json
   [stuffy]="decks/Stuffy Doll/Stuffy Doll.profile.json"
+  [zombies]=decks/Zombies/Zombies.profile.json
 )
 
 # PLAY-SETTING SHAPE (USER 2026-10-27: "I would cut d3 b10 games to run more at play settings. d3 b10 is a nice
@@ -200,6 +202,11 @@ declare -A DECK_PROF=(
 # into turn 11 -- legal but volatile), and slivers actively spins on its heavy tail. The
 # deeper/generous budgets live in OVERNIGHT instead. See search-perf-investigation memory.
 SMOKE_CASES=(
+  # Zombies: pre-keep-table entry set. Gray Merchant drains each opponent, so 2HG has its own canary.
+  "zombies    0 1001 1000  0"
+  "zombies    3 1001   50 10"
+  "zombies    5 1001  100 20"
+  "zombies2hg 5 1001   25 20"
   # mazesend (Maze's End): ADDED 2026-11-18 by the analysis (docs/design/analysis-Maze's End.md, "S4"), all three
   # tiers at once, at Hinata's pre-keep-table ENTRY shape. Gates alternate-win ramp (Maze's End + ten Gate names),
   # MazesEndProvider, no value_play block -> play rows are d5 b20. No keep table and no value leaf yet, so GT WILL
@@ -857,6 +864,13 @@ SMOKE_CASES=(
 # (see SMOKE block). slivers must stay low regardless -- it spins on its heavy tail (s2002 d5
 # was 16.5 min at budget 200) for zero benefit. d0 has no search. Only antilife is new here.
 REGRESSION_CASES=(
+  "zombies       3 30281    5  0"
+  "zombies       5 30281    5  0"
+  "zombies       0 2002 1000  0"
+  "zombies       3 2002   50 10"
+  "zombies       5 2002  150 20"
+  "zombies       5 3003  150 20"
+  "zombies2hg    5 2002   75 20"
   # mazesend: see the SMOKE block (2026-11-18, pre-keep-table ENTRY set).
   "mazesend     0 2002 1000 0"
   "mazesend     3 2002   15 10"
@@ -1456,6 +1470,21 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
+  "zombies       3 30381    5  0"
+  "zombies       5 30381    5  0"
+  "zombies       0  4004 2000  0"
+  "zombies       0  6006 2000  0"
+  "zombies       0  8008 2000  0"
+  "zombies       0 10010 2000  0"
+  "zombies       3  4004  125 10"
+  "zombies       5  4004  300 20"
+  "zombies       5  5005  300 20"
+  "zombies       5  6006  300 20"
+  "zombies       5  7007  300 20"
+  "zombies2hg    5  4004   75 20"
+  "zombies2hg    5  5005   75 20"
+  "zombies2hg    5  6006   75 20"
+  "zombies2hg    5  7007   75 20"
   # mazesend: overnight ENTRY set before its keep table (2026-11-18; d0 4x2000, one d3 b10 sanity row, d5 4x300 b20
   # play rows). No mazesend2hg overnight rows: the deck reads no heads or starting life (see the SMOKE canary note).
   # Expand to the FULL set just before the keep table is adopted.

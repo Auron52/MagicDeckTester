@@ -10,6 +10,10 @@
 # Modes: smoke (<15m), regression (<45m), overnight (full sweep; host-dependent); seeds disjoint.
 
 # --- smoke ---
+zombies_smoke_d0_s1001=4.7780/985a3cc116ae0a71
+zombies_smoke_d3_s1001=4.4400/646bfeba0d7674f1
+zombies_smoke_d5_s1001=4.4500/794f2f7416dfeff1
+zombies2hg_smoke_d5_s1001=4.9200/85219e6f6509ef24
 mazesend_smoke_d0_s1001=6.7160/7a052adf70055959
 mazesend_smoke_d3_s1001=5.1000/bfbc30ba9c4ae4d0
 mazesend_smoke_d5_s1001=5.6061/741e2c89c969f6de

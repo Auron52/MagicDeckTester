@@ -70,6 +70,34 @@ item to verify dynamically.
 The full overnight checkpoint landed on the shared branch as `ffee59231` before
 this deck's implementation began.
 
+## Validation progress, 2026-11-26
+
+All 11 card definitions and their engine paths were committed and pushed in
+`10d771d5a`; the baseline profile was generated with analyzer seed 51001 and
+pushed in `f1af594ec`. The optimized `mtg` and `mtg-analyze` binaries built.
+Coverage reports zero missing cards; the cost and hard-field Scryfall audits
+pass. `audit_viewer_decisions.py` passed dynamically on seeds 52001 onward,
+including the sacrifice choice and a forced Lord of the Undead return choice.
+Cemetery Reaper's graveyard card target is encoded in distinct plan labels;
+the static Oracle-text regex treats it as an advisory target mention.
+
+The analyzer completed 1,000 card-score games at depth 5, a 400-game cost
+diagnostic (`COST_NEUTRAL`), and a 400-game discard evidence run. The latter
+found no real-game discard decisions but 2,641 rollout-only sheds; its verdict
+is `DISCARD_UNLABELLED`, requiring a paired default-vs-worst shed-ranking bound
+of at least 150 games per arm. This bound remains to run.
+
+The smoke tier's Zombies rows passed all 677 shared scenarios and were
+accepted: d0 1,000 games avg 4.7780; d3 50 avg 4.4400; d5 100 avg 4.4500.
+Depth 3 and 5 had identical outcomes on the 50 paired seeds. The 2HG smoke
+batch played 25 games at avg 4.9200; its scenario gate passed and its new GT
+was accepted. Regression and overnight tier runs remain in progress.
+
+External Codex-play seeds 54001-54003 found no illegal or missing playable
+plans and no wrong state deltas. Seed 54001 exercised Gravecrawler's graveyard
+cast after Culling; seed 54003 showed tapped entries, Cemetery Reaper's bonus,
+and distinct Fleshbag victim proposals. Further seeds are running.
+
 ### Implementation order
 
 1. Add the existing-schema bodies and static lords first (Diregraf Ghoul,
