@@ -296,6 +296,17 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**08:26 UTC 11-26 (pre-compaction checkpoint):**
+- I am HEAD of the push queue. Validation for wip/land-1126 is running under `push_queue.py hold` (background task; log `build/scratch/land-1126/validate.log`, markers TIERS.DONE and UNIT.DONE). It is now in smoke, with regression to follow via `--both`.
+  - The rebase onto 9ca7deb5e was a no-op; head is 83cded842.
+  - The batch is worldfire-ad, the maze c5c8877d9 price, and MTG_KO_BOUNDARY_SIM default ON (c599d121f).
+- After validation: `bash test/regression.sh <mode> --accept-with-regressions` for the tiers that moved, then `python3 test/check_gt_logs.py`, commit the GT, `push_queue.py land`. CI cannot be watched (gh is not authenticated).
+- After landing, relaunch my two kill-only batches. Analysis per `logs/mill-k/mill-k-handoff2.md`. Existing waiters bx3trlg9w, byy6viynm and bn7paa2fb watch their DONE markers and heartbeat.
+  - `setsid nohup bash build/scratch/mill-k/kverify/run.sh build/scratch/mill-k/kverify &`
+  - `setsid nohup bash build/scratch/mill-k/ident/run.sh build/scratch/mill-k/ident &`
+- The Maze successor agent (about 142K context) has split the fold and the scoped price into clean commits on wip/maze2hg-perf. Its ab3 batch is queued on the box lock. Its report3.md comes in its final message, and the parent commits it.
+- USER questions are still open: K fleet-wide (recommend yes once the kverify sample is clean); SG50 with K on CG/AL/DS; the CG beam drop.
+
 **08:11 UTC 11-26:**
 - Worldfire re-measure on 9ca7deb5e passed: net +1 over 6000 games, t=+0.38. All 3 slower games recover at d8 b0 (83cded842, `logs/worldfire-ad/ab_verdict_remeasure.md`).
 - The Maze ab2 fold is byte-identical on all 12 shapes. The price on top of it is still worse on Gods (+19 / +24), and Maze is 0 / 0 (619248137 on wip/maze2hg-perf). A successor agent is scoping the price to fans the fold cannot collapse.
