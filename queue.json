@@ -1,19 +1,18 @@
 {
  "entries": [
   {
-   "branch": "phase-1-2-deck-analyzer",
-   "head_since": "2026-11-26T13:52:46Z",
-   "heartbeat": "2026-11-26T15:34:11Z",
-   "host": "a7c2d36c718e",
-   "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
-   "joined": "2026-11-26T13:52:46Z",
-   "note": ""
-  },
-  {
    "branch": "ee-park",
+   "head_since": "2026-11-26T15:42:37Z",
    "host": "67d5329561c0",
    "id": "67d5329561c0:ee-park",
    "joined": "2026-11-26T14:52:45Z",
+   "note": ""
+  },
+  {
+   "branch": "phase-1-2-deck-analyzer",
+   "host": "a7c2d36c718e",
+   "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
+   "joined": "2026-11-26T15:42:37Z",
    "note": ""
   }
  ]
