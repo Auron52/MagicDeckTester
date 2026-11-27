@@ -87,4 +87,29 @@ s30109829 T5 the engine's line wins. Rule 2 covers these wherever a line on the 
 
 ## Measurements
 
-(filled in below)
+Gate setup:
+- Treasure Hunt gi 100000-119999, seed 30000000 + gi, `MTG_MANA_ORACLE=2`, one 200-job manifest.
+- It ran once per binary under the box lock, back to back, because the levers are process-level.
+- base = origin `ce045ad8b` (the land-1129 Release build); new = `wip/th-resid` `6a38e62dd`.
+- Scripts: `logs/th-resid/run_gate2.sh`, `gate_report2.py`.
+
+| binary | APPLY-DROP | of them undeclared | APPLY-DROP-ORDER | ENUM-GAP | ORACLE-GAP | HIDDEN-INFO |
+|---|---|---|---|---|---|---|
+| base | 326 | 257 | 62 | 76 | 0 | 8 |
+| new | 22 | 18 | 0 | 1 | 0 | 8 |
+
+Where the moved flags went on the new binary:
+- DROP-COVERED by a winning line on the menu: 304 would-be APPLY-DROP and 62 would-be APPLY-DROP-ORDER.
+- ENUM-GAP provider rejections: `provider=153` realisations, which takes the ENUM-GAP count from 76 to 1.
+- The undeclared menu cover fired 0 times in the gate. Every undeclared drop there sat on a menu that already held
+  a win, and the win rule is asked first. It is still the right verdict where no line wins: s30106563 T4 with the
+  opponent out of reach.
+
+Play is byte-identical: all 200 job digests match between the binaries. Oracle wall rose by 0.14%
+(2,953,485 -> 2,957,674 ms). Oracle applies fell by 8,361 of 41.67M.
+
+What is left on the new binary:
+- 18 undeclared `{no land + Treasure Hunt}` drops: s30103724 T4 x7, s30112907 T5 x6, s30101394 T5 x5.
+- 4 declared `{no land + Treasure Hunt + Treasure Hunt}` drops: s30108799 T4 and s30111609 T4. In s30108799 the
+  continuation casts the second Treasure Hunt itself, so the declared cast reads as "dropped".
+- 1 ENUM-GAP: s30113218 T7 `{land=Cascade Bluffs + Land's Edge + Land's Edge}`, which is worthless.
