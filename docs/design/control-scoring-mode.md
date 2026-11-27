@@ -706,6 +706,26 @@ blockers, which is part of why the USER finds Parallax Wave followed by Opalesce
    Several blockers are assigned together to stop the most damage in total (killing blockers to the attackers
    worth killing, by Q8 trouble value; soakers to the biggest remaining non-tramplers). The same rule is how the
    attacker's lookahead predicts our blocks.
+
+   **When a body is worth keeping, and when it is a liability (USER 2026-11-27, verbatim):** "Since in goldfish the
+   creatures tend to get bigger holding it back makes some sense, except perhaps against a deck like Creature
+   Giving, Hinata, Stuffy etc. where the creatures are a liability."
+   * **Against most gauntlet decks, hold the chump.** Their attackers grow, so a chump blocker is worth more later,
+     on the lethal turn or against a bigger threat. That is the default of the rule above.
+   * **Against decks that punish us for having creatures, spend them.** Creature Giving, Hinata and Stuffy Doll all
+     run Forbidden Orchard. Creature Giving also gives us tokens (Hunted Phantasm, Varchild's War-Riders) and
+     drains 2 life per creature of ours that dies (Massacre Wurm). Stuffy Doll's Chain Reaction grows with the
+     number of creatures, and its reflectors pass the damage on. Against these, a body on our side is a liability,
+     so trading or chumping it away early costs nothing or gains. Those gifted creatures are on OUR side in the
+     replay: today the passive opponent receives them.
+   * **Priced by measurement, not by a deck list.** The clairvoyant scored block sees the drain or the bigger
+     Chain Reaction in the replay. The non-clairvoyant rule uses a per-gauntlet-deck BODY VALUE, measured offline
+     the same way as the Q8 trouble value: the delay from removing one of our creatures. Where that value is
+     negative, the rule chumps and trades freely.
+   * **A related liability on the attacker's side: damage reflectors.** Blocking Stuffy Doll, Mogg Maniac, Boros
+     Reckoner, Screaming Nemesis or a Spiteful Sliver means the damage our blocker deals comes back to us. The
+     block rule counts damage dealt to a reflecting creature as damage to us, so it soaks with a blocker that
+     deals no damage (or none at all) rather than killing.
 3. **The attacker's choice against blockers** (the gauntlet deck). This is the messy part. "Attack with
    everything" sends a 1/1 into a 4/4 wall every turn, which over-credits the blocker. Options: (a) keep attack-all,
    as an upper bound only; (b) a provider rule that holds back an attacker that would die to a block without
