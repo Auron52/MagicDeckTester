@@ -342,7 +342,7 @@ All on the build of commit `84e204640` plus the spawn fix (section 10), Release,
 **Done** (branch `feature/control-mode`, local, not pushed):
 * `84e204640` the feature: `src/core/ControlInject.{h,cpp}`, the hooks, the job fields, the tax, the
   `GameState` bytes, unit tests, the probe script on the new grammar.
-* the follow-up commit (spawn arrival in a skipped round, the spawn unit check, this document).
+* `c833f5e22` spawn arrival in a skipped round, the spawn unit check, this document.
 
 **Remaining (not stage-1 engine work):** the gauntlet baseline table (a `ctrl_record` job per gauntlet deck at
 `max_turns` 15 on fixed held-out seeds) and the delay-table / clairvoyant-sweep drivers (section 7); blocking
