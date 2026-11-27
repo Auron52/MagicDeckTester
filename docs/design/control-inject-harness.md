@@ -385,7 +385,8 @@ math, skip check, report end to end; synthetic data, no engine).
 * `plan --what baseline|table [--games N] [--threads T] [--baseline-dir D]`: core-hours. Per-game cost = the
   baseline's measured cpu when it exists, else `test/suite_cost.json` (worst shape, upper bound; `--estimate`
   scales it by `test/job_cost.tsv` units). The table's game count is exact from the baseline (screening and
-  sweep sizes included); disrupted games are priced at 1.3x (`--arm-factor`).
+  sweep sizes included); disrupted games are priced at 2.5x a baseline game (`--arm-factor`; measured on the
+  pilot, cost-weighted: Stompy 2.9, Burn 1.9, Dragons 1.6, White Knights 1.2, Breaching 1.0).
 * `table make <dir> --baseline-dir D [--decks ..] [--games N] [--rounds 2-5] [--life-screen]`: per deck and round
   t: fixed-policy singles `land` (destroy land 0), `crt` (destroy creature big), `sweep`, `ctr` / `ctrhand` /
   `ctrtop` (the first spell of mana value >= 1, the probe's policy = the Q8 threshold at zero), `disc` (nonland
@@ -404,12 +405,31 @@ math, skip check, report end to end; synthetic data, no engine).
 * Delay convention: `delay = K' - K`, unwon arm = 16 (`control_score.delay(..., censored="bound")`), an unwon base
   game = 0.
 
-**Runs (2026-11-27, small-job lane, 2 threads):** baseline `build/scratch/control-mode/baseline1` -> tables in
-`logs/control-mode/baseline/` (65 decks, 20 games; the five probe decks 60), 0.26 core-hours, ~8 min wall,
-nothing dropped. Pilot `build/scratch/control-mode/pilot1` (five probe decks x 60 games, rounds 2-5, every kind,
-clairvoyant + joint, no life screen) -> `logs/control-mode/pilot-report.txt`.
+**Runs (2026-11-27, small-job lane, 2 threads; heartbeat 2/2 busy):**
+* Baseline `build/scratch/control-mode/baseline1` -> `logs/control-mode/baseline/<key>.json` + `summary.txt`:
+  65 decks x 20 games (the five probe decks 60), 1,800 games, 0.26 core-hours, 8 min wall, NOTHING dropped
+  (`plan` projected 1.1 core-hours from suite_cost). Equal-weight mean kill round 4.574; no game unwon at 15, none
+  past 12 (latest kill round 11, Beasts). Non-life kills: Maze's End alt 20/20, Mill decked 20/20, Accomplished
+  Alchemist decked 12/20, Eldrazi Displacer Flicker decked 2/20.
+* Pilot `build/scratch/control-mode/pilot1`: five probe decks x 60 games, rounds 2-5, every kind, clairvoyant +
+  joint, no life screen. 4,564 jobs, 51,987 games, 2.56 core-hours, 78 min wall (`plan` said 0.65 h at the old
+  1.3x arm factor; hence 2.5x). Report: `logs/control-mode/pilot-report.txt` (+ `.json`, `pilot-rows.jsonl` with
+  the state features). Against section 8 (d3 b10, max_turns 12, 200 games; the pilot is at PLAY settings and
+  horizon 15, 60 games), mean of the five decks: land 2/3/4 1.05 / 0.82 / 0.35 (probe 1.06 / 0.84 / 0.31); crt
+  0.50 / 0.63 / 0.53 (0.52 / 0.58 / 0.53); sweep3/4 1.27 / 1.71 (1.26 / 1.76); counter 0.57 / 0.82 / 0.55 (0.54 /
+  0.82 / 0.52); discard 0.40 / 0.37 / 0.22 (0.51 / 0.48 / 0.24). Interactions: land (3+4) +0.37 (probe +0.45),
+  crt +0.13 (+0.13), counter +0.07 (+0.03), two counters in round 3 -0.39 (-0.38), sweep3 - crt3 +0.64 (+0.68).
+  Clairvoyant vs fixed: discard 1.16 vs 0.40 on round 2 (the largest gap), counter 0.95 vs 0.82 on round 3
+  (Stompy 1.52 vs 0.95), land and creature within 0.05. Skip check: 923 / 925 exact; the two are Burn gi 12
+  (base 4, skip2 and skip3 also 4: the passive opponent's own life loss, as the section 9 skip:3-5 cases).
+  Life-screen validation: of 897 games the 5.6 screen would zero, 895 measured 0; Stompy gi 29 measured +1
+  at life3 rounds 2 and 3 (the budgeted re-search found a slower line), so the screen is NOT exact and stays
+  off by default. Life gain (USER 5.6): Burn life3 +0.45-0.55, life5 +0.65-0.72 per round 2-4; the creature decks
+  +0.13-0.18 / +0.19-0.27; race-flip share at w = 5: Burn 0.25-0.38, creature decks 0.11-0.26.
 
-**Projected full table** (`logs/control-mode/plan-full-table-20.txt`): 65 decks x 20 games, rounds 2-5 =
-206,590 games, **55 core-hours = 2.3 h at 24 threads** (54 with the life screen); about 2x that at 40 games.
-Worldfire is 43 of the 55 core-hours' first 0.8 (32,240 games: its counter sweeps over many spells a round),
-then Beasts 26 core-ks and Hinata 16 core-ks.
+**Projected full table** (`logs/control-mode/plan-full-table-20.txt`, arm factor 2.5): 65 decks x 20 games,
+rounds 2-5, every kind, clairvoyant + joint = 206,590 games, **107 core-hours = 4.4 h at 24 threads**; without
+the clairvoyant sweeps 47 core-hours; about 2x either at 40 games (the stage-2 parity split). The largest shares:
+Worldfire 23.0 core-hours (32,240 games: its counter sweeps run over many spells a round), Beasts 14.0, Hinata
+8.6, Snow 6.3, Gods 6.1, Maze's End 4.9. Launch: `table make <dir> --baseline-dir logs/control-mode/baseline
+--games 20`, then one `mtg --batch` under the box lock (a big run, not the lane).

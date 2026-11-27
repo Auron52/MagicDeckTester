@@ -1109,7 +1109,9 @@ def main(argv=None):
     pl.add_argument("--life-screen", action="store_true")
     pl.add_argument("--estimate", action="store_true", help="units-scaled estimate instead of the suite max")
     pl.add_argument("--arms-per-game", type=int, default=120, help="games per base game without a baseline")
-    pl.add_argument("--arm-factor", type=float, default=1.3, help="cost of a disrupted game over a baseline game")
+    pl.add_argument("--arm-factor", type=float, default=2.5,
+                    help="cost of a disrupted game over a baseline game (pilot 2026-11-27: 2.5 cost-weighted; "
+                         "Stompy 2.9, Burn 1.9, Dragons 1.6, White Knights 1.2, Breaching 1.0)")
     pl.add_argument("--horizon-factor", type=float, default=1.2)
     t = sp.add_parser("table")
     ts = t.add_subparsers(dest="sub", required=True)
