@@ -265,6 +265,75 @@ TEST_CASE("Elves scaling rule: a held SCALED dork widens the band by its live yi
     CHECK(mk.count(CastSet{ { "Joraga Warcaller", 3 } }) == 0);
 }
 
+// THE SUBSET-SUM FOLD (MTG_ELVES_SUBSET_FOLD, default ON): inside the band only the counts that are the largest for
+// some reachable leftover survive -- subset sums of the held attackers' yields, plus Ezuri's converter multiples.
+namespace {
+struct FoldArm
+{
+    std::int8_t saved;
+    explicit FoldArm(int v) : saved(heurarm::t_arm[heurarm::ELVES_SUBSET_FOLD])
+    { heurarm::t_arm[heurarm::ELVES_SUBSET_FOLD] = static_cast<std::int8_t>(v); }
+    ~FoldArm() { heurarm::t_arm[heurarm::ELVES_SUBSET_FOLD] = saved; }
+};
+// The Genesis Wave X values (Wave-alone plans) the rule keeps on this board, pre-combat, fold on or off.
+std::set<int> WaveAloneXs(const GameState& s, int fold)
+{
+    std::vector<TurnSolver::Plan> plans;
+    { PruneArm off(0); plans = TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, nullptr); }
+    std::vector<DecisionProvider::PlanView> views;
+    for (const TurnSolver::Plan& p : plans) { views.push_back({ &p.actions, &p.land_to_play, &p }); }
+    std::vector<char> admit(plans.size(), 1);
+    { PruneArm on(1); FoldArm f(fold); ElvesScalingAdmit(s, /*is_pre_combat=*/true, views, admit); }
+    std::set<int> xs;
+    for (std::size_t i = 0; i < plans.size(); ++i)
+    {
+        const CastSet c = Casts(plans[i]);
+        if (admit[i] && c.size() == 1 && c[0].first == "Genesis Wave") { xs.insert(c[0].second); }
+    }
+    return xs;
+}
+// 10 Forests, two unsick Priests of Titania (and optionally a Llanowar and an Ezuri); hand Genesis Wave alone.
+GameState FoldBase(bool llanowar, bool ezuri)
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 6; s.game_seed = 4243;
+    s.players[0].life = 20; s.players[1].life = 20;
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < 30; ++i) { s.players[0].library.push_back(PCard(i % 2 ? "Forest" : "Llanowar Elves", 900 + i)); }
+    for (int i = 0; i < 10; ++i) { PPut(s, "Forest", 100 + i); }
+    PPut(s, "Priest of Titania", 201);
+    PPut(s, "Priest of Titania", 202);
+    if (llanowar) { PPut(s, "Llanowar Elves", 203); }
+    if (ezuri) { PPut(s, "Ezuri, Renegade Leader", 204); }
+    PHand(s, "Genesis Wave", 3);
+    s.m_provider = &Prov();
+    return s;
+}
+}   // namespace
+
+TEST_CASE("Elves scaling rule: the subset-sum fold keeps only the hold-back points inside the band")
+{
+    if (!RuleLive()) { return; }
+    // Two Priests at 2 each: 14 mana, Wave top X 11. Held sums {0, 2, 4}: X 11, 9, 7. The band keeps 7..11.
+    const GameState s = FoldBase(false, false);
+    CHECK(WaveAloneXs(s, 0) == std::set<int>{ 7, 8, 9, 10, 11 });
+    CHECK(WaveAloneXs(s, 1) == std::set<int>{ 7, 9, 11 });
+    CHECK(WaveAloneXs(s, -1) == WaveAloneXs(s, 1));            // default ON
+    // + a Llanowar (Priests at 3): 17 mana, top 14; sums {0,1,3,4,6,7}: drops X 12 and 9.
+    const GameState t = FoldBase(true, false);
+    CHECK(WaveAloneXs(t, 0) == std::set<int>{ 7, 8, 9, 10, 11, 12, 13, 14 });
+    CHECK(WaveAloneXs(t, 1) == std::set<int>{ 7, 8, 10, 11, 13, 14 });
+}
+
+TEST_CASE("Elves scaling rule: the fold keeps Ezuri's combat-pump multiples (leftover mana the converter spends)")
+{
+    if (!RuleLive()) { return; }
+    // Ezuri is an Elf: Priests at 4, Llanowar 1 -> 19 mana, top X 16, h 9. Held sums {0,1,4,5,8,9}; with the pump's
+    // 5-multiples also {5,6,9}: kept d {0,1,4,5,6,8,9}, so X 16,15,12,11,10,8,7 (drops 14, 13, 9).
+    const GameState s = FoldBase(true, true);
+    CHECK(WaveAloneXs(s, 0) == std::set<int>{ 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 });
+    CHECK(WaveAloneXs(s, 1) == std::set<int>{ 7, 8, 10, 11, 12, 15, 16 });
+}
+
 // ---- 3. THE LIFT SWITCHES ----------------------------------------------------------------------------------------
 
 TEST_CASE("Elves scaling rule: MTG_ELVES_SCALING_PRUNE=0 restores every count and every split")

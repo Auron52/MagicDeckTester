@@ -75440,13 +75440,13 @@ ElvesSink ElvesSinkOf(const Action& a)
 // the plans they held, and the plans it removed as splits / below the band; one stderr line at exit.
 struct ElvesCensus
 {
-    std::atomic<long long> calls{0}, plans{0}, split{0}, band{0};
+    std::atomic<long long> calls{0}, plans{0}, split{0}, band{0}, fold{0};
     ~ElvesCensus()
     {
         if (calls.load() == 0) { return; }
         std::fprintf(stderr, "[elves-scaling-census] enumerations=%lld plans=%lld dropped_split=%lld dropped_band=%lld "
-                     "kept=%lld\n", calls.load(), plans.load(), split.load(), band.load(),
-                     plans.load() - split.load() - band.load());
+                     "dropped_fold=%lld kept=%lld\n", calls.load(), plans.load(), split.load(), band.load(),
+                     fold.load(), plans.load() - split.load() - band.load() - fold.load());
     }
 };
 ElvesCensus& ElvesCensusSink() { static ElvesCensus c; return c; }
@@ -75467,6 +75467,124 @@ void ElvesBlankSink(Action& a)
     a.cost       = ManaCost{};
     a.eval       = 0;
     a.def        = nullptr;
+}
+
+// ---- THE SUBSET-SUM FOLD inside the hold-back band (MTG_ELVES_SUBSET_FOLD, DEFAULT ON; =0 -> the band as before) ----
+//
+// WHAT IT REMOVES. The band keeps EVERY count in [top - h, top]. Within one class (the same line but for the count)
+// two counts differ only in how much mana goes into the sink and how much is left over. Leftover mana is worth
+// something only through what can still spend it this turn; for the band's purpose that is the attackers it lets stay
+// untapped. Keeping attack-capable dork set T untapped frees yield(T), so the LARGEST count that still affords T is
+//     c_T = top - ceil((yield(T) - S) / unit),      S = the class top's own slack, 0 <= S < unit,
+// and any count c < top that is not some c_T keeps exactly the attackers c + 1 keeps (no subset sum falls between
+// them) and puts less into the sink. A larger Wave X / kick / squad count is never worse in this goldfish (a bigger X
+// reveals a superset and raises the MV cap; a kick or squad copy adds a counter / lord / body), and our draw from an
+// empty library is a no-op, not a loss. So the fold keeps d = top - c only where d = floor(s/unit) or ceil(s/unit)
+// for some reachable leftover s (S unknown in [0, unit)). The class top (s = 0) always survives.
+//
+// THE LEFTOVER s IS EVERYTHING THAT CAN STILL SPEND MANA IN THE CLASS, not just held attackers (each term widens the
+// kept set, so the fold stays sound wherever the term is live):
+//   * each held attack-capable mana creature (the band's ElvesHoldBackSources set, walked again here): its yield as
+//     an INTERVAL [y, y + growth] -- a scaled dork grows while the plan resolves: +1 per other Elf cast for an Elf
+//     count (Priest, Archdruid), +2 for Marwyn (its counter and, from a lord Elf, the lord's +1);
+//   * Ezuri's combat converter (ApplyFirebreathing spends LEFTOVER mana at combat on a repeatable team pump): with a
+//     team_pump_cost creature of ours on the battlefield, or cast in the plan, pre-combat, every multiple of its cost;
+//   * Leaf-Crowned Visionary's {G} pay-draw on an Elf spell cast AT OR AFTER the sink (the sink's own trigger
+//     included): paid at trigger time out of what the sink left, so [0, n] more for n such triggers.
+// Every s is capped at the band (d <= h), so the fold is a SUBSET of what the band admits.
+//
+// WHERE IT DOES NOT APPLY (the class keeps the whole band): a kick / squad class whose top is the kMaxMultikick cap
+// (the top need not be mana-bound, so S is unknown), and Ezuri's main-phase pump count as the sink (its menu is the
+// provider's MainPhaseTeamPumpCounts, not every count, so its top need not be mana-bound either).
+//
+// WHAT IT CAN STILL MISS (outside the class, disclosed): mana left for a LATER re-solve -- the Wave's site-10
+// breakpoint continuation or main 2 -- that casts a card still in hand with the leftover plus what the Wave put (the
+// same card cast before the sink is a different class, which keeps its own hold-back points); a smaller Wave X that
+// leaves a Genesis Wave on top of the library instead of milling it; a team-pump creature the Wave itself puts.
+bool ElvesSubsetFoldOn()
+{
+    static const bool s_env = EnvOn("MTG_ELVES_SUBSET_FOLD", true);   // DEFAULT ON; =0 -> every count in the band
+    return heurarm::Flag(heurarm::ELVES_SUBSET_FOLD, s_env);
+}
+
+// The held attack-capable mana creatures with their yield ranges per unit of plan Elf casts (the same set
+// ElvesHoldBackSources walks: untapped mana-dork creatures of ours that CanAttackFull now, pre-combat only).
+bool IsElvesPayDraw(const CardDefinition& d)
+{ return d.params.cast_subtype_pay_draw_cost.has_value() && !d.params.cast_trigger_subtype.empty(); }
+// A creature whose repeatable team pump the combat converter (ApplyFirebreathing) feeds with leftover mana.
+bool IsElvesConverterPump(const CardDefinition& d)
+{
+    return d.params.team_pump_cost.has_value() && d.params.team_pump_power > 0 && !d.params.team_pump_taps_source
+        && d.params.team_pump_cost->ManaValue() > 0;
+}
+
+struct ElvesFoldSource { int yield = 0; int growth_per_cast = 0; };
+std::vector<ElvesFoldSource> ElvesFoldSources(const GameState& s, bool is_pre_combat)
+{
+    std::vector<ElvesFoldSource> out;
+    if (!is_pre_combat) { return out; }
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped || !p.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->tmpl != CardTemplate::ManaDork) { continue; }
+        if (!CanAttackFull(p, s.battlefield, me)) { continue; }
+        const bool scaled = IsScaledManaDork(*d);
+        out.push_back({ scaled ? ScaledDorkCount(s, me, *d) : ManaProducedPerTap(*d),
+                        !scaled ? 0 : (d->params.mana_per_own_power ? 2 : 1) });
+    }
+    return out;
+}
+
+// ok[d], d = 0..h: may a count d steps below the class top be the largest count for some leftover? (see above)
+std::vector<char> ElvesFoldAdmissible(const std::vector<ElvesFoldSource>& src, int elf_casts, int unit, int h,
+                                      int pump_cost, int pay_after)
+{
+    unit = std::max(1, unit);
+    const int cap = (h + 1) * unit - 1;   // any s above it has floor(s / unit) > h: outside the band
+    std::vector<char> reach(static_cast<std::size_t>(cap) + 1, 0), next;
+    reach[0] = 1;
+    auto add_range = [&](int lo, int hi)
+    {
+        next.assign(reach.size(), 0);
+        for (int v = 0; v <= cap; ++v)
+        {
+            if (!reach[static_cast<std::size_t>(v)]) { continue; }
+            for (int t = std::max(0, lo); t <= hi && v + t <= cap; ++t) { next[static_cast<std::size_t>(v + t)] = 1; }
+        }
+        for (std::size_t v = 0; v < reach.size(); ++v) { reach[v] = static_cast<char>(reach[v] | next[v]); }
+    };
+    for (const ElvesFoldSource& f : src)
+    {
+        const int lo = std::max(0, f.yield);
+        add_range(lo, lo + f.growth_per_cast * std::max(0, elf_casts));
+    }
+    if (pay_after > 0)                                      // any number 0..n of the trailing pay-draw triggers
+    {
+        next.assign(reach.size(), 0);
+        for (int v = 0; v <= cap; ++v)
+        {
+            if (!reach[static_cast<std::size_t>(v)]) { continue; }
+            for (int t = 0; t <= pay_after && v + t <= cap; ++t) { next[static_cast<std::size_t>(v + t)] = 1; }
+        }
+        reach.swap(next);
+    }
+    if (pump_cost > 0)                                      // every multiple of the converter's pump cost
+    {
+        for (int v = 0; v + pump_cost <= cap; ++v)
+        { if (reach[static_cast<std::size_t>(v)]) { reach[static_cast<std::size_t>(v + pump_cost)] = 1; } }
+    }
+    std::vector<char> ok(static_cast<std::size_t>(h) + 1, 0);
+    ok[0] = 1;
+    for (int v = 0; v <= cap; ++v)
+    {
+        if (!reach[static_cast<std::size_t>(v)]) { continue; }
+        const int fl = v / unit, ce = (v + unit - 1) / unit;
+        if (fl <= h) { ok[static_cast<std::size_t>(fl)] = 1; }
+        if (ce <= h) { ok[static_cast<std::size_t>(ce)] = 1; }
+    }
+    return ok;
 }
 }   // namespace
 
@@ -75506,19 +75624,35 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
     // A row holds no copy of its plan: the blanked copy ("canon") is built on demand, and only each CLASS's first
     // member keeps one. (It used to be one full Plan copy per row -- on a 240,928-plan Elves continuation list that
     // doubled the enumeration's peak, ~1.2 GB; elves-mem 2026-11-26.)
-    struct Row { std::size_t i; std::string sink; int count; int unit; int elf_casts = 0; };
+    struct Row { std::size_t i; std::string sink; int count; int unit; int elf_casts = 0;
+                 bool fold_ok = false; bool kick = false; int pump_cast = 0; int pay_after = 0; };
     std::vector<Row> rows;
-    long long n_split = 0, n_band = 0;
+    long long n_split = 0, n_band = 0, n_fold = 0;
     struct Flush
     {
-        std::size_t n; long long& sp; long long& bd;
+        std::size_t n; long long& sp; long long& bd; long long& fd;
         ~Flush()
         {
             if (!ElvesCensusOn()) { return; }
             ElvesCensus& c = ElvesCensusSink();
             c.calls.fetch_add(1); c.plans.fetch_add(static_cast<long long>(n)); c.split.fetch_add(sp); c.band.fetch_add(bd);
+            c.fold.fetch_add(fd);
         }
-    } flush{ plans.size(), n_split, n_band };
+    } flush{ plans.size(), n_split, n_band, n_fold };
+    const bool fold_on = ElvesSubsetFoldOn();
+    std::vector<std::string> pay_draw_bf;   // the trigger subtype of each Visionary-type source of ours on the battlefield
+    int converter_cost = 0;                 // Ezuri's combat pump cost when a converter creature of ours is in play
+    if (fold_on)
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            if (IsElvesPayDraw(*d)) { pay_draw_bf.push_back(d->params.cast_trigger_subtype); }
+            if (IsElvesConverterPump(*d) && p.card.IsCreature()) { converter_cost = d->params.team_pump_cost->ManaValue(); }
+        }
+    }
     for (std::size_t i = 0; i < plans.size(); ++i)
     {
         if (!admit[i] || plans[i].actions == nullptr) { continue; }
@@ -75546,6 +75680,28 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         r.count = one.count;
         r.unit  = one.unit;
         r.elf_casts = elf_casts;
+        if (fold_on)
+        {
+            // The subset-sum fold's per-plan terms (ElvesFoldAdmissible): which sink, a team-pump creature cast in
+            // the plan, and the Visionary pay-draw triggers on Elf spells cast at or after the sink.
+            const Action& sa = (*plans[i].actions)[static_cast<std::size_t>(at)];
+            const CardDefinition* sd = sa.kind == Action::Kind::CastFromHand
+                                     ? CardDatabase::Instance().Lookup(sa.card_name.str()) : nullptr;
+            r.fold_ok = sd != nullptr;                     // Wave X or a kick / squad count; never Ezuri's pump count
+            r.kick    = sd != nullptr && HasRepeatKicker(sd->params);
+            std::vector<std::string> trig = pay_draw_bf;
+            for (std::size_t k = 0; k < plans[i].actions->size(); ++k)
+            {
+                const Action& a = (*plans[i].actions)[k];
+                if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name.str());
+                if (d == nullptr) { continue; }
+                if (IsElvesConverterPump(*d)) { r.pump_cast = d->params.team_pump_cost->ManaValue(); }
+                if (static_cast<int>(k) >= at)
+                { for (const std::string& st : trig) { if (CardHasSubtype(d->card, st)) { ++r.pay_after; } } }
+                if (IsElvesPayDraw(*d) && d->card.IsCreature()) { trig.push_back(d->params.cast_trigger_subtype); }
+            }
+        }
         rows.push_back(std::move(r));
     }
     if (rows.empty()) { return; }
@@ -75567,6 +75723,8 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         out.bp_base        = -1;
     };
     const std::vector<ElvesHoldBackSource> held = ElvesHoldBackSources(s, is_pre_combat);
+    const std::vector<ElvesFoldSource> fold_src = fold_on ? ElvesFoldSources(s, is_pre_combat) : std::vector<ElvesFoldSource>{};
+    std::unordered_map<std::uint64_t, std::vector<char>> fold_memo;
     const int trace_turn = ElvesTraceTurn();
     const bool trace = trace_turn > 0 && s.turn_number == trace_turn;
     if (trace)
@@ -75652,8 +75810,29 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
             const Row& r = rows[idx[a]];
             const int hm = ElvesHoldBackMana(held, r.elf_casts);   // the mana every held attacker frees
             const int h = (hm + r.unit - 1) / r.unit;   // (3) the hold-back band in count steps
-            const bool drop = r.count < top[static_cast<std::size_t>(cls[a])] - h;
+            const int ctop = top[static_cast<std::size_t>(cls[a])];
+            const bool drop = r.count < ctop - h;
             if (drop) { admit[r.i] = 0; ++n_band; }
+            // The subset-sum fold (ElvesFoldAdmissible): inside the band, keep only the counts that are the largest
+            // for some reachable leftover. Not on a capped kick top (its slack is unknown) or a pump-count sink.
+            bool fold = false;
+            if (!drop && r.fold_ok && r.count < ctop && !(r.kick && ctop >= kMaxMultikick))
+            {
+                const int pump = !is_pre_combat ? 0 : converter_cost > 0 ? converter_cost : r.pump_cast;
+                const std::uint64_t key = (static_cast<std::uint64_t>(r.elf_casts) << 48)
+                                        ^ (static_cast<std::uint64_t>(r.unit) << 40)
+                                        ^ (static_cast<std::uint64_t>(r.pay_after) << 32)
+                                        ^ (static_cast<std::uint64_t>(pump) << 24)
+                                        ^ static_cast<std::uint64_t>(h);
+                auto it = fold_memo.find(key);
+                if (it == fold_memo.end())
+                {
+                    it = fold_memo.emplace(key, ElvesFoldAdmissible(fold_src, r.elf_casts, r.unit, h, pump,
+                                                                    r.pay_after)).first;
+                }
+                fold = !it->second[static_cast<std::size_t>(ctop - r.count)];
+                if (fold) { admit[r.i] = 0; ++n_fold; }
+            }
             if (trace)
             {
                 std::string casts;
@@ -75665,7 +75844,7 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
                     casts += " ";
                 }
                 std::fprintf(stderr, "[elves-scal-trace]   cls=%d sink=%s count=%d top=%d h=%d %s | %s\n", cls[a],
-                             r.sink.c_str(), r.count, top[static_cast<std::size_t>(cls[a])], h, drop ? "DROP" : "keep",
+                             r.sink.c_str(), r.count, ctop, h, drop ? "DROP" : fold ? "FOLD" : "keep",
                              casts.c_str());
             }
         }
