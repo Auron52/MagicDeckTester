@@ -43,7 +43,15 @@ size, the chain sentinel's walk and ONE entry.
   holds no Clancaller; (2) restrict Magistrate's target set (TapTargetPumpTargets hook). A play-identical route would be a LAZY
   kick-count axis (hold the 21 count variants as one prototype, like kFanPayDraw) -- a design change.
 
-## Running jobs (mine; leave them running)
+## UPDATE 18:42 UTC -- both jobs FINISHED
+* UNITS (S/unit3.log, rc=0): 4342/4342 test cases, 3,687,790 assertions, 0 failed. The commit's "units pass" stands.
+* MASSIF (S/massif/new_hog.txt, rc=0, done 18:39) is NOT REPRESENTATIVE: under valgrind the derivation meter fired
+  ("[bp-derive-priced-stop] subset visits refused=502225" in S/massif/new_hog.err), so the replay played a cheaper game in ~3 min.
+  To break down the 3.3 GB, use the gdb RSS-threshold sampler on the native binary instead (S/diag/hog_gdb.sh <bin> <list>
+  <outprefix>; thresholds in the script; run in box_lane --slots 2 --cap-gb 4), or massif with the meter's wall dependence
+  removed (find what MTG_BP_DERIVE_METER / the priced stop keys on).
+
+## Jobs as of the handoff (now finished, see the update above)
 * MASSIF of the hog on bin_new: box_lane PID 2993643 -> S/massif/run.sh PID 2993652 -> valgrind PID 2993653 (started 18:34,
   replay phase from 18:36; ~45 min). Outputs S/massif/new_hog.{massif,out,err}, ms_print -> S/massif/new_hog.txt; marker
   S/massif/DONE ("rc=N time"). Read the peak snapshot's tree: what besides the 236K list (base actions / filter / axes /
@@ -54,8 +62,8 @@ size, the chain sentinel's walk and ONE entry.
 
 ## Remaining, in order
 1. Units verdict (S/unit3.DONE / S/unit3.log).
-2. Massif verdict (S/massif/new_hog.txt): break down the 3.3 GB peak.
-3. THE 32-THREAD REPLAY -- launch only after massif's DONE (massif + a 20 GB-capped process exceed the 23 GB box):
+2. Break down the 3.3 GB peak NATIVELY (massif under valgrind tripped the priced stop -- see the update).
+3. THE 32-THREAD REPLAY -- massif is DONE, so it can launch now (heavy.lock):
    `S/r32/run.sh` with run_in_background (takes heavy.lock itself). ONE process, all 32 threads, list S/r32.log = 37 lines
    (S/slow8.log = the 8 slowest pre-abort rollouts from elves-int logs/Elves_mullgen/gen.log, 267 s ... 125 s; then the 28
    lines of build/scratch/elves-int/replay_wave.log; then the hog), MTG_RSS_CAP_GB=20, bin_new. Markers S/r32/STARTED,
