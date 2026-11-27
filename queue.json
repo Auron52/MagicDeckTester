@@ -1,3 +1,12 @@
 {
- "entries": []
+ "entries": [
+  {
+   "branch": "land-1129",
+   "head_since": "2026-11-27T05:23:27Z",
+   "host": "839667a3a15d",
+   "id": "839667a3a15d:land-1129",
+   "joined": "2026-11-27T05:23:27Z",
+   "note": ""
+  }
+ ]
 }
