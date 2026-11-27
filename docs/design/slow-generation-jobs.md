@@ -331,3 +331,4 @@ when this validates. Melira Pod's paused value leaf stays paused until then (sta
   - The 37 worst rollouts at once on 32 threads peak at 15.2 GB under the 20 GB cap.
   - Cherry-picked onto elves-int; build/units/smoke running (validate2.status). Then land, and RESUME the mullgen from the journal (same play).
 - 2026-11-27 20:47 UTC Elves mullgen (resumed 19:07 from journal, mullgen5.sh, head c4d5de01f): phase=refine, frozen 242146/279352 cells (86.6%), roll7 388/s, idle 0.0%, ~27 cores busy, RSS 9.5 GB (8 GB free). Slowest rollout 165 s (Wave + 4 Priest). Healthy.
+- 2026-11-27 23:17 UTC Maze's End K=20 mullgen (fast, maze-gen2, src d8c96049, launched 21:21): phase=floor, roll7 308,525 of the 943,928 floor (45/s now, ~60/s average), idle 0.0%, ~30 cores, RSS 3.9 GB (13 GB available). Floor done ~02:30-03:00 UTC, then refine. Elves value leaf chained after it (chain_after.sh).
