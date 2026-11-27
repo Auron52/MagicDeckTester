@@ -610,3 +610,14 @@ working, finish up anything else remaining and then proceed with the mulligan pr
 * OPEN USER QUESTIONS: holdall vs holdall+lump; do two Galadhrim Brigades count as a split (2HG 814, unfindable at
   d8 b0 under the no-split rule); MTG_ATTACK_LORD_CAST off; the 4 discard-rule readings; Shepherd / Ezuri inert
   clauses + six INERT_PARAMS sign-offs; kick cap 20 vs 2HG's 30 life.
+
+## Coordinator checkpoint 12 (2026-11-27 ~09:35 UTC)
+LANDED f2e307fe3 (Elves play batch: discard buckets ON, holdall, kick cap 20, Visionary beyond-horizon draw with
+the pre-combat attacker amendment; GT accepted smoke+regression, 0 searched slower, only elves/elves2hg keys move;
+check_gt_logs clean). CI run 45973934344 watched.
+Mulligan profile RUNNING: `MTG_RSS_CAP_GB=20 flock heavy.lock bash scripts/mullgen.sh run decks/Elves fast`
+(harness task b2lox12h6; log build/scratch/elves-int/mullgen2.log; rc marker build/scratch/elves-int/mullgen.launch).
+RECIPE = **fast** (R30): the USER default (2026-10-19) -- no instruction for complete, and K=17 / ~245K hands is not
+clearly cheap. (Checkpoint 8's "(complete)" label was wrong: its command passed no recipe, so it was fast too.)
+Status cron d1bc103d (replaces b3381ea5). After: commit the keep table, re-run Elves rows with it, accept, land;
+then Maze's End K=20 mullgen from .claude/worktrees/maze-gen2.
