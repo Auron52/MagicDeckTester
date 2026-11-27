@@ -621,3 +621,25 @@ RECIPE = **fast** (R30): the USER default (2026-10-19) -- no instruction for com
 clearly cheap. (Checkpoint 8's "(complete)" label was wrong: its command passed no recipe, so it was fast too.)
 Status cron d1bc103d (replaces b3381ea5). After: commit the keep table, re-run Elves rows with it, accept, land;
 then Maze's End K=20 mullgen from .claude/worktrees/maze-gen2.
+
+## USER answers 2026-11-27 ~09:50 UTC (verbatim) and what follows from each
+1. Hold-back: "Hold all dorks back is okay, but not sufficient in my mind unless we have heuristically determined the
+   right option in our situation. i.e. If just searching we should probably consider all, hold back normal dorks and
+   hold back all dorks. If we add some heuristic logic to figure out the win turn we could potentially prune that
+   further." -> the landed band already admits every count from full scale down to all-dorks-held (a superset of the
+   three options); agent (wip/elves-r2) builds the three-point narrowing behind MTG_ELVES_HOLDBACK_MODE and A/Bs it.
+   Default stays the band until the USER decides.
+2. Brigade: "Why would you play 2 Galadhrim Brigades when you could play one and Squad it? I guess the only case I can
+   think of would be if we played it for three and gained mana as a result, but it seems to me like the other option
+   would almost always win out." -> the no-split rule stands; game 814's mechanism is being explained (wip/elves-lordcast).
+3. Lordcast: "I would leave it off for now, but we probably should figure out why it doesn't work." -> OFF; root-cause
+   investigation running (wip/elves-lordcast).
+4. Discard: "I don't understand the Taunting Elf comment. Genesis Wave is technically MV 3, but realistically needs to
+   be cast for 6 mana or preferably even more to be good. It shouldn't be counted as a cheap spell in the discard
+   heuristic. Mana Elves should indeed be kept above spare lands. We ideally do want to play a land next turn, though,
+   so keeping one is nice if we can manage it." -> Wave priced at 6 in the discard heuristic; one land always kept as
+   the last mana card shed (the <4-lands condition dropped); additive floor reading not contested (wip/elves-r2).
+5. Sign-offs: "Yes, I thought I signed off on these already." -> Shepherd uncounterable / Dinosaur clauses, Ezuri
+   regenerate / trample, and the six INERT_PARAMS are USER-APPROVED (no longer provisional).
+6. Kick cap: "Yeah, we may want to scale it up for 2HG arguably." -> cap = the opponent's starting life (20 / 30),
+   wip/elves-r2.
