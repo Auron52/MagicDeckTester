@@ -696,3 +696,26 @@ then Maze's End K=20 mullgen from .claude/worktrees/maze-gen2.
     1..94, x activation subsets = 210K base plans. Proposed SOUND fold (default ON, told to the USER): admit only
     counts top - (subset-sum of held attack-capable dorks' yields); any other count keeps the same attackers untapped
     while putting less into a monotone sink. Agent on wip/elves-mem2 builds + measures it (memory, A/B, d8 b0).
+
+## Coordinator checkpoint 13 (2026-11-27 ~12:30 UTC, pre-compaction) -- RESUME HERE
+State: f2e307fe3 LANDED (CI green). elves-int local commits (ledger/slow-gen docs only) ride with the next landing.
+Elves mulligan profile PAUSED (OOM on Genesis Wave rollouts); journal + *.oom-20261127T1005 copies in decks/Elves of
+elves-int; it will RESTART from zero if the fold below changes play (only 17 min lost).
+Running agents (owner session e3bd4e46; cron dc51fd7e 2-hourly):
+* wip/elves-mem2 (.claude/worktrees/elves-mem2): validate play-neutral mem fix 6ab2cfe77 (units, smoke 0 changed),
+  then the subset-sum hold-back fold (MTG_ELVES_SUBSET_FOLD default ON): memory on 28 Wave rollouts + 28-thread fit
+  under 20 GB, A/B 3k+3k d5 b20, d8 b0. Handoff file if it stops: logs/elves/mem3-handoff.md there.
+* wip/elves-r2 (.claude/worktrees/elves-r2): tap-order fix (scaling-last before the sink payment, attackers from it
+  on), A/B band / bandtap / bandtapfix, d8 b0, 2HG repros 75/202/428/2162; deleting MTG_ELVES_R2 + the three/two
+  hold-back modes (USER kept band). Handoff: logs/elves/r3-handoff.md.
+* wip/elves-lordcast (.claude/worktrees/elves-lordcast): amended lordcast (A/B/C fixes, default OFF); searched
+  slower games gi1552/gi663/gi480 already fixed on post-rebase code (attribution to bf58ca704 running). Round-3 A/B
+  (330k games, logs/lordcast/run_ab3.sh) HELD by the coordinator until the Elves mullgen has run. Handoff:
+  logs/elves/lordcast-handoff2.md.
+Next, in order: (1) integrate mem2 (+fold) and r2 on one branch (rebase one onto the other; both touch
+ElvesScalingAdmit), validate (units, smoke, regression), accept the Elves GT, land via push_queue; (2) restart the
+Elves mullgen fast from a tree carrying the landed code (check `head -c 1200` of the journal first; a play change
+means the gate renames it aside -- keep the copies); (3) the USER-accepted Brigade split exception (second sink when a
+scaled source grown by the first sink's bodies pays for it), then A/B; (4) lordcast round-3 A/B; (5) Maze's End K=20
+mullgen from .claude/worktrees/maze-gen2.
+Open USER decision: the tap-order default (after the fixed version's numbers).
