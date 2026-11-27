@@ -15,6 +15,7 @@
 #include <doctest/doctest.h>
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -1014,4 +1015,139 @@ TEST_CASE("Elves mana: a Cavern-class float unit is {C} on every float-only path
         CHECK(CcoFloatWild(a) == 1);
         CHECK_FALSE(EN(a, 40)->tapped);
     }
+}
+
+// ---- USER 2026-11-27: the kick-count bound, and the beyond-horizon Visionary policy ----------------------------
+// "I think Kick counts should be capped at lethal size of 20." The DB synthesizes the "(Kicked xK)" faces K = 1..20
+// and CollectActions offers every affordable K up to there.
+TEST_CASE("Joraga Warcaller: the kick-count bound is 20 (USER: lethal size) -- faces x1..x20, plans up to K = 20")
+{
+    CHECK(kMaxMultikick == 20);
+    for (const char* n : { "Joraga Warcaller", "Galadhrim Brigade" })
+    {
+        CAPTURE(n);
+        (void)ED(n);
+        CHECK(CardDatabase::Instance().Lookup(MultikickFaceName(n, 20)) != nullptr);
+        CHECK(CardDatabase::Instance().Lookup(MultikickFaceName(n, 21)) == nullptr);
+    }
+    GameState s = EBase();
+    EForests(s, 45);   // {G} + 20 x {1}{G} = 41 mana: K = 20 affordable, 21 would be too (43) but is past the bound
+    EHand(s, "Joraga Warcaller", 20);
+    int kmax = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        for (const Action& a : p.actions)
+        { if (IsCast(a, "Joraga Warcaller") && a.kicked) { kmax = std::max<int>(kmax, a.kick_count); } }
+    }
+    CHECK(kmax == 20);
+}
+
+// "Leaf crowned-visionary should probably not decline the draw automatically even beyond the search horizon" ...
+// "If you don't have anything else to use the mana for it should draw." A greedy plan (GreedyPermit: the horizon
+// playout / the depth-0 runner) carries MihailPayChoices::PaySpare; its unpinned triggers pay when the {G} is spare.
+namespace {
+MihailPayChoices ESpare(bool pre_combat, const ManaCost& reserve = {})
+{
+    MihailPayChoices c;
+    c.SetPaySpare(pre_combat, reserve);
+    return c;
+}
+ManaCost EG(int generic, int green) { ManaCost c; c.generic = generic; c.green = green; return c; }
+std::size_t EFire(GameState s, const MihailPayChoices& c, const ManaCost* line = nullptr)
+{
+    s.scripted_mihail_pay_choice = c;
+    if (line != nullptr)
+    {
+        LineUnpaidCostScope luc(*line);
+        FireOnCastTriggers(s, ED("Llanowar Elves"), /*mana_spent=*/1);
+        return s.players[0].hand.size();
+    }
+    FireOnCastTriggers(s, ED("Llanowar Elves"), /*mana_spent=*/1);
+    return s.players[0].hand.size();
+}
+}   // namespace
+
+TEST_CASE("Leaf-Crowned Visionary beyond the horizon: an unpinned trigger pays only when the {G} is spare")
+{
+    GameState s = EBase();
+    EPut(s, "Leaf-Crowned Visionary", 1);
+    EForests(s, 2);
+    // Inside the search window (no pay_spare) unpinned still declines.
+    CHECK(EFire(s, MihailPayChoices{}) == 0u);
+    // Spare: nothing else in the line.
+    CHECK(EFire(s, ESpare(true)) == 1u);
+    CHECK(EFire(s, ESpare(false)) == 1u);
+    // The rest of the line owes {1}{G}: two Forests cover it OR the {G}, not both -> decline; three cover both.
+    const ManaCost line = EG(1, 1);
+    CHECK(EFire(s, ESpare(true), &line) == 0u);
+    {
+        GameState t = s; EForests(t, 1, 200);
+        CHECK(EFire(t, ESpare(true), &line) == 1u);
+    }
+    // The plan's activations (the reserve) are not in the line hold: reserved the same way.
+    CHECK(EFire(s, ESpare(true, EG(1, 1))) == 0u);
+    CHECK(EFire(s, ESpare(true, EG(0, 1))) == 1u);
+    // An empty library: no draw to buy.
+    {
+        GameState t = s; t.players[0].library.clear();
+        CHECK(EFire(t, ESpare(true)) == 0u);
+    }
+    // A searched pin is never overridden: pinned decline stays a decline.
+    {
+        MihailPayChoices c = ESpare(true);
+        c.Pin(1);
+        CHECK(EFire(s, c) == 0u);
+    }
+}
+
+TEST_CASE("Leaf-Crowned Visionary beyond the horizon: before combat the {G} may not cost an Ezuri pump")
+{
+    GameState s = EBase();
+    EPut(s, "Leaf-Crowned Visionary", 1);
+    EPut(s, "Ezuri, Renegade Leader", 2);
+    // Five Forests = exactly one {2}{G}{G}{G} pump: the {G} would cost it before combat, not after.
+    EForests(s, 5);
+    CHECK(EFire(s, ESpare(true)) == 0u);
+    CHECK(EFire(s, ESpare(false)) == 1u);
+    // Six: one pump either way -> spare.
+    EForests(s, 1, 200);
+    CHECK(EFire(s, ESpare(true)) == 1u);
+}
+
+TEST_CASE("Leaf-Crowned Visionary beyond the horizon: greedy Solve marks its plan; both worlds draw the same card")
+{
+    GameState s = EBase();
+    EForests(s, 2);
+    EPut(s, "Leaf-Crowned Visionary", 1);
+    EHand(s, "Llanowar Elves", 20);
+    const TurnSolver::Plan g =
+        TurnSolver::Solve(s, true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+    CHECK(g.mihail_pay_choice.PaySpare());
+    CHECK_FALSE(g.mihail_pay_choice.IsPinned());
+    CHECK(g.mihail_pay_choice.SparePreCombat());
+    REQUIRE(std::any_of(g.actions.begin(), g.actions.end(),
+                        [](const Action& a) { return IsCast(a, "Llanowar Elves"); }));
+    GameState roll, real;
+    EBoth(s, g, roll, real);
+    for (const GameState* gs : { &roll, &real })
+    {
+        CHECK(gs->players[0].hand.size() == 1u);   // the paid draw
+        CHECK(ETapped(*gs) == 2);
+    }
+    CHECK(roll.players[0].hand[0].m_number == real.players[0].hand[0].m_number);
+    // The temporary A/B selector (MTG_PLAYOUT_PAY_DRAW=0, per job) restores the decline.
+    {
+        const std::int8_t prev = heurarm::t_arm[heurarm::PLAYOUT_PAY_DRAW];
+        heurarm::t_arm[heurarm::PLAYOUT_PAY_DRAW] = 0;
+        const TurnSolver::Plan off =
+            TurnSolver::Solve(s, true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+        heurarm::t_arm[heurarm::PLAYOUT_PAY_DRAW] = prev;
+        CHECK_FALSE(off.mihail_pay_choice.PaySpare());
+    }
+    // No pay-draw source: the plan is not marked (every other deck byte-identical).
+    GameState n = EBase();
+    EForests(n, 2);
+    EHand(n, "Llanowar Elves", 20);
+    CHECK_FALSE(TurnSolver::Solve(n, true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0))
+                    .mihail_pay_choice.PaySpare());
 }
