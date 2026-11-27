@@ -53887,10 +53887,25 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
             int ord[5] = { 0, 1, 2, 3, 4 };
             if (const int* hp = PayHandPips(reserve, -1)) { PayHandColorOrder(reserve, hp, ord); }
             for (int x : ord) { if (((keep >> x) & 1) == 0) { drain(cost.generic, *res[x]); } }
+            // MTG_UNSEEN_SCARCE_RITUAL_NET (EngineFlags.h): the later pips the RITUAL this payment is for pays with its
+            // own output are not owed by the float, so its units beyond the rest pay the generic first.
+            int spare_owed[5] = { later[0], later[1], later[2], later[3], later[4] };
+            if (UnseenScarceRitualNetOn())
+            {
+                const Card* pc = PayingSpellCard();
+                const CardDefinition* pd = pc != nullptr ? CardDatabase::Instance().LookupCached(*pc) : nullptr;
+                if (pd != nullptr && pd->params.ritual_floating_mana > 0 && !pd->params.untap_x_mana_sources)
+                {
+                    ManaPool out;
+                    AddColorToPool(out, pd->params.ritual_float_color, RitualFloatAmount(*t_pay_hand_ctx->s, *pd, 0));
+                    const int oc[5] = { out.white, out.blue, out.black, out.red, out.green };
+                    for (int x = 0; x < 5; ++x) { spare_owed[x] = std::max(0, later[x] - oc[x]); }
+                }
+            }
             for (int x : ord)
             {
                 if (((keep >> x) & 1) == 0) { continue; }
-                int spare = std::max(0, *res[x] - later[x]);
+                int spare = std::max(0, *res[x] - spare_owed[x]);
                 while (cost.generic > 0 && spare > 0) { --cost.generic; --*res[x]; --spare; }
             }
             for (int x : ord) { if (((keep >> x) & 1) != 0) { drain(cost.generic, *res[x]); } }

@@ -9587,6 +9587,39 @@ void NoteLineNoncreatureCast(const CardDefinition& def)
     if (g_line_noncreature_left > 0 && !def.card.IsCreature()) { --g_line_noncreature_left; }
 }
 
+thread_local LineSeq* g_line_seq = nullptr;   // see ManaPayment.h (LineSeqScope, MTG_LINE_SEQ_REST)
+
+static bool LineSeqIsCast(const Action& a)
+{ return a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard; }
+
+// Valid only when the hold is the line's casts alone (LineCastCostTotal also holds a paid suspend, a named tutor-put
+// activation and a blink activation's pips, which no cast site steps past), and with the lever on.
+LineSeqScope::LineSeqScope(const std::vector<Action>& acts) : m_prev(g_line_seq)
+{
+    m_seq.acts = &acts;
+    m_seq.valid = LineSeqRestOn();
+    for (const Action& a : acts)
+    {
+        if (!m_seq.valid) { break; }
+        if ((a.kind == Action::Kind::Suspend && a.cost.ManaValue() > 0) || a.kind == Action::Kind::ActivateBlink
+            || (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacNamedTutorPut))
+        { m_seq.valid = false; }
+    }
+    g_line_seq = &m_seq;
+}
+
+void NoteLineSeqCast(const CardDefinition& def)
+{
+    LineSeq* q = g_line_seq;
+    if (q == nullptr || !q->valid) { return; }
+    const std::vector<Action>& acts = *q->acts;
+    int i = q->next;
+    while (i < static_cast<int>(acts.size()) && !LineSeqIsCast(acts[static_cast<std::size_t>(i)])) { ++i; }
+    if (i >= static_cast<int>(acts.size()) || acts[static_cast<std::size_t>(i)].card_name != def.card.m_name)
+    { q->valid = false; return; }
+    q->next = i + 1;
+}
+
 // TakeHasteFloatForCreatureSpell's condition on a bill: a {C} pip, or a non-snow generic pip.
 static bool BillTakesHasteUnit(const ManaCost& c)
 {
@@ -13835,6 +13868,194 @@ static bool LumpAwareBillPayableOpener(const GameState& board, const ManaCost& b
     return LumpAwareBillPayable(board, bill, extra);
 }
 
+// ---- MTG_LINE_SEQ_REST: the rest of the applying line, walked in order (EngineFlags.h, ManaPayment.h) -------------
+// The index in the bound sequence of the cast this payment is for, when the sequence is in step with it: the cast
+// stepped last is the spell being paid, and the casts after it owe exactly the hold's rest (LineRestAfter: the same
+// coloured pips; the same generic up to the generic the line's own same-turn reducers have taken off). -1 otherwise.
+static int LineSeqPayingIndex(const ManaCost& cost_in)
+{
+    const LineSeq* q = g_line_seq;
+    if (q == nullptr || !q->valid || q->next <= 0 || g_line_hold_has_acts || !LineSeqRestOn()) { return -1; }
+    const Card* pc = PayingSpellCard();
+    const std::vector<Action>& acts = *q->acts;
+    if (pc == nullptr || acts[static_cast<std::size_t>(q->next - 1)].card_name != pc->m_name) { return -1; }
+    int rest_pips[5];
+    const int rest_mv = LineRestAfter(cost_in, rest_pips);
+    if (rest_mv <= 0) { return -1; }
+    ManaCost sum;
+    for (std::size_t i = static_cast<std::size_t>(q->next); i < acts.size(); ++i)
+    {
+        const Action& a = acts[i];
+        if (LineSeqIsCast(a) && !a.free_cast && !a.alt_cost) { AddManaCost(sum, a.cost); }
+    }
+    const int sp[5] = { sum.white, sum.blue, sum.black, sum.red, sum.green };
+    int pips = 0;
+    for (int c = 0; c < 5; ++c) { if (sp[c] != rest_pips[c]) { return -1; } pips += sp[c]; }
+    const int sum_generic = sum.ManaValue() - pips;
+    const int hold_generic = rest_mv - pips;
+    if (sum_generic > hold_generic || hold_generic > sum_generic + g_line_reducer_credit) { return -1; }
+    return q->next - 1;
+}
+
+// Pay `bill` on `c` (left paid on success): the plain board first, then every way of cracking its untapped lumps
+// (LumpAwareBillPayable's enumeration, each lump uncracked or in a colour of `cols`). The units of `keep` floating are
+// set aside on a first attempt (the later casts' scarce colours), then not.
+static bool LineSeqPayOn(GameState& c, const ManaCost& bill, bool for_creature, const ManaPool& keep_want, int cols_mask)
+{
+    std::vector<OnDemandCrack> lands, lumps;
+    CollectOnDemandCracks(c, lands, lumps);
+    if (lumps.size() > 3) { return false; }
+    static const char* kCol[5] = { "W", "U", "B", "R", "G" };
+    std::vector<int> cols;
+    for (int x = 0; x < 5; ++x) { if ((cols_mask >> x) & 1) { cols.push_back(x); } }
+    if (cols.empty()) { cols.push_back(3); }
+    const int k = static_cast<int>(cols.size()) + 1;
+    int combos = 1;
+    for (std::size_t i = 0; i < lumps.size(); ++i) { combos *= k; }
+    GameState t;
+    for (int m = 0; m < combos; ++m)
+    {
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            t = c;
+            int r = m;
+            bool ok = true;
+            for (const OnDemandCrack& l : lumps)
+            {
+                const int pick = r % k;
+                r /= k;
+                if (pick == 0) { continue; }
+                OnDemandCrack kk = l;
+                kk.color = kCol[cols[static_cast<std::size_t>(pick - 1)]];
+                if (!ApplyOnDemandCrack(t, kk)) { ok = false; break; }
+            }
+            if (!ok) { break; }
+            ManaPool keep;
+            if (pass == 0)
+            {
+                const ManaPool& f = t.floating_mana;
+                keep.white = std::min(f.white, keep_want.white); keep.blue = std::min(f.blue, keep_want.blue);
+                keep.black = std::min(f.black, keep_want.black); keep.red = std::min(f.red, keep_want.red);
+                keep.green = std::min(f.green, keep_want.green);
+                if (keep.Total() == 0) { continue; }
+            }
+            ManaPool start = t.floating_mana;
+            start.white -= keep.white; start.blue -= keep.blue; start.black -= keep.black; start.red -= keep.red;
+            start.green -= keep.green;
+            t.floating_mana = start;
+            if (!PaymentManaCovers(t, for_creature, bill.ManaValue() - static_cast<int>(start.Total()))) { continue; }
+            ManaPool left;
+            if (!TapForCostBacktrack(t, bill, for_creature, start, nullptr, nullptr, &left)) { continue; }
+            t.floating_mana = left;
+            t.floating_mana.AddPool(keep);
+            c = t;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Is the rest of the line -- the casts after acts[at], the cast this payment is for -- payable IN ORDER on `board`, the
+// board this payment leaves (acts[at] not yet resolved)? A WITNESS walk: acts[at] resolves (its ritual float; an Apex
+// of Power cast from hand adds its ten in the plan's chosen colour; an artifact enters), then each later cast is paid at
+// its live cost (EffectiveSpellCost on the walk's board: a Ruby Medallion cast earlier in the line reduces it) and
+// resolves the same way. A payment keeps floating, where it can, the units of the colours the casts after it owe and
+// none of them makes. True only by exhibiting such a sequence; anything the walk does not model (an alternative or
+// kicked cast, an unknown card) ends it with false. Scratch only, quiet; it binds an empty hold of its own, so its
+// payments read no line and no sequence.
+static bool LineSeqRestPays(const GameState& board, int at)
+{
+    const LineSeq* q = g_line_seq;
+    if (q == nullptr) { return false; }
+    const std::vector<Action>& acts = *q->acts;
+    const RevealLogPause quiet;
+    LineUnpaidCostScope _luc(ManaCost{});
+    const std::unique_ptr<GameState> c = std::make_unique<GameState>(board);
+    const int active = c->active_player_index;
+    // Non-staged hand copies by name, for an impulse-float cast's "if cast from hand" (the paying card excluded).
+    const Card* pc = PayingSpellCard();
+    auto from_hand = [&](const InternedName& n) -> bool
+    {
+        for (Card& h : c->players[active].hand)
+        {
+            if (h.m_name != n || h.m_is_staged || (pc != nullptr && h.m_number == pc->m_number)) { continue; }
+            h.m_is_staged = true;   // consumed (scratch board)
+            return true;
+        }
+        return false;
+    };
+    auto resolve = [&](const Action& a, const CardDefinition& d, bool hand_cast) -> void
+    {
+        if (IsManaRitual(d) && !d.params.untap_x_mana_sources) { ApplyRitualFloat(*c, d, a.chosen_x, a.splice_count + 1); }
+        if (d.params.impulse_float_amount > 0 && hand_cast && !a.chosen_float_color.str().empty())
+        { AddChosenColorFloat(*c, a.chosen_float_color.str(), d.params.impulse_float_amount); }
+        if (d.card.HasType(CardType::Artifact) && !d.card.IsCreature())
+        {
+            Permanent perm;
+            perm.card = d.card;
+            perm.card.m_number = 100000 + static_cast<int>(&a - acts.data());
+            perm.controller_index = active;
+            perm.owner_index = active;
+            perm.tapped = d.params.enters_tapped;
+            c->battlefield.push_back(perm);
+        }
+    };
+    auto def_of = [](const Action& a) -> const CardDefinition*
+    { return a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name.str()); };
+    auto simple = [](const Action& a) -> bool
+    {
+        return !a.alt_cost && !a.kicked && !a.evoke && !a.emerge && !a.awaken && a.face_down == 0
+            && a.soulfire_own_targets == 0 && !a.bestow;
+    };
+    {
+        const Action& a0 = acts[static_cast<std::size_t>(at)];
+        const CardDefinition* d0 = def_of(a0);
+        if (d0 == nullptr || !simple(a0)) { return false; }
+        resolve(a0, *d0, a0.kind == Action::Kind::CastFromHand && pc != nullptr && !pc->m_is_staged);
+    }
+    for (std::size_t i = static_cast<std::size_t>(at) + 1; i < acts.size(); ++i)
+    {
+        const Action& a = acts[i];
+        if (!LineSeqIsCast(a)) { continue; }
+        const CardDefinition* d = def_of(a);
+        if (d == nullptr || !simple(a)) { return false; }
+        const bool hand_cast = a.kind == Action::Kind::CastFromHand && from_hand(a.card_name);
+        if (!a.free_cast)
+        {
+            const ManaCost ec = EffectiveSpellCost(*d, *c, a.splice_count + 1);
+            // What the casts after this one owe, and which of those colours none of them makes.
+            int owed[5] = { 0, 0, 0, 0, 0 };
+            int made = 0;
+            for (std::size_t j = i + 1; j < acts.size(); ++j)
+            {
+                const Action& b = acts[j];
+                if (!LineSeqIsCast(b)) { continue; }
+                const ManaCost& bc = b.cost;
+                owed[0] += bc.white; owed[1] += bc.blue; owed[2] += bc.black; owed[3] += bc.red; owed[4] += bc.green;
+                const CardDefinition* bd = def_of(b);
+                if (bd == nullptr) { continue; }
+                ManaPool mk;
+                if (bd->params.ritual_floating_mana > 0) { AddColorToPool(mk, bd->params.ritual_float_color, 1); }
+                if (bd->params.impulse_float_amount > 0) { AddColorToPool(mk, b.chosen_float_color.str(), 1); }
+                const int mc[5] = { mk.white, mk.blue, mk.black, mk.red, mk.green };
+                for (int x = 0; x < 5; ++x) { if (mc[x] > 0) { made |= 1 << x; } }
+            }
+            ManaPool keep;
+            int cols = 0;
+            const int pip[5] = { ec.white, ec.blue, ec.black, ec.red, ec.green };
+            int* kp[5] = { &keep.white, &keep.blue, &keep.black, &keep.red, &keep.green };
+            for (int x = 0; x < 5; ++x)
+            {
+                if (pip[x] > 0 || owed[x] > 0) { cols |= 1 << x; }
+                if (owed[x] > 0 && !((made >> x) & 1)) { *kp[x] = owed[x]; }
+            }
+            if (ec.ManaValue() > 0 && !LineSeqPayOn(*c, ec, d->card.IsCreature(), keep, cols)) { return false; }
+        }
+        resolve(a, *d, hand_cast);
+    }
+    return true;
+}
+
 static thread_local int t_pilgrimage_pay_depth = 0;
 
 // MTG_UNSEEN_KEEP_SCARCE (reader: SpendFloatingTowardCost, SpellEffects.h). A colour qualifies when it floats, the
@@ -13956,9 +14177,97 @@ static void SwapLeftoverForLine(GameState& state, const ManaCost& cost_in, const
 }
 
 // CAVERN-CLASS FLOAT: CcoFloatScope (SpellEffects.h, beside CcoFloatWild) -- every float spend outside the bill.
+// THE OWED FLOAT KEEP (MTG_LINE_SEQ_REST, EngineFlags.h). An outermost autonomous payment for a cast of a bound line
+// sequence, while units of a colour x float that the rest of the line owes and none of its casts makes (Lotus Bloom's
+// {B} for a Dragonlord Kolaghan): the plain payment is tried on a copy, and when it STRANDS the rest -- neither the
+// summed judge (LumpAwareBillPayable, the paying ritual's float credited) nor the ordered walk (LineSeqRestPays) pays
+// it -- the bill is paid again with those units set aside (CR 601.2h: the player chooses which mana pays), so another
+// source or another floating colour pays the generic and x floats on. That payment replaces the plain one only when it
+// pays the bill and the walk pays the rest after it, so it never replaces a payment that keeps the named line by one
+// that does not. Dragonstorm s30152803 T4 {Mountain, Ruby Medallion, Seething Song x2, Dragonlord Kolaghan, Irencrag
+// Feat, Dragonstorm}: Ruby's {2} cracked the Bloom for {B} and floated one; the first Song's {1}{R} spent it on the {1}
+// with a Mountain untapped (the float rung reads the Mountain as non-spare: the rest owes red, and only the paying
+// ritual's five are netted, not the next Song's five or Irencrag's seven), and Kolaghan's {B} had no source.
+// Returns -1 (not taken: the caller pays as before), else the kept payment's result.
+static thread_local bool t_keep_owed_float_busy = false;
+static int KeepOwedFloatPay(GameState& state, const ManaCost& cost_in, bool for_creature, ManaPool* available,
+                            bool honor_legacy_cco)
+{
+    if (cost_in.generic <= 0 || state.floating_mana.Total() == 0) { return -1; }
+    const int at = LineSeqPayingIndex(cost_in);
+    if (at < 0) { return -1; }
+    int rest_pips[5];
+    const int rest_mv = LineRestAfter(cost_in, rest_pips);
+    // The colours the rest owes that none of its casts makes, and the floating units of each beyond this bill's pips.
+    const std::vector<Action>& acts = *g_line_seq->acts;
+    int made = 0;
+    for (std::size_t j = static_cast<std::size_t>(at) + 1; j < acts.size(); ++j)
+    {
+        const Action& b = acts[j];
+        if (!LineSeqIsCast(b)) { continue; }
+        const CardDefinition* bd = b.def != nullptr ? b.def : CardDatabase::Instance().Lookup(b.card_name.str());
+        if (bd == nullptr) { return -1; }
+        ManaPool mk;
+        if (bd->params.ritual_floating_mana > 0) { AddColorToPool(mk, bd->params.ritual_float_color, 1); }
+        if (bd->params.impulse_float_amount > 0) { AddColorToPool(mk, b.chosen_float_color.str(), 1); }
+        const int mc[5] = { mk.white, mk.blue, mk.black, mk.red, mk.green };
+        for (int x = 0; x < 5; ++x) { if (mc[x] > 0) { made |= 1 << x; } }
+    }
+    const ManaPool& f = state.floating_mana;
+    const int fl[5] = { f.white, f.blue, f.black, f.red, f.green };
+    const int pip[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+    ManaPool keep;
+    int* kp[5] = { &keep.white, &keep.blue, &keep.black, &keep.red, &keep.green };
+    for (int x = 0; x < 5; ++x)
+    {
+        if (rest_pips[x] <= 0 || ((made >> x) & 1)) { continue; }
+        *kp[x] = std::min(rest_pips[x], std::max(0, fl[x] - pip[x]));
+    }
+    if (keep.Total() == 0) { return -1; }
+    ManaCost bill;
+    bill.white = rest_pips[0]; bill.blue = rest_pips[1]; bill.black = rest_pips[2];
+    bill.red = rest_pips[3]; bill.green = rest_pips[4];
+    bill.generic = std::max(0, rest_mv - (rest_pips[0] + rest_pips[1] + rest_pips[2] + rest_pips[3] + rest_pips[4]));
+    const ManaPool ritual = LineKeepRockFor(state).ritual;
+    auto pay = [&](GameState& b, ManaPool* av, const ManaPool* k) -> bool
+    {
+        t_keep_owed_float_busy = true;
+        ManaPool& fm = b.floating_mana;
+        if (k != nullptr)
+        {
+            fm.white -= k->white; fm.blue -= k->blue; fm.black -= k->black; fm.red -= k->red; fm.green -= k->green;
+        }
+        const bool ok = TapForCostShared(b, cost_in, for_creature, av, honor_legacy_cco);
+        if (k != nullptr) { b.floating_mana.AddPool(*k); }
+        t_keep_owed_float_busy = false;
+        return ok;
+    };
+    const std::unique_ptr<GameState> trial = std::make_unique<GameState>();
+    ManaPool trial_avail;
+    {
+        const RevealLogPause quiet;
+        *trial = state;
+        if (available != nullptr) { trial_avail = *available; }
+        if (!pay(*trial, available != nullptr ? &trial_avail : nullptr, nullptr)) { return -1; }
+        if (LumpAwareBillPayableOpener(*trial, bill, ritual) || LineSeqRestPays(*trial, at)) { return -1; }
+        *trial = state;
+        if (available != nullptr) { trial_avail = *available; }
+        if (!pay(*trial, available != nullptr ? &trial_avail : nullptr, &keep)) { return -1; }
+        if (!LineSeqRestPays(*trial, at)) { return -1; }
+    }
+    return pay(state, available, &keep) ? 1 : 0;
+}
+
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
 {
+    if (!t_keep_owed_float_busy && t_pilgrimage_pay_depth == 0 && g_line_seq != nullptr && t_pay_nest == 0
+        && !t_pay_refining && !manaoracle::t_float_only
+        && !(manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target) && !HumanPlayActive())
+    {
+        const int r = KeepOwedFloatPay(state, cost_in, for_creature, available, honor_legacy_cco);
+        if (r >= 0) { return r != 0; }
+    }
     CcoFloatScope _cco_float(state, for_creature);
     // Record the committed mana-ability taps only after the full payment has
     // succeeded. The payer tries and rolls back alternate allocations; creating
@@ -14314,7 +14623,11 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         bill.red = rest_pips[3]; bill.green = rest_pips[4];
         bill.generic = std::max(0, rest_mv - (rest_pips[0] + rest_pips[1] + rest_pips[2] + rest_pips[3] + rest_pips[4]));
         const ManaPool ritual = LineKeepRockFor(state).ritual;
-        if (LumpAwareBillPayableOpener(*scratch, bill, ritual)) { return false; }
+        // MTG_LINE_SEQ_REST: ...or walked in order (LineSeqRestPays, a witness), crediting the rest's own casts.
+        const int seq_at = LineSeqPayingIndex(cost_in);
+        auto rest_ok = [&](const GameState& b) -> bool
+        { return LumpAwareBillPayableOpener(b, bill, ritual) || (seq_at >= 0 && LineSeqRestPays(b, seq_at)); };
+        if (rest_ok(*scratch)) { return false; }
         const ManaPool& f0 = state.floating_mana;
         const int had[5] = { f0.white, f0.blue, f0.black, f0.red, f0.green };
         const std::unique_ptr<GameState> kept = std::make_unique<GameState>();
@@ -14333,7 +14646,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
             ManaPool kept_avail;
             if (!OnDemandTrial(state, r2, true, cost_in, for_creature, available, kept_avail, honor_legacy_cco, *kept, &keep)
                 || (held_strands && strands(*kept))) { continue; }
-            if (!LumpAwareBillPayableOpener(*kept, bill, ritual)) { continue; }
+            if (!rest_ok(*kept)) { continue; }
             return OnDemandPayWith(state, r2, true, cost_in, for_creature, available, honor_legacy_cco, &keep);
         }
         return false;

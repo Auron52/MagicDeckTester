@@ -12,6 +12,11 @@
 //                                      earlier noncreature cast of the line was paid (the line's total never counts down).
 //   MTG_ONDEMAND_LUMP_KEEP_OWED     -- a Bloom crack that paid a bill spent all its {B} on the generic, though another
 //                                      untapped source could pay that part and let the {B} the line owes float on.
+//   MTG_LINE_SEQ_REST               -- the payer judged the rest of the line as one summed bill, crediting none of the
+//                                      rest's own rituals; with the line's casts walked in order, a floating {B} the rest
+//                                      owes and does not make is kept when the plain payment strands the rest.
+//   MTG_UNSEEN_SCARCE_RITUAL_NET    -- the unseen-keep-scarce drain counted the later red the paying ritual itself
+//                                      makes as owed by the float, so a generic unit came off the {B}.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -161,6 +166,41 @@ bool PayLineDlk(GameState& s, const std::vector<Action>& line, std::size_t paid 
         SubManaCost(g_line_unpaid_cost, cost);
         if (d.params.ritual_floating_mana > 0) { s.floating_mana.red += d.params.ritual_floating_mana; }
         if (d.params.impulse_float_amount > 0) { s.floating_mana.red += d.params.impulse_float_amount; }   // Apex: red
+    }
+    return true;
+}
+// Pay `line` in order under the seeds the apply worlds bind, the line's casts in order included (MTG_LINE_SEQ_REST:
+// LineSeqScope, stepped at each cast by NoteLineSeqCast before its payment). The first `paid` casts were paid before
+// this board (the hold is reduced and the sequence stepped). True when every other cast is paid.
+bool PayLineSeqDlk(GameState& s, const std::vector<Action>& line, std::size_t paid, const GameState& seed)
+{
+    LineUnpaidCostScope luc(LineCastCostTotal(line));
+    const int credit = LineReducerCredit(seed, line);
+    const int bound = LineKeepBound(line);
+    LineReducerCreditScope lrc(credit, (credit > 0 || bound) ? LineNoncreatureMv(line) : 0, bound);
+    LineNoncreatureLeftScope lnl(LineNoncreatureLeftCount(line));
+    LineSeqScope lsq(line);
+    int num = 40;
+    for (std::size_t i = 0; i < paid; ++i)
+    {
+        const CardDefinition& d = DefDlk(line[i].card_name.str());
+        NoteLineNoncreatureCast(d);
+        NoteLineSeqCast(d);
+        SubManaCost(g_line_unpaid_cost, EffectiveSpellCost(d, seed));
+    }
+    for (std::size_t i = paid; i < line.size(); ++i)
+    {
+        const CardDefinition& d = DefDlk(line[i].card_name.str());
+        const Card c = CardDlk(line[i].card_name.str(), num++);
+        const ManaCost cost = EffectiveSpellCost(d, s);
+        NoteLineNoncreatureCast(d);
+        NoteLineSeqCast(d);
+        {
+            SpellSubtypePayScope pay(&c);
+            if (!TapForCostDirect(s, cost, /*for_creature=*/d.card.IsCreature())) { return false; }
+        }
+        SubManaCost(g_line_unpaid_cost, cost);
+        if (d.params.ritual_floating_mana > 0) { s.floating_mana.red += d.params.ritual_floating_mana; }
     }
     return true;
 }
@@ -428,5 +468,68 @@ TEST_CASE("Dragonstorm line keep: s30120119 T6 -- Apex taps the Mountain and the
         ArmDlk as(heurarm::ONDEMAND_LUMP_KEEP_OWED, on);
         GameState s = s0;
         CHECK(PayLineDlk(s, line) == on);
+    }
+}
+
+// Dragonstorm s30152803 gi152803 T4 m1 {Mountain, Ruby Medallion, Seething Song, Seething Song, Dragonlord Kolaghan,
+// Irencrag Feat, Dragonstorm}: Ruby's {2} cracked Lotus Bloom for {B} and one {B} floats beside two untapped Mountains.
+// The first Song's {1}{R} spent the {B} on the {1} (the float rung reads the second Mountain as non-spare: the rest owes
+// red beyond Song's own five) and Kolaghan's {B} had no source. MTG_LINE_SEQ_REST's owed float keep: the plain payment
+// strands the rest walked in order, so the {B} is set aside and both Mountains pay; the walk (Song, Kolaghan, Irencrag's
+// seven, Dragonstorm, every red cast reduced by the Ruby) pays the rest. (Traced in game: MTG_DS2_PAYDBG.)
+TEST_CASE("Dragonstorm line keep: s30152803 T4 -- the first Song taps both Mountains and the Bloom's {B} floats to Kolaghan")
+{
+    GameState s0 = BaseDlk(4);
+    PutDlk(s0, "Mountain", 33);
+    PutDlk(s0, "Mountain", 27);
+    PutDlk(s0, "Ruby Medallion", 43);
+    s0.floating_mana.black = 1;
+    for (const char* h : { "Seething Song", "Seething Song", "Dragonlord Kolaghan", "Irencrag Feat", "Dragonstorm" })
+    { s0.players[0].hand.push_back(CardDlk(h, 60 + static_cast<int>(s0.players[0].hand.size()))); }
+    GameState pre = BaseDlk(4);   // the board the line was enumerated on (no Ruby yet)
+    const std::vector<Action> line = { CastDlk(pre, "Ruby Medallion"), CastDlk(pre, "Seething Song"),
+                                       CastDlk(pre, "Seething Song"), CastDlk(pre, "Dragonlord Kolaghan"),
+                                       CastDlk(pre, "Irencrag Feat"), CastDlk(pre, "Dragonstorm") };
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmDlk as(heurarm::LINE_SEQ_REST, on);
+        GameState s = s0;
+        CHECK(PayLineSeqDlk(s, line, 1, pre) == on);
+    }
+}
+
+// Dragonstorm s30093026 gi93026 T4, two Apexes before Dragonlord Kolaghan: the continuation's Seething Song {2}{R} over
+// {B} + fourteen {R} (no untapped source left, so the unseen-keep-scarce drain keeps both colours) owes more later red
+// than the float holds after its own pip; red's spare read zero, and both generic came off the keep colours in hand
+// order (the hand wants more red than floats), the {B} first. (Board reduced from the game's: B1 R14, later red 12.) Song's own five red pay those later pips: MTG_UNSEEN_SCARCE_RITUAL_NET
+// nets them, red pays both generic, and the {B} floats on for Kolaghan.
+TEST_CASE("Dragonstorm line keep: s30093026 T4 -- Song's own red nets the later red, the scarce drain keeps the {B}")
+{
+    GameState s0 = BaseDlk(4);
+    PutDlk(s0, "Mountain", 28).tapped = true;
+    PutDlk(s0, "Mercadian Bazaar", 24).tapped = true;
+    s0.floating_mana.black = 1;
+    s0.floating_mana.red = 14;
+    for (const char* h : { "Seething Song", "Scourge of Valkas", "Dragonlord Kolaghan", "Irencrag Feat", "Apex of Power",
+                           "Apex of Power", "Dragonstorm" })
+    { s0.players[0].hand.push_back(CardDlk(h, 60 + static_cast<int>(s0.players[0].hand.size()))); }
+    const std::vector<Action> line = { CastDlk(s0, "Seething Song"), CastDlk(s0, "Scourge of Valkas"),
+                                       CastDlk(s0, "Dragonlord Kolaghan"), CastDlk(s0, "Irencrag Feat"),
+                                       CastDlk(s0, "Apex of Power"), CastDlk(s0, "Apex of Power"),
+                                       CastDlk(s0, "Dragonstorm") };
+    LineOpensUnseenScope unseen(true);   // the continuation follows an Apex (a breakpoint opener)
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmDlk as(heurarm::UNSEEN_SCARCE_RITUAL_NET, on);
+        GameState s = s0;
+        LineUnpaidCostScope luc(LineCastCostTotal(line));
+        const Card c = CardDlk("Seething Song", 40);
+        {
+            SpellSubtypePayScope pay(&c);
+            REQUIRE(TapForCostDirect(s, line[0].cost, /*for_creature=*/false));
+        }
+        CHECK(s.floating_mana.black == (on ? 1 : 0));
     }
 }
