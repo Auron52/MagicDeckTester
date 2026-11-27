@@ -509,6 +509,22 @@ inline bool UnseenKeepScarceOn()
     return heurarm::Flag(heurarm::UNSEEN_KEEP_SCARCE, env_on);
 }
 
+// MTG_UNSEEN_SCARCE_RITUAL_NET (DEFAULT ON; =0 restores the unseen-scarce drain's spare test byte for byte) -- the
+// unseen-keep-scarce drain (SpendFloatingTowardCost) keeps each scarce colour's units up to what the named line still
+// owes of it and spends the rest of the generic off the scarce colours in hand order. When EVERY floating colour is
+// scarce (no untapped source makes red either) and the payment is for a RITUAL, the line's later red pips are partly the
+// ritual's own: it resolves before them. Counting them as owed by the float made red's spare too small, so the generic's
+// last units came off the keep colours in hand order, black first. With the lever the later pips are netted by the
+// ritual's output (LINE_FLOAT_RITUAL_NET's argument, the float rung's twin): a unit beyond what the rest needs from the
+// float AFTER the ritual resolves pays the generic first. A reorder of floating units only (the same total is spent).
+// Dragonstorm s30093026 T4, two Apexes before Dragonlord Kolaghan: the continuation's Seething Song {2}{R} over B1 R14
+// (later B1 R12, Bazaar and Mountain tapped) spent the {B} on its second generic; Song's five red cover the later red.
+inline bool UnseenScarceRitualNetOn()
+{
+    static const bool env_on = EnvOn("MTG_UNSEEN_SCARCE_RITUAL_NET", true);
+    return heurarm::Flag(heurarm::UNSEEN_SCARCE_RITUAL_NET, env_on);
+}
+
 // MTG_LINE_FLOAT_COVERED (DEFAULT ON since 2026-10-28; =0 -> the rung's colour test always applies) -- the
 // LINE_FLOAT_TAP_FIRST rung's colour test refuses a source that makes a colour the line still owes, because a
 // later pip may need it for that colour. When the reserve left after this payment's own pips already covers
@@ -775,6 +791,28 @@ inline bool OnDemandLumpKeepOwedOn()
 {
     static const bool env_on = EnvOn("MTG_ONDEMAND_LUMP_KEEP_OWED", true);
     return heurarm::Flag(heurarm::ONDEMAND_LUMP_KEEP_OWED, env_on);
+}
+
+// MTG_LINE_SEQ_REST (DEFAULT ON; =0 restores the summed-hold judgements alone byte for byte) -- the rest of the applying
+// line judged IN ORDER. The line hold (g_line_unpaid_cost) is one summed bill, so every payer test of "is the rest still
+// payable after this payment" credits none of the mana the rest's own casts add: a second Apex of Power's ten, which pays
+// the Dragonlord Kolaghan after it, or a later Seething Song's five. With the lever both apply worlds bind the plan's
+// casts in order (LineSeqScope) and step them at the cast site (NoteLineSeqCast), and LineSeqRestPays walks the rest:
+// each cast paid at its live cost on the board the casts before it leave, then its output added (a ritual's float, an
+// Apex's ten in the plan's chosen colour, an artifact put onto the battlefield). The walk is a WITNESS: it says "payable"
+// only by exhibiting a legal sequence of payments, so a payment it lets the payer choose never strands a line the
+// summed judge kept. Two readers:
+//  * MTG_ONDEMAND_LUMP_KEEP_OWED's judge: the plain crack strands when neither the summed judge nor the walk pays the
+//    rest, and the kept payment is taken when either does. Dragonstorm s30133545 T5 {Desperate Ritual x2, Apex of Power
+//    x2, Dragonlord Kolaghan, Scourge of Valkas}: see ManaPayment.cpp (keep_owed).
+//  * The owed float keep (KeepOwedFloatPay, ManaPayment.cpp): a floating unit of a colour the rest owes and none of its
+//    casts makes is set aside for a payment the plain drain would spend it on, when the plain payment strands the rest
+//    and the kept one does not (CR 601.2h: the player chooses which mana pays). Dragonstorm s30152803 T4.
+// A payment choice in the shared payer (executor and rollout together), at every budget.
+inline bool LineSeqRestOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_SEQ_REST", true);
+    return heurarm::Flag(heurarm::LINE_SEQ_REST, env_on);
 }
 
 // MTG_ONDEMAND_VISIBLE_LUMP_EXACT (DEFAULT ON; =0 restores the colour comparison alone byte for byte) -- Dragonstorm's

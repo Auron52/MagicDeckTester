@@ -1047,22 +1047,51 @@ constexpr int kLineKeepFull = 1;
 constexpr int kLineKeepCrit = 2;
 extern thread_local int g_line_keep_bound;
 
+// THE LINE'S CASTS, IN ORDER (MTG_LINE_SEQ_REST, EngineFlags.h). The hold above is one summed bill, so a payer that
+// asks "is the rest of the line still payable after this payment?" can credit neither the mana the rest's own rituals
+// add nor the order they add it in: a second Apex of Power's ten pays the Kolaghan after it, and a Seething Song's five
+// pay the next Song. Both apply worlds bind the plan's action list here beside the hold (LineSeqScope, ApplyPlanDirect
+// and AIEngine::TakeTurn), and each cast site steps the cursor past the cast it is about to pay (NoteLineSeqCast, beside
+// NoteLineNoncreatureCast). A cast that is not the line's next one (a reordered realisation, a cast the list does not
+// hold) makes the sequence invalid for the rest of the apply; every LineUnpaidCostScope binds none, so a walk or nested
+// apply that binds its own hold never reads an outer line's casts. Read by LineSeqRestPays (ManaPayment.cpp) only.
+struct LineSeq
+{
+    const std::vector<Action>* acts = nullptr;
+    int  next  = 0;       // index in *acts just past the cast being paid (0: no cast stepped yet)
+    bool valid = false;
+};
+extern thread_local LineSeq* g_line_seq;
+// A cast site's step: `def` is being cast now (before its payment).
+void NoteLineSeqCast(const CardDefinition& def);
+class LineSeqScope
+{
+public:
+    explicit LineSeqScope(const std::vector<Action>& acts);
+    ~LineSeqScope() { g_line_seq = m_prev; }
+    LineSeqScope(const LineSeqScope&)            = delete;
+    LineSeqScope& operator=(const LineSeqScope&) = delete;
+private:
+    LineSeq  m_seq;
+    LineSeq* m_prev;
+};
+
 class LineUnpaidCostScope
 {
 public:
     explicit LineUnpaidCostScope(const ManaCost& c)
         : m_prev(g_line_unpaid_cost), m_prev_acts(g_line_hold_has_acts),
           m_prev_credit(g_line_reducer_credit), m_prev_nc(g_line_noncreature_mv), m_prev_bound(g_line_keep_bound),
-          m_prev_nc_left(g_line_noncreature_left)
+          m_prev_nc_left(g_line_noncreature_left), m_prev_seq(g_line_seq)
     {
         g_line_unpaid_cost = c; g_line_hold_has_acts = false; g_line_reducer_credit = 0; g_line_noncreature_mv = 0;
-        g_line_keep_bound = 0; g_line_noncreature_left = -1;
+        g_line_keep_bound = 0; g_line_noncreature_left = -1; g_line_seq = nullptr;
     }
     ~LineUnpaidCostScope()
     {
         g_line_unpaid_cost = m_prev; g_line_hold_has_acts = m_prev_acts;
         g_line_reducer_credit = m_prev_credit; g_line_noncreature_mv = m_prev_nc; g_line_keep_bound = m_prev_bound;
-        g_line_noncreature_left = m_prev_nc_left;
+        g_line_noncreature_left = m_prev_nc_left; g_line_seq = m_prev_seq;
     }
     LineUnpaidCostScope(const LineUnpaidCostScope&)            = delete;
     LineUnpaidCostScope& operator=(const LineUnpaidCostScope&) = delete;
@@ -1073,6 +1102,7 @@ private:
     int      m_prev_nc;
     int      m_prev_bound;
     int      m_prev_nc_left;
+    LineSeq* m_prev_seq;
 };
 
 // THE SCARCE HOLD OUTRANKS A LAND AURA'S HOST HOLD (MTG_SCARCE_COLOR_MASK). Both per-cast host holds (the rollout's
