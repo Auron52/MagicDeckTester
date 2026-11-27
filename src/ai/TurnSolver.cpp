@@ -64682,8 +64682,31 @@ struct Dumper
 };
 inline Dumper g_dumper;
 }
+static bool LethalCutKillIsReal(const GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
+                                bool land_played, int pending_atk, const char* site);
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
 {
+    // DIAG (TEMPORARY, 2026-11-27 lordcast gi663; print-only, default 0 = off): MTG_LORDCAST_SOLVE_DIAG_TURN=<turn>
+    // prints every pre-combat Solve (the playout / horizon policy) on that turn: the board's own hand size, the plan
+    // it returns, its projected wins flag and the applied plan + combat verdict.
+    {
+        static const int s_sd = EnvInt("MTG_LORDCAST_SOLVE_DIAG_TURN", 0);
+        static thread_local bool t_in = false;
+        if (s_sd > 0 && !t_in && state.turn_number == s_sd && is_pre_combat)
+        {
+            t_in = true;
+            Plan p = Solve(state, is_pre_combat, permit);
+            std::string sum, hand;
+            for (const Action& a : p.actions) { sum += a.card_name.str() + ","; }
+            for (const Card& c : state.ActivePlayer().hand) { hand += c.m_name.str() + ","; }
+            const bool real = LethalCutKillIsReal(state, p, is_pre_combat, /*land_played=*/false, 0, "solvediag");
+            std::fprintf(stderr, "[solvediag] T%d opp=%d wins=%d real=%d land=%s p=%s hand=[%s]\n", state.turn_number,
+                         state.Opponent().life, p.wins_this_turn ? 1 : 0, real ? 1 : 0, p.land_to_play.c_str(),
+                         sum.c_str(), hand.c_str());
+            t_in = false;
+            return p;
+        }
+    }
     routetape::Suspend _rts;   // a solve inside a route link's apply is not the link's own resolution
     // THE TRIPWIRE ran when the caller built `permit` (GreedyPermit's constructor checks both the
     // claimed depth and the innermost search frame -- see greedywindow in TurnSolver.h). There is
@@ -134492,6 +134515,35 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // winner is taken only when the applied plan + combat really kills; a refused one falls through.
     static const bool s_lc_verify_env = EnvOn("MTG_LORDCAST_VERIFY", false);
     const bool lc_verify = heurarm::Flag(heurarm::LORDCAST_VERIFY_TMP, s_lc_verify_env);
+    // DIAG (TEMPORARY, 2026-11-27 lordcast gi663; print-only, default 0 = off): MTG_LORDCAST_DIAG_TURN=<turn> lists,
+    // at every pre-combat SolveWithLookahead node on that turn, the projected winners and every candidate casting
+    // MTG_LORDCAST_DIAG_CARD (default "Joraga Warcaller"), with the applied plan + combat verdict.
+    {
+        static const int s_lcd = EnvInt("MTG_LORDCAST_DIAG_TURN", 0);
+        if (s_lcd > 0 && state.turn_number == s_lcd && is_pre_combat)
+        {
+            static const std::string s_lcd_card = []{ const char* e = std::getenv("MTG_LORDCAST_DIAG_CARD");
+                                                      return std::string(e && *e ? e : "Joraga Warcaller"); }();
+            int nwin = 0;
+            for (const Plan& p : candidates) { if (p.wins_this_turn) { ++nwin; } }
+            std::fprintf(stderr, "[lcdiag] T%d d%d opp=%d ncand=%zu nwin=%d\n", state.turn_number, depth,
+                         state.Opponent().life, candidates.size(), nwin);
+            for (const Plan& p : candidates)
+            {
+                bool has = false;
+                std::string sum;
+                for (const Action& a : p.actions)
+                {
+                    sum += a.card_name.str() + ",";
+                    if (a.card_name.str().find(s_lcd_card) != std::string::npos) { has = true; }
+                }
+                if (!has && !p.wins_this_turn) { continue; }
+                const bool real = LethalCutKillIsReal(state, p, is_pre_combat, /*land_played=*/false, 0, "lcdiag");
+                std::fprintf(stderr, "[lcdiag]   wins=%d real=%d v=%d land=%s p=%s\n", p.wins_this_turn ? 1 : 0,
+                             real ? 1 : 0, static_cast<int>(p.value), p.land_to_play.c_str(), sum.c_str());
+            }
+        }
+    }
     for (const Plan& p : candidates)
     {
         if (!p.wins_this_turn) { continue; }
