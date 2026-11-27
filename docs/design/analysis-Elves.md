@@ -690,3 +690,9 @@ then Maze's End K=20 mullgen from .claude/worktrees/maze-gen2.
     modes are deleted in wip/elves-r2). Brigade split exception -> "Okay, that makes sense to me." (admit a second
     scaled sink when a scaled source grown by the first sink's bodies pays for it; to implement after the tap-order
     round, same function ElvesScalingAdmit).
+15. Mulligan-gen OOM, round 2 (wip/elves-mem2 6ab2cfe77, play-neutral: lazy Visionary pay-draw fan + lazy-aware end
+    filter): Wave rollout peak 8.88 -> 3.80 GB, 28/28 win turns identical, verifier 0 mismatches; units/smoke pending.
+    Root cause of the size: T7 boards with Priests/Archdruids tapping ~20 each make the hold-back band span Wave X
+    1..94, x activation subsets = 210K base plans. Proposed SOUND fold (default ON, told to the USER): admit only
+    counts top - (subset-sum of held attack-capable dorks' yields); any other count keeps the same attackers untapped
+    while putting less into a monotone sink. Agent on wip/elves-mem2 builds + measures it (memory, A/B, d8 b0).
