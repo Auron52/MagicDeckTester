@@ -321,3 +321,8 @@ when this validates. Melira Pod's paused value leaf stays paused until then (sta
   - The lazy fix 6ab2cfe77 is validated, but the worst Wave rollout still peaks at 3.8 GB. The fold was lossy and parked.
   - The mem4 agent (wip/elves-mem4) has a massif breakdown and a dominated-X cap (X* = max(library, max MV)) in validation.
   - The box was underused (load 7, 15 GB free), so the coordinator launched the lordcast round-3 A/B on heavy.lock (~20 min; DONE marker build/scratch/elves-lordcast/DONE3).
+- 2026-11-27 18:05 UTC (Elves mullgen restart, session e3bd4e46): the run started 17:00 and was ABORTED at 18:04 by the engine's MTG_RSS_CAP_GB=20 (rss 20.10G); the journal is safe (~428K records, .bak1/.bak2 rotated).
+  - Phase: sub-refine wave 1.
+  - Suspect: one rollout 114 s in flight, size5 draw r=5 seed=13064056893581132306 (Genesis Wave, Taunting Elf, Priest, Marwyn, Forest). All other in-flight rollouts were short.
+  - Earlier slow rollouts reached 267 s.
+  - Replaying it alone to measure its peak (build/scratch/elves-int/replay_hog.out).
