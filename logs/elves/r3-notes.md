@@ -110,3 +110,11 @@ Round-2 held-out seeds 9610001+gi, game_index gi, 3,000 std + 3,000 2HG per arm,
   ElvesHoldBackNormalMana stays: the chosen census (diagnostic) reads it.
 - The temporary MTG_ELVES_TAP_WHOLEPLAN A/B slot (round-2 order) is deleted again. MTG_ELVES_TAP_ORDER stays (default
   OFF, the USER's decision).
+- Informational d8 b0 RESULT (finished after the handoff): none of the 4 recovers. bandtapfix at d8 b0 wins on band's
+  turn and the OLD order stays a turn faster: std 449 (T5 vs T4); 2HG 786 (T5 vs T4), 1226 (T4 vs T3), 2371 (T5 vs T4).
+  So in these games, tapping a scaled dork early for a set-up cast (keeping a fixed attacker untapped) is a genuinely
+  faster line that neither the fix nor band finds at any budget: the set-up order is a fixed heuristic, not searched.
+  It is not a bar failure (the bar is vs band). Owed if pursued: root-cause one of the four (r3_diverge.py on
+  bandtap vs bandtapfix). The candidate amendment is a board-keyed exception: a set-up cast taps a scaled dork first
+  when its yield cannot grow before the sink (no Elf cast between it and the sink), or when the attacker it saves
+  is worth more.

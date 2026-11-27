@@ -29,7 +29,8 @@ then `logs/elves/r3-notes.md` (round 3, all measurements), then `logs/elves/r2-h
    never trust `| tail`. If it was killed or failed, rerun:
    `flock /workspaces/MagicDeckTester/build/heavy.lock env MTG_BUILD_JOBS=12 ./build.sh > logs/elves/r3-build3.log 2>&1; echo EXIT=$? >> logs/elves/r3-build3.log`
    (run_in_background).
-2. **Informational d8 b0** (NOT the bar): 8 jobs, the 4 games where bandtapfix is slower than the OLD bandtap (std 449;
+2. **Informational d8 b0** (NOT the bar) -- FINISHED after the handoff: 0 of 4 recover (see r3-notes.md section 4).
+   Root-causing one of std 449 / 2HG 786, 1226, 2371 is an OPTIONAL follow-up. Originally: 8 jobs, the 4 games where bandtapfix is slower than the OLD bandtap (std 449;
    2HG 786, 1226, 2371). box_lane PID 2825391, output `build/scratch/elves-r3/ab/d8x.out` / `d8x.err`. Verdict:
    `python3 logs/elves/r3_d8_verdict.py build/scratch/elves-r3/ab/ab.out build/scratch/elves-r3/ab/d8x.out bandtapfix bandtap`
    (paths under /workspaces/MagicDeckTester/). Its jobs carry MTG_ELVES_TAP_WHOLEPLAN, which only the SNAPSHOT binary
