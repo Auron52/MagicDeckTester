@@ -75513,34 +75513,48 @@ bool ElvesScalSinkAwareOn()
 }
 
 // The hold-back offsets (count steps below the class top) a row may sit at. The band (holdall): every offset
-// 0..ceil(H/unit), H the sum of the held yields. LUMP POINTS: only the offsets that leave a whole SET S of the
-// attack-capable mana creatures untapped -- ceil(Y(S)/unit) and floor(Y(S)/unit) for every subset S (the largest
-// count leaving S untapped is one of the two, by the top's slack < unit). Any count's untapped set is a set S with
-// Y(S) <= its spare mana, so the larger lump point of that S leaves the same creatures untapped: what a dropped
-// in-between count adds is mana stranded by a lump, never a different attacker. SINK-AWARE: a Wave row frees only
-// the FLAT (one-mana) dorks.
+// 0..ceil(H/unit), H the sum of the held yields (a scaled dork's grown by the plan's Elf casts, an upper bound). LUMP
+// POINTS: only the offsets that leave a whole SET S of the attack-capable mana creatures untapped -- ceil(Y/unit)
+// and floor(Y/unit) for every value Y(S) can take (the largest count leaving S untapped is one of the two, by the
+// top's slack < unit). A scaled dork's yield is a RANGE [now, now + the plan's Elf casts]: the payer may tap it
+// before or after the plan's Elves land (the first cut of this arm took the upper bound alone and lost the Wave-
+// first growth lines: std 9791362 T4 Wave X4 then Wave X15 off the grown Priests). Any count's untapped set is a
+// set S with Y(S) <= its spare mana, so the larger lump point of that S leaves the same creatures untapped.
+// SINK-AWARE: a Wave row frees only the FLAT dorks. BOTH narrowings apply only with NO FOLLOW-UP this phase: a
+// nonland card in hand beyond the plan's casts, or a mana-costed activation on our board (Ezuri's team pump,
+// Shepherd's 5/5s, Clancaller's tutor, Wirewood Lodge's untap). With a follow-up the whole band stays: a scaled dork
+// held across the Wave taps again GROWN, and a lump's leftover FLOATS into the continuation's casts (std 9791362 T4
+// Wave X4 -> Wave X15; 2HG 9790720 T5 Wave X4 with an Archdruid's 2 floating -> Wave X5), so neither the in-between
+// counts nor the scaled hold-backs are dominated.
 std::vector<char> ElvesHoldBackOffsets(const std::vector<ElvesHoldBackSource>& src, int plan_elf_casts, bool wave_sink,
-                                       int unit, bool lump, bool sink_aware)
+                                       int unit, bool lump, bool sink_aware, bool follow_up)
 {
-    std::vector<int> ys;
+    std::vector<std::pair<int, int>> ys;   // yield range [lo, hi]
     for (const ElvesHoldBackSource& h : src)
     {
-        if (sink_aware && wave_sink && h.scaled) { continue; }
-        ys.push_back(std::max(0, h.yield + (h.scaled ? plan_elf_casts : 0)));
+        if (sink_aware && wave_sink && h.scaled && !follow_up) { continue; }   // (no follow-up)
+        const int lo = std::max(0, h.yield);
+        ys.push_back({ lo, h.scaled ? std::max(lo, h.yield + plan_elf_casts) : lo });
     }
     int H = 0;
-    for (int y : ys) { H += y; }
+    for (const auto& y : ys) { H += y.second; }
     unit = std::max(1, unit);
     const int hmax = (H + unit - 1) / unit;
+    lump = lump && !follow_up;
     std::vector<char> ok(static_cast<std::size_t>(hmax) + 1, lump ? 0 : 1);
     ok[0] = 1;
     if (!lump) { return ok; }
-    std::vector<char> sum(static_cast<std::size_t>(H) + 1, 0);   // the achievable subset sums
+    std::vector<char> sum(static_cast<std::size_t>(H) + 1, 0);   // the values a subset's yield can take
     sum[0] = 1;
-    for (int y : ys)
+    for (const auto& y : ys)
     {
-        if (y == 0) { continue; }
-        for (int v = H; v >= y; --v) { if (sum[static_cast<std::size_t>(v - y)]) { sum[static_cast<std::size_t>(v)] = 1; } }
+        if (y.second == 0) { continue; }
+        const std::vector<char> before = sum;
+        for (int v = 0; v <= H; ++v)
+        {
+            if (!before[static_cast<std::size_t>(v)]) { continue; }
+            for (int d = std::max(1, y.first); d <= y.second && v + d <= H; ++d) { sum[static_cast<std::size_t>(v + d)] = 1; }
+        }
     }
     for (int v = 0; v <= H; ++v)
     {
@@ -75557,7 +75571,7 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
     // A row holds no copy of its plan: the blanked copy ("canon") is built on demand, and only each CLASS's first
     // member keeps one. (It used to be one full Plan copy per row -- on a 240,928-plan Elves continuation list that
     // doubled the enumeration's peak, ~1.2 GB; elves-mem 2026-11-26.)
-    struct Row { std::size_t i; std::string sink; int count; int unit; int elf_casts = 0; bool wave = false; };
+    struct Row { std::size_t i; std::string sink; int count; int unit; int elf_casts = 0; bool wave = false; bool follow = false; };
     std::vector<Row> rows;
     long long n_split = 0, n_band = 0;
     struct Flush
@@ -75570,6 +75584,20 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
             c.calls.fetch_add(1); c.plans.fetch_add(static_cast<long long>(n)); c.split.fetch_add(sp); c.band.fetch_add(bd);
         }
     } flush{ plans.size(), n_split, n_band };
+    // A FOLLOW-UP this phase (both narrowings need its absence): a nonland card in hand beyond the plan's casts, or
+    // a mana-costed activation on our board (Ezuri's team pump, Shepherd's 5/5s, Clancaller's tutor, Lodge's untap).
+    int hand_nonland = 0;
+    for (const Card& c : s.players[static_cast<std::size_t>(s.active_player_index)].hand)
+    { if (!c.IsLand()) { ++hand_nonland; } }
+    bool board_follow = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && (d->params.team_pump_cost.has_value() || d->params.team_base_pt_cost.has_value()
+                             || d->params.tap_tutor_put_cost.has_value() || d->params.untap_creature_cost.has_value()))
+        { board_follow = true; break; }
+    }
     for (std::size_t i = 0; i < plans.size(); ++i)
     {
         if (!admit[i] || plans[i].actions == nullptr) { continue; }
@@ -75582,11 +75610,14 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         }
         if (scaled == 0) { continue; }                     // no scaled sink: untouched
         int elf_casts = 0;   // the plan's OTHER Elf creature casts: each grows a scaled dork's tap (an upper bound)
+        int hand_casts = 0;  // the plan's casts from hand
         for (std::size_t k = 0; k < plans[i].actions->size(); ++k)
         {
             const Action& a = (*plans[i].actions)[k];
-            if (static_cast<int>(k) == at || a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
             const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name.str());
+            ++hand_casts;
+            if (static_cast<int>(k) == at) { continue; }
             if (d != nullptr && d->card.IsCreature() && CardHasSubtype(d->card, "Elf")) { ++elf_casts; }
         }
         if (scaled >= 2) { admit[i] = 0; ++n_split; continue; }   // (1) a split across two sinks
@@ -75598,6 +75629,7 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         r.unit  = one.unit;
         r.elf_casts = elf_casts;
         r.wave      = one.wave;
+        r.follow    = board_follow || hand_nonland > hand_casts;
         rows.push_back(std::move(r));
     }
     if (rows.empty()) { return; }
@@ -75618,7 +75650,7 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
     };
     const std::vector<ElvesHoldBackSource> held = ElvesHoldBackSources(s, is_pre_combat);
     const bool lump = ElvesScalLumpOn(), sink_aware = ElvesScalSinkAwareOn();
-    std::map<std::tuple<int, bool, int>, std::vector<char>> offs;   // (elf casts, wave, unit) -> admitted offsets
+    std::map<std::tuple<int, bool, int, bool>, std::vector<char>> offs;   // (elf casts, wave, unit, follow-up) -> offsets
     const int trace_turn = ElvesTraceTurn();
     const bool trace = trace_turn > 0 && s.turn_number == trace_turn;
     if (trace)
@@ -75702,10 +75734,10 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         for (std::size_t a = 0; a < idx.size(); ++a)
         {
             const Row& r = rows[idx[a]];
-            auto key = std::make_tuple(r.elf_casts, r.wave, r.unit);
+            auto key = std::make_tuple(r.elf_casts, r.wave, r.unit, r.follow);
             auto it = offs.find(key);
             if (it == offs.end())
-            { it = offs.emplace(key, ElvesHoldBackOffsets(held, r.elf_casts, r.wave, r.unit, lump, sink_aware)).first; }
+            { it = offs.emplace(key, ElvesHoldBackOffsets(held, r.elf_casts, r.wave, r.unit, lump, sink_aware, r.follow)).first; }
             const std::vector<char>& ok = it->second;   // (3) the admitted hold-back offsets in count steps
             const int h = static_cast<int>(ok.size()) - 1;
             const int gap = top[static_cast<std::size_t>(cls[a])] - r.count;

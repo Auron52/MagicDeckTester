@@ -3963,9 +3963,10 @@ struct ElvesHoldBackSource { int yield = 0; bool scaled = false; };
 std::vector<ElvesHoldBackSource> ElvesHoldBackSources(const GameState& s, bool is_pre_combat);
 int ElvesHoldBackMana(const std::vector<ElvesHoldBackSource>& src, int plan_elf_casts);
 // The admitted hold-back offsets below a class top (index = count steps; see the .cpp). TEMPORARY A/B arms: lump
-// (subset-sum lump points) and sink_aware (a Wave row frees only the flat dorks).
+// (subset-sum lump points, scaled yields as a range) and sink_aware (a Wave row frees only the flat dorks unless a
+// follow-up sink remains).
 std::vector<char> ElvesHoldBackOffsets(const std::vector<ElvesHoldBackSource>& src, int plan_elf_casts, bool wave_sink,
-                                       int unit, bool lump, bool sink_aware);
+                                       int unit, bool lump, bool sink_aware, bool follow_up);
 class ElvesProvider : public SelesnyaLifegainProvider
 {
 public:

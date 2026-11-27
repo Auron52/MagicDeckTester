@@ -270,18 +270,23 @@ TEST_CASE("Elves scaling rule: hold-back offsets -- the band, lump points, sink-
     auto offs = [](const std::vector<char>& ok) { std::vector<int> o; for (std::size_t i = 0; i < ok.size(); ++i) { if (ok[i]) { o.push_back(static_cast<int>(i)); } } return o; };
     const std::vector<ElvesHoldBackSource> src{ { 1, false }, { 1, false }, { 5, true } };   // 2 Llanowars + a Priest at 5
     // The band (holdall): every offset down to all three held (7 mana).
-    CHECK(offs(ElvesHoldBackOffsets(src, 0, false, 1, false, false)) == std::vector<int>{ 0, 1, 2, 3, 4, 5, 6, 7 });
+    CHECK(offs(ElvesHoldBackOffsets(src, 0, false, 1, false, false, false)) == std::vector<int>{ 0, 1, 2, 3, 4, 5, 6, 7 });
     // Lump points: a whole set held -- {} 0, one Llanowar 1, both 2, the Priest 5, Priest + 1 6, all 7.
-    CHECK(offs(ElvesHoldBackOffsets(src, 0, false, 1, true, false)) == std::vector<int>{ 0, 1, 2, 5, 6, 7 });
+    CHECK(offs(ElvesHoldBackOffsets(src, 0, false, 1, true, false, false)) == std::vector<int>{ 0, 1, 2, 5, 6, 7 });
     // Kicks (2 mana a step): ceil and floor of each set's yield -- {0}, {0,1}, {1}, {2,3}, {3}, {3,4}.
-    CHECK(offs(ElvesHoldBackOffsets(src, 0, false, 2, true, false)) == std::vector<int>{ 0, 1, 2, 3, 4 });
-    // The plan's Elf casts grow the Priest's tap: 5 + 2.
-    CHECK(offs(ElvesHoldBackOffsets(src, 2, false, 1, true, false)) == std::vector<int>{ 0, 1, 2, 7, 8, 9 });
+    CHECK(offs(ElvesHoldBackOffsets(src, 0, false, 2, true, false, false)) == std::vector<int>{ 0, 1, 2, 3, 4 });
+    // The plan's Elf casts grow the Priest's tap to anywhere in 5..7 (the payer may tap it before they land).
+    CHECK(offs(ElvesHoldBackOffsets(src, 2, false, 1, true, false, false)) == std::vector<int>{ 0, 1, 2, 5, 6, 7, 8, 9 });
+    const std::vector<ElvesHoldBackSource> big{ { 1, false }, { 6, true } };
+    CHECK(offs(ElvesHoldBackOffsets(big, 0, false, 1, true, false, false)) == std::vector<int>{ 0, 1, 6, 7 });
     // Sink-aware: a Wave row frees only the flat dorks; an attacker-growing sink keeps the Priest.
-    CHECK(offs(ElvesHoldBackOffsets(src, 0, true, 1, false, true)) == std::vector<int>{ 0, 1, 2 });
-    CHECK(offs(ElvesHoldBackOffsets(src, 0, false, 2, false, true)) == std::vector<int>{ 0, 1, 2, 3, 4 });
+    CHECK(offs(ElvesHoldBackOffsets(src, 0, true, 1, false, true, false)) == std::vector<int>{ 0, 1, 2 });
+    // ...and with a follow-up this phase neither narrowing applies: the whole band.
+    CHECK(offs(ElvesHoldBackOffsets(src, 0, true, 1, false, true, true)) == std::vector<int>{ 0, 1, 2, 3, 4, 5, 6, 7 });
+    CHECK(offs(ElvesHoldBackOffsets(src, 0, true, 1, true, true, true)) == std::vector<int>{ 0, 1, 2, 3, 4, 5, 6, 7 });
+    CHECK(offs(ElvesHoldBackOffsets(src, 0, false, 2, false, true, false)) == std::vector<int>{ 0, 1, 2, 3, 4 });
     // No attacker (or post-combat): the top alone.
-    CHECK(offs(ElvesHoldBackOffsets({}, 0, false, 1, true, true)) == std::vector<int>{ 0 });
+    CHECK(offs(ElvesHoldBackOffsets({}, 0, false, 1, true, true, false)) == std::vector<int>{ 0 });
 }
 
 // ---- 3. THE LIFT SWITCHES ----------------------------------------------------------------------------------------
