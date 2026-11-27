@@ -719,3 +719,15 @@ means the gate renames it aside -- keep the copies); (3) the USER-accepted Briga
 scaled source grown by the first sink's bodies pays for it), then A/B; (4) lordcast round-3 A/B; (5) Maze's End K=20
 mullgen from .claude/worktrees/maze-gen2.
 Open USER decision: the tap-order default (after the fixed version's numbers).
+
+### Checkpoint 14 (2026-11-27 ~13:00 UTC): tap order fixed and ADOPTED (clean win)
+- The fix (wip/elves-r2 c3c8981da): the attackers-first order now applies only from the scaled sink's own payment onward. The pre-sink Elf casts keep the scaled dorks for last.
+- A/B, 3k std + 3k 2HG at d5 b20:
+  - std: -0.0067 (se 0.0015), 20 faster / 0 slower;
+  - 2HG: -0.0130 (se 0.0021), 39 / 0;
+  - units ~0.97x;
+  - no slower game, so no d8 b0 runs are owed.
+- Under the USER's standing clean-win rule ("almost anything that measures better and is cheaper is a good option") the coordinator flips MTG_ELVES_TAP_ORDER to default ON. The USER was told in chat.
+- The r4 agent is validating and flipping it (handoff in logs/elves/r3-handoff.md on wip/elves-r2).
+- MTG_ELVES_R2 and the three/two modes are deleted (USER: keep band).
+- The 2HG slower games 75/202/428/2162 under the old bandtap were the same mechanism as std 2176.
