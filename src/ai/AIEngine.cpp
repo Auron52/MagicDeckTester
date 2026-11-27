@@ -8976,6 +8976,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(state, plan.actions));
     // ...and the creature casts that can take Generator Servant's haste (MTG_SERVANT_HASTE_KEEP), same seed.
     LineHasteTakersScope _lht(LineHasteTakerCount(plan.actions));
+    // ...and the line's noncreature casts still to pay (MTG_LINE_NC_LEFT), same seed; counted down at the cast site.
+    LineNoncreatureLeftScope _lnl(LineNoncreatureLeftCount(plan.actions));
     // ...and the plan's TRAIL flips for the cast-time largest-attacker pick (Morph INT-6; ApplyPlanDirect's twin).
     PlanTrailFlipsScope _ptf(TurnSolver::PlanTrailFlipsFor(state, plan.actions));
     // ORDER (2026-11-13, Shadowborn s7007 gi183): these scopes are installed BEFORE the Lotus / suspend /
@@ -11599,6 +11601,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         // the full bill for the line-hold accounting below. A bestowed cast is an Aura spell.
         ManaCost pay_bill = effective;
         NoteLineHasteTakerCast(*def, bestow, effective);   // MTG_SERVANT_HASTE_KEEP (rollout twin: apply_one)
+        NoteLineNoncreatureCast(*def);   // MTG_LINE_NC_LEFT (rollout twin: apply_one)
         haste_from_mana = def->card.IsCreature() && !bestow && TakeHasteFloatForCreatureSpell(state, pay_bill);
         bool paid_ok = false;
         {

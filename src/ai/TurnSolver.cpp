@@ -76966,6 +76966,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // ...and the creature casts that can take Generator Servant's haste (MTG_SERVANT_HASTE_KEEP), same seed
     // as the executor's (AIEngine::TakeTurn).
     LineHasteTakersScope _lht(LineHasteTakerCount(plan.actions));
+    // ...and the line's noncreature casts still to pay (MTG_LINE_NC_LEFT), same seed; counted down at the cast site.
+    LineNoncreatureLeftScope _lnl(LineNoncreatureLeftCount(plan.actions));
     // ...and the plan's TRAIL flips, for the cast-time largest-attacker pick's look-ahead (Morph INT-6; same
     // builder and the same point as the executor's twin in AIEngine::TakeTurn).
     PlanTrailFlipsScope _ptf(TurnSolver::PlanTrailFlipsFor(state, plan.actions));
@@ -79362,6 +79364,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // tagged {C} floats -> byte-identical.
             ManaCost pay_bill = ec;
             NoteLineHasteTakerCast(def, bestow, ec);   // MTG_SERVANT_HASTE_KEEP (executor twin: CastSpellFromHand)
+            NoteLineNoncreatureCast(def);   // MTG_LINE_NC_LEFT (executor twin: CastSpellFromHand)
             cast_haste_from_mana = is_creature && !bestow && TakeHasteFloatForCreatureSpell(state, pay_bill);
             bool paid_ok = false;
             {
