@@ -1,0 +1,900 @@
+{
+ "jobs": [
+  {
+   "name": "on.std.c0",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760000,
+   "game_index": 0,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c0",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760000,
+   "game_index": 0,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c0",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760000,
+   "game_index": 0,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c0",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760000,
+   "game_index": 0,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c50",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760050,
+   "game_index": 50,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c50",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760050,
+   "game_index": 50,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c50",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760050,
+   "game_index": 50,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c50",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760050,
+   "game_index": 50,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c100",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760100,
+   "game_index": 100,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c100",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760100,
+   "game_index": 100,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c100",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760100,
+   "game_index": 100,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c100",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760100,
+   "game_index": 100,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c150",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760150,
+   "game_index": 150,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c150",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760150,
+   "game_index": 150,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c150",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760150,
+   "game_index": 150,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c150",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760150,
+   "game_index": 150,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c200",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760200,
+   "game_index": 200,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c200",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760200,
+   "game_index": 200,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c200",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760200,
+   "game_index": 200,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c200",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760200,
+   "game_index": 200,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c250",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760250,
+   "game_index": 250,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c250",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760250,
+   "game_index": 250,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c250",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760250,
+   "game_index": 250,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c250",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760250,
+   "game_index": 250,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c300",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760300,
+   "game_index": 300,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c300",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760300,
+   "game_index": 300,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c300",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760300,
+   "game_index": 300,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c300",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760300,
+   "game_index": 300,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c350",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760350,
+   "game_index": 350,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c350",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760350,
+   "game_index": 350,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c350",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760350,
+   "game_index": 350,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c350",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760350,
+   "game_index": 350,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c400",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760400,
+   "game_index": 400,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c400",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760400,
+   "game_index": 400,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c400",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760400,
+   "game_index": 400,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c400",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760400,
+   "game_index": 400,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c450",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760450,
+   "game_index": 450,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c450",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760450,
+   "game_index": 450,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c450",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760450,
+   "game_index": 450,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c450",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760450,
+   "game_index": 450,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c500",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760500,
+   "game_index": 500,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c500",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760500,
+   "game_index": 500,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c500",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760500,
+   "game_index": 500,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c500",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760500,
+   "game_index": 500,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c550",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760550,
+   "game_index": 550,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c550",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760550,
+   "game_index": 550,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c550",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760550,
+   "game_index": 550,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c550",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760550,
+   "game_index": 550,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c600",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760600,
+   "game_index": 600,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c600",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760600,
+   "game_index": 600,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c600",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760600,
+   "game_index": 600,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c600",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760600,
+   "game_index": 600,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c650",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760650,
+   "game_index": 650,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c650",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760650,
+   "game_index": 650,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c650",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760650,
+   "game_index": 650,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c650",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760650,
+   "game_index": 650,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c700",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760700,
+   "game_index": 700,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c700",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760700,
+   "game_index": 700,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c700",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760700,
+   "game_index": 700,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c700",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760700,
+   "game_index": 700,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "on.std.c750",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760750,
+   "game_index": 750,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   }
+  },
+  {
+   "name": "off.std.c750",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760750,
+   "game_index": 750,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   }
+  },
+  {
+   "name": "on.2hg.c750",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760750,
+   "game_index": 750,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": true
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  },
+  {
+   "name": "off.2hg.c750",
+   "deck": "decks/Elves/Elves.cod",
+   "profile": "decks/Elves/Elves.profile.json",
+   "games": 50,
+   "seed": 9760750,
+   "game_index": 750,
+   "budget_ms": 20,
+   "weight": 0,
+   "flags": {
+    "MTG_ELVES_BUCKET_DISCARD": false
+   },
+   "starting_life": 30,
+   "opponent_heads": 2
+  }
+ ]
+}

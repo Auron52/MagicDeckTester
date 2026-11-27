@@ -1,0 +1,84 @@
+=== SHED COST: calls=431072  cpu=3.290s  (7.632 us/call, summed over threads) ===
+=== SHED HAND SIZE AT ENTRY: 8:431019 9:53 ===
+=== SHED POLICY: calls=431948  idx0-differs-from-generic=336703 (77.9%) ===
+=== SHED STATS: real=12  rollout=431962 (low-land=431297)  cleanups-that-shed=431072  sheds/cleanup=1.00 ===
+[batch] workers=32 (hw_concurrency=32, affinity=32, requested=auto)
+[goldfish] SLOW-GAME 43172ms  job=off.2hg.c550 gi=592 wt=5 units=54855  repro: --seed 9760592 --game-index 592 --games 1
+[goldfish] SLOW-GAME 43473ms  job=on.2hg.c550 gi=592 wt=5 units=55198  repro: --seed 9760592 --game-index 592 --games 1
+[play] off.2hg.c0 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c100 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c150 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c200 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c250 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c300 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c350 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c400 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c450 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c50 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c500 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c550 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c600 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c650 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c700 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.2hg.c750 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c0 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c100 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c150 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c200 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c250 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c300 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c350 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c400 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c450 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c50 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c500 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c550 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c600 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c650 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c700 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] off.std.c750 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c0 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c100 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c150 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c200 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c250 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c300 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c350 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c400 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c450 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c50 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c500 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c550 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c600 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c650 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c700 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.2hg.c750 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c0 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c100 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c150 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c200 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c250 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c300 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c350 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c400 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c450 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c50 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c500 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c550 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c600 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c650 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c700 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+[play] on.std.c750 depth=5 budget=20ms source=default(depth)+cli(budget) provider=Elves
+      2 [discard] elves g9760344 T7 hand=8 board_mana=1 board_lands=1 scaling=2 reach=4 order=Immaculate Magistrate|Leaf-Crowned Visionary|Leaf-Crowned Visionary|Elvish Archdruid|Priest of Titania|Priest of Titania|Galadhrim Brigade|Galadhrim Brigade
+      2 [discard] elves g9760664 T5 hand=8 board_mana=1 board_lands=1 scaling=3 reach=5 order=Joraga Warcaller|Elvish Clancaller|Llanowar Elves|Elvish Mystic|Priest of Titania|Elvish Archdruid|Joraga Warcaller|Joraga Warcaller
+      2 [discard] elves g9760664 T6 hand=8 board_mana=1 board_lands=1 scaling=2 reach=5 order=Taunting Elf|Elvish Clancaller|Llanowar Elves|Elvish Mystic|Priest of Titania|Elvish Archdruid|Joraga Warcaller|Joraga Warcaller
+      2 [discard] elves-off g9760344 T7 hand=8 shed=Leaf-Crowned Visionary
+      2 [discard] elves-off g9760664 T5 hand=8 shed=Joraga Warcaller
+      2 [discard] elves-off g9760664 T6 hand=8 shed=Elvish Clancaller
+      6 [discard] g9760344 T7 hand=8 cands=8 lip=1 landsinhand=0 tower=0 dropopen=1 -> Immaculate Magistrate
+      2 [discard] g9760344 T7 hand=8 cands=8 lip=1 landsinhand=0 tower=0 dropopen=1 -> Leaf-Crowned Visionary
+      4 [discard] g9760664 T5 hand=8 cands=8 lip=1 landsinhand=0 tower=0 dropopen=1 -> Elvish Archdruid
+      4 [discard] g9760664 T5 hand=8 cands=8 lip=1 landsinhand=0 tower=0 dropopen=1 -> Joraga Warcaller
+      4 [discard] g9760664 T6 hand=8 cands=8 lip=1 landsinhand=0 tower=0 dropopen=1 -> Elvish Archdruid
+      2 [discard] g9760664 T6 hand=8 cands=8 lip=1 landsinhand=0 tower=0 dropopen=1 -> Elvish Clancaller
+      2 [discard] g9760664 T6 hand=8 cands=8 lip=1 landsinhand=0 tower=0 dropopen=1 -> Taunting Elf

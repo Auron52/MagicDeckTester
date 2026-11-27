@@ -1,0 +1,2 @@
+ std n=800 won off=797 on=797 sum off=3441 on=3441 delta(on-off)=+0.00000 se=0.00000 t=+0.00 faster=0 slower=0
+ 2hg n=800 won off=797 on=797 sum off=3668 on=3668 delta(on-off)=+0.00000 se=0.00000 t=+0.00 faster=0 slower=0
