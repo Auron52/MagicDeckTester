@@ -516,3 +516,14 @@ Then: on VALIDATION PASSED commit the keep table (.keepmodel.exhaustive.profile.
 profile.json gen settings), re-run Elves smoke/regression/overnight rows with the table (keep_adoption_attribution),
 accept --deck=elves,elves2hg per tier, check_gt_logs, push_queue join/land, CI watch. Status cron 0ff5efb4
 (replaces 61a8eb73).
+
+## Coordinator checkpoint 9 (2026-11-27 ~01:25 UTC, pre-compaction) -- RESUME HERE
+
+USER asked for the viewer to create Elves references BEFORE the mulligan generation gets far, so the mullgen run
+was STOPPED during its PGO build (nothing lost; no journal). Primary checkout: untracked CRLF decks/Elves/Elves.cod
+(identical modulo CRLF) moved to logs/elves-original/Elves.cod.crlf-original; `git pull --rebase` running (task
+bhw3gvbdn). Next: confirm the pull, check_references_safe, restart the viewer FROM THE PRIMARY CHECKOUT ONLY
+(`MDT_REFERENCE_BACKUP_DIR=/home/vscode/.claude/mdt-reference-backups ./play.sh --no-open`, after killing the old
+worldfire viewer pid 384685 once its tree has no uncommitted refs), give the USER the URL, commit + push every new
+references/Elves file at once. Relaunch mullgen (checkpoint 8 command) only once the USER is done with references
+and any misplays they reveal are fixed.
