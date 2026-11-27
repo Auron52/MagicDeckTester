@@ -661,3 +661,7 @@ then Maze's End K=20 mullgen from .claude/worktrees/maze-gen2.
    make sure that we maintain whatever thing we want to maintain, whether that is the attackers or the scaling mana."
    -> wip/elves-r2 builds a provider-controlled tap order (preserve scaling mana / preserve attackers / all-in),
    hold-back counts consistent with it, behind the selector as the `two` arm; default the USER's after the A/B.
+10. Mode by board: "Usually on an earlier turn (like turns 2-3) you would focus on building your mana and keep the
+    scaling back. After that you usually want to attack. But ideally how we handle this would depend more on our board
+    than the turn." -> the preserve-scaling / preserve-attackers choice keys on board features (attack damage vs life,
+    scaled-dork growth, a sink in hand), never the turn number; the A/B reports the chosen mode's turn distribution.
