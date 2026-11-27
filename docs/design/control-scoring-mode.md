@@ -794,6 +794,27 @@ The mapping spectrum, most to least exact:
    where section 8 measured non-additivity (+39% for paired land destruction; -0.38 rounds for a same-turn second
    counter).
 
+**The no-control baselines are computed ONCE (USER 2026-11-27).** USER, verbatim: "The other advantage of doing each
+gauntlet deck alone is that, if we choose set seeds, we don't need to recalculate them every time. We can
+potentially calculate it once and only calculate the other numbers multiple times." So:
+* **Fixed seeds per gauntlet deck.** The mapping uses one fixed, held-out seed set per gauntlet deck (at least 20
+  games each), never reused by a tier.
+* **Baseline table, built once.** Each gauntlet deck's kill turn with no control, per seed, at the mapping horizon
+  of 15 (Q5), is stored and reused by every mapping key and every control deck. It is NOT the suite's ground
+  truth: the tiers stop at turn 8 and use other seeds. The suite's turn 4.6 average kill says this is a small
+  run, about 63 x 20 games once.
+* **Only the controlled games are played per key.** The delay of a key is its controlled game's kill turn minus
+  the stored baseline for the same seed. The paired seed is also what keeps the difference low-variance: the
+  two games share their draws until the first effect.
+* **Prefix sharing, as a further saving.** With a fixed seed, a controlled game is identical to its baseline up
+  to the round of the first effect. If the baseline run snapshots the game state at each round, a controlled
+  replay can start from the snapshot instead of turn 1. This needs the engine to resume a game from a saved
+  state across processes; within one process a state copy is enough. It is an option to measure, not yet a
+  claim.
+* **Invalidation, like any generated artifact.** The baseline is keyed on each gauntlet deck's decklist hash, its
+  play digest (an engine change that moves its play) and the seed set. A key that no longer matches is recomputed
+  for that deck only, and the controlled games for that deck are then stale too.
+
 Recommended route: build 4 first (it is the stage-1 table and gives the baseline), measure its error against a
 few hundred full-joint keys (1), and then add 3 or 2 only as far as that error demands. Every level records the
 gauntlet it was built on, so a changed gauntlet triggers a rebuild of the mapping rather than of any game.
