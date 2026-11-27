@@ -326,3 +326,7 @@ when this validates. Melira Pod's paused value leaf stays paused until then (sta
   - Suspect: one rollout 114 s in flight, size5 draw r=5 seed=13064056893581132306 (Genesis Wave, Taunting Elf, Priest, Marwyn, Forest). All other in-flight rollouts were short.
   - Earlier slow rollouts reached 267 s.
   - Replaying it alone to measure its peak (build/scratch/elves-int/replay_hog.out).
+- 2026-11-27 18:47 UTC status check (Elves mullgen, session e3bd4e46): still STOPPED after the 18:04 rss-cap abort; the journal is safe.
+  - Fix 9b9e82fa4 (the executor reads the breakpoint continuation in place; play-identical, 2000-game digest 0 changed) took the hog rollout 14.0 → 3.32 GB.
+  - The 37 worst rollouts at once on 32 threads peak at 15.2 GB under the 20 GB cap.
+  - Cherry-picked onto elves-int; build/units/smoke running (validate2.status). Then land, and RESUME the mullgen from the journal (same play).
