@@ -249,11 +249,11 @@
   },
   "hinata": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
-   "cost_per_game_ms": 18918.94,
+   "cost_per_game_ms": 29846.8767,
    "jobs": 7,
    "key": "hinata",
    "tier": "regression",
-   "total_core_ms": 8287550,
+   "total_core_ms": 13568647,
    "worst_case": "hinata_regression_d5_b30"
   },
   "hydras": {
@@ -579,6 +579,15 @@
    "tier": "regression",
    "total_core_ms": 1530104,
    "worst_case": "worldfire_regression_d5_b20"
+  },
+  "zombies": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 4538.72,
+   "jobs": 7,
+   "key": "zombies",
+   "tier": "regression",
+   "total_core_ms": 913497,
+   "worst_case": "zombies2hg_regression_d5_b20"
   }
  }
 }
