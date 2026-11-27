@@ -13,7 +13,7 @@
 zombies_smoke_d0_s1001=4.7780/985a3cc116ae0a71
 zombies_smoke_d3_s1001=4.4400/646bfeba0d7674f1
 zombies_smoke_d5_s1001=4.4500/794f2f7416dfeff1
-zombies2hg_smoke_d5_s1001=4.9200/85219e6f6509ef24
+zombies2hg_smoke_d5_s1001=4.9200/ca5e36f777224b81
 mazesend_smoke_d0_s1001=6.7160/7a052adf70055959
 mazesend_smoke_d3_s1001=5.1000/bfbc30ba9c4ae4d0
 mazesend_smoke_d5_s1001=5.6061/741e2c89c969f6de
@@ -272,7 +272,7 @@ zombies_regression_d5_s30281=4.4000/69681e79ecf3fd55
 zombies_regression_d0_s2002=4.8210/c8a6d3d33c80d1ba
 zombies_regression_d3_s2002=4.5000/ded0a5192a785940
 zombies_regression_d5_s2002=4.4267/de22390e7fecdc62
-zombies_regression_d5_s3003=4.3733/abe31ab8c4825814
+zombies_regression_d5_s3003=4.3733/5f95554b5cd9ed51
 zombies2hg_regression_d5_s2002=4.9600/ee86a8e11afba24f
 mazesend_regression_d0_s2002=6.7190/c086fa276a467f35
 mazesend_regression_d3_s2002=5.6667/6f086962daca7877

@@ -75940,3 +75940,133 @@ std::vector<int> ElvesProvider::CleanupDiscardCandidates(
     }
     return CleanupDiscardRankingCounted(s, required_pieces, shed);
 }
+
+static bool ZombiesBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_ZOMBIES_BUCKET_DISCARD", true); // DEFAULT ON; =0 restores generic
+    return on;
+}
+
+bool ZombiesProvider::CleanupDiscardShedStable() const
+{
+    return !ZombiesBucketDiscardEnabled();
+}
+
+std::vector<int> ZombiesProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!ZombiesBucketDiscardEnabled())
+    { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n == 0) { return {}; }
+    int board_lands = 0, board_creatures = 0, opponent_creatures = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == me)
+        {
+            board_lands += p.card.IsLand();
+            board_creatures += p.card.IsCreature();
+        }
+        else { opponent_creatures += p.card.IsCreature(); }
+    }
+
+    std::vector<int> lands, threats, rituals, other;
+    bool gray_merchant = false, payoff = false, hand_fodder = false, dark_ritual = false;
+    auto mv = [&](int i) { return CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(i)]); };
+    auto threat_rank = [&](int i)
+    {
+        const auto& name = ap.hand[static_cast<std::size_t>(i)].m_name;
+        if (name == "Gravecrawler") { return 0; }
+        if (name == "Dread Wanderer") { return 1; }
+        if (name == "Diregraf Ghoul") { return 2; }
+        if (name == "Undead Warchief") { return 3; }
+        if (name == "Cemetery Reaper") { return 4; }
+        if (name == "Lord of the Accursed") { return 5; }
+        if (name == "Lord of the Undead") { return 6; }
+        if (name == "Death Baron") { return 7; }
+        if (name == "Blood Scrivener") { return 8; }
+        if (name == "Gray Merchant of Asphodel") { return 9; }
+        if (name == "Fleshbag Marauder") { return 10; }
+        return 11;
+    };
+    auto distance = [&](int i) { return std::max(0, mv(i) - board_lands - 1); };
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        if (c.m_is_staged) { continue; }
+        if (CleanupDiscardIsLand(c)) { lands.push_back(i); continue; }
+        if (c.m_name == "Dark Ritual" || c.m_name == "Culling the Weak")
+        {
+            rituals.push_back(i);
+            dark_ritual |= c.m_name == "Dark Ritual";
+            continue;
+        }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        if (def != nullptr && def->card.IsCreature())
+        {
+            threats.push_back(i);
+            hand_fodder |= mv(i) == 1;
+            gray_merchant |= c.m_name == "Gray Merchant of Asphodel";
+            payoff |= mv(i) >= 3;
+            continue;
+        }
+        other.push_back(i);
+    }
+    // A card's role is bought once. Board sources satisfy the quotas first;
+    // the hand supplies up to four land drops (five for an unaccelerated Gary),
+    // two creatures, and one useful burst-mana spell.
+    std::stable_sort(threats.begin(), threats.end(), [&](int a, int b)
+    {
+        if (distance(a) != distance(b)) { return distance(a) < distance(b); }
+        return threat_rank(a) < threat_rank(b);
+    });
+    std::stable_sort(rituals.begin(), rituals.end(), [&](int a, int b)
+    {
+        return (ap.hand[static_cast<std::size_t>(a)].m_name == "Dark Ritual")
+            > (ap.hand[static_cast<std::size_t>(b)].m_name == "Dark Ritual");
+    });
+    const int land_goal = gray_merchant && !dark_ritual ? 5 : 4;
+    const int land_need = std::max(0, land_goal - board_lands);
+    const int threat_need = std::max(0, 2 - board_creatures);
+    std::vector<char> keep(static_cast<std::size_t>(n), 0);
+    for (int k = 0; k < std::min(land_need, static_cast<int>(lands.size())); ++k)
+    { keep[static_cast<std::size_t>(lands[static_cast<std::size_t>(k)])] = 1; }
+    for (int k = 0; k < std::min(threat_need, static_cast<int>(threats.size())); ++k)
+    { keep[static_cast<std::size_t>(threats[static_cast<std::size_t>(k)])] = 1; }
+    if (payoff && !rituals.empty())
+    {
+        const int first = rituals.front();
+        const bool culling_ready = board_creatures > 0 || hand_fodder;
+        if (ap.hand[static_cast<std::size_t>(first)].m_name == "Dark Ritual" || culling_ready)
+        { keep[static_cast<std::size_t>(first)] = 1; }
+    }
+
+    std::vector<int> tier(static_cast<std::size_t>(n), 0);
+    for (int i : rituals) { tier[static_cast<std::size_t>(i)] = keep[static_cast<std::size_t>(i)] ? 5 : 1; }
+    for (int i : lands)   { tier[static_cast<std::size_t>(i)] = keep[static_cast<std::size_t>(i)] ? 6 : 2; }
+    for (int i : threats)
+    {
+        const bool inactive_fleshbag = ap.hand[static_cast<std::size_t>(i)].m_name == "Fleshbag Marauder"
+            && opponent_creatures == 0;
+        tier[static_cast<std::size_t>(i)] =
+            keep[static_cast<std::size_t>(i)] ? 7 : (inactive_fleshbag ? 0 : 3);
+    }
+    std::vector<int> shed;
+    for (int i : other) { shed.push_back(i); }
+    shed.insert(shed.end(), rituals.begin(), rituals.end());
+    shed.insert(shed.end(), lands.begin(), lands.end());
+    shed.insert(shed.end(), threats.begin(), threats.end());
+    std::stable_sort(shed.begin(), shed.end(), [&](int a, int b)
+    {
+        if (tier[static_cast<std::size_t>(a)] != tier[static_cast<std::size_t>(b)])
+        { return tier[static_cast<std::size_t>(a)] < tier[static_cast<std::size_t>(b)]; }
+        if (distance(a) != distance(b)) { return distance(a) > distance(b); }
+        return threat_rank(a) > threat_rank(b);
+    });
+    std::vector<int> ranked = CleanupDiscardRankingCounted(s, required_pieces, shed);
+    if (ranked.size() > 1) { ranked.resize(1); }
+    return ranked;
+}

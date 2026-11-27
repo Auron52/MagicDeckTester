@@ -469,6 +469,9 @@ class ZombiesProvider : public DeckProvider
 {
 public:
     const char* Name() const override { return "Zombies"; }
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
+    bool CleanupDiscardShedStable() const override;
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Gravecrawler recursion and Gray Merchant devotion need a deck-specific upper bound." }; }
 };

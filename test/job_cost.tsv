@@ -1664,7 +1664,7 @@ zombies2hg_overnight_d5_s5005	17361
 zombies2hg_overnight_d5_s6006	11633
 zombies2hg_overnight_d5_s7007	16233
 zombies2hg_regression_d5_s2002	19048
-zombies2hg_smoke_d5_s1001	24011
+zombies2hg_smoke_d5_s1001	23466
 zombies_overnight_d0_s10010	1
 zombies_overnight_d0_s4004	1
 zombies_overnight_d0_s6006	1
@@ -1677,11 +1677,11 @@ zombies_overnight_d5_s5005	7360
 zombies_overnight_d5_s6006	7895
 zombies_overnight_d5_s7007	6967
 zombies_regression_d0_s2002	1
-zombies_regression_d3_s2002	5212
-zombies_regression_d3_s30281	14672
-zombies_regression_d5_s2002	6325
-zombies_regression_d5_s3003	8428
-zombies_regression_d5_s30281	15601
+zombies_regression_d3_s2002	5165
+zombies_regression_d3_s30281	14673
+zombies_regression_d5_s2002	6309
+zombies_regression_d5_s3003	8362
+zombies_regression_d5_s30281	15573
 zombies_smoke_d0_s1001	1
 zombies_smoke_d3_s1001	11012
 zombies_smoke_d5_s1001	10726

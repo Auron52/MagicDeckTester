@@ -22,9 +22,9 @@ cards. All eleven now have card entries and shared engine paths. The new paths
 cover devotion drain, lord deathtouch, empty-hand draw replacement, repeatable
 graveyard casting, conditional graveyard return, graveyard exile for a token,
 and simultaneous each-player sacrifice. The Warchief's lord bonus includes
-itself. The Zombies provider is owned by this deck and currently inherits the
-generic search policy. These entries still need Stage 2 review, cost/field
-audits, a completed build, and game checks. Lord of the Undead's
+itself. The Zombies provider is owned by this deck and inherits the generic
+play search policy; its cleanup discard rule is described below. The Stage 2
+review, cost/field audits, build, and game checks completed. Lord of the Undead's
 opposing-Zombie buff, Lord of the Accursed's menace activation, and
 Gravecrawler's can't-block clause are provisionally omitted as goldfish inert;
 user sign-off remains pending under the analyze-deck workflow.
@@ -123,6 +123,23 @@ and turn 7 with it at budget 20; with the tie-break at unlimited budget it won
 turn 6. The faster line is recoverable and no structural branch was removed.
 Keep the default tie-break on pending stronger evidence.
 
+The Stage 5g earliest-win miner used the `99395cd62` source build at depth 5,
+budget 3000, seeds 26011 and 37021, requesting 300 games each. It emitted 2,673 decision records across both
+seed blocks. All seed indices were reached, but one final game remained active
+on one CPU for over eight minutes after the other workers finished, so the
+miner was stopped at ten minutes in the second block. The partial report is
+`logs/heuristics/Zombies.report.txt` (local, untracked run evidence). Its most
+consistent order proposal was Dark Ritual before Undead Warchief: 113 decisions
+favored that order, zero favored the reverse, and 26 tied. Dark Ritual before
+other lords was strong but had one to four conflicts per pair. Fleshbag Marauder
+was slower in 99 of 207 inclusion comparisons, but helped four, so it remains
+available to search. No land-choice rule exists for this mono-Swamp deck. A
+Zombies-only Warchief-order proposal was paired against the generic policy on
+400 games at shipped depth 5 and budget 20 (seed 58001). The arms had identical
+per-game win turns in all 400 games and the same 4.3925 average; the proposed
+override was removed. The miner's candidate score did not translate into a
+live-game improvement, so Zombies retains the generic cast order.
+
 External Codex-play seeds 54001-54017 found no illegal or missing playable
 plans and no wrong state deltas. They exercised Gravecrawler's graveyard cast
 after Culling, tapped entries, Cemetery Reaper's graveyard exile and token,
@@ -142,31 +159,50 @@ mana and put Dread onto the battlefield tapped and sick. It remained there and
 untapped normally on the next turn. Choices through return:
 `0,0,0,0,1,6,5,4,3,1,0,0,1,1`.
 
-## Candidate cleanup discard buckets (not yet shipped)
+## Provisional cleanup discard buckets
 
 The current evidence contains zero real cleanup decisions in 400 games and a
 zero win-turn bound from inverting rollout cleanup ranking over 200 paired
-depth-5 games. This candidate is for the user review required by the
-per-deck discard workflow; it has not changed the engine or the accepted GT.
+depth-5 games. The analyze-deck workflow requires an authored policy and says
+to keep working while user review is pending. The following default is being
+implemented behind `MTG_ZOMBIES_BUCKET_DISCARD` (`=0` restores generic):
 
-1. **Mana:** preserve land drops toward five total Swamps, net of Swamps on the
-   battlefield; keep at least two early lands if available. Keep one Dark
-   Ritual when a lord, Warchief, or Gray Merchant can use its burst within
-   the next turn. Culling the Weak counts as acceleration only when a
-   sacrificeable creature is present or a Gravecrawler can return.
-2. **Threat floor:** preserve two creatures after the mana quota. Prioritize
-   reusable Gravecrawler, then a castable one-drop, then a castable lord.
-   Upgrade Lord of the Undead when it can recover a creature and Gray Merchant
-   when current devotion makes it a near-term kill.
-3. **Overflow:** after quotas, keep the most castable damage source or lord;
-   shed redundant lands beyond the five-land path, excess rituals without a
-   payoff, and Fleshbag Marauder if its sacrifice would cost more damage than
-   the passive opponent's creature does. Within a role, use distance to
-   castability, including available black mana and Warchief's cost reduction.
+1. **Mana:** keep Swamps up to four total counting the battlefield, or five
+   when Gray Merchant is in hand without Dark Ritual. Keep one Dark Ritual
+   with a creature costing at least three; keep Culling the Weak in that slot
+   only if a battlefield creature or a one-drop in hand can feed it.
+2. **Threat floor:** keep two creatures counting the battlefield. Choose hand
+   threats by land drops until castable next turn, then Gravecrawler, Dread
+   Wanderer, Diregraf Ghoul, Warchief, the three-mana lords, Blood Scrivener,
+   Gray Merchant, and Fleshbag Marauder.
+3. **Overflow:** shed unneeded rituals, lands beyond the quota, then spare
+   creatures; an unneeded Fleshbag with no opponent creature sheds first.
+   Quota members shed last, with the ritual before lands and threats if the
+   hand cannot retain every quota member. The rule returns one index and is
+   re-evaluated after every shed. Distance uses printed mana value and the
+   next land drop; it does not yet credit Warchief's conditional reduction.
 
-The bound suggests that implementing this rule is unlikely to improve the
-current goldfish metric, but it would make the authored policy explicit for
-future engine and deck changes. User review remains pending before shipping.
+This is a provisional default for user amendment. The first 400-game paired
+screen at seed 68001 was superseded: its build began compiling the provider
+before the hand-placeholder lookup fix, so the screen measured an earlier
+classification. A clean rebuild of the corrected source passed all three
+focused hand-choice fixtures. The corrected 400-game A/B at depth 5, budget 20
+(same seed 68001) again had identical per-game win turns and a 4.4550 average
+on both arms. The policy changed the first rollout shed in 8,202 of 16,253
+calls (50.5%); there were zero real cleanup discards. This establishes a live,
+non-inferior policy on that sample, with no measured win-turn gain. Suite
+validation found the three main smoke keys unchanged. Of six main regression
+keys, five were unchanged; the sixth had one same-score play change (seed 3041,
+game index 8): Lord of the Accursed on turn 3 became Cemetery Reaper, and both
+lines won on turn 5. The changed digest was accepted after a paired replay;
+there were no slower games, reference failures, or scenario failures.
+The 2HG regression key was unchanged. The 2HG smoke key moved only one play
+digest (seed 1015, game index 14), again with a turn-5 win in both arms: the
+bucket policy chose a turn-1 creature/ritual development line and a turn-3
+Gray Merchant instead of the fallback's slower board development followed by
+a turn-4 Reaper. The two settings reproduced on a single-game replay, and the
+same-score 2HG smoke digest was accepted. Its 677 scenarios and 950 reference
+replays passed; no score regressions were observed.
 
 ### Implementation order
 
