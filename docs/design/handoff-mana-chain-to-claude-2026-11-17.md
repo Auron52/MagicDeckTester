@@ -296,6 +296,13 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**22:58 UTC 11-27** -- LANDED 524d7c303 (land-1130: TH residuals + DS round 4 default ON + DS CPU cut 2 + GT accept;
+0 slower, 1 faster hinata d0, 3 same-score play changes worldfire d5 gi36 / elementals d0 gi22 / bruna d0 gi819;
+units 4347/4347; viewer 0 drift). CI run 46079583570 watching. Primary checkout fast-forwarded. DS verdict-memo agent
+running (wip/ds-memo, logs/ds-memo/; a play change, gate + A/B owed). NEXT: gate_1127 DONE -> commit test/mana_clean.json
+from land-1128, rank the clusters (Karrthus need-later, Dragons two-dig, Maze Summit 2HG g292, Cyclone d6, Hinata
+gi548/gi33, prepay step 5, DS still-open events, TH s30101394), spawn fix agents.
+
 **22:02 UTC 11-27** -- LANDING land-1130 VALIDATING (wip/land-1130, lease held via `push_queue.py hold`;
 log build/scratch/land-1130/hold.log, UNIT.DONE / TIERS.DONE). Batch: TH residuals (6a38e62dd..8e2bbd717 picked,
 byte-identical) + DS round 4 (3bd740edd..070171d59 picked; one HeuristicArm.h enum conflict with the Elves landing,
