@@ -16272,20 +16272,17 @@ static bool AttackLordCastEnabled()
     // DEFAULT OFF (2026-11-22 A/B, 1.45M pairs, seed 1810000): searched 0 on 19 lord decks except Stompy +1; d0 -10,397
     // overall, but Boars d0 +172 (216 slower; the Ilharg put projection reads the kept lord) and Goblins d0 +177.
     // Fails the every-deck bar, so it stays off until those are root-caused (USER call). =1 -> on.
+    // 2026-11-27 root causes and AMENDMENTS (all inside the lever, off arm byte-identical): A frozen attack intent
+    // (ProjectPlanWalk re-asks a held creature a kept lord pumps), B implicit sac-fodder payment (AttackTapLoss),
+    // C the legend rule on a kept lord (ProjectPlanWalk), D Solve admits a lord-credited win only when applied +
+    // combat really kills (the payment-model over-reads the lord multiplies). USER 2026-11-27: "I would leave it
+    // off for now, but we probably should figure out why it doesn't work." -- still default OFF.
     static const bool env_on = EnvOn("MTG_ATTACK_LORD_CAST", false);
     return heurarm::Flag(heurarm::ATTACK_LORD_CAST, env_on);
 }
 // MTG_LORDCAST_HAND -- TEMPORARY selector (2026-11-27 lordcast re-test; delete or adopt with the USER's call on
 // MTG_ATTACK_LORD_CAST): the walk takes each cast card out of the scratch hand, so Ilharg's attack-put projection
 // cannot put a card the plan already cast. =1 on.
-// MTG_LORDCAST_AMEND_DIAG -- TEMPORARY DIAGNOSTIC (2026-11-27, attribution of the round-2 searched recoveries; delete
-// before the round-3 A/B binary is built): bitmask of the MTG_ATTACK_LORD_CAST amendments left armed, A=1 B=2 C=4 D=8,
-// default 15 (all). Read only under the lever, so the off arm is unaffected.
-static int LordCastAmendDiag()
-{
-    static const int v = EnvInt("MTG_LORDCAST_AMEND_DIAG", 15);
-    return v;
-}
 static bool LordCastHandEnabled()
 {
     static const bool env_on = EnvOn("MTG_LORDCAST_HAND", false);
@@ -16600,7 +16597,7 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
         // battlefield (or kept earlier in this walk) is not kept again -- the legend rule leaves ONE copy, so its static
         // pump counts once. Without this the walk read Raggadragga's +2/+2 twice on three mana dorks (17 read, 11
         // dealt) and played the second copy as a "lethal" line. Lever-only, so the off arm is byte-identical.
-        if (keep_lord && board_lord && (LordCastAmendDiag() & 4) && d->card.HasSupertype(Supertype::Legendary))
+        if (keep_lord && board_lord && d->card.HasSupertype(Supertype::Legendary))
         {
             for (const Permanent& q : t.battlefield)
             {
@@ -16772,7 +16769,7 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
     // exactly the input that hold read, so the frozen "hold" dropped the lord's pump on it (16 read, 19 dealt, the
     // T4 kill missed). A creature the intent HELD whose lord bonus the kept lords raise is re-asked on the walk's
     // board (wants = 2); every other verdict stays the pre-plan one, so point 10's hold-context protection stands.
-    if (board_lord && (LordCastAmendDiag() & 1) && t_attack_intent != nullptr)
+    if (board_lord && t_attack_intent != nullptr)
     {
         AttackIntent re = *t_attack_intent;
         bool changed = false;
@@ -17224,7 +17221,7 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
     // more often, since nothing lifts it); inert without a live outlet (state.deck_has_sac_mana_outlet).
     int fodder_eat = 0;
     SacPayOutlet fodder_outlet;
-    if (need_exact && ctx.board_lord && (LordCastAmendDiag() & 2) && !ctx.cand_walk.empty())
+    if (need_exact && ctx.board_lord && !ctx.cand_walk.empty())
     {
         bool lord_in_sel = false;
         for (int j : sel) { if (ctx.cand_walk[static_cast<std::size_t>(j)] & kWalkLord) { lord_in_sel = true; break; } }
@@ -68017,7 +68014,7 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
         // (one apply per candidate winner, not per subset). A refused subset competes on value, exactly as the off
         // arm scores it. Lever-only: the off arm is byte-identical.
         if (better && wins && !verified_win && is_pre_combat && atk_tap_ctx.board_lord
-            && (LordCastAmendDiag() & 8) && !atk_tap_ctx.cand_walk.empty())
+            && !atk_tap_ctx.cand_walk.empty())
         {
             bool lord_in_sel = false;
             for (int j : sel)
