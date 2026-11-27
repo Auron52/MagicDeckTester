@@ -127,3 +127,76 @@ Held-out play A/B of ALL THREE levers off vs on (`mk_ab.py --n 400 --hg 200 --wf
 deck, 86,400 games): **43,200 pairs, net 0, 0 slower, 0 faster in every shape**; Dragonstorm std 3000 / 2HG 3000 pairs
 0 / 0; units -0.00% total (no shape moves more than +0.02%); cpu +0.03% (wall, noise). No slower game, so no d8 b0
 replay is owed.
+
+### Round 2 (ds-apply2): `MTG_CCO_RESERVE_JOINT` and `MTG_LINE_NC_LEFT` (2026-11-27)
+
+Two more payer judgements in the shared payer (executor and rollout together, every budget), each DEFAULT ON with `=0`
+byte-identical (six event repros: the `=0` game logs equal the base binary's f5f442801, `runId` aside).
+
+**(a) `MTG_CCO_RESERVE_JOINT` -- two Unclaimed Territories.** The greedy ladder's CCO line reserve (`cco_hold`,
+ManaPayment.cpp) releases a colored_creature_only land when, PER COLOUR the line is short of, the OTHER untapped
+creature-only lands make that colour (`MTG_CCO_RESERVE_OTHER`). Each other land was counted toward every colour it
+makes, but one tap makes one unit: with Karrthus owing {B} and {G} and two Territories, each read the other as covering
+both, neither was held, the CCO hand-demand rung tapped one early and Desperate Ritual's generic took its {C}
+(s30096797 T5). The release now needs the others to cover the shortfall JOINTLY (Hall's condition over every subset of
+the held colours; boards with more than 16 other lands keep the per-colour test). It only adds holds; the backtracker
+still runs on any greedy failure. A unit fixture must carry the game's HAND (the hand-demand rung reads it).
+
+**(c) `MTG_LINE_NC_LEFT` -- the line-keep rung's stale noncreature total.** s30129376 T4 {Ruby Medallion, Seething Song,
+Karrthus}: Ruby is paid with Lotus Bloom ({B} floats). At Song's payment the floating {B} and Mountain#29's {R} paid
+Song's {1}{R}, leaving Karrthus's {B} and {G} to the one Territory, although Sandstone Needle's {R}{R} pays Song and
+keeps the {B}. (Round 1's handoff placed the loss at Ruby's payment and wrote a leftover-swap lever,
+`MTG_LEFTOVER_SWAP_EXACT`, for it; the debug trace shows the engine's Ruby payment leaves `fl B1` and Song's drains it,
+and no unit floats after Song for a swap to move. That lever is DELETED.) The line-keep rung (`LineReducerKeepHold`)
+judges the rest of the line in creature mode -- a creature-only land makes a colour -- only when
+`g_line_noncreature_mv` is 0 or this noncreature payment's mana value reaches it. That value is the line's WHOLE
+noncreature bill (Ruby 2 + Song 3 = 5) and is never counted down, so at Song's payment (mana value 2 after Ruby)
+Karrthus was judged as a noncreature bill (Territory {C} only), unpayable however Song was paid, and the rung kept
+nothing. With the lever both apply worlds count the line's noncreature casts down at the cast site
+(`g_line_noncreature_left`, `LineNoncreatureLeftScope` + `NoteLineNoncreatureCast`, beside the
+`MTG_SERVANT_HASTE_KEEP` count), and the rest is creature-only once none is left. It only turns the rest's mode from
+noncreature to creature. Payability walks bind no count (every `LineUnpaidCostScope` resets it to -1) and keep the old
+test. (The LINE_FLOAT_TAP_FIRST rung does not catch this board either: a depletion land is never "spare" there.)
+
+**Event repros** (oracle on the event turn, APPLY-DROP flags with both levers off / both on / CCO_JOINT only / NC_LEFT
+only; "off" is the base binary f5f442801, except s30103016 and s30126750: the new binary at `=0`. The two agree wherever
+both were run):
+
+| seed:turn | off | on | joint only | nc_left only | fixed by |
+|---|---:|---:|---:|---:|---|
+| 30096797:5 | 2 | 0 | 0 | 2 | CCO_RESERVE_JOINT |
+| 30112157:6 | 4 | 0 | 0 | 4 | CCO_RESERVE_JOINT |
+| 30142602:6 | 6 | 0 | 0 | 6 | CCO_RESERVE_JOINT |
+| 30155973:5 | 2 | 0 | 0 | 2 | CCO_RESERVE_JOINT |
+| 30089733:5 | 4 | 0 | 0 | 4 | CCO_RESERVE_JOINT |
+| 30103016:7 | 5 | 0 | 0 | 5 | CCO_RESERVE_JOINT |
+| 30129376:4 | 1 | 0 | 1 | 0 | LINE_NC_LEFT |
+| 30126750:5 | 2 | 0 | 2 | 0 | LINE_NC_LEFT |
+
+Units: full suite 4314 / 4314; the line-keep cases 8 / 8, both new tests pass on (pays) and off (fails).
+
+**Gate** (`logs/ds-apply2/mk_gate2.py`: the Dragonstorm slice of claude-queue-20261125a, gi 87000-158999, 72,000 games
+per arm, MTG_MANA_ORACLE=2; leave-one-out arms on gi < 105000):
+
+| arm | slice | AD-decl flags | AD-undecl flags | events decl | events undecl | ENUM-GAP | ORACLE-GAP | turns |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| off | all | 284 | 314 | 59 | 48 | 27 | 0 | 313,583 |
+| on | all | 270 | 323 | 50 | 49 | 27 | 1 | 313,583 |
+| off | loo | 62 | 72 | 14 | 13 | 5 | 0 | 78,957 |
+| on | loo | 51 | 72 | 10 | 13 | 5 | 0 | 78,957 |
+| CCO_JOINT off | loo | 62 | 72 | 14 | 13 | 5 | 0 | 78,957 |
+| NC_LEFT off | loo | 51 | 72 | 10 | 13 | 5 | 0 | 78,957 |
+
+Off -> on: 10 declared Karrthus events fixed (all ten in the table above, plus 30103016 T8 and 30142602 T7), 1 declared
+and 1 need-later Karrthus event new (s30145787 T6, s30155815 T6), both in blocks whose play moved (5 of 362 block
+digests differ). The one ORACLE-GAP (s30123403 T7) is in a block with an identical digest: the oracle's own probes
+run under the levers, so its coverage moved, not the engine's play. Turns 313,583 both arms; cpu +0.1% (wall).
+
+**Held-out play A/B** (`mk_ab.py --n 400 --hg 200 --wf 3000 --base 5220000`, every suite deck std + 2HG, Dragonstorm
+3000 + 3000, levers all off vs all on, 87,600 games): **43,800 pairs, net 0, 0 slower, 0 faster in every one of the
+128 shapes**; units -0.00% total (largest move boars 2HG -0.01%); cpu +0.09% (wall, per-shape noise within +-2.7%). No
+slower game, so no d8 b0 replay is owed. Heartbeat 32/32 throughout.
+
+Verdict: both levers ADOPT, default ON (payer-ordering fixes; play-neutral on the held-out sample, no CPU cost).
+Remaining Dragonstorm APPLY-DROP: Kolaghan declared (144 flags) and the need-later Karrthus cluster (270-279), unchanged
+by these levers; round-1 items d (Apex-line Kolaghan overkill-only) and e (need-later past Apex) are still open.
