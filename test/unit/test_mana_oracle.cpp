@@ -1900,13 +1900,12 @@ struct OracleEnvPin
 // Treasure Hunt off two Islands, an Island from hand played in its breakpoint, the second off that Island and the last
 // one. The engine reaches that line only as the breakpoint's continuation {land=Island + Treasure Hunt}, which the
 // provider's strict flood gate refuses (drop spent, no Land's Edge or Reliquary Tower out, no mana for the Edge).
-GameState ThTwoHunts(bool edge_in_play)
+// `th_provider` false: the deck's provider is left unset (GenericProvider, which casts every flood engine).
+GameState ThTwoHunts(bool th_provider)
 {
     static const TreasureHuntProvider prov;
-    std::vector<std::string> bf{ "Island", "Island", "Island" };
-    if (edge_in_play) { bf.push_back("Land's Edge"); }
-    GameState s = Board(bf);
-    s.m_provider = &prov;
+    GameState s = Board({ "Island", "Island", "Island" });
+    s.m_provider = th_provider ? &prov : nullptr;
     s.turn_number = 3;
     s.players[0].life = s.players[1].life = 20;
     Hand(s, { "Treasure Hunt", "Treasure Hunt", "Island", "Island", "Land's Edge" });
@@ -1928,7 +1927,7 @@ TurnSolver::Plan TwoHunts(const GameState& s)
 TEST_CASE("ENUM-GAP: a second Treasure Hunt paid by a land played after the first is the provider's prune, not a gap")
 {
     EnsureOracleCards();
-    const GameState s = ThTwoHunts(/*edge_in_play=*/false);
+    const GameState s = ThTwoHunts(/*th_provider=*/true);
     const TurnSolver::Plan p = TwoHunts(s);
     std::string why;
     {
@@ -1938,12 +1937,14 @@ TEST_CASE("ENUM-GAP: a second Treasure Hunt paid by a land played after the firs
         CHECK(why.find("Island#") != std::string::npos);
     }
     CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, p, {}).empty());
-    // With Land's Edge in play the provider admits the second Treasure Hunt after the drop: a real gap either way.
-    const GameState e = ThTwoHunts(/*edge_in_play=*/true);
-    CHECK(manaoracle::EnumGapVerdict(e, /*pre=*/true, TwoHunts(e), {}) == "ENUM-GAP");
+    // CONTROL: the same board under a provider that admits the second Treasure Hunt after the drop (GenericProvider
+    // casts every flood engine). The rejection is the provider's answer, not the continuation land: a real gap
+    // with the lever on as well as off.
+    const GameState g = ThTwoHunts(/*th_provider=*/false);
+    CHECK(manaoracle::EnumGapVerdict(g, /*pre=*/true, TwoHunts(g), {}) == "ENUM-GAP");
     {
         OracleEnvPin off("MTG_ORACLE_EG_PROVIDER_PRUNE", "0");
-        CHECK(manaoracle::EnumGapVerdict(e, /*pre=*/true, TwoHunts(e), {}) == "ENUM-GAP");
+        CHECK(manaoracle::EnumGapVerdict(g, /*pre=*/true, TwoHunts(g), {}) == "ENUM-GAP");
     }
 }
 
@@ -1974,19 +1975,23 @@ TEST_CASE("mana oracle: a drop on a line that has already won is DROP-COVERED")
 }
 
 // An UNDECLARED drop the menu reaches anyway (MTG_ORACLE_UNDECL_MENU_COVER). Treasure Hunt s30106563 T4 (gate gi
-// 100000-119999, the leading undeclared shape): {no land + Treasure Hunt} off Reliquary Tower, Ferrous Lake and
-// Saprazzan Skerry, Land's Edge in hand. The breakpoint continuation plays a land and casts Land's Edge, which the
-// plan does not name, and the Edge drops; the oracle's payment of Treasure Hunt leaves the colours for it. Every board
-// that payment reaches, {land=Cascade Bluffs + Treasure Hunt} reaches under the engine's own line. (The opponent is
-// put out of reach, so no entry's line wins and MTG_ORACLE_DROP_WON stays out of it.)
+// 100000-119999, the leading undeclared shape), the game's own board: {no land + Treasure Hunt} off Reliquary Tower,
+// Ferrous Lake and Saprazzan Skerry, Land's Edge in hand, the opponent at 18. The engine pays Treasure Hunt with the
+// Skerry alone; the breakpoint continuation plays a Reliquary Tower and casts Land's Edge, which the plan does not name,
+// and the Edge drops (one red source). The oracle's payments leave the colours: Skerry + Ferrous Lake for the Hunt,
+// then the continuation plays Cascade Bluffs (or Steam Vents), casts the Edge and throws the hand, the Tower with it.
+// Every such board, {land=Cascade Bluffs + Treasure Hunt} or {land=Steam Vents + Treasure Hunt} reaches under the
+// engine's own line. MTG_ORACLE_DROP_WON is pinned off throughout: the throws win in the unit's apply, and that lever
+// would cover the drop first (in the game it did not fire), so the test isolates this one.
 TEST_CASE("mana oracle: an undeclared continuation drop whose board another menu entry reaches is DROP-COVERED")
 {
     EnsureOracleCards();
+    OracleEnvPin won_off("MTG_ORACLE_DROP_WON", "0");
     static const TreasureHuntProvider prov;
     GameState s = Board({ "Reliquary Tower", "Ferrous Lake", "Saprazzan Skerry" });
     s.m_provider = &prov;
     s.players[0].life = 20;
-    s.players[1].life = 500;
+    s.players[1].life = 18;
     s.battlefield[2].counters.Add(Counter::Type::Depletion, 2);
     Hand(s, { "Forgotten Cave", "Steam Vents", "Frostboil Snarl", "Reliquary Tower", "Frostboil Snarl", "Fiery Islet",
               "Treasure Hunt", "Island", "Cascade Bluffs", "Sandstone Needle", "Ferrous Lake", "Cascade Bluffs",
@@ -2001,16 +2006,21 @@ TEST_CASE("mana oracle: an undeclared continuation drop whose board another menu
     TurnSolver::Plan hunt = PlanOf({ CastAction(s, "Treasure Hunt") });
     TurnSolver::Plan bluffs = hunt;
     bluffs.land_to_play = "Cascade Bluffs";
+    TurnSolver::Plan vents = hunt;
+    vents.land_to_play = "Steam Vents";
+    const std::vector<TurnSolver::Plan> menu{ hunt, bluffs, vents };
+    // The premise: alone on the menu the drop is an APPLY-DROP whichever way the lever is set (no other entry).
     const std::vector<std::string> alone = manaoracle::PlanVerdict(s, /*pre=*/true, hunt, { hunt });
     INFO("alone: ", Joined(alone));
     REQUIRE(Has(alone, "APPLY-DROP"));
     {
         OracleEnvPin off("MTG_ORACLE_UNDECL_MENU_COVER", "0");
-        const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, hunt, { hunt, bluffs });
+        const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, hunt, menu);
         INFO("off: ", Joined(v));
         CHECK(Has(v, "APPLY-DROP"));
+        CHECK_FALSE(Has(v, "DROP-COVERED"));
     }
-    const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, hunt, { hunt, bluffs });
+    const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, hunt, menu);
     INFO("on: ", Joined(v));
     CHECK_FALSE(Has(v, "APPLY-DROP"));
     CHECK(Has(v, "DROP-COVERED"));
