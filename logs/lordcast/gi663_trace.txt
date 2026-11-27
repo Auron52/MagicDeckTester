@@ -1,0 +1,28 @@
+Elves 2HG gi663 (seed 7340663, gi663, life 30 heads 2, d8 b0) -- 2026-11-27 trace session (runner: build/scratch/elves-lordcast/g663/run.sh
+<tag> <off|on|onAV> <proj_turn> [ENV=..]; BUD=<budget> DEP=<depth> BIN=<binary> overrides; one-job batch from m_663b.json)
+
+off T4 (digest 675b2b04191b09d4, 2127 units); on T5 (a13471a212d1158d, 37615 units). Also at d8 BUD=200000: off T4, on T5 (93217 units).
+
+Real games: both play T1-T2 identically; T3 both cast Leaf-Crowned Visionary + Priest of Titania; off PAYS the Visionary {G} draw (Plan::
+mihail_pay_choice), draws Elvish Archdruid, casts it (pays again) -> T4 Llanowar + Joraga Warcaller kicked x8, kill (opp 26 -> -3).
+on declines the draws, attacks for 2, T4 Archdruid natural draw, T5 Warcaller kill.
+
+MTG_FSW_TRACE=1 MTG_FSW_TURN=3 (FSLineWin): off decides T3 inside its T2 search (T3 frames at d2 only; 19 [fsw] lines, then cutoff);
+on re-searches T3 at d3 (best tail=5). DECISIVE ROW -- identical node and identical breakpoint wave in both arms:
+  [fsw-wave] T3 d2 oppL=27 node=[Forest,Wirewood Lodge,] hand=6 p=land=Forest;Leaf-Crowned Visionary,Priest of Titania,Wirewood Lodge,
+             bp=1@0 after=27 kill=0 cont=[k0:Elvish Archdruid,]
+  off: tail=4   on: tail=9
+So the lever changes how the paid-draw continuation's T4 is scored, NOT the T3 root ranking and NOT the unverified first-winner return
+(onAV == on byte-identical).
+
+Ruled out (each arm's digest unchanged): line caches (MTG_GAME_LINE_CACHE/INWIN_CACHE/ROLLOUT_GAME_CACHE =0, and *_VERIFY=1);
+memos (MTG_ROLLOUT_M1_MEMO SOLVE_MEMO ENUM_MEMO COLLECT_MEMO EXH_LEAF_MEMO MEMO_WIN_ORDERFREE =0).
+No pre-combat SolveWithLookahead node and no pre-combat Solve call occurs on T4 in either arm (TEMPORARY print-only diagnostics
+MTG_LORDCAST_DIAG_TURN / MTG_LORDCAST_SOLVE_DIAG_TURN, commit 6507cfd63; 0 lines even with every memo off). T4 is decided by
+FSLineWin's own frames (d1). Its T4 trace shows NO frame with tail=4 or a kill in EITHER arm; the T4 waves that cast Warcaller
+(cont=[k0:Joraga Warcaller,...]) leave the opponent at 12-13, while off's executor kicked x8 for 29.
+
+NEXT SUSPECTS (not yet run): (1) an FSLineWin T4 path that returns a kill without printing [fsw] -- a route / lethal-cut / board-lethal
+short-circuit -- read FSLineWin (TurnSolver.cpp ~124844) for returns before the [fsw] print at ~127498; (2) the multikick Warcaller
+kick-count variants in the T4 enumeration: where the lever's AttackTapLoss walk (kept lord bodies tapped, re-projection taps the spent
+sources) changes plan values, a value-ordered cut on kick variants would drop the x8 line only under the lever.
