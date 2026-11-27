@@ -65905,11 +65905,9 @@ static bool SubsetHasUncastHasteRider(const std::vector<Action>& cands, const st
 // plan (and every key that folds the choice) is byte-identical. The reserve is what the plan spends OUTSIDE its casts
 // (activations: Ezuri's pump count, Clancaller, Allosaurus Shepherd, Wirewood Lodge), which the line hold
 // (g_line_unpaid_cost, casts only) does not carry; a whole-plan sum, so an activation the line has already paid is
-// still reserved -- it can only decline more. MTG_PLAYOUT_PAY_DRAW=0 (TEMPORARY A/B selector) -> the old decline.
+// still reserved -- it can only decline more.
 static void MarkPlayoutPayDraw(const GameState& state, bool is_pre_combat, TurnSolver::Plan& p)
 {
-    static const bool s_env = EnvOn("MTG_PLAYOUT_PAY_DRAW", true);   // DEFAULT ON; =0 -> decline beyond the horizon
-    if (!heurarm::Flag(heurarm::PLAYOUT_PAY_DRAW, s_env)) { return; }
     if (p.mihail_pay_choice.IsPinned() || HumanPlayActive()) { return; }
     auto is_pay_draw = [](const CardDefinition* d)
     { return d != nullptr && d->params.cast_subtype_pay_draw_cost.has_value() && !d->params.cast_trigger_subtype.empty(); };
