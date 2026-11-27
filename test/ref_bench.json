@@ -570,6 +570,18 @@
    "short": 0,
    "shortfalls": [],
    "src": "587dcce678b33e6a61d28b2760d0c11a8f693f79"
+  },
+  "zombies": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.4,
+   "max_turns": 8,
+   "n": 10,
+   "policy": "committed value_play",
+   "search": 4.4,
+   "short": 0,
+   "shortfalls": [],
+   "src": "58e7b5aea94b0a2361dfb38226ec1a4dc0a9d2ea"
   }
  }
 }

@@ -50,6 +50,13 @@ The completed Zombies overnight run need not be repeated solely because the
 shared head moved; its source hash and same-score audit are recorded in this
 ledger. The shared ground-truth header can reflect another deck's later accept.
 
+The primary play viewer was started from the landed shared checkout with the
+validated Release binary. The user saved ten Zombies reference games, committed
+and pushed as `0fa58ab5a`. At committed depth 5/budget 20, the search matched
+all ten win turns exactly (human 4.400, search 4.400; zero hand mismatches or
+shortfalls). A live Scryfall cost audit compared all 13 costed Zombies cards;
+all 13 mana costs matched.
+
 ## Coverage
 
 `python3 scripts/analyze_deck.py decks/Zombies/Zombies.cod --coverage-only`
