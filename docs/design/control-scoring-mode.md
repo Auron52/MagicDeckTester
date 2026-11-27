@@ -1400,8 +1400,10 @@ deck:
     harness and the mapping model (removal, counter, discard, land destruction, sweeper, life gain, damage
     prevention, a blocker the deck casts mainly to block, a lock piece). The classification is listed in the
     screen report so the USER can correct it.
-  * **In such a screen the control-scored result decides,** with 1v1 joining when it exists. The goldfish result is
-    still reported beside it, because it shows what the card costs the deck's own clock.
+  * **In such a screen only the control-scored mode runs,** with 1v1 joining when it exists. Goldfish is not run at
+    all (USER 2026-11-27, verbatim): "Realistically we don't need the goldfish for the control card tests because we
+    know it will be totally unreliable." The card's cost to the deck's own clock is already inside the control
+    score, through W.
 * **A non-control swap: goldfish decides, the other modes sanity-check (USER 2026-11-27, verbatim):** "Regarding the
   open question, the control modes are probably more accurate, but also clearly more expensive. Goldfishing on the
   other hand allows us to run a lot of games which is very helpful when we are looking at cards that are just
@@ -1412,7 +1414,7 @@ deck:
     other modes run a smaller sample as a sanity check. A sanity check that points the other way, beyond its own
     noise, is reported to the USER rather than overriding the verdict.
   * **A control card in the swap:** the control-scored mode (and 1v1 later) gets the focused effort and decides,
-    as above. Goldfish is reported beside it.
+    as above. Goldfish is not run.
   * The screen report states which case it applied and why, from the card classification.
 
 **Q9. Is the per-pair form of section 4.1 what you mean by "<win turn - average control impact>"?** The design
