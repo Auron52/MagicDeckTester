@@ -801,9 +801,16 @@ attacker mid-combat. Each one changes how much of the gauntlet deck's damage lan
 though not a particularly strong one on its own." In the replay it is an effect like any other: life gained on
 round t raises the life the gauntlet deck has to get through, and the replay measures how far that pushes its kill.
 Expected size: gaining L life against a deck that deals about R damage a round buys at most about L / R rounds,
-and only in the games where it carries the kill past a round boundary. So it is small alone, and largest against
-slow chip damage or on top of other delays (a blocker, a removal spell), which is where the mapping's interaction
-terms matter. It also has a hard counter in the gauntlet: Screaming Nemesis's lockout, above. The suite's life-gain
+and only in the games where it carries the kill past a round boundary. Which R matters depends on how the deck
+deals its damage (USER 2026-11-27, verbatim: "But for delaying the win turn it is very good vs burn and not so
+amazing vs creature decks."):
+* **Against burn it is strong.** Burn's damage is spent card by card, about 3 a spell, and does not repeat. Every
+  ~3 life gained is one more burn spell it must draw, which is close to one more draw step.
+* **Against creature decks it is weak.** A board deals its damage again every round, and it grows, so R rises and
+  the same life is gone in a fraction of a round.
+It is largest on top of other delays (a blocker, a removal spell), which is where the mapping's interaction terms
+matter. The per-gauntlet-deck partial scores (section 4.5) keep the burn-vs-creature difference visible instead of
+averaging it away. It also has a hard counter in the gauntlet: Screaming Nemesis's lockout, above. The suite's life-gain
 decks (Selesnya Lifegain, Critter Lifegain, Martyr Lifegain, Lifegain Heliod Combo) are goldfish decks today. If
 the USER ever wants their life gain credited, they are candidates to carry both modes.
 
