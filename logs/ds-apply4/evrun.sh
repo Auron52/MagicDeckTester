@@ -2,4 +2,4 @@
 # evrun.sh <bin> <tag> [ENV=VAL...]: every event game (events.txt), oracle on the event turn; DONE marker rep_<tag>.DONE
 S=/workspaces/MagicDeckTester/build/scratch/ds-apply4
 B=$1; tag=$2; shift 2
-REPO=/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4 /workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/logs/ds-apply4/rep.sh $B $tag $(cat $S/events.txt) -- "$@" MTG_X_DUMMY=0
+REPO=/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4 bash /workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/logs/ds-apply4/rep.sh $B $tag $(cat $S/events.txt) -- "$@" MTG_X_DUMMY=0

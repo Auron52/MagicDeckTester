@@ -1,0 +1,23 @@
+arm                          sl   games    turns       units   cpu_s ADdecl ADundc ADordr   ENUM CAPdec   KolD   evD   evU
+off                          all  72000   313541   139460104   84043    259    321     51     25    228    123    47    50
+on                           all  72000   313540   139431000   86636    211    318     35     25    248     82    37    50
+no_line_seq_rest             all  18109    78944    33903531   19893     50     76     14      5      0      8     9    14
+no_unseen_scarce_ritual_net  all  18109    78943    33889376   20497     51     76     14      5      0      9    10    14
+off                          loo  18109    78944    33903501   19966     51     76     14      5      0      9    10    14
+on                           loo  18109    78943    33889406   20524     50     76     14      5      0      8     9    14
+no_line_seq_rest             loo  18109    78944    33903531   19893     50     76     14      5      0      8     9    14
+no_unseen_scarce_ritual_net  loo  18109    78943    33889376   20497     51     76     14      5      0      9    10    14
+
+off all ADundc Karrthus, Tyrant of Jund=277, ADdecl Dragonlord Kolaghan=123, ADdecl Karrthus, Tyrant of Jund=46, ADdecl Scourge of Valkas=34, ADundc Dragonlord Kolaghan=22, ADundc Scourge of Valkas=18, ADdecl Utvara Hellkite=15, ADdecl Lathliss, Dragon Queen=14
+on all ADundc Karrthus, Tyrant of Jund=274, ADdecl Dragonlord Kolaghan=82, ADdecl Karrthus, Tyrant of Jund=39, ADdecl Scourge of Valkas=34, ADundc Dragonlord Kolaghan=22, ADundc Scourge of Valkas=18, ADdecl Utvara Hellkite=15, ADdecl Lathliss, Dragon Queen=14
+no_line_seq_rest all ADundc Karrthus, Tyrant of Jund=64, ADdecl Scourge of Valkas=15, ADdecl Lathliss, Dragon Queen=14, ADdecl Apex of Power=8, ADdecl Dragonlord Kolaghan=8, ADundc Dragonlord Kolaghan=7, ADdecl Karrthus, Tyrant of Jund=5, ADundc Scourge of Valkas=3
+no_unseen_scarce_ritual_net all ADundc Karrthus, Tyrant of Jund=64, ADdecl Scourge of Valkas=15, ADdecl Lathliss, Dragon Queen=14, ADdecl Dragonlord Kolaghan=9, ADdecl Apex of Power=8, ADundc Dragonlord Kolaghan=7, ADdecl Karrthus, Tyrant of Jund=5, ADundc Scourge of Valkas=3
+off loo ADundc Karrthus, Tyrant of Jund=64, ADdecl Scourge of Valkas=15, ADdecl Lathliss, Dragon Queen=14, ADdecl Dragonlord Kolaghan=9, ADdecl Apex of Power=8, ADundc Dragonlord Kolaghan=7, ADdecl Karrthus, Tyrant of Jund=5, ADundc Scourge of Valkas=3
+on loo ADundc Karrthus, Tyrant of Jund=64, ADdecl Scourge of Valkas=15, ADdecl Lathliss, Dragon Queen=14, ADdecl Apex of Power=8, ADdecl Dragonlord Kolaghan=8, ADundc Dragonlord Kolaghan=7, ADdecl Karrthus, Tyrant of Jund=5, ADundc Scourge of Valkas=3
+no_line_seq_rest loo ADundc Karrthus, Tyrant of Jund=64, ADdecl Scourge of Valkas=15, ADdecl Lathliss, Dragon Queen=14, ADdecl Apex of Power=8, ADdecl Dragonlord Kolaghan=8, ADundc Dragonlord Kolaghan=7, ADdecl Karrthus, Tyrant of Jund=5, ADundc Scourge of Valkas=3
+no_unseen_scarce_ritual_net loo ADundc Karrthus, Tyrant of Jund=64, ADdecl Scourge of Valkas=15, ADdecl Lathliss, Dragon Queen=14, ADdecl Dragonlord Kolaghan=9, ADdecl Apex of Power=8, ADundc Dragonlord Kolaghan=7, ADdecl Karrthus, Tyrant of Jund=5, ADundc Scourge of Valkas=3
+
+CAPPED-DECISION (seed,turn) events: off 3 on 4; only-off 0 only-on 1; flags in shared events off 228 on 237
+  only-on (30145787, 'T6') 11
+  shared (30112005, 'T6') 40 -> 41
+  shared (30137529, 'T7') 98 -> 106

@@ -1,0 +1,649 @@
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_accomplished_alchemist.cpp:3492:
+TEST CASE:  Cast order, PROPOSED: {Wild Growth, Living Wish} on two Forests -- realised only with the Aura before the Wish
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_accomplished_alchemist.cpp:3545: MESSAGE: realised in worlds: off=2 on=2 on(domain off)=0 af=2
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_accomplished_alchemist.cpp:3615:
+TEST CASE:  Cast order, PROPOSED: an Alchemist turn's two-card bootstrap (Nourish, then the Wish off the Alchemist) survives every arm
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_accomplished_alchemist.cpp:3656: MESSAGE: both cast, worlds: generic wish-first-in-hand=2 generic nourish-first=2 proposed(af+wl)=2 wish_after_life=2 life_first=2
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_accomplished_alchemist.cpp:3917:
+TEST CASE:  Cast order, WISH_LATE: {Living Wish, Galvanic Alchemist} off an Alchemist turn -- the mechanism probe
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_accomplished_alchemist.cpp:3961: MESSAGE: forests=2 both cast, worlds: generic=2 walwl=2 wlate=2
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_accomplished_alchemist.cpp:3961: MESSAGE: forests=1 both cast, worlds: generic=2 walwl=2 wlate=2
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_accomplished_alchemist.cpp:4221:
+TEST CASE:  Weather flex: the USER's line realised as ONE cast list -- spell, Weather, the Alchemist's six blue for Crab Umbra, then the loop kills (both worlds)
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_accomplished_alchemist.cpp:4255: MESSAGE: plans 7/7 worlds won: gw=0 gwf=2
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_attach_order.cpp:267:
+TEST CASE:  Attach (A): a Theft onto a hand-cast Lizard Blades the plan reconfigures is dropped; its twin realises the same board cheaper
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_attach_order.cpp:295: MESSAGE: seed-2100018 T7 board (autonomous menu): 154 plans; Theft onto the hand Lizard + its reconfigure: 0; Theft onto it kept without one: 5
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_bruna_sweep.cpp:1719:
+TEST CASE:  bp continuation cache: an unpinned entry is never served to a combat-swap-pinned state
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_bruna_sweep.cpp:1741: MESSAGE: unpinned list 4 plans, pinned list 2
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:196:
+TEST CASE:  Equip host fold: two identical Speakers -- only mirror images are dropped, every line survives
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:201: MESSAGE: two-Speaker frame (autonomous menu): 12 distinct plans unfolded -> 10 folded
+  logged: unfolded 12 plans, folded 10
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:334:
+TEST CASE:  Equip host fold: the claude-play sweep's seed-2100003 T5 board, autonomous menu before / after
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:357: MESSAGE:[gods-dredge-depth1] plans=24 budget_used=38
+ seed-2100003 T5 board (autonomous menu): 49 distinct plans unfolded -> 35 folded
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:472:
+TEST CASE:  Equip host fold / Theft: only mirror images are dropped, every line survives -- Speakers AND Hammers
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:481: MESSAGE: two-Speaker / two-Hammer / two-Theft board (autonomous menu): 774 distinct plans unfolded -> 538 folded; 473 distinct lines up to relabelling
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:641:
+TEST CASE:  Hand-piece Thefts: only mirror images of the two copies are dropped; twins realise the same board in BOTH worlds
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:648: MESSAGE: two hand Hammers + two Thefts (autonomous menu): 12 distinct plans unfolded -> 10 folded
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:768:
+TEST CASE:  Unlanded hand copy: an Equip of a copy the subset never lands is dropped; a strictly cheaper twin stays on the menu
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:778: MESSAGE: two hand Hammers, one main-1 copy (autonomous menu): 10 distinct plans unfolded -> 8 folded; plans equipping copy #2 with <= 1 Hammer cast: 2 -> 0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:796: MESSAGE: dropped |0:Colossus Hammer:0>0/e0/m0;17:Colossus Hammer:63>15/e0/m0;  -> twin |0:Colossus Hammer:0>0/e0/m0;
+  logged: dropped |0:Colossus Hammer:0>0/e0/m0;17:Colossus Hammer:63>15/e0/m0;
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:796: MESSAGE: dropped |0:Colossus Hammer:0>0/e0/m0;17:Colossus Hammer:63>57/e0/m0;  -> twin |0:Colossus Hammer:0>0/e0/m0;
+  logged: dropped |0:Colossus Hammer:0>0/e0/m0;17:Colossus Hammer:63>57/e0/m0;
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:857:
+TEST CASE:  Unlanded hand copy: the greedy walker (Solve) keeps its pick and never takes a dead Equip
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:870: MESSAGE: greedy pick, fold 0: |0:Colossus Hammer:0>0/e0/m0;0:Colossus Hammer:0>0/e0/m0;17:Colossus Hammer:61>15/e0/m0;
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_equip_host_fold.cpp:870: MESSAGE: greedy pick, fold 1: |0:Colossus Hammer:0>0/e0/m0;0:Colossus Hammer:0>0/e0/m0;17:Colossus Hammer:61>15/e0/m0;
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_free_turns.cpp:350:
+TEST CASE:  free turns: the hurdle basic -- the list's most common basic; the four no-basic lists by colour
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_free_turns.cpp:367: MESSAGE: Eldrazi Displacer Flicker -> Forest
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_free_turns.cpp:367: MESSAGE: Fluctuator -> Plains
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_free_turns.cpp:367: MESSAGE: Galadriel -> Island
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_free_turns.cpp:367: MESSAGE: Prevent Damage -> Plains
+
+[keeptable] building deck.keepmodel.exhaustive.profile.json-89445bf788be2df1.keeptable from /tmp/mtg_keep_table_test/loader/deck.keepmodel.exhaustive.profile.json ...
+[keeptable] built 3000 compositions (0.73843 MB) in 0.0319394 s
+[keeptable] WARNING: keep_table_alias "Jorn, God of Winter" -> "Not A Card" is INERT: the table has no bucket for "Not A Card" either.
+[profile] WARNING: mulligan.keep_table_alias entry "Jorn, God of Winter" -> "Kaldring, the Rimestaff" has no "why" -- IGNORED.
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_mana_oracle.cpp:1668:
+TEST CASE:  pay refine: the release bound never releases fewer Gates than the eager enumeration, in any battlefield order (Maze's End F5R)
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_mana_oracle.cpp:1693: MESSAGE: rotation 0: paid true bound release 0, eager release 0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_mana_oracle.cpp:1693: MESSAGE: rotation 1: paid true bound release 0, eager release 0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_mana_oracle.cpp:1693: MESSAGE: rotation 2: paid true bound release 0, eager release 0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_mana_oracle.cpp:1693: MESSAGE: rotation 3: paid true bound release 0, eager release 0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_mana_oracle.cpp:1693: MESSAGE: rotation 4: paid true bound release 0, eager release 0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_mana_oracle.cpp:1693: MESSAGE: rotation 5: paid true bound release 0, eager release 0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_mana_oracle.cpp:1693: MESSAGE: rotation 6: paid true bound release 0, eager release 0
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_merfolk_turns.cpp:1486:
+TEST CASE:  Three Tree City: Dockhand before Seahunter is on the menu and applies (s30000762 T4)
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_merfolk_turns.cpp:1502: MESSAGE: bound alone: applied=false
+
+[provider-required] RED-FLAG decks/Test/Test.cod provider=Generic: Trench Gorger [etb_exile_library_lands_set_base_pt] -- no deck policy, the engine default runs
+[provider-required] RED FLAG: deck decks/Test/Test.cod holds a card whose decision EXPECTS a deck-specific provider policy, and its provider 'Generic' has none, so the ENGINE DEFAULT runs:
+  * Trench Gorger [etb_exile_library_lands_set_base_pt]: "search your library for any number of land cards, exile them" -- WHICH lands to exile. Running: the engine's searched menu: every count, but for 3+ kept lands WHICH lands is one round-robin prefix per count, capped at 62 entries (the full keep-subset product is combinatorially huge). Implement: DecisionProvider::RestrictExileLibraryLandsMenu, then ImplementsRequiredHeuristic(ExileLibraryLands).
+  USER 2026-11-20: "The default should be searched ... The expectation is that we will override it and so this should be a red flag." Draft a provider policy for the USER -- see docs/design/provider-heuristic-required.md.
+[provider-required] RED-FLAG contender provider=Generic: Acclaimed Contender [etb_dig_count] -- no deck policy, the engine default runs
+[provider-required] RED FLAG: deck contender holds a card whose decision EXPECTS a deck-specific provider policy, and its provider 'Generic' has none, so the ENGINE DEFAULT runs:
+  * Acclaimed Contender [etb_dig_count]: "look at the top N, you may put a <subtype> card into your hand" -- WHICH match to take. Running: the searched ETB-dig axis over EVERY legal match (it was the 3 front matches in LIBRARY order); beyond the horizon the playout still takes the first match in library order. Implement: DecisionProvider::EtbDigCandidates (rank / restrict the matches; EtbDigSearchWidth to cap the axis), then ImplementsRequiredHeuristic(EtbDigPick).
+  USER 2026-11-20: "The default should be searched ... The expectation is that we will override it and so this should be a red flag." Draft a provider policy for the USER -- see docs/design/provider-heuristic-required.md.
+[provider-required] RED-FLAG (unnamed) provider=Generic: Trench Gorger [etb_exile_library_lands_set_base_pt] -- no deck policy, the engine default runs
+[provider-required] RED FLAG: deck (unnamed) holds a card whose decision EXPECTS a deck-specific provider policy, and its provider 'Generic' has none, so the ENGINE DEFAULT runs:
+  * Trench Gorger [etb_exile_library_lands_set_base_pt]: "search your library for any number of land cards, exile them" -- WHICH lands to exile. Running: the engine's searched menu: every count, but for 3+ kept lands WHICH lands is one round-robin prefix per count, capped at 62 entries (the full keep-subset product is combinatorially huge). Implement: DecisionProvider::RestrictExileLibraryLandsMenu, then ImplementsRequiredHeuristic(ExileLibraryLands).
+  USER 2026-11-20: "The default should be searched ... The expectation is that we will override it and so this should be a red flag." Draft a provider policy for the USER -- see docs/design/provider-heuristic-required.md.
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_int9.cpp:516:
+TEST CASE:  INT-9 Jetmir kill: the enumeration collapses to the one verified killing plan
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_int9.cpp:524: MESSAGE: plans on the kill turn: 2
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_int9.cpp:625:
+TEST CASE:  INT-9 F: the Intent probe state -- searched (INT-8) vs the free-Intent ruling vs every INT-9 prune
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_int9.cpp:630: MESSAGE: Intent variants at an unlimited root: searched 216, free Intent declined 8, INT-9 1
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_int9.cpp:695:
+TEST CASE:  Sacrifice claims: two sacrifice costs never share the one creature the plan has
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_int9.cpp:718: MESSAGE: plans=7 culling-only=2 intent-only=2 both=0
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:384:
+TEST CASE:  SB union plan: Ritual, Ritual, Stone, Apostle is one post-combat plan
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:414: MESSAGE: union plans: shipped order 4, USER order 4
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:503:
+TEST CASE:  SB ritual payoff: a granter that only the ritual's own ripple credit could pay is a phantom, pruned
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:521: MESSAGE: Stone plans on one Swamp: off 1, on 0
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:538:
+TEST CASE:  SB ritual payoff: a sacrifice-six activation the six cannot reach is no sink for a ritual
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:555: MESSAGE: Ritual plans, one Apostle: off 1, on 0
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:683:
+TEST CASE:  SB order: Ritual-after-Stone is ONE arrangement per line -- the plan count does not grow
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:722: MESSAGE: 4 Swamps: plans off 14 on 14; Stone-before-Ritual lines off 0 on 0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:722: MESSAGE: 6 Swamps: plans off 22 on 22; Stone-before-Ritual lines off 0 on 12
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:722: MESSAGE: 7 Swamps: plans off 24 on 24; Stone-before-Ritual lines off 0 on 12
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:781:
+TEST CASE:  SB extreme case: the enumerator offers the six-cast line (census, both mains)
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main1 plan v=0 set:  | arranged:  pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:820: MESSAGE: going-off main1: 1 plans, 0 cast all six
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=1000 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=1000 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=1000 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=1000 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=1000 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=1000 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=1000 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=1000 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=900 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=900 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=900 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=900 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=900 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=900 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=900 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=900 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=900 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=800 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=600 set: Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle | arranged: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle | arranged: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Abhorrent Overlord | arranged: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=400 set: Dark Ritual > Dark Ritual > Shadowborn Apostle | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=400 set: Dark Ritual > Dark Ritual > Shadowborn Apostle | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=400 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=400 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=400 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=400 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=400 set: Dark Ritual > Shadowborn Apostle > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=400 set: Dark Ritual > Shadowborn Apostle > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=400 set: Dark Ritual > Shadowborn Apostle > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=400 set: Dark Ritual > Shadowborn Apostle > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=400 set: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=400 set: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=300 set: Dark Ritual > Shadowborn Apostle | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=300 set: Dark Ritual > Shadowborn Apostle | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=300 set: Dark Ritual > Shadowborn Apostle | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=300 set: Dark Ritual > Shadowborn Apostle | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=300 set: Dark Ritual > Dark Ritual > Thrumming Stone | arranged: Dark Ritual > Dark Ritual > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=300 set: Dark Ritual > Dark Ritual > Thrumming Stone | arranged: Dark Ritual > Dark Ritual > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=300 set: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=300 set: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=200 set: Shadowborn Apostle | arranged: Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=200 set: Shadowborn Apostle | arranged: Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=200 set: act:Shadowborn Apostle->Abhorrent Overlord | arranged:  pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=100 set: act:Shadowborn Apostle->Jetmir, Nexus of Revels | arranged:  pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: going-off main2 plan v=0 set:  | arranged:  pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:820: MESSAGE: going-off main2: 148 plans, 24 cast all six
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main1 plan v=0 set:  | arranged:  pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:820: MESSAGE: control main1: 1 plans, 0 cast all six
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=800 FULL set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=700 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=600 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle | arranged: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle | arranged: Dark Ritual > Shadowborn Apostle > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Shadowborn Apostle > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Shadowborn Apostle pays=0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=500 set: Dark Ritual > Shadowborn Apostle > Thrumming Stone > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=400 set: Dark Ritual > Dark Ritual > Shadowborn Apostle | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=400 set: Dark Ritual > Dark Ritual > Shadowborn Apostle | arranged: Dark Ritual > Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=400 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=400 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=400 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=400 set: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Dark Ritual > Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=300 set: Dark Ritual > Shadowborn Apostle | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=300 set: Dark Ritual > Shadowborn Apostle | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=300 set: Dark Ritual > Shadowborn Apostle | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=300 set: Dark Ritual > Shadowborn Apostle | arranged: Dark Ritual > Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=300 set: Dark Ritual > Dark Ritual > Thrumming Stone | arranged: Dark Ritual > Dark Ritual > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=300 set: Dark Ritual > Dark Ritual > Thrumming Stone | arranged: Dark Ritual > Dark Ritual > Thrumming Stone pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=300 set: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=300 set: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] | arranged: Shadowborn Apostle > Culling the Weak[eats hand Shadowborn Apostle] pays=0
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=200 set: Shadowborn Apostle | arranged: Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=200 set: Shadowborn Apostle | arranged: Shadowborn Apostle pays=1
+
+/workspaces/MagicDeckTester/.claude/worktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:817: MESSAGE: control main2 plan v=0 set:  | arranged:  pays=1
+
+/workspaces/MagicDeckTester/.claude/wor[subtype-registry] 'ZzNotARealSubtypeZz' was first seen AFTER freeze and resolves to kNone. Add it to SubtypeRegistry::RuntimeLiterals().
+ktrees/ds-apply4/test/unit/test_shadowborn_mainphase.cpp:820: MESSAGE: control main2: 64 plans, 8 cast all six
+
+===============================================================================
+[doctest] test cases:    4333 |    4333 passed | 0 failed | 0 skipped
+[doctest] assertions: 3687157 | 3687157 passed | 0 failed |
+[doctest] Status: SUCCESS!
+[lastply] folded=20
+[inwin-cache] win_hits=0 nowin_hits=0 win_stores=1 nowin_stores=70 widened=2 full_refusals=0
+[game-line-cache] win_hits=2 nowin_hits=388 stores=119 full_refusals=0 leafless_reads=2
+[id-hint-game] lookups=25 cur_hits=2 prev_hits=0
+[rollout-game-cache] lookups=11098 hits=1933 win_hits=851 stores=18105 full_refusals=0
+[leaf-kill-only] armed_turns=4 candidate_rollouts_skipped=24 memo_ko_entries=0 m1_cands=0 m2_cands=0 m2_apply_empty=0 m2_no_reach=0 fsl_edge_no_reach=0
+[enum-memo] hits=1 misses=1671 clears=0
+[seed-walk-fold] folded=2 (whiff 1) | verify checked=0 MISMATCH=0
+[solve-memo] hits=78308 misses=228777 clears=2 bind_refusals=3
+[m2-search-memo] hits=188 misses=358 clears=0
+[pb-xbase] F5 groups=10 folded=166 | verify ok=0 MISMATCH=0
+[pb-fold-x] tables=95 | F3 mirror: groups=3 folded=22 verify ok=0 MISMATCH=0 | F4 strand: groups=4 folded=10 verify same=0 payment-only=0 MISMATCH=0 unmatched=0
+[pb-exact-width] exact_fans=137 (of them tight-bound 2) bound_fans=102 exact_ranks=2090 (upper bound would emit 0) | verify resolutions=0 MISMATCH=0 (of them emitted > real: 0)
+[leaf-eval] published=97192 ties=81332 flips=4848 life-equal-ties=37922
+[pb-lazy-cands] lazy_lists=3370 clones_not_materialised=25393 materialised_on_demand=3354 | verify lists=0 entries=0 MISMATCH=0
+[pb-lazy-cands] bp-cache lazy_lists=6 entries_not_materialised=8 m2-memo lazy_lists=0 | bp verify lists=0 entries=0 MISMATCH=0
+[pb-lazy-cands] cast-trigger fans held lazily=4
+
+=== PAY-ROLLBACK: tried=1 fired=0   REAL play: tried=0 fired=0 ===
+[enchant-retarget] 1 searched Aura target(s) illegal at resolution (fallback host used)

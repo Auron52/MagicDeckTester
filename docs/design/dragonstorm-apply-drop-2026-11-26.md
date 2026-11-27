@@ -398,8 +398,85 @@ arms (s30133545 decision #5 "keep-floating {B}", 15 -> 18; s30145461 decision #1
 plans on the on arm; neither is a new mechanism. Four final game logs move (30130531, 30134453, 30145461, 30152803);
 every win turn is unchanged.
 
-GATE4
+**Gate** (`logs/ds-apply4/run_gate.sh`, one pooled oracle batch, `MTG_MANA_ORACLE=2`, Dragonstorm play settings: off /
+on 72,000 games each on gi 87000-158999, the two leave-one-out arms 18,109 games each on gi < 105000;
+`logs/ds-apply4/gate_attrib.txt` from `attrib.py`, which keys a flag on the LAST dropped cast as round 3 did):
+```
+arm                          slice  games   turns  ADdecl ADundc ADordr ENUM CAPdec KolD  evD  evU  cpu_s
+off                          all    72000  313541    259    321     51   25    228  123   47   50  84043
+on                           all    72000  313540    211    318     35   25    248   82   37   50  86636
+off                          loo    18109   78944     51     76     14    5      0    9   10   14  19966
+on                           loo    18109   78943     50     76     14    5      0    8    9   14  20524
+no_line_seq_rest (M1 only)   loo    18109   78944     50     76     14    5      0    8    9   14  19893
+no_unseen_scarce_ritual_net  loo    18109   78943     51     76     14    5      0    9   10   14  20497
+```
+Kolaghan-declared 123 -> 82 (-33%), all declared drops 259 -> 211, ORDER 51 -> 35, Kolaghan-declared events 47 -> 37;
+the undeclared (need-later) class is unchanged (321 -> 318), as expected: neither lever reads an undeclared cast. One game
+is a turn faster (block g101129, LINE_SEQ_REST: the leave-one-out arm without it does not move); no game is slower.
+The leave-one-out slice holds only one of the events (s30093026, fixed by M1 alone), so the per-lever split comes from
+the 18 event repros instead (`logs/ds-apply4/events_loo_*.txt`, the same binary, one lever `=0`):
+```
+                         KolD   events fixed
+both =0 (off)             123   -
+M2 only (RITUAL_NET =0)    80   s30115282 s30127991 s30130531 s30132752 s30152803
+M1 only (SEQ_REST =0)     125   s30093026 s30131013 s30134453 (and s30133545 15->18, s30145461 30->36)
+both on                    82   all eight
+```
+So M2 (`LINE_SEQ_REST`) carries five events and M1 (`UNSEEN_SCARCE_RITUAL_NET`) three; with M2 on, M1 still fixes its
+three (80 -> 82 is those -7 flags plus the +9 the oracle counts in the two events that keep failing at the same decision).
+CAPPED-DECISION 228 -> 248 is three event turns, all games that win on the same turn on both arms: s30137529 T7 98 -> 106,
+s30112005 T6 40 -> 41, and s30145787 T6 (0 -> 11). It counts the oracle's per-decision enumeration cap being reached,
+i.e. how many plans the AUDIT examined at a capped decision; the engine's play there is unchanged (same win turn), so it is
+analyzer work, not a play defect. The gate's +3.1% cpu includes the oracle; the A/B below is the play-CPU measure.
 
-AB4
+**Held-out A/B** (`logs/ds-apply4/run_ab.sh`, `mk_ab.py --n 400 --hg 200 --wf 3000 --base 5410000`: every deck at
+play settings, Standard 400 / 2HG 200 pairs, Dragonstorm 3,000 + 3,000; 128 shapes, 43,800 pairs, no oracle;
+`logs/ds-apply4/ab_report.txt`): **net 0 on every shape -- not one game is slower or faster** (win turn), units
+-0.00% overall (Dragonstorm +0.03% / -0.00%, Extra Turns -0.09% / -0.12%, everything else 0). So the 8 events fixed are
+payments inside lines the search already won on the same turn (as the gate's turn totals also say, 313541 -> 313540).
+There is no slower game, so nothing to replay at d8 b0 and no clairvoyance test to run.
 
-VERDICT4
+**CPU, and the cut.** The A/B measured Dragonstorm at **+4.1% / +4.2% CPU** (240 blocks, 172 slower, median +4.0%;
+other shapes within the +-2-4% cpu noise of a 200-400-game shape, total +0.59%). Not oracle cost: the A/B has no
+oracle. The leave-one-out gate slice puts it on `LINE_SEQ_REST` (19,893 s with it off vs 20,497 s with it alone).
+A call-graph profile located it in `KeepOwedFloatPay`: every entry paid the plain bill TWICE (a quiet trial on a board
+copy, then the caller's real payment after the -1), then ran the summed judge (more board copies, one per lump crack)
+and, when that failed, the walk. Stage counters over 100 games (temporary build): 206,552 entries, 76% with a float
+that pays the rest after any payment, 90% judged fine, 0 taken -- the keep acts rarely, but its test ran on every
+ritual-chain payment. Commit 777cba077 (exact):
+- THE FLOAT ALONE PAYS THE REST: a payment spends at most its mana value from any one floating colour, so when the float
+  less that still covers the rest's every pip and its total, the summed judge would say "payable" -> -1 at once
+  (157,830 of 206,552 entries; 0 cases where the judge disagreed);
+- IN PLACE when the reveal pause is a no-op (search, rollouts): the plain payment is made once, on the real board; only
+  the original is copied, for the kept retry; a float that covers the rest after it skips the judge;
+- `LineSeqPayOn`: no copy for a pass 0 with nothing to keep; the winning scratch board is moved.
+Measured in user instructions (`perf stat -e instructions:u`, insensitive to the box's load; `logs/ds-apply4/cpu_cut.txt`):
+```
+Dragonstorm play, 200 games    levers off       levers on        on/off
+before the cut (3bd740edd)     179.69 G         187.86 G         +4.55%
+after the cut  (777cba077)     179.70 G         182.62 G         +1.62%
+45 other decks x 25 games      1147.40 G        1148.30 G        +0.08%   (after the cut)
+```
+So 64% of the Dragonstorm overhead is gone, and the other decks pay +0.08% (the sequence scope per apply). The
+residual +1.6% on Dragonstorm is the walk (~0.75% of samples, about half from the round-3 lump rung's `rest_ok`, half
+from the keep's after-a-failed-judge check), the summed judge on the 24% of entries the float does not cover (~0.4%),
+and the board copy for those (~0.15%). Play is unchanged by the cut: every play digest equals the pre-cut binary's on
+the 6,000 Dragonstorm A/B games and 200 paired games; 118 non-Dragonstorm o0 blocks equal the A/B's OFF arm in digest
+and units. The only moves are what the old discarded trial left in the thread's payment caches: search units in 6 of
+248 Dragonstorm blocks (<0.2%), and Extra Turns o0, whose digest the old trial had moved at the same win turns, now
+equal to the off arm. Unit tests 4333 / 4333.
+
+**Verdict: adopt both levers, DEFAULT ON (as committed).** Both are sound payment choices (each replaces only a payment
+that provably strands the named line by one with a witness; CR 601.2h), present at every budget, executor and rollout
+in lockstep, and inert to findability (they choose which mana pays, never which line is searched). The A/B moves no
+game at play settings on any deck (net 0, 0 slower, 0 faster), so the adoption bar's "average at play settings" is
+met at exactly neutral, and the gate shows the correctness gain: Kolaghan-declared drops 123 -> 82, declared drops
+259 -> 211, ORDER 51 -> 35, eight events fixed (M2 five, M1 three), one game a turn faster, none slower. CPU after the
+cut: Dragonstorm +1.6% instructions, every other deck +0.08%. The USER's "cut CPU" stands against that +1.6%; what is
+left is listed above (the walk and the judge on the 24% the float misses) and is the next CPU item if it is wanted.
+GT: the cut moves no play digest relative to 3bd740edd on Dragonstorm, but the levers themselves are a default-ON play
+change, so smoke / regression GT is accepted by the parent under the landing binary (not here).
+Still open in the cluster: s30133545 (decision #5 keep-floating {B}, probably a breakpoint continuation's payment,
+which binds no sequence by design), s30145461 (Territory, decision #11), and s30092109, s30102129, s30135813,
+s30140711, s30141736, s30142750, s30149079, s30157929 unchanged. Extending the walk into continuations needs the
+sequence recorded with the record (`Action::rec_line_hold`) so executor and rollout stay in lockstep.
