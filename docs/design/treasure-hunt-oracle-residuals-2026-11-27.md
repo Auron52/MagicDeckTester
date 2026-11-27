@@ -40,7 +40,11 @@ a flood engine and the deck's provider refuses it on the board that payment is a
 the realisation's script up to the payment (`ContLandCastProviderPruned`). The verdict is counted as
 `enum-gap rejections: provider=N`.
 
-A unit test with Land's Edge in play checks that the provider's admission still yields ENUM-GAP.
+The unit test (`test_mana_oracle.cpp`, "...is the provider's prune, not a gap") pins the lever both ways on a
+three-Island board: off gives ENUM-GAP naming the continuation Island, on gives nothing. Its control is the same
+board under GenericProvider, which admits every flood engine: ENUM-GAP with the lever on and off. So the rejection
+is the provider's answer, not the continuation land. (A first control with Land's Edge already in play returned
+nothing in both arms, so it did not isolate the lever and was replaced.)
 
 **Left alone.** s30113218 T7 `{land=Cascade Bluffs + Land's Edge + Land's Edge}` (x1) is a real flat-pool
 under-count of a filter land. It has no value, though: a second Land's Edge adds nothing, because one Edge discards any
@@ -73,6 +77,14 @@ s30106563 T4 `{no land + Treasure Hunt}`:
 - That board is what `{land=Cascade Bluffs + Treasure Hunt}` reaches under the engine's own line.
 
 The same-action sibling cover never saw it, because it compares only entries with the plan's own actions.
+
+The unit test uses the game's own board, opponent at 18. With the opponent out of reach (an earlier draft at 500)
+the oracle's continuation casts the Edge but throws nothing, so it never uses the Reliquary Tower the engine's line
+played. Every realisation then reads as "a different continuation" (CONTINUATION-DIFFERS) and the drop never reaches
+this verdict. At 18 the continuation throws the hand, the Tower with it. The test's menu needs both
+`{land=Cascade Bluffs + Treasure Hunt}` and `{land=Steam Vents + Treasure Hunt}`: the oracle has full payments
+through each land, and the cover needs every one of them. `MTG_ORACLE_DROP_WON` is pinned off in the test, because
+the throws win inside the unit's apply and that lever would cover the drop first.
 
 **The oracle change.** For a drop with a lost action the plan did not declare (`LostUndeclared`, the census's `later`),
 the oracle now asks one more question. Is every board a full payment reaches also reached by another menu entry's
@@ -108,8 +120,22 @@ Where the moved flags went on the new binary:
 Play is byte-identical: all 200 job digests match between the binaries. Oracle wall rose by 0.14%
 (2,953,485 -> 2,957,674 ms). Oracle applies fell by 8,361 of 41.67M.
 
-What is left on the new binary:
-- 18 undeclared `{no land + Treasure Hunt}` drops: s30103724 T4 x7, s30112907 T5 x6, s30101394 T5 x5.
-- 4 declared `{no land + Treasure Hunt + Treasure Hunt}` drops: s30108799 T4 and s30111609 T4. In s30108799 the
-  continuation casts the second Treasure Hunt itself, so the declared cast reads as "dropped".
-- 1 ENUM-GAP: s30113218 T7 `{land=Cascade Bluffs + Land's Edge + Land's Edge}`, which is worthless.
+What is left on the new binary (classified 2026-11-27 from single-game replays; none is a clear oracle false positive,
+so none was changed):
+- s30103724 T4 x7 and s30112907 T5 x6, undeclared `{no land + Treasure Hunt}`. This is the s30106563 shape. The oracle's
+  continuation casts Land's Edge and throws the hand inside the main (opponent -6 and -23). No menu entry's engine line
+  reaches that board, and none wins inside its apply, so neither the cover nor the win rule applies. The claim is
+  true as stated: a payment of this plan casts the Edge in this main. It costs nothing, though. Both games are won
+  on that same turn (avg 4.00 and 5.00 on replay), through the chosen line's Edge throws after the main.
+- s30101394 T5 x5, undeclared. The sibling diff is a payment choice: the engine pays Treasure Hunt with Forgotten Cave
+  where the oracle uses Ferrous Lake, and then the continuation's Land's Edge is unpaid. The census says
+  `MTG_PAY_ROLLBACK (forced on) recovers it`. That makes it a real engine payment imperfection inside a continuation,
+  the mana-payment exemption's territory, and not the oracle's.
+- s30108799 T4 x2 and s30111609 T4 x2, declared `{no land + Treasure Hunt + Treasure Hunt}`. The handoff's reading
+  ("the continuation cast the second Treasure Hunt itself") is NOT what the flagged instances show. In both games
+  that instance (no Treasure Hunt left in hand) is the one that is not flagged. In the flagged instances, the
+  engine's breakpoint continuation plays a land and casts Land's Edge, and the second Treasure Hunt stays in hand.
+  The oracle pays the second Treasure Hunt instead: off Saprazzan Skerry in s30108799, and in s30111609 off mana
+  floated by the first payment. This is a re-plan on the reveal, the item 4 class. It is a real drop of a declared
+  cast, not an oracle artefact.
+- 1 ENUM-GAP: s30113218 T7 `{land=Cascade Bluffs + Land's Edge + Land's Edge}`, which is worthless (section 1).
