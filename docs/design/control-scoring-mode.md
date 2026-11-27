@@ -1216,6 +1216,11 @@ the rest.
   * **A trade** (our block kills the attacker AND the blocker dies) stays a searched option.
   * **A one-sided loss** (the attacker dies to the block and the blocker survives) is pruned UNLESS the attack's
     damage through is lethal this turn or leaves the defender dead to next turn's attack ("on the ropes").
+  * **Mixed boards (USER 2026-11-27, verbatim):** "Naturally, if you have one creature that is safe and another that
+    would just die uselessly you would only attack with the safe creature." The rules apply per attacker: the
+    safe one attacks, the useless one stays home. "Useless" is judged against the WHOLE attack, though. With more
+    attackers than our untapped blockers, someone gets through unblocked, so an attacker is a one-sided loss only
+    if our block rule would actually block it, with a blocker that survives, given everything else attacking.
   This is a heuristic prune, unlike the can't-die and interchangeable-attacker rules above, which are sound. It
   is therefore checked against the unpruned search at a large budget on a held-out sample. A game it makes worse
   is a counterexample, and the fix is to the rule's ranking. Its default is the USER's call on that measurement.
