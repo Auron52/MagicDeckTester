@@ -677,3 +677,12 @@ then Maze's End K=20 mullgen from .claude/worktrees/maze-gen2.
     Prospector's sac mana counted like land mana, the sacrificed Goblins never leave the attack; C (Boars 23,
     hypothesis) a 2nd copy of a legendary lord already in play is counted (legend rule). Amended version in
     184a7cb71 (default OFF); round 3 continuing from logs/elves/lordcast-handoff.md.
+13. ROUND 2 MEASURED (wip/elves-r2 f9d1ad107; 3,000 std + 3,000 2HG per arm, d5 b20; notes logs/elves/r2-notes.md):
+    R2 tasks 1-3 (kick cap = opp starting life, Wave = 6 in discard, one land kept) change no win turn, -1.0% / -0.24%
+    units. In-between hold-back counts cost ~6.4% units (three 0.936x band) but three / two are slower (std +0.0030 /
+    +0.0033, 2HG +0.0043 / +0.0053) and their slower games mostly do not recover at d8 b0 -> recommend keep band (a
+    budget-staged order is designed, not built). Band's chosen count is in-between on ~5-6% of sink turns. Tap order
+    (bandtap): std -0.0063 (se 0.0015) 20/1, 2HG -0.0123 (se 0.0023) 42/5, 0.968x units, but 5 of 6 slower games do
+    not recover (std 2176: attackers order applied to the pre-sink Elf casts too) -> fix (scaling-last before the
+    sink's payment, attackers from it onward) being built + re-measured (round 3). USER decisions: band vs three/two;
+    tap-order default (after round 3).
