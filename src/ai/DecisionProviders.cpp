@@ -75795,7 +75795,7 @@ std::vector<int> ElvesProvider::XCandidates(const GameState& s, const CardDefini
     return xs;
 }
 
-// ---- ElvesProvider::ManaSourceRank -- WHAT THE PAYMENT PRESERVES (MTG_ELVES_TAP_ORDER, TEMPORARY, DEFAULT OFF) -------
+// ---- ElvesProvider::ManaSourceRank -- WHAT THE PAYMENT PRESERVES (MTG_ELVES_TAP_ORDER, DEFAULT ON 2026-11-27) ---------
 //
 // USER 2026-11-27: "technically on earlier turns when we are setting up, you usually want to use the scaling elf mana
 // last, to get more on board before you tap it. Then in late turns you want to work the other way around to leave

@@ -15,6 +15,7 @@
 #include <doctest/doctest.h>
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
+#include "ai/EngineFlags.h"
 #include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
@@ -29,6 +30,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <functional>
 #include <set>
 #include <string>
@@ -1197,7 +1199,7 @@ TEST_CASE("Leaf-Crowned Visionary beyond the horizon: greedy Solve marks its pla
                     .mihail_pay_choice.PaySpare());
 }
 
-// ---- MTG_ELVES_TAP_ORDER (TEMPORARY, default OFF; USER 2026-11-27: "we should take control of the tap order a bit in
+// ---- MTG_ELVES_TAP_ORDER (default ON since 2026-11-27, =0 hatch; USER 2026-11-27: "we should take control of the tap order a bit in
 // the heuristic provider to make sure that we maintain whatever thing we want to maintain, whether that is the
 // attackers or the scaling mana") ---------------------------------------------------------------------------------
 // Priest of Titania with 5 Elves (Priest, 2 attack-capable Llanowars, 2 Clancallers) taps for 5; no lands. Galadhrim
@@ -1263,7 +1265,16 @@ TEST_CASE("Elves tap order: a sink turn PRESERVES ATTACKERS -- the Priest pays t
     // The inherited order (selector off), recorded for the report: the Brigade is an Elf, so the plan "casts scaler
     // food" and the Priest ranks LAST -- the Llanowars tap first.
     for (const auto& w : off) { MESSAGE("off: priest=" << w[0] << " llanowar1=" << w[1] << " llanowar2=" << w[2]); }
-    CHECK(ETapArm(-1).saved == -1);   // the selector is unset by default (env default OFF)
+    CHECK(ETapArm(-1).saved == -1);   // the selector is unset by default, so the env default decides
+    // The env default is ON (adopted 2026-11-27): with the arm unset and no env override, the sink turn preserves
+    // attackers exactly as the forced-on arm does.
+    if (std::getenv("MTG_ELVES_TAP_ORDER") == nullptr)
+    {
+        std::vector<std::array<bool, 3>> dflt;
+        { ETapArm a(-1); dflt = ETapAfter(s, 1); }
+        CHECK(dflt == on);
+        CHECK(ElvesTapOrderOn());
+    }
 }
 
 TEST_CASE("Elves tap order: a plan with no scaled sink keeps the inherited (scaling-preserving) order")

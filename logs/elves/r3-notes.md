@@ -101,15 +101,14 @@ Round-2 held-out seeds 9610001+gi, game_index gi, 3,000 std + 3,000 2HG per arm,
   (8 jobs), output `d8x.out` / `d8x.err`; verdict: `python3 logs/elves/r3_d8_verdict.py $S/ab.out $S/d8x.out
   bandtapfix bandtap`. Queued in box_lane at handoff (PID 2825391).
 
-## 5. Tidy (task 4) -- in the tree, NOT YET BUILT in its final form
+## 5. Tidy (task 4) -- BUILT 13:17 UTC (EXIT=0), units green, digests identical
 - MTG_ELVES_R2 deleted: kick cap = starting life, Wave priced X = 3, land floor at every land count, all
   unconditional. The R2=0 test checks are removed.
 - USER ruling (band stays): MTG_ELVES_HOLDBACK_MODE, the heurarm twins MTG_ELVES_HOLDBACK_THREE / _TWO, the three /
   two branches, the in-between counting (`inbetween=`, `between` trace tag, nearest_below) are deleted. The three/two
   unit test is now a band test on the same board. The band rule itself is unchanged (`drop = count < top - h`).
   ElvesHoldBackNormalMana stays: the chosen census (diagnostic) reads it.
-- The temporary MTG_ELVES_TAP_WHOLEPLAN A/B slot (round-2 order) is deleted again. MTG_ELVES_TAP_ORDER stays (default
-  OFF, the USER's decision).
+- The temporary MTG_ELVES_TAP_WHOLEPLAN A/B slot (round-2 order) is deleted again. MTG_ELVES_TAP_ORDER stays (see 6).
 - Informational d8 b0 RESULT (finished after the handoff): none of the 4 recovers. bandtapfix at d8 b0 wins on band's
   turn and the OLD order stays a turn faster: std 449 (T5 vs T4); 2HG 786 (T5 vs T4), 1226 (T4 vs T3), 2371 (T5 vs T4).
   So in these games, tapping a scaled dork early for a set-up cast (keeping a fixed attacker untapped) is a genuinely
@@ -118,3 +117,22 @@ Round-2 held-out seeds 9610001+gi, game_index gi, 3,000 std + 3,000 2HG per arm,
   bandtap vs bandtapfix). The candidate amendment is a board-keyed exception: a set-up cast taps a scaled dork first
   when its yield cannot grow before the sink (no Elf cast between it and the sink), or when the attacker it saves
   is worth more.
+
+- Tidy binary (build 13:11/13:17 UTC, EXIT=0): full units 4336/4336 (3,687,541 assertions); Elves filter
+  (`-tc="*Elves*,*elves*,Joraga*"`) 38/38; full units under MTG_ELVES_TAP_ORDER=1 4336/4336. MTG_UNPRUNED=1: the full
+  suite single-threaded ran 1h45m and was killed at the coordinator's request; the Elves filter was re-run under it
+  (tidy binary): 38/38 (5,496 assertions).
+- Inertness replay: 200 jobs of `build/scratch/elves-r3/ab/ab.json` (100 games x band/bandtapfix: 70 games whose arms
+  differ, 30 identical; no MTG_ELVES_TAP_WHOLEPLAN job), manifest `build/scratch/elves-r4/replay.json`: **200/200
+  digests identical** to ab.out (provider=Elves).
+
+## 6. ADOPTED: MTG_ELVES_TAP_ORDER default ON (2026-11-27)
+- The coordinator adopted it under the USER's standing rule "almost anything that measures better and is cheaper is a
+  good option": bandtapfix vs band std -0.0067 (se 0.0015) 20 faster / 0 slower; 2HG -0.0130 (se 0.0021) 39 / 0;
+  ~0.97x units; d8 b0 bar met (no slower game).
+- `ElvesTapOrderOn()` reads `EnvOn("MTG_ELVES_TAP_ORDER", true)`; `=0` restores the scaling-preserving order. The
+  tap-order unit test now also pins the default (arm unset, no env: same taps as the forced-on arm).
+- Elves play moves at the default: smoke/regression/overnight Elves GT is owed through the normal accept flow (the
+  coordinator integrates with wip/elves-mem2 and validates the combination).
+- Flipped build (15:33/15:38 UTC, EXIT=0): full units 4336/4336 (3,687,546 assertions: +5 from the default-pin
+  checks); Elves filter under MTG_ELVES_TAP_ORDER=0 (the hatch) 38/38.
