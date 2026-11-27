@@ -1157,6 +1157,8 @@ enum Slot : int
     LEFTOVER_SWAP_WIDE,       // MTG_LEFTOVER_SWAP_WIDE  MTG_LEFTOVER_LINE_SWAP's re-attribution also moves a leftover unit that floated BEFORE the payment (not only one the payment produced), and its strand test credits the float of the ritual the payment is for (Dragonstorm s30087280 T4: Irencrag Feat's {1} ate the floating {B} Dragonlord Kolaghan owes while Sandstone Needle's second {R} floated). DEFAULT ON; =0 -> the produced-only swap, byte-identical
     ONDEMAND_VISIBLE_LUMP_EXACT, // MTG_ONDEMAND_VISIBLE_LUMP_EXACT  Dragonstorm's visible-closer lump rule refuses an early Lotus Bloom crack that STRANDS the later bill: the ordinary payment pays it and the early crack does not (both judged with every crack of the lumps left and the ritual's float; when both pay, the crack still saves a source for later mana use, 2HG s5131993 firebreathing); its colour comparison read an uncracked Bloom as no supply (s30152662 T5: Irencrag Feat cracked the second Bloom for {B} with {B} already floating, and Karrthus's {G} had no source). DEFAULT ON; =0 -> the comparison alone, byte-identical
     LINE_FLOAT_RITUAL_NET,    // MTG_LINE_FLOAT_RITUAL_NET  the LINE_FLOAT_TAP_FIRST rung's spare-source colour test nets the later pips of the float of the ritual this payment is for: a source whose colours the ritual's own output covers is spare (Dragonstorm s30096957 T4 {Ruby Medallion, Seething Song, Karrthus}: Song's {1} drained the floating {B} Karrthus owes because the Mountain read as Karrthus's {R}, which Song's {R}x5 pays). DEFAULT ON; =0 -> the float-blind spare test, byte-identical
+    ELVES_SCAL_LUMP,          // MTG_ELVES_SCAL_LUMP       TEMPORARY A/B selector (2026-11-27, delete after the A/B): with ELVES_SCALING_PRUNE, the hold-back band keeps only the LUMP POINTS -- the top, and for every subset S of the attack-capable mana creatures the counts top - ceil(Y(S)/unit) and top - floor(Y(S)/unit) (the largest count that leaves S untapped, whatever the top's slack) -- instead of every count down to the all-held one. Default OFF
+    ELVES_SCAL_SINKAWARE,     // MTG_ELVES_SCAL_SINKAWARE  TEMPORARY A/B selector (2026-11-27, delete after the A/B): with ELVES_SCALING_PRUNE, a Genesis Wave X row's hold-back sources are the FLAT (1-mana) dorks only; the attacker-growing sinks (Warcaller kicks, Brigade squad, Ezuri's pump) keep every attack-capable mana creature. Default OFF
     COUNT
 };
 
@@ -2258,6 +2260,8 @@ inline const char* Name(int slot)
         "MTG_LEFTOVER_SWAP_WIDE",
         "MTG_ONDEMAND_VISIBLE_LUMP_EXACT",
         "MTG_LINE_FLOAT_RITUAL_NET",
+        "MTG_ELVES_SCAL_LUMP",
+        "MTG_ELVES_SCAL_SINKAWARE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

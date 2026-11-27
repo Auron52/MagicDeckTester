@@ -75416,7 +75416,7 @@ bool BloodSunProvider::LandPlayOffered(const GameState& s, int controller, const
 
 namespace
 {
-struct ElvesSink { int count = -1; int unit = 0; };   // count -1: not a sink
+struct ElvesSink { int count = -1; int unit = 0; bool wave = false; };   // count -1: not a sink; wave: Genesis Wave's X
 
 ElvesSink ElvesSinkOf(const Action& a)
 {
@@ -75427,7 +75427,7 @@ ElvesSink ElvesSinkOf(const Action& a)
         if (HasRepeatKicker(d->params))
         { return { a.kick_count, std::max(1, RepeatKickerCost(d->params)->ManaValue()) }; }
         if (d->params.reveal_x_put_permanents)
-        { return { std::max(1, a.chosen_x), std::max(1, d->card.m_mana_cost.x_pips) }; }
+        { return { std::max(1, a.chosen_x), std::max(1, d->card.m_mana_cost.x_pips), true }; }
         return {};
     }
     if (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 2 && a.def != nullptr
@@ -75500,13 +75500,64 @@ int ElvesHoldBackMana(const std::vector<ElvesHoldBackSource>& src, int plan_elf_
     return all;
 }
 
+bool ElvesScalLumpOn()
+{
+    static const bool s_env = EnvOn("MTG_ELVES_SCAL_LUMP");   // TEMPORARY A/B selector, default OFF
+    return heurarm::Flag(heurarm::ELVES_SCAL_LUMP, s_env);
+}
+
+bool ElvesScalSinkAwareOn()
+{
+    static const bool s_env = EnvOn("MTG_ELVES_SCAL_SINKAWARE");   // TEMPORARY A/B selector, default OFF
+    return heurarm::Flag(heurarm::ELVES_SCAL_SINKAWARE, s_env);
+}
+
+// The hold-back offsets (count steps below the class top) a row may sit at. The band (holdall): every offset
+// 0..ceil(H/unit), H the sum of the held yields. LUMP POINTS: only the offsets that leave a whole SET S of the
+// attack-capable mana creatures untapped -- ceil(Y(S)/unit) and floor(Y(S)/unit) for every subset S (the largest
+// count leaving S untapped is one of the two, by the top's slack < unit). Any count's untapped set is a set S with
+// Y(S) <= its spare mana, so the larger lump point of that S leaves the same creatures untapped: what a dropped
+// in-between count adds is mana stranded by a lump, never a different attacker. SINK-AWARE: a Wave row frees only
+// the FLAT (one-mana) dorks.
+std::vector<char> ElvesHoldBackOffsets(const std::vector<ElvesHoldBackSource>& src, int plan_elf_casts, bool wave_sink,
+                                       int unit, bool lump, bool sink_aware)
+{
+    std::vector<int> ys;
+    for (const ElvesHoldBackSource& h : src)
+    {
+        if (sink_aware && wave_sink && h.scaled) { continue; }
+        ys.push_back(std::max(0, h.yield + (h.scaled ? plan_elf_casts : 0)));
+    }
+    int H = 0;
+    for (int y : ys) { H += y; }
+    unit = std::max(1, unit);
+    const int hmax = (H + unit - 1) / unit;
+    std::vector<char> ok(static_cast<std::size_t>(hmax) + 1, lump ? 0 : 1);
+    ok[0] = 1;
+    if (!lump) { return ok; }
+    std::vector<char> sum(static_cast<std::size_t>(H) + 1, 0);   // the achievable subset sums
+    sum[0] = 1;
+    for (int y : ys)
+    {
+        if (y == 0) { continue; }
+        for (int v = H; v >= y; --v) { if (sum[static_cast<std::size_t>(v - y)]) { sum[static_cast<std::size_t>(v)] = 1; } }
+    }
+    for (int v = 0; v <= H; ++v)
+    {
+        if (!sum[static_cast<std::size_t>(v)]) { continue; }
+        ok[static_cast<std::size_t>((v + unit - 1) / unit)] = 1;
+        ok[static_cast<std::size_t>(v / unit)] = 1;
+    }
+    return ok;
+}
+
 void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
                        const std::vector<DecisionProvider::PlanView>& plans, std::vector<char>& admit)
 {
     // A row holds no copy of its plan: the blanked copy ("canon") is built on demand, and only each CLASS's first
     // member keeps one. (It used to be one full Plan copy per row -- on a 240,928-plan Elves continuation list that
     // doubled the enumeration's peak, ~1.2 GB; elves-mem 2026-11-26.)
-    struct Row { std::size_t i; std::string sink; int count; int unit; int elf_casts = 0; };
+    struct Row { std::size_t i; std::string sink; int count; int unit; int elf_casts = 0; bool wave = false; };
     std::vector<Row> rows;
     long long n_split = 0, n_band = 0;
     struct Flush
@@ -75546,6 +75597,7 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         r.count = one.count;
         r.unit  = one.unit;
         r.elf_casts = elf_casts;
+        r.wave      = one.wave;
         rows.push_back(std::move(r));
     }
     if (rows.empty()) { return; }
@@ -75565,6 +75617,8 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         out.bp_base        = -1;
     };
     const std::vector<ElvesHoldBackSource> held = ElvesHoldBackSources(s, is_pre_combat);
+    const bool lump = ElvesScalLumpOn(), sink_aware = ElvesScalSinkAwareOn();
+    std::map<std::tuple<int, bool, int>, std::vector<char>> offs;   // (elf casts, wave, unit) -> admitted offsets
     const int trace_turn = ElvesTraceTurn();
     const bool trace = trace_turn > 0 && s.turn_number == trace_turn;
     if (trace)
@@ -75648,9 +75702,14 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         for (std::size_t a = 0; a < idx.size(); ++a)
         {
             const Row& r = rows[idx[a]];
-            const int hm = ElvesHoldBackMana(held, r.elf_casts);   // the mana every held attacker frees
-            const int h = (hm + r.unit - 1) / r.unit;   // (3) the hold-back band in count steps
-            const bool drop = r.count < top[static_cast<std::size_t>(cls[a])] - h;
+            auto key = std::make_tuple(r.elf_casts, r.wave, r.unit);
+            auto it = offs.find(key);
+            if (it == offs.end())
+            { it = offs.emplace(key, ElvesHoldBackOffsets(held, r.elf_casts, r.wave, r.unit, lump, sink_aware)).first; }
+            const std::vector<char>& ok = it->second;   // (3) the admitted hold-back offsets in count steps
+            const int h = static_cast<int>(ok.size()) - 1;
+            const int gap = top[static_cast<std::size_t>(cls[a])] - r.count;
+            const bool drop = gap > h || (gap >= 0 && !ok[static_cast<std::size_t>(gap)]);
             if (drop) { admit[r.i] = 0; ++n_band; }
             if (trace)
             {
