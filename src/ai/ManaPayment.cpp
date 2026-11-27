@@ -13817,10 +13817,11 @@ static bool LumpAwareBillPayable(const GameState& board, const ManaCost& bill, c
     int combos = 1;
     for (std::size_t i = 0; i < lumps.size(); ++i) { combos *= k; }
     const RevealLogPause quiet;
-    const std::unique_ptr<GameState> c = std::make_unique<GameState>();
+    std::optional<RampScratch> cs;   // a pooled scratch (its copy reuses storage; the same board each combo)
     for (int m = 0; m < combos; ++m)
     {
-        *c = board;
+        if (!cs) { cs.emplace(board); } else { cs->Board() = board; }
+        GameState* const c = &cs->Board();
         c->floating_mana.AddPool(extra);
         int r = m;
         bool ok = true;
@@ -13912,13 +13913,21 @@ static bool LineSeqPayOn(GameState& c, const ManaCost& bill, bool for_creature, 
     const int k = static_cast<int>(cols.size()) + 1;
     int combos = 1;
     for (std::size_t i = 0; i < lumps.size(); ++i) { combos *= k; }
-    GameState t;
+    // THE LAST ATTEMPT IN PLACE (CPU 2026-11-27, exact): a false return ends the walk, which discards `c`, so the final
+    // (m, pass) is tried on `c` itself and every earlier one on the scratch `t` (one copy per earlier attempt, none when
+    // the board has no lump and nothing to set aside -- the common case).
+    std::optional<RampScratch> tp;
     for (int m = 0; m < combos; ++m)
     {
         for (int pass = 0; pass < 2; ++pass)
         {
             if (pass == 0 && keep_want.Total() == 0) { continue; }   // nothing to set aside: pass 0 would `continue`
-            t = c;
+            const bool in_place = m == combos - 1 && pass == 1;
+            if (!in_place)
+            {
+                if (!tp) { tp.emplace(c); } else { tp->Board() = c; }
+            }
+            GameState& t = in_place ? c : tp->Board();
             int r = m;
             bool ok = true;
             for (const OnDemandCrack& l : lumps)
@@ -13949,7 +13958,7 @@ static bool LineSeqPayOn(GameState& c, const ManaCost& bill, bool for_creature, 
             if (!TapForCostBacktrack(t, bill, for_creature, start, nullptr, nullptr, &left)) { continue; }
             t.floating_mana = left;
             t.floating_mana.AddPool(keep);
-            c = std::move(t);   // the walk's own scratch board
+            if (!in_place) { std::swap(c, t); }   // the walk's own scratch board (swapped: the pool keeps its storage)
             return true;
         }
     }
@@ -13964,14 +13973,16 @@ static bool LineSeqPayOn(GameState& c, const ManaCost& bill, bool for_creature, 
 // none of them makes. True only by exhibiting such a sequence; anything the walk does not model (an alternative or
 // kicked cast, an unknown card) ends it with false. Scratch only, quiet; it binds an empty hold of its own, so its
 // payments read no line and no sequence.
-static bool LineSeqRestPays(const GameState& board, int at)
+// LineSeqRestPaysOn walks ON `cb` itself, which it spends: for a scratch board the caller discards it saves the copy
+// (the same board, so the same answer).
+static bool LineSeqRestPaysOn(GameState& cb, int at)
 {
     const LineSeq* q = g_line_seq;
     if (q == nullptr) { return false; }
     const std::vector<Action>& acts = *q->acts;
     const RevealLogPause quiet;
     LineUnpaidCostScope _luc(ManaCost{});
-    const std::unique_ptr<GameState> c = std::make_unique<GameState>(board);
+    GameState* const c = &cb;
     const int active = c->active_player_index;
     // Non-staged hand copies by name, for an impulse-float cast's "if cast from hand" (the paying card excluded).
     const Card* pc = PayingSpellCard();
@@ -14055,6 +14066,13 @@ static bool LineSeqRestPays(const GameState& board, int at)
         resolve(a, *d, hand_cast);
     }
     return true;
+}
+
+static bool LineSeqRestPays(const GameState& board, int at)
+{
+    if (g_line_seq == nullptr) { return false; }
+    RampScratch c(board);   // a pooled scratch: the copy reuses its storage (the same board, so the same answer)
+    return LineSeqRestPaysOn(c.Board(), at);
 }
 
 static thread_local int t_pilgrimage_pay_depth = 0;
@@ -14199,6 +14217,35 @@ static int KeepOwedFloatPay(GameState& state, const ManaCost& cost_in, bool for_
     if (at < 0) { return -1; }
     int rest_pips[5];
     const int rest_mv = LineRestAfter(cost_in, rest_pips);
+    ManaCost bill;
+    bill.white = rest_pips[0]; bill.blue = rest_pips[1]; bill.black = rest_pips[2];
+    bill.red = rest_pips[3]; bill.green = rest_pips[4];
+    bill.generic = std::max(0, rest_mv - (rest_pips[0] + rest_pips[1] + rest_pips[2] + rest_pips[3] + rest_pips[4]));
+    // THE FLOAT ALONE PAYS THE REST (CPU 2026-11-27, exact). A payment spends exactly its mana value, so at most
+    // cost_in.ManaValue() floating units of any one colour, and it never takes a floating unit away otherwise (a tap only
+    // adds float; SwapLeftoverForLine re-attributes only when the rest is short as left). So when the float less that
+    // much still covers the rest -- every pip colour and the total -- the plain payment's board pays the rest from the
+    // float alone, the summed judge below would say so, and this returns -1 without the trial (tested first: it reads
+    // only the float and the rest, and the keep test below returns -1 as well). Dragonstorm: 76% of the
+    // entries here (a ritual chain's red float), with no case where the post-payment judge disagreed (100 games).
+    {
+        const ManaPool& f0 = state.floating_mana;
+        const int mv = cost_in.ManaValue();
+        auto covers = [mv](int have, int need) { return need <= 0 || have - mv >= need; };
+        if (static_cast<int>(f0.Total()) - mv >= bill.ManaValue() && covers(f0.white, bill.white)
+            && covers(f0.blue, bill.blue) && covers(f0.black, bill.black) && covers(f0.red, bill.red)
+            && covers(f0.green, bill.green))
+        { return -1; }
+    }
+    // No colour the rest owes floats beyond this bill's pips: the keep below is empty whatever the rest makes (-1).
+    {
+        const ManaPool& f1 = state.floating_mana;
+        const int have[5] = { f1.white, f1.blue, f1.black, f1.red, f1.green };
+        const int own[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+        bool any = false;
+        for (int x = 0; x < 5; ++x) { if (rest_pips[x] > 0 && have[x] > own[x]) { any = true; } }
+        if (!any) { return -1; }
+    }
     // The colours the rest owes that none of its casts makes, and the floating units of each beyond this bill's pips.
     const std::vector<Action>& acts = *g_line_seq->acts;
     int made = 0;
@@ -14225,25 +14272,6 @@ static int KeepOwedFloatPay(GameState& state, const ManaCost& cost_in, bool for_
         *kp[x] = std::min(rest_pips[x], std::max(0, fl[x] - pip[x]));
     }
     if (keep.Total() == 0) { return -1; }
-    ManaCost bill;
-    bill.white = rest_pips[0]; bill.blue = rest_pips[1]; bill.black = rest_pips[2];
-    bill.red = rest_pips[3]; bill.green = rest_pips[4];
-    bill.generic = std::max(0, rest_mv - (rest_pips[0] + rest_pips[1] + rest_pips[2] + rest_pips[3] + rest_pips[4]));
-    // THE FLOAT ALONE PAYS THE REST (CPU 2026-11-27, exact). A payment spends exactly its mana value, so at most
-    // cost_in.ManaValue() floating units of any one colour, and it never takes a floating unit away otherwise (a tap only
-    // adds float; SwapLeftoverForLine re-attributes only when the rest is short as left). So when the float less that
-    // much still covers the rest -- every pip colour and the total -- the plain payment's board pays the rest from the
-    // float alone, the summed judge below would say so, and this returns -1 without the trial. Dragonstorm: 76% of the
-    // entries here (a ritual chain's red float), with no case where the post-payment judge disagreed (100 games).
-    {
-        const ManaPool& f0 = state.floating_mana;
-        const int mv = cost_in.ManaValue();
-        auto covers = [mv](int have, int need) { return need <= 0 || have - mv >= need; };
-        if (static_cast<int>(f0.Total()) - mv >= bill.ManaValue() && covers(f0.white, bill.white)
-            && covers(f0.blue, bill.blue) && covers(f0.black, bill.black) && covers(f0.red, bill.red)
-            && covers(f0.green, bill.green))
-        { return -1; }
-    }
     const ManaPool ritual = LineKeepRockFor(state).ritual;
     auto pay = [&](GameState& b, ManaPool* av, const ManaPool* k) -> bool
     {
@@ -14258,7 +14286,6 @@ static int KeepOwedFloatPay(GameState& state, const ManaCost& cost_in, bool for_
         t_keep_owed_float_busy = false;
         return ok;
     };
-    const std::unique_ptr<GameState> trial = std::make_unique<GameState>();
     ManaPool trial_avail;
     // IN PLACE when nothing is logged or hooked (CPU 2026-11-27; the search / rollout world, where the cost is). The same
     // payments, so the same play; only what the dropped trial left in the thread's payment caches is gone (search units
@@ -14272,7 +14299,8 @@ static int KeepOwedFloatPay(GameState& state, const ManaCost& cost_in, bool for_
     { const RevealLogPause probe; pause_noop = probe.noop; }
     if (pause_noop)
     {
-        *trial = state;                                      // the original board
+        RampScratch trial_s(state);                          // the original board (pooled scratch)
+        GameState* const trial = &trial_s.Board();
         if (available != nullptr) { trial_avail = *available; }
         if (!pay(state, available, nullptr)) { return 0; }
         // The float left pays the rest outright (each pip colour and the total): the judge's answer, without its copies.
@@ -14280,23 +14308,24 @@ static int KeepOwedFloatPay(GameState& state, const ManaCost& cost_in, bool for_
         if (pf.white >= bill.white && pf.blue >= bill.blue && pf.black >= bill.black && pf.red >= bill.red
             && pf.green >= bill.green && static_cast<int>(pf.Total()) >= bill.ManaValue()) { return 1; }
         if (LumpAwareBillPayableOpener(state, bill, ritual) || LineSeqRestPays(state, at)) { return 1; }
-        const std::unique_ptr<GameState> kept = std::make_unique<GameState>(*trial);
+        RampScratch kept_s(*trial);
+        GameState* const kept = &kept_s.Board();
         ManaPool kept_avail = trial_avail;
-        if (!pay(*kept, available != nullptr ? &kept_avail : nullptr, &keep) || !LineSeqRestPays(*kept, at)) { return 1; }
+        if (!pay(*kept, available != nullptr ? &kept_avail : nullptr, &keep) || !LineSeqRestPaysOn(*kept, at)) { return 1; }
         state = *trial;                                      // the kept payment replaces the plain one
         if (available != nullptr) { *available = trial_avail; }
         return pay(state, available, &keep) ? 1 : 0;
     }
     {
         const RevealLogPause quiet;
-        *trial = state;
+        const std::unique_ptr<GameState> trial = std::make_unique<GameState>(state);
         if (available != nullptr) { trial_avail = *available; }
         if (!pay(*trial, available != nullptr ? &trial_avail : nullptr, nullptr)) { return -1; }
-        if (LumpAwareBillPayableOpener(*trial, bill, ritual) || LineSeqRestPays(*trial, at)) { return -1; }
+        if (LumpAwareBillPayableOpener(*trial, bill, ritual) || LineSeqRestPaysOn(*trial, at)) { return -1; }
         *trial = state;
         if (available != nullptr) { trial_avail = *available; }
         if (!pay(*trial, available != nullptr ? &trial_avail : nullptr, &keep)) { return -1; }
-        if (!LineSeqRestPays(*trial, at)) { return -1; }
+        if (!LineSeqRestPaysOn(*trial, at)) { return -1; }
     }
     return pay(state, available, &keep) ? 1 : 0;
 }
@@ -14668,8 +14697,10 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         const ManaPool ritual = LineKeepRockFor(state).ritual;
         // MTG_LINE_SEQ_REST: ...or walked in order (LineSeqRestPays, a witness), crediting the rest's own casts.
         const int seq_at = LineSeqPayingIndex(cost_in);
-        auto rest_ok = [&](const GameState& b) -> bool
-        { return LumpAwareBillPayableOpener(b, bill, ritual) || (seq_at >= 0 && LineSeqRestPays(b, seq_at)); };
+        // Both boards it judges (*scratch, *kept) are scratch the walk may spend: neither is read again before it is
+        // overwritten (the next trial's copy) or dropped (the commit pays on `state`).
+        auto rest_ok = [&](GameState& b) -> bool
+        { return LumpAwareBillPayableOpener(b, bill, ritual) || (seq_at >= 0 && LineSeqRestPaysOn(b, seq_at)); };
         if (rest_ok(*scratch)) { return false; }
         const ManaPool& f0 = state.floating_mana;
         const int had[5] = { f0.white, f0.blue, f0.black, f0.red, f0.green };
