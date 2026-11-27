@@ -15,18 +15,22 @@ for ln in open(err, errors="replace"):
 proto = {}
 for j in json.load(open(man))["jobs"]:
     k, s, a, gi0 = j["name"].split("|")
-    proto.setdefault((k, s), j)
+    proto.setdefault((k, s, a), j)   # per ARM: carries that arm's full flag set (lever + every selector)
+# Seed base from the manifest itself (chunk seed = BASE + gi0, game_index = gi0), never hard-coded.
+BASES = {j["seed"] - j["game_index"] for j in proto.values()}
+if len(BASES) != 1: sys.exit(f"manifest has several seed bases {BASES}")
+BASE = BASES.pop()
 jobs = []
 for (k, s, a, gi), wt in sorted(W.items()):
     if a != A or s == "d0" or (k, s, B, gi) not in W: continue
     base = W[(k, s, B, gi)]
     if sc(wt) <= sc(base): continue
-    p = proto[(k, s)]
-    for arm, on in ((A, A == "on"), (B, B == "on")):
-        j = {kk: v for kk, v in p.items() if kk not in ("name", "games", "seed", "game_index", "weight", "flags")}
-        j.update({"name": f"{k}|{s}|{arm}|{gi}|was{base}->{wt}", "games": 1, "seed": 7340000 + gi,
+    for arm in (A, B):
+        p = proto[(k, s, arm)]
+        j = {kk: v for kk, v in p.items() if kk not in ("name", "games", "seed", "game_index", "weight")}
+        j.update({"name": f"{k}|{s}|{arm}|{gi}|was{base}->{wt}", "games": 1, "seed": BASE + gi,
                   "game_index": gi, "depth": 8, "budget_ms": 0, "ignore_play_profile": True,
-                  "flags": {"MTG_ATTACK_LORD_CAST": on}})
+                  "flags": dict(p["flags"])})
         jobs.append(j)
 json.dump({"jobs": jobs}, open(out, "w"), indent=0)
 print(len(jobs) // 2, "slower searched games ->", out)
