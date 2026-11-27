@@ -412,7 +412,9 @@ std::atomic<long long> g_cost_main{0}, g_cost_sibpay{0}, g_cost_orders{0};
 // plan without it is on the menu or checked on its own (noop); it tapped a card taken off the top of the library
 // (hidden); the menu reaches its board with every land Aura's host aside and at least its resources (host_blind).
 // (cont_land): a land drop the plan did not make paid for it.
-std::atomic<long long> g_eg_noop{0}, g_eg_hidden{0}, g_eg_host_blind{0}, g_eg_cont_land{0};
+// (provider): ...and the cast it paid is one the deck's provider refuses once that land is played
+// (ContLandCastProviderPruned).
+std::atomic<long long> g_eg_noop{0}, g_eg_hidden{0}, g_eg_host_blind{0}, g_eg_cont_land{0}, g_eg_provider{0};
 // The equip route's macros audited link by link (AuditRoute), and the links audited.
 std::atomic<long long> g_route_macros{0}, g_route_links{0}, g_route_us{0};   // ...and the audit's wall (us)
 // ROLLBACK CENSUS (USER 2026-10-27: "how many lines are fully inaccessible and which are accessible only
@@ -464,8 +466,10 @@ struct Reporter
             by += std::string(" ") + kClsName[c] + "=" + std::to_string(g_cls[c].load());
         }
         std::fprintf(stderr, "=== MANA ORACLE classes:%s ===\n", by.empty() ? " (none)" : by.c_str());
-        std::fprintf(stderr, "=== MANA ORACLE enum-gap rejections: noop=%lld hidden=%lld host_blind=%lld cont_land=%lld ===\n",
-                     g_eg_noop.load(), g_eg_hidden.load(), g_eg_host_blind.load(), g_eg_cont_land.load());
+        std::fprintf(stderr, "=== MANA ORACLE enum-gap rejections: noop=%lld hidden=%lld host_blind=%lld cont_land=%lld "
+                     "provider=%lld ===\n",
+                     g_eg_noop.load(), g_eg_hidden.load(), g_eg_host_blind.load(), g_eg_cont_land.load(),
+                     g_eg_provider.load());
         if (CostTrace())
         {
             std::fprintf(stderr, "=== MANA ORACLE audit applies by stage: own=%lld sibling-payments=%lld other-orders=%lld ===\n",
@@ -5537,7 +5541,7 @@ bool TapsHiddenCard(const GameState& root, const Outcome& o, std::string* what)
 // True (and `what` = the land, `land` = its name) when the script taps a land card from the root hand other than the
 // plan's own drop. A plan whose land is left to the heuristic (`land_decided` false) is not asked.
 bool TapsContinuationLand(const GameState& root, const TurnSolver::Plan& plan, const Outcome& o, std::string* what,
-                          std::string* land)
+                          std::string* land, int* num = nullptr)
 {
     if (!plan.land_decided) { return false; }
     std::map<int, std::string> hand_lands;
@@ -5557,6 +5561,7 @@ bool TapsContinuationLand(const GameState& root, const TurnSolver::Plan& plan, c
             if (own > 0 && it->second == plan.land_to_play) { --own; continue; }
             if (what != nullptr) { *what = t.name + "#" + std::to_string(t.num); }
             if (land != nullptr) { *land = it->second; }
+            if (num != nullptr) { *num = t.num; }
             return true;
         }
     }
@@ -5586,6 +5591,66 @@ bool ReplayScript(const GameState& root, bool pre, const TurnSolver::Plan& plan,
     ++t_dec_applies;
     g_applies.fetch_add(1, std::memory_order_relaxed);
     return h.tap_error.empty() && !h.frontier && h.next == script.size() && cast_drops.empty() && act_drops.empty();
+}
+
+// A CONTINUATION LAND PAID A CAST THE DECK'S PROVIDER REFUSES THERE. The ENUM-GAP pass's paying realisation of a
+// `no land` plan may play a land from hand inside a breakpoint (the land the reveal let it choose) and pay a LATER
+// cast of the plan with it. The engine reaches that line only as the breakpoint's continuation `land=X + <cast>`, and
+// the enumerator's one cast choke point (CollectActions) asks the deck's provider first whether a FLOOD ENGINE -- a
+// DrawUntilNonland card, a cascade / retrace card, a shuffle-reveal or exile-until-nonland -- may be cast at all
+// (DecisionProvider::ShouldCastDrawEngine). Treasure Hunt's provider refuses one once the land drop is spent with
+// no outlet for the lands it draws (THStrictFlood, the USER's "don't play a land BEFORE Treasure Hunt / Throes":
+// docs/design/treasure-hunt-land-rule-provider.md). A provider prune that restricts the options is no mana gate, so
+// such a realisation is no option a mana gate kept off the menu. Treasure Hunt gate (gi 100000-119999), 2026-11-27:
+// 70+ of 76 ENUM-GAPs were {no land + Treasure Hunt + Treasure Hunt} (s30100161 T3: the second Treasure Hunt off
+// Temple of Epiphany + a Ferrous Lake played after the first resolved, no Land's Edge or Reliquary Tower out).
+// True (and `what` = the cast) when the payment of the script that first taps card `land_num` pays a flood-engine
+// cast the provider refuses on the board that payment is asked on (a replay of the script up to that payment).
+// MTG_ORACLE_EG_PROVIDER_PRUNE (DEFAULT ON; =0 -> not asked, the verdict as before).
+bool ContLandCastProviderPruned(const GameState& root, bool pre, const TurnSolver::Plan& plan, const Outcome& o,
+                                int land_num, std::string* what)
+{
+    // Read per call (not cached), so a unit test can pin it either way: the oracle is a checker, never a hot path.
+    if (!EnvOn("MTG_ORACLE_EG_PROVIDER_PRUNE", true)) { return false; }
+    std::size_t j = o.script.size();
+    for (std::size_t i = 0; i < o.script.size() && j == o.script.size(); ++i)
+    {
+        for (const TurnSolver::PreTap& t : o.script[i].taps) { if (t.num == land_num) { j = i; break; } }
+    }
+    if (j == o.script.size()) { return false; }
+    GameState copy = root;
+    GameState fs;
+    Hook h;
+    h.target  = &copy;
+    h.script.assign(o.script.begin(), o.script.begin() + static_cast<std::ptrdiff_t>(j));
+    h.f_state = &fs;
+    std::vector<std::string> cast_drops, act_drops;
+    std::vector<std::string>* saved_cast = g_play_dropped_cast_sink;
+    std::vector<std::string>* saved_act  = g_act_drop_sink;
+    g_play_dropped_cast_sink = &cast_drops;
+    g_act_drop_sink          = &act_drops;
+    Hook* const saved_hook = t_hook;
+    t_hook = &h;
+    TurnSolver::ApplyPlan(copy, plan, pre);
+    t_hook = saved_hook;
+    g_play_dropped_cast_sink = saved_cast;
+    g_act_drop_sink          = saved_act;
+    ++t_dec_applies;
+    g_applies.fetch_add(1, std::memory_order_relaxed);
+    // The frontier must be the payment of a SPELL (not a tap-ahead or a tap choice), asked on a board where the land
+    // is in play: the replayed prefix is the same script, so it is the same board the realisation paid on.
+    if (!h.tap_error.empty() || !h.frontier || !h.f_has_spell || h.f_tapahead > 0 || h.f_tapchoice > 0) { return false; }
+    bool land_in_play = false;
+    for (const Permanent& p : fs.battlefield) { if (p.card.m_number == land_num) { land_in_play = true; break; } }
+    if (!land_in_play) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(h.f_spell);
+    if (d == nullptr) { return false; }
+    // The flood-engine set, exactly as CollectActions' gate names it (TurnSolver.cpp, "Flood-engine gate").
+    const bool flood = d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0 || d->params.retrace
+                    || d->params.shuffle_reveal_freecast || d->params.etb_exile_until_nonland;
+    if (!flood || ResolveProvider(fs).ShouldCastDrawEngine(fs, fs.active_player_index, *d)) { return false; }
+    if (what != nullptr) { *what = h.f_spell.m_name.str(); }
+    return true;
 }
 
 // THE ACTIONS A REALISATION REALLY PERFORMED. An apply can skip an action and report no drop: a TapForTokenPay or an
@@ -5710,6 +5775,14 @@ struct Census
     bool                   later = false;  // a lost cast the plan did not declare
     bool                   rescued = false;// MTG_PAY_ROLLBACK (forced on) recovers it
 };
+// A lost cast the plan does not name (RollbackCore's `later`): it came from a continuation, after the plan's payments.
+bool LostUndeclared(const TurnSolver::Plan& plan, const EngineReal& er)
+{
+    std::multiset<std::string> declared;
+    for (const Action& a : plan.actions) { declared.insert(a.kind == Action::Kind::CastFromHand ? a.card_name.str() : ActionKey(a)); }
+    for (const std::string& x : er.cast) { if (declared.count(x) == 0) { return true; } }
+    return false;
+}
 Census RollbackCore(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er,
                     const std::multiset<std::string>& e_want)
 {
@@ -5811,6 +5884,16 @@ struct SibPayMemo
     std::map<const TurnSolver::Plan*, Entry> by_plan;
 };
 thread_local SibPayMemo* t_sib_memo = nullptr;
+// The decision's whole menu, as the engine realised it (AuditDecision's `real`): the undeclared-drop cover test reads
+// every entry's board (AuditPlan). Null outside a decision audit (the viewer's line audit), where that test is off.
+thread_local const std::vector<EngineReal>* t_menu_real = nullptr;
+// Does any entry of that menu win the game in its own engine line (OpponentHasLost)? (MTG_ORACLE_DROP_WON.)
+bool MenuHoldsWin()
+{
+    if (t_menu_real == nullptr) { return false; }
+    for (const EngineReal& m : *t_menu_real) { if (OpponentHasLost(m.st)) { return true; } }
+    return false;
+}
 
 void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er_in,
                const std::vector<const EngineReal*>& full_sibs,
@@ -6205,6 +6288,26 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     {
         const std::string dropped = "engine dropped [" + DropText(e_cast, e_act) + "]";
         const bool partial = r.capped || !r.unmodeled.empty() || !unscripted.empty();
+        // A LINE ON THE MENU WINS. A drop on a line that has already won the game (the opponent has lost: Land's
+        // Edge threw the hand) costs nothing: no payment of the plan can end better than a win in this main. Nor can
+        // a drop anywhere on a menu that holds such a win: the search has the win, and the game's measure (the turn
+        // it is won) cannot improve on it. Treasure Hunt gate (gi 100000-119999), 2026-11-27: every APPLY-DROP-ORDER
+        // was {land + Treasure Hunt + Throes of Chaos} whose breakpoint continuation cast Land's Edge off the reveal
+        // and threw ~30 lands (s30109829 T5, 41 flags: opponent -48), leaving Throes' {3}{R} unpaid; 13 of the 41
+        // were the entries whose continuation casts the Edge and fires it after the main, beside the entries that
+        // win in the main itself. A verdict is emitted as DROP-COVERED naming the class it would have had.
+        // MTG_ORACLE_DROP_WON (DEFAULT ON; =0 -> the verdicts as before). (Read per call, as the oracle's other
+        // test-pinned levers: a checker, not a hot path.)
+        const bool e_won = EnvOn("MTG_ORACLE_DROP_WON", true) && (OpponentHasLost(e) || MenuHoldsWin());
+        auto won_cover = [&](Cls would) -> bool
+        {
+            if (!e_won) { return false; }
+            Emit(C_DROP_COVERED, root, pre, plan, dropped + (OpponentHasLost(e)
+                     ? "; the engine's line wins here (the opponent has lost)"
+                     : "; another menu entry's engine line wins here (the opponent has lost)")
+                 + ", so nothing it dropped can matter (would-be " + kClsName[would] + ")");
+            return true;
+        };
         // Another menu entry with the SAME actions (a cast-order variant, a land position) that pays for
         // them all answers this drop only if it reaches every board a full payment of THIS order
         // reaches, with at least the resources. Order variants exist because order can matter.
@@ -6309,6 +6412,45 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                 return;
             }
             uncovered = still;
+        }
+        if (full != nullptr && won_cover(C_APPLY_DROP)) { return; }
+        // AN UNDECLARED DROP THE MENU REACHES ANYWAY. A lost cast the plan does not name came from a breakpoint's
+        // continuation, re-solved on the board the plan's payments left (a Treasure Hunt's reveal, then Land's Edge).
+        // When every board a full payment of this plan reaches is also reached by ANOTHER menu entry's own engine
+        // line, with at least the resources (the cover ENUM-GAP's JudgeHit asks of the whole menu), the drop loses
+        // no option: the search holds that board under the other entry. The same-action siblings above ask this of
+        // a declared drop only. Treasure Hunt s30106563 T4 {no land + Treasure Hunt}: the continuation's Reliquary
+        // Tower + Land's Edge lost Land's Edge; the oracle's payment plays Cascade Bluffs instead and casts it, the
+        // board {land=Cascade Bluffs + Treasure Hunt} reaches (Vampires s30230089, 2026-11-17, the same shape).
+        // MTG_ORACLE_UNDECL_MENU_COVER (DEFAULT ON; =0 -> APPLY-DROP as before).
+        if (full != nullptr && t_menu_real != nullptr && EnvOn("MTG_ORACLE_UNDECL_MENU_COVER", true)
+            && LostUndeclared(plan, er_in))
+        {
+            std::vector<const Outcome*> need = uncovered_all;
+            if (need.empty())
+            {
+                for (const Outcome& o : r.outcomes) { if (o.Clean() && Includes(o.left, e_want)) { need.push_back(&o); } }
+            }
+            auto menu_covers = [&](const Outcome& o)
+            {
+                const std::uint64_t k = CoreKey(o.St());
+                const Res orr = Resources(o.St(), false);
+                for (const EngineReal& m : *t_menu_real)
+                {
+                    if (&m == &er_in || !m.Full()) { continue; }
+                    if (CoreKey(m.st) == k && Covers(Resources(m.st, false), orr, nullptr)) { return true; }
+                }
+                return false;
+            };
+            bool all = !need.empty();
+            for (const Outcome* o : need) { if (!menu_covers(*o)) { all = false; break; } }
+            if (all)
+            {
+                Emit(C_DROP_COVERED, root, pre, plan, dropped + "; a lost action was not declared in the plan, and "
+                                                      "every board a full payment reaches, another menu entry's own "
+                                                      "line reaches with at least the resources (would-be APPLY-DROP)");
+                return;
+            }
         }
         if (full != nullptr)
         {
@@ -6447,6 +6589,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                     order += (order.empty() ? "" : " > ")
                            + (a.kind == Action::Kind::CastFromHand ? a.card_name.str() : ActionKey(a));
                 }
+                if (won_cover(C_APPLY_DROP_ORDER)) { return; }
                 g_rb[RB_ORDER].fetch_add(1, std::memory_order_relaxed);
                 Emit(C_APPLY_DROP_ORDER, root, pre, plan,
                      dropped + "; the order " + order + " pays every action with " + ScriptText(o.script));
@@ -6810,7 +6953,8 @@ GapVerdict EnumGapPlan(const GameState& state, bool pre, const TurnSolver::Plan&
                 }
             }
             std::string card, land;
-            if (TapsContinuationLand(state, t, o, &card, &land))
+            int land_num = 0;
+            if (TapsContinuationLand(state, t, o, &card, &land, &land_num))
             {
                 TurnSolver::Plan with_land = t;
                 with_land.land_to_play = land;
@@ -6821,6 +6965,17 @@ GapVerdict EnumGapPlan(const GameState& state, bool pre, const TurnSolver::Plan&
                     EgTrace(state, pre, t, "cont-land: paying it with " + ScriptText(o.script) + " taps " + card
                                            + ", a land from hand the plan did not play; the plan playing it is "
                                            + (mv.on_menu.count(lk) != 0 ? "on the menu" : "enumerated"));
+                    return false;
+                }
+                // ...or the cast that land paid is one the deck's provider refuses once that land is played
+                // (ContLandCastProviderPruned): a provider prune, not a mana gate.
+                std::string pruned;
+                if (ContLandCastProviderPruned(state, pre, t, o, land_num, &pruned))
+                {
+                    g_eg_provider.fetch_add(1, std::memory_order_relaxed);
+                    EgTrace(state, pre, t, "provider: paying it with " + ScriptText(o.script) + " taps " + card
+                                           + ", a land from hand the plan did not play, for " + pruned
+                                           + ", which the deck's provider refuses once that land is played");
                     return false;
                 }
             }
@@ -6922,7 +7077,10 @@ std::vector<std::string> PlanVerdict(const GameState& state, bool pre, const Tur
     std::vector<std::string> got;
     std::vector<std::string>* saved = t_emit_capture;
     t_emit_capture = &got;
+    const std::vector<EngineReal>* saved_menu = t_menu_real;
+    t_menu_real = &real;   // the whole menu, as AuditDecision hands it (the undeclared-drop cover)
     AuditPlan(state, pre, plan, EngineApply(state, pre, plan), sibs, sib_plans);
+    t_menu_real = saved_menu;
     t_emit_capture = saved;
     return got;
 }
@@ -7218,6 +7376,12 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
         explicit SibMemoScope(SibPayMemo* m) : saved(t_sib_memo) { t_sib_memo = m; }
         ~SibMemoScope() { t_sib_memo = saved; }
     } sib_memo_scope(&sib_memo);
+    struct MenuRealScope
+    {
+        const std::vector<EngineReal>* saved;
+        explicit MenuRealScope(const std::vector<EngineReal>* m) : saved(t_menu_real) { t_menu_real = m; }
+        ~MenuRealScope() { t_menu_real = saved; }
+    } menu_real_scope(&real);
     for (std::size_t i = 0; i < plans.size(); ++i)
     {
         if (DecisionOut()) { skip_out(plans[i], "plan"); continue; }

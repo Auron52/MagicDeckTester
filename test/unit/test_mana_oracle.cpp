@@ -19,6 +19,7 @@
 #include "core/SpellEffects.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <optional>
 #include <string>
 #include <vector>
@@ -1874,4 +1875,143 @@ TEST_CASE("mana oracle: which Mind Stone -- the one cast this turn or the old on
     const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, plan, { plan });
     INFO("verdict: ", Joined(v));
     CHECK_FALSE(Has(v, "ORACLE-GAP"));
+}
+
+namespace
+{
+// One oracle lever pinned for a scope (the levers below are read per call), restored on exit.
+struct OracleEnvPin
+{
+    const char* name;
+    std::string saved;
+    bool        had;
+    OracleEnvPin(const char* n, const char* value) : name(n)
+    {
+        const char* e = std::getenv(n);
+        had = e != nullptr;
+        if (had) { saved = e; }
+        setenv(n, value, 1);
+    }
+    ~OracleEnvPin() { if (had) { setenv(name, saved.c_str(), 1); } else { unsetenv(name); } }
+};
+// Treasure Hunt's T3 shape (s30100161, gate gi 100000-119999): three untapped Islands, two Treasure Hunts and two
+// Islands in hand with Land's Edge, the drop open, a nonland on top. The pre-land pool (3) cannot pay both {1}{U}s, so
+// a mana gate keeps {no land + Treasure Hunt + Treasure Hunt} off the menu. A paying realisation exists: the first
+// Treasure Hunt off two Islands, an Island from hand played in its breakpoint, the second off that Island and the last
+// one. The engine reaches that line only as the breakpoint's continuation {land=Island + Treasure Hunt}, which the
+// provider's strict flood gate refuses (drop spent, no Land's Edge or Reliquary Tower out, no mana for the Edge).
+GameState ThTwoHunts(bool edge_in_play)
+{
+    static const TreasureHuntProvider prov;
+    std::vector<std::string> bf{ "Island", "Island", "Island" };
+    if (edge_in_play) { bf.push_back("Land's Edge"); }
+    GameState s = Board(bf);
+    s.m_provider = &prov;
+    s.turn_number = 3;
+    s.players[0].life = s.players[1].life = 20;
+    Hand(s, { "Treasure Hunt", "Treasure Hunt", "Island", "Island", "Land's Edge" });
+    SetLibrary(s, std::vector<std::string>(20, "Gideon, Ally of Zendikar"));
+    return s;
+}
+TurnSolver::Plan TwoHunts(const GameState& s)
+{
+    Action a = CastAction(s, "Treasure Hunt");
+    Action b = a;
+    for (int i = a.hand_index + 1; i < static_cast<int>(s.players[0].hand.size()); ++i)
+    { if (s.players[0].hand[static_cast<std::size_t>(i)].m_name.str() == "Treasure Hunt") { b.hand_index = i; break; } }
+    TurnSolver::Plan p = PlanOf({ a, b });
+    p.land_to_play.clear();   // "no land": the drop is left open past the first Treasure Hunt
+    return p;
+}
+} // namespace
+
+TEST_CASE("ENUM-GAP: a second Treasure Hunt paid by a land played after the first is the provider's prune, not a gap")
+{
+    EnsureOracleCards();
+    const GameState s = ThTwoHunts(/*edge_in_play=*/false);
+    const TurnSolver::Plan p = TwoHunts(s);
+    std::string why;
+    {
+        OracleEnvPin off("MTG_ORACLE_EG_PROVIDER_PRUNE", "0");
+        CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, p, {}, nullptr, &why) == "ENUM-GAP");
+        INFO(why);
+        CHECK(why.find("Island#") != std::string::npos);
+    }
+    CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, p, {}).empty());
+    // With Land's Edge in play the provider admits the second Treasure Hunt after the drop: a real gap either way.
+    const GameState e = ThTwoHunts(/*edge_in_play=*/true);
+    CHECK(manaoracle::EnumGapVerdict(e, /*pre=*/true, TwoHunts(e), {}) == "ENUM-GAP");
+    {
+        OracleEnvPin off("MTG_ORACLE_EG_PROVIDER_PRUNE", "0");
+        CHECK(manaoracle::EnumGapVerdict(e, /*pre=*/true, TwoHunts(e), {}) == "ENUM-GAP");
+    }
+}
+
+// A drop on a line that has already WON (the opponent has lost) costs nothing (MTG_ORACLE_DROP_WON). Treasure Hunt
+// s30109829 T5 (41 APPLY-DROP-ORDERs): {land + Treasure Hunt + Throes of Chaos}, the breakpoint continuation cast
+// Land's Edge and threw ~30 lands (opponent -48), so Throes' {3}{R} went unpaid. Here the Slivers replicate drop above
+// (APPLY-DROP alone on the menu) on a board whose opponent has already lost: the verdict reads only the engine's end
+// board, which still shows the loss.
+TEST_CASE("mana oracle: a drop on a line that has already won is DROP-COVERED")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Secluded Courtyard", "Sliver Hive", "Mutavault", "Cavern of Souls", "Hatchery Sliver" });
+    s.players[0].life = 20;
+    s.players[1].life = 0;
+    Hand(s, { "Predatory Sliver", "Plated Sliver" });
+    SetLibrary(s, std::vector<std::string>(20, "Plated Sliver"));
+    const TurnSolver::Plan unpinned = PlanOf({ CastAction(s, "Predatory Sliver"), CastAction(s, "Plated Sliver") });
+    {
+        OracleEnvPin off("MTG_ORACLE_DROP_WON", "0");
+        const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, unpinned, { unpinned });
+        INFO("off: ", Joined(v));
+        CHECK(Has(v, "APPLY-DROP"));
+    }
+    const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, unpinned, { unpinned });
+    INFO("on: ", Joined(v));
+    CHECK_FALSE(Has(v, "APPLY-DROP"));
+    CHECK(Has(v, "DROP-COVERED"));
+}
+
+// An UNDECLARED drop the menu reaches anyway (MTG_ORACLE_UNDECL_MENU_COVER). Treasure Hunt s30106563 T4 (gate gi
+// 100000-119999, the leading undeclared shape): {no land + Treasure Hunt} off Reliquary Tower, Ferrous Lake and
+// Saprazzan Skerry, Land's Edge in hand. The breakpoint continuation plays a land and casts Land's Edge, which the
+// plan does not name, and the Edge drops; the oracle's payment of Treasure Hunt leaves the colours for it. Every board
+// that payment reaches, {land=Cascade Bluffs + Treasure Hunt} reaches under the engine's own line. (The opponent is
+// put out of reach, so no entry's line wins and MTG_ORACLE_DROP_WON stays out of it.)
+TEST_CASE("mana oracle: an undeclared continuation drop whose board another menu entry reaches is DROP-COVERED")
+{
+    EnsureOracleCards();
+    static const TreasureHuntProvider prov;
+    GameState s = Board({ "Reliquary Tower", "Ferrous Lake", "Saprazzan Skerry" });
+    s.m_provider = &prov;
+    s.players[0].life = 20;
+    s.players[1].life = 500;
+    s.battlefield[2].counters.Add(Counter::Type::Depletion, 2);
+    Hand(s, { "Forgotten Cave", "Steam Vents", "Frostboil Snarl", "Reliquary Tower", "Frostboil Snarl", "Fiery Islet",
+              "Treasure Hunt", "Island", "Cascade Bluffs", "Sandstone Needle", "Ferrous Lake", "Cascade Bluffs",
+              "Forgotten Cave", "Steam Vents", "Island", "Temple of Epiphany", "Sandstone Needle", "Forgotten Cave",
+              "Lonely Sandbar", "Forgotten Cave", "Steam Vents", "Lonely Sandbar", "Sandstone Needle", "Reliquary Tower",
+              "Saprazzan Skerry", "Ferrous Lake", "Temple of Epiphany", "Land's Edge", "Thundering Falls" });
+    std::vector<std::string> lib{ "Frostboil Snarl", "Thundering Falls", "Saprazzan Skerry", "Reliquary Tower",
+                                  "Ferrous Lake", "Remote Isle", "Temple of Epiphany", "Lonely Sandbar", "Cascade Bluffs",
+                                  "Fiery Islet", "Temple of Epiphany", "Lonely Sandbar", "Treasure Hunt" };
+    for (int i = 0; i < 20; ++i) { lib.push_back("Gideon, Ally of Zendikar"); }
+    SetLibrary(s, lib);
+    TurnSolver::Plan hunt = PlanOf({ CastAction(s, "Treasure Hunt") });
+    TurnSolver::Plan bluffs = hunt;
+    bluffs.land_to_play = "Cascade Bluffs";
+    const std::vector<std::string> alone = manaoracle::PlanVerdict(s, /*pre=*/true, hunt, { hunt });
+    INFO("alone: ", Joined(alone));
+    REQUIRE(Has(alone, "APPLY-DROP"));
+    {
+        OracleEnvPin off("MTG_ORACLE_UNDECL_MENU_COVER", "0");
+        const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, hunt, { hunt, bluffs });
+        INFO("off: ", Joined(v));
+        CHECK(Has(v, "APPLY-DROP"));
+    }
+    const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, hunt, { hunt, bluffs });
+    INFO("on: ", Joined(v));
+    CHECK_FALSE(Has(v, "APPLY-DROP"));
+    CHECK(Has(v, "DROP-COVERED"));
 }
