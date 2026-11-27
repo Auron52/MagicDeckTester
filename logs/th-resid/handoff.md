@@ -123,3 +123,21 @@ Command: `build/Release/mtg-test --test-case="*provider's prune*,*already won is
     Candidate seeds are in the new gate's `AD-undecl-cov` lines.
   - The lever itself is verified on the real game (s30106563 T4 repro: 2 to 0).
 - The full unit suite (`scripts/unit_par.sh`) has NOT been run yet. Run it after fixing the two fixtures.
+
+## UPDATE 16:3x UTC: the GATE IS DONE (both rc=0)
+
+The table and residuals are now in the design doc, under "Measurements".
+
+| binary | APPLY-DROP | undeclared | APPLY-DROP-ORDER | ENUM-GAP |
+|---|---|---|---|---|
+| base | 326 | 257 | 62 | 76 |
+| new | 22 | 18 | 0 | 1 |
+
+- Play: 200/200 job digests are identical.
+- Oracle wall: +0.14%.
+- The undeclared-cover lever fired 0 times in the gate. The win rule, asked first, takes every undeclared drop here.
+
+Remaining work:
+1. The two unit fixtures above.
+2. The full unit suite.
+3. Optional: the 18 + 4 residual drops.
