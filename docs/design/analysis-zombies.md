@@ -204,6 +204,20 @@ a turn-4 Reaper. The two settings reproduced on a single-game replay, and the
 same-score 2HG smoke digest was accepted. Its 677 scenarios and 950 reference
 replays passed; no score regressions were observed.
 
+The filtered overnight run on committed source `46271e67b` completed on
+2026-11-27 in about six minutes. All 15 Zombies and Zombies 2HG rows kept
+their win-turn averages. Eleven digests were exact; four searched rows and
+one depth-0 row had same-score play changes. The changes came from two seeds:
+4031 (2HG depth 5, game index 27, turn-4 win) and 4067 (2HG depth 5 and
+single-player depths 0, 3, and 5, game index 63, turn-7 win). Kept hands and
+draws were unchanged. The differing lines were legal: seed 4031 changed the
+turn-1 creature/Ritual development, while seed 4067 changed a later
+Culling/Lord/Death sequence. No game became faster or slower. The five
+same-score play digests were accepted with `regression.sh --overnight
+--deck=zombies,zombies2hg --accept`; the source hash is recorded in the
+ground-truth header. This snapshot is retained even if the shared branch
+moves before integration, so a later sweep can measure the remaining drift.
+
 ### Implementation order
 
 1. Add the existing-schema bodies and static lords first (Diregraf Ghoul,
