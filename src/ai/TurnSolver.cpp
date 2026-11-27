@@ -16587,7 +16587,18 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
         if (d->card.IsLand() || d->card.IsInstant() || d->card.IsSorcery()) { continue; }
         // A lord body is kept (below kWalkNumberBase) and TAPPED, so its static pump reaches the plan's hasty casts
         // (and, with MTG_ATTACK_LORD_CAST, the board's attackers) while it is never counted as an attacker itself.
-        const bool keep_lord = lord && IsLordPermanent(*d);
+        bool keep_lord = lord && IsLordPermanent(*d);
+        // MTG_ATTACK_LORD_CAST amendment C (2026-11-27, Boars d0 gi8941): a LEGENDARY lord whose name is already on our
+        // battlefield (or kept earlier in this walk) is not kept again -- the legend rule leaves ONE copy, so its static
+        // pump counts once. Without this the walk read Raggadragga's +2/+2 twice on three mana dorks (17 read, 11
+        // dealt) and played the second copy as a "lethal" line. Lever-only, so the off arm is byte-identical.
+        if (keep_lord && board_lord && d->card.HasSupertype(Supertype::Legendary))
+        {
+            for (const Permanent& q : t.battlefield)
+            {
+                if (q.controller_index == active && q.card.m_name == d->card.m_name) { keep_lord = false; break; }
+            }
+        }
         const bool body = d->card.IsCreature() || keep_lord
                        || (life && (LifegainAttackWatcher(d->params) || EnterLifegainWatcher(d->params)));
         if (!body) { continue; }
@@ -16747,6 +16758,36 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
                                        [&](const Permanent& q)
                                        { return q.controller_index == active && q.card.m_number >= erase_from; }),
                         t.battlefield.end());
+    // MTG_ATTACK_LORD_CAST amendment A (2026-11-27, Boars d0 gi44 and ~200 like it): the re-projection reads who
+    // WANTS to attack from the PRE-plan board (MTG_ATTACK_REPROJECT_INTENT), where a 0-power mana dork holds. A kept
+    // lord that pumps it (Raggadragga's +2/+2 on creatures with a mana ability: Ignoble Hierarch 0/1 -> 2/3) changes
+    // exactly the input that hold read, so the frozen "hold" dropped the lord's pump on it (16 read, 19 dealt, the
+    // T4 kill missed). A creature the intent HELD whose lord bonus the kept lords raise is re-asked on the walk's
+    // board (wants = 2); every other verdict stays the pre-plan one, so point 10's hold-context protection stands.
+    if (board_lord && t_attack_intent != nullptr)
+    {
+        AttackIntent re = *t_attack_intent;
+        bool changed = false;
+        for (std::size_t i = 0; i < re.number.size(); ++i)
+        {
+            if (re.wants[i] != 0) { continue; }
+            const Permanent* now = nullptr;
+            const Permanent* was = nullptr;
+            for (const Permanent& q : t.battlefield)
+            { if (q.controller_index == active && q.card.m_number == re.number[i]) { now = &q; break; } }
+            for (const Permanent& q : state.battlefield)
+            { if (q.controller_index == active && q.card.m_number == re.number[i]) { was = &q; break; } }
+            if (now == nullptr || was == nullptr) { continue; }
+            if (ComputeLordBonus(now->card, t, active, now->AnimatedAllTypes(), now).first
+                > ComputeLordBonus(was->card, state, active, was->AnimatedAllTypes(), was).first)
+            { re.wants[i] = 2; changed = true; }
+        }
+        if (changed)
+        {
+            AttackIntentScope re_scope(&re);
+            return PendingAttackDamage(t) + extra;
+        }
+    }
     return PendingAttackDamage(t) + extra;
 }
 
@@ -17162,7 +17203,36 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
         // dork spent on its own ability pays nothing, and its share of `need` falls on the others.
         s1 = &e->srcs; pend1 = e->pending; y1 = e->yield;
     }
-    const int need = need_exact ? cost_mv - (supply_total - y1) : cost_mv - legacy_nc_total;
+    int need = need_exact ? cost_mv - (supply_total - y1) : cost_mv - legacy_nc_total;
+    // MTG_ATTACK_LORD_CAST amendment B (2026-11-27, Goblins d0 gi314 and the Goblins slower games): a LIVE §2b
+    // sac-for-mana outlet (Skirk Prospector, MTG_SAC_OUTLET_PAY) puts every legal fodder body's mana into `supply`
+    // as if it were a land, and the payer EATS those bodies -- last, after the lands and the attacking dorks -- when
+    // nothing else pays. Only an explicit SacForMana candidate was charged (cand_sac), so a plan paid by implicit
+    // fodder kept every eaten Goblin in its attack: {Goblin Chieftain, Twinshot Sniper} read 24 with the lord's
+    // +1/+1 on six Goblins, then ate Muxus, Goblin King and three Lackeys to pay and dealt 7. For a subset whose
+    // read the lever touches (a kept lord pumping the board), the dorks are spent before any fodder (need grows by
+    // the fodder share) and the bodies the payer would eat -- ceil(rest / per), in SacPayFodderRank order, the
+    // payer's own -- leave the walk's board. Lever-only (the off arm's identical over-read stays below lethal far
+    // more often, since nothing lifts it); inert without a live outlet (state.deck_has_sac_mana_outlet).
+    int fodder_eat = 0;
+    SacPayOutlet fodder_outlet;
+    if (need_exact && ctx.board_lord && !ctx.cand_walk.empty())
+    {
+        bool lord_in_sel = false;
+        for (int j : sel) { if (ctx.cand_walk[static_cast<std::size_t>(j)] & kWalkLord) { lord_in_sel = true; break; } }
+        if (lord_in_sel) { fodder_outlet = LiveSacPayOutlet(state, state.active_player_index); }
+        if (fodder_outlet.valid())
+        {
+            const int per = std::max(1, fodder_outlet.def->params.sac_outlet_add_mana_amount);
+            const int f_units = SacPayFodderCount(state, state.active_player_index, fodder_outlet) * per;
+            if (f_units > 0)
+            {
+                need = std::max(need, cost_mv - (supply_total - y1 - f_units));
+                const int eat_units = cost_mv - (supply_total - f_units);
+                if (eat_units > 0) { fodder_eat = (eat_units + per - 1) / per; }
+            }
+        }
+    }
     // MTG_ATTACK_TAP_CREATURE_ONLY: the noncreature share is paid from noncreature-spendable supply
     // only (pool_noncreature drops creature_mana_only sources), so its need is the noncreature cost
     // beyond the non-attacker part of THAT pool, covered by attacking sources whose mana it can spend.
@@ -17210,7 +17280,7 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
     if (!reproj && !walk) { return (ctx.pending_atk - pend1) + lost_base; }
     // Memo key: the stage-1 taps, the spent sources, and the subset's walk-relevant members (casts and
     // lifegain activations -- everything the walk reads). Unkeyable past 64 candidates: computed fresh.
-    const bool keyable = cands.size() <= 64 && sac_keyable;
+    const bool keyable = cands.size() <= 64 && sac_keyable && fodder_eat == 0;   // amendment B: eaten count unkeyed
     std::uint64_t walk_key = 0;
     if (walk && keyable)
     {
@@ -17252,6 +17322,22 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
                 { p.tapped = true; break; }
             }
         }
+    }
+    // Amendment B: the bodies the payer eats (see `fodder_eat`), lowest SacPayFodderRank first.
+    for (int n = 0; n < fodder_eat; ++n)
+    {
+        int best = -1, best_rank = 0;
+        for (int i = 0; i < static_cast<int>(t.battlefield.size()); ++i)
+        {
+            const Permanent& q = t.battlefield[static_cast<std::size_t>(i)];
+            if (q.controller_index != t.active_player_index) { continue; }
+            const CardDefinition* qd = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
+            if (!IsSacPayFodder(q, qd, fodder_outlet)) { continue; }
+            const int r = SacPayFodderRank(t, q, fodder_outlet);
+            if (best < 0 || r < best_rank) { best = i; best_rank = r; }
+        }
+        if (best < 0) { break; }
+        t.battlefield.erase(t.battlefield.begin() + best);
     }
     AttackIntentScope intent_scope(PrePlanAttackIntent(state, ctx));   // point 10
     const int pend2 = walk ? ProjectPlanWalk(t, state, cands, sel, walk_pump, walk_life, walk_lord,
