@@ -1,0 +1,12 @@
+creature_giving_d3b10_A_s48100000 turns_diff=0 digest_diff=1 of 100
+creature_giving_d3b10_A_s48101000 turns_diff=0 digest_diff=0 of 100
+creature_giving_d3b10_A_s48102000 turns_diff=0 digest_diff=3 of 100
+giants_d3b10_A_s48109000 turns_diff=0 digest_diff=0 of 100
+giants_d3b10_A_s48110000 turns_diff=0 digest_diff=0 of 100
+giants_d3b10_A_s48111000 turns_diff=0 digest_diff=0 of 100
+knights_d3b10_A_s48103000 turns_diff=0 digest_diff=1 of 100
+knights_d3b10_A_s48104000 turns_diff=0 digest_diff=1 of 100
+knights_d3b10_A_s48105000 turns_diff=0 digest_diff=2 of 100
+vampires_d3b10_A_s48106000 turns_diff=0 digest_diff=5 of 100
+vampires_d3b10_A_s48107000 turns_diff=0 digest_diff=5 of 100
+vampires_d3b10_A_s48108000 turns_diff=0 digest_diff=3 of 100

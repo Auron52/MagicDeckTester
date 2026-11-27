@@ -1,0 +1,73 @@
+# MTG_LEAF_KILL_ONLY_VERIFY=1, unlimited budget, mtg.final (NOM2 default ON). Pooled batch: d1 b0 x12 + d2 b0 x4 per eligible deck
+[leaf-kill-only] MISMATCH t2 depth=1 cutoff=5 kill_only=9 full=5 budget=none
+[leaf-kill-only] MISMATCH t5 depth=1 cutoff=5 kill_only=9 full=5 budget=none
+[leaf-kill-only] MISMATCH t5 depth=1 cutoff=5 kill_only=9 full=5 budget=none
+[leaf-kill-only] MISMATCH t6 depth=1 cutoff=6 kill_only=9 full=6 budget=none
+[leaf-kill-only] MISMATCH t6 depth=1 cutoff=6 kill_only=9 full=6 budget=none
+[leaf-kill-only] MISMATCH t5 depth=1 cutoff=5 kill_only=9 full=5 budget=none
+[leaf-kill-only] MISMATCH t5 depth=1 cutoff=5 kill_only=9 full=5 budget=none
+[leaf-kill-only] MISMATCH t5 depth=1 cutoff=5 kill_only=9 full=5 budget=none
+[leaf-kill-only] MISMATCH t5 depth=1 cutoff=6 kill_only=9 full=6 budget=none
+[leaf-kill-only] armed_turns=0 candidate_rollouts_skipped=0 memo_ko_entries=0 m1_cands=0 m2_cands=0 m2_apply_empty=0 m2_no_reach=0 fsl_edge_no_reach=0 verified=22856 MISMATCHES=9
+
+# per-deck attribution, d1 b0 x12, one process per (deck, arm): K1 = NOM2 on, K0 = off
+alchemist_K0 verified=391 MISMATCHES=0
+alchemist_K1 verified=391 MISMATCHES=0
+auras_K0 verified=144 MISMATCHES=0
+auras_K1 verified=144 MISMATCHES=0
+breaching_K0 verified=44 MISMATCHES=0
+breaching_K1 verified=44 MISMATCHES=0
+creature_giving_K0 verified=257 MISMATCHES=0
+creature_giving_K1 verified=257 MISMATCHES=0
+critter_K0 verified=136 MISMATCHES=0
+critter_K1 verified=136 MISMATCHES=0
+dragons_K0 verified=144 MISMATCHES=0
+dragons_K1 verified=144 MISMATCHES=0
+dragonstorm_K0 verified=118 MISMATCHES=0
+dragonstorm_K1 verified=118 MISMATCHES=0
+edf_K0 verified=388 MISMATCHES=0
+edf_K1 verified=388 MISMATCHES=0
+elementals_K0 verified=431 MISMATCHES=0
+elementals_K1 verified=431 MISMATCHES=0
+fluctuator_K0 verified=148 MISMATCHES=0
+fluctuator_K1 verified=148 MISMATCHES=0
+galadriel_K0 verified=117 MISMATCHES=0
+galadriel_K1 verified=117 MISMATCHES=0
+gods_K0 verified=150 MISMATCHES=0
+gods_K1 verified=150 MISMATCHES=0
+jumbo_K0 verified=124 MISMATCHES=0
+jumbo_K1 verified=124 MISMATCHES=0
+kithkin_K0 verified=157 MISMATCHES=0
+kithkin_K1 verified=157 MISMATCHES=0
+kittyv3_K0 verified=91 MISMATCHES=0
+kittyv3_K1 verified=91 MISMATCHES=0
+knights_K0 verified=116 MISMATCHES=0
+knights_K1 verified=116 MISMATCHES=0
+lhc_K0 verified=169 MISMATCHES=0
+lhc_K1 verified=169 MISMATCHES=0
+mazesend_K0 verified=1569 MISMATCHES=0
+mazesend_K1 verified=1581 MISMATCHES=6
+merfolk_K0 verified=244 MISMATCHES=0
+merfolk_K1 verified=244 MISMATCHES=0
+mill_K0 verified=474 MISMATCHES=0
+mill_K1 verified=474 MISMATCHES=0
+minotaur_K0 verified=176 MISMATCHES=0
+minotaur_K1 verified=176 MISMATCHES=0
+mirrorwing_K0 verified=200 MISMATCHES=0
+mirrorwing_K1 verified=200 MISMATCHES=0
+pd_K0 verified=338 MISMATCHES=0
+pd_K1 verified=338 MISMATCHES=0
+pirates_K0 verified=205 MISMATCHES=0
+pirates_K1 verified=205 MISMATCHES=0
+selesnyav2_K0 verified=239 MISMATCHES=0
+selesnyav2_K1 verified=239 MISMATCHES=0
+slivers_K0 verified=153 MISMATCHES=0
+slivers_K1 verified=153 MISMATCHES=0
+soldiers_K0 verified=174 MISMATCHES=0
+soldiers_K1 verified=174 MISMATCHES=0
+stompy_K0 verified=445 MISMATCHES=0
+stompy_K1 verified=445 MISMATCHES=0
+th_K0 verified=155 MISMATCHES=0
+th_K1 verified=155 MISMATCHES=0
+whiteknights_K0 verified=96 MISMATCHES=0
+whiteknights_K1 verified=96 MISMATCHES=0

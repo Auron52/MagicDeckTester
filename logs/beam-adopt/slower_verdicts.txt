@@ -1,0 +1,22 @@
+creature_giving      seed 49106000 gi    3: B 4 -> F 5  d8b0 4  NC B 6 F 6  => recover
+creature_giving      seed 49104000 gi  249: B 4 -> F 5  d8b0 4  NC B 4 F 4  => recover
+creature_giving      seed 49108000 gi  172: B 5 -> F 6  d8b0 5  NC B 6 F 6  => recover
+antilife2hg          seed 49148000 gi  207: B 7 -> F 8  d8b0 7  NC B 9 F 9  => recover
+creature_giving2hg   seed 49121000 gi   16: B 6 -> F 7  d8b0 6  NC B 7 F 7  => recover
+creature_giving      seed 49112000 gi   78: B 4 -> F 5  d8b0 4  NC B 6 F 6  => recover
+creature_giving2hg   seed 49126000 gi   36: B 5 -> F 6  d8b0 5  NC B 6 F 6  => recover
+creature_giving      seed 49101000 gi  140: B 4 -> F 5  d8b0 4  NC B 8 F 8  => recover
+dragonstorm          seed 49173000 gi   66: B 7 -> F 8  d8b0 7  NC B 9 F 9  => recover
+creature_giving      seed 49103000 gi  165: B 5 -> F 7  d8b0 5  NC B 5 F 5  => recover
+creature_giving2hg   seed 49120000 gi  207: B 5 -> F 6  d8b0 5  NC B 5 F 5  => recover
+creature_giving      seed 49119000 gi  240: B 5 -> F 6  d8b0 5  NC B 7 F 7  => recover
+creature_giving2hg   seed 49125000 gi  182: B 6 -> F 7  d8b0 6  NC B 8 F 8  => recover
+creature_giving      seed 49100000 gi  191: B 4 -> F 5  d8b0 4  NC B 5 F 5  => recover
+creature_giving2hg   seed 49124000 gi  148: B 4 -> F 5  d8b0 4  NC B 5 F 5  => recover
+creature_giving2hg   seed 49124000 gi  208: B 5 -> F 6  d8b0 5  NC B 7 F 7  => recover
+antilife             seed 49134000 gi   28: B 4 -> F 5  d8b0 4  NC B 8 F 8  => recover
+creature_giving      seed 49114000 gi  220: B 5 -> F 6  d8b0 5  NC B 6 F 6  => recover
+dragonstorm          seed 49163000 gi  176: B 6 -> F 7  d8b0 6  NC B 7 F 7  => recover
+creature_giving2hg   seed 49123000 gi   88: B 5 -> F 6  d8b0 5  NC B 7 F 7  => recover
+creature_giving2hg   seed 49123000 gi  125: B 5 -> F 6  d8b0 5  NC B 8 F 8  => recover
+tally: {'recover': 21}
