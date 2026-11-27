@@ -2,7 +2,9 @@
 
 Worktree: `.claude/worktrees/zombies-analysis` (`wip/zombies-analysis-1126`).
 Started 2026-11-26 from shared commit `9e566000b`. The deck file was copied
-from the primary checkout, where it is still untracked; keep that original.
+from the primary checkout and landed on the shared branch at `1c5ab04be`.
+The original untracked copy is backed up under
+`/home/vscode/.claude/mdt-deck-backups/Zombies-original-20261126.cod`.
 Rebased onto the pushed overnight checkpoint `ffee59231` after its landing gate
 passed; implementation work starts from this shared source.
 
@@ -56,6 +58,24 @@ and pushed as `0fa58ab5a`. At committed depth 5/budget 20, the search matched
 all ten win turns exactly (human 4.400, search 4.400; zero hand mismatches or
 shortfalls). A live Scryfall cost audit compared all 13 costed Zombies cards;
 all 13 mana costs matched.
+
+## Post-reference mana follow-up (2026-11-27)
+
+The first 5,000-game mana oracle gate on source `58e7b5aea94b` reported
+7,870 `APPLY-DROP-ORDER` misses, with no other miss class and identical
+oracle-off play. Most were Culling the Weak ordered after the Warchief it could
+fund. A sequential payable-order search now covers sacrifice rituals and
+ritual-plus-reducer lines at both enumeration and apply. The scratch walk puts
+same-line sacrifice creatures onto the board with their physical IDs and pays
+the sacrifice cost; it also models a Fleshbag Marauder choice that removes a
+live reducer before the following spell. The focused 100-game oracle block
+went from 187 misses to zero. A 500-game block on the rebased shared source
+also has zero misses, zero oracle gaps and zero unmodeled cases.
+
+All ten user references were replayed after these changes at committed play
+depth 5/budget 20: human and search both average 4.400 turns, zero hand
+mismatches, zero shortfalls. The full 5,000-game gate requires a fresh PGO
+binary stamped to `HEAD:src`; that build and the full gate remain in progress.
 
 ## Coverage
 
