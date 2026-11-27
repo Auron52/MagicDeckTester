@@ -2121,7 +2121,7 @@ soldiers 0 / 500, th -1 / 300, **fluctuator +1 / 500** (one slower game, d3 gi22
 d3 x1500, 144000 d5 x1000): net 0 (2 slower / 2 faster); pooled **+1 over 3,000** (+0.0003 / game). Every slower game recovers
 at --depth 8 --budget-ms 0: fluctuator gi222 (OFF's T4 at b10 is budget luck -- both arms play T5 at b50, b200 and d3 b0, and T4
 at d8 b0), gi979, gi1464, and elementals smoke gi120 (both arms T4 at d8 b0). By the letter of the bar fluctuator is net > 0, so
-NOM2 stays DEFAULT OFF pending the coordinator / USER (QC2).
+NOM2 stays DEFAULT OFF pending the coordinator / USER (QC2). (RESOLVED 2026-11-27: the USER adopted NOM2 DEFAULT ON for every eligible deck; the Cyclone provider opt-in is deleted.)
 **3. `MTG_NESTED_EXH_AXIS` (per-job, DEFAULT OFF; the design's B2 in Ponder form).** Past an exhausted finite decision budget,
 a nested non-enforcing solve admits Ponder ORDER variants only below rank `MTG_NESTED_EXH_AXIS_W` (default 2, floor 2). This
 targets the leaf's Ponder order variants (~20% of wall). It is a budget-staged admission and inert at an unlimited budget.
@@ -2213,7 +2213,7 @@ pooled batch at <= 4 threads, with a PID waiter.
     Each such mulligan then plays ~10-14 trial games.
   - My reading: a modelling gap in the GENERIC curve check (cycling is a play), not a deck heuristic. The keep policy is yours.
   - The paired keep-vs-mulligan measurement that would show whether keeping them is better is built but UN-RUN (resume 1).
-- QC2. NOM2 (the kill-only turn for decks with no second main). Sound: 0 mismatches at unlimited budget. Effects:
+- QC2 (ANSWERED 2026-11-27: adopted DEFAULT ON fleet-wide). NOM2 (the kill-only turn for decks with no second main). Sound: 0 mismatches at unlimited budget. Effects:
   - Units: most d3 rows x0.74-0.89; Cyclone x0.92 / x0.954.
   - Play: 12 of 13 moving decks net <= 0. Fluctuator +1 over 3,000 games; every slower game recovers at d8 b0.
   - Cyclone needs it ON to get the kill-only saving. DEFAULT OFF until you decide; I recommend ON.

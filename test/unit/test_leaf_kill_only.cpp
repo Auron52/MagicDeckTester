@@ -230,10 +230,11 @@ TEST_CASE("Leaf kill-only: a full-horizon rollout and a deck without a searched 
     }
 }
 
-TEST_CASE("Leaf kill-only NOM2: a deck on which no post-combat main can open arms the scope and agrees with the full solve")
+TEST_CASE("Leaf kill-only NOM2: by DEFAULT a non-Cyclone deck on which no post-combat main can open arms the scope and agrees with the full solve")
 {
     EnsureCardsLoaded();
-    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // Exercise the parity proof on this generic test board.
+    // No ArmScope: NOM2 is DEFAULT ON for every eligible deck (USER 2026-11-27), and this generic board resolves to a
+    // non-Cyclone provider, so the default alone must arm it (it was a Cyclone-only provider opt-in before).
     for (int opp : { 20, 2 })
     {
         CAPTURE(opp);
@@ -254,7 +255,7 @@ TEST_CASE("Leaf kill-only NOM2: a deck on which no post-combat main can open arm
 TEST_CASE("Leaf kill-only EXTRA: an extra-turn deck arms the scope; an Emrakul cast whose extra turn kills is still found")
 {
     EnsureCardsLoaded();
-    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // This synthetic board does not detect a Cyclone provider.
+    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // explicit (the default is ON): this case is about EXTRA.
     auto board = [](int opp)
     {
         GameState s = Fresh(opp);
@@ -406,7 +407,7 @@ TEST_CASE("Edge m2 no-reach: the full-line search skips an edge node's second ma
 TEST_CASE("Leaf kill-only NOM2: Maze's End's end-step win (Manabond's dump, then the off-main fetch) is found at the cutoff")
 {
     EnsureCardsLoaded();
-    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // Maze's End does not opt in; force the shortcut on
+    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // explicit (the default is ON since 2026-11-27)
     const GameState s = MazeEndStepWinBoard();
     const Both b = Run(s, /*cutoff=*/5, /*second_main=*/false);
     CHECK(b.off == 5);          // the full solve: the end step wins this turn

@@ -115173,10 +115173,12 @@ inline bool LeafKillOnlyExtraOn()
     static const bool v = EnvOn("MTG_LEAF_KILL_ONLY_EXTRA", true);
     return heurarm::Flag(heurarm::LEAF_KILL_ONLY_EXTRA, v);
 }
-// MTG_LEAF_KILL_ONLY_NOM2 -- by default only providers that opt in (Cyclone) use the shortcut;
-// =0 disables it and =1 enables it for every eligible deck. SOUND (the verify below is 0 mismatches),
-// but fleet-wide adoption changes budget re-spend: smoke (2026-10-29) moved 21 of 149 configs
-// (searched: 1 slower / 4 faster / 39 same-score digest changes). Keep other decks at their old default.
+// MTG_LEAF_KILL_ONLY_NOM2 -- DEFAULT ON for every eligible deck (=0 off). A SOUND identity fold, so it defaults ON
+// wherever its parity condition holds (CLAUDE.md "COLLAPSE WASTED SEARCH UNCONDITIONALLY"); it was a Cyclone-only
+// provider opt-in until the USER adopted it fleet-wide on 2026-11-27 ("If it is a fully safe optimization, which it
+// seems like it is, let's just turn it on and see how it does"). MTG_LEAF_KILL_ONLY_VERIFY at an unlimited budget,
+// after the boundary fixes below (MTG_KO_BOUNDARY_SIM, MTG_KO_CROSS_ROUND_STOP): 0 mismatches over 53 fleet jobs /
+// 77,826 forks. Under a finite budget it re-spends the units it frees (a play change; A/B logs/k-fleet/report.md).
 // The identity's one parity requirement is that a candidate's own evaluation and the rollout's replay of the pick run
 // the same turn: the same apply, the same combat and the same post-combat main. The gate asked for a SEARCHED second
 // main because then both worlds solve it through the same memoised solve (the rollout's Dig-only m2 would have no
@@ -115184,17 +115186,15 @@ inline bool LeafKillOnlyExtraOn()
 // not searched (`second_main` / uses_second_main false), no Jorn untap, no Omnitool dig, no extra-combat source, and
 // a provider without a restricted main 2 (MayOpenRestrictedSecondMain). Deck constants only, so the answer cannot
 // differ between the two worlds of one game.
-inline bool LeafKillOnlyNoM2On(const GameState& s)
+inline bool LeafKillOnlyNoM2On()
 {
-    static const bool all_decks = EnvOn("MTG_LEAF_KILL_ONLY_NOM2");
-    static const bool disabled = !EnvOn("MTG_LEAF_KILL_ONLY_NOM2", true);
-    return heurarm::Flag(heurarm::LEAF_KILL_ONLY_NOM2,
-                          all_decks || (!disabled && ResolveProvider(s).LeafKillOnlyNoM2OptIn()));
+    static const bool v = EnvOn("MTG_LEAF_KILL_ONLY_NOM2", true);
+    return heurarm::Flag(heurarm::LEAF_KILL_ONLY_NOM2, v);
 }
 inline bool KillOnlyNoM2Parity(const GameState& s, bool second_main)
 {
     return !second_main && !s.uses_second_main && !s.deck_has_attack_untap && !s.deck_has_attack_dig_hand
-        && !s.deck_has_extra_combat && !ResolveProvider(s).MayOpenRestrictedSecondMain() && LeafKillOnlyNoM2On(s);
+        && !s.deck_has_extra_combat && !ResolveProvider(s).MayOpenRestrictedSecondMain() && LeafKillOnlyNoM2On();
 }
 // At a kill-only skip site, after the candidate's whole turn: true = it cannot change the rollout's answer.
 inline bool KillOnlySkippable(const GameState& after_turn)
@@ -134144,7 +134144,7 @@ static BoundaryChoice BoundaryChooseCrossingLandsByRollout(GameState& copy, int 
 // turn -- a board no main phase ever saw (MTG_LEAF_KILL_ONLY_VERIFY, 2026-11-25: every one of 6 mismatches in 1,581
 // Maze's End rollouts under MTG_LEAF_KILL_ONLY_NOM2=1; 0 on the 30 other armed decks). Deck-gated on the only
 // sources of that board (deck_has_crossing_land_put: Manabond / Burgeoning / Garth); false for every other deck, so
-// Cyclone (the one deck that ships MTG_LEAF_KILL_ONLY_NOM2) is untouched. The mismatches were a missed win, not a
+// Cyclone (the one deck that shipped MTG_LEAF_KILL_ONLY_NOM2 at the time) is untouched. The mismatches were a missed win, not a
 // parity break: with every candidate skipped the solve returns candidates.front(), and the rollout's replay of that
 // plan reached the end step without the mana (or the line) the off-main activation needed. No lever: it is a
 // soundness fix to a claimed-exact identity (unit test: test_leaf_kill_only.cpp, "Maze's End's end-step win").
