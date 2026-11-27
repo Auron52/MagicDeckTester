@@ -4749,11 +4749,12 @@ public:
                                            const std::vector<int>& value_fallback_take_at = {},
                                            // (The escalation's budget is a fresh 0.5 x budget_ms for every deck --
                                            // no per-deck parameter; see the escalation in TurnSolver.cpp.)
-                                           // Per-deck escalation beam (value_play.beam_width / beam_leafdepth).
-                                           // beam_width < 0 (default) => use the MTG_ESC_BEAM env static (byte-
-                                           // identical). 0 => off; >0 => keep top-N value-ranked plans near the
-                                           // leaf. beam_leafdepth: beam only nodes within that many plies of the
-                                           // leaf (protects the top plies / committed play).
+                                           // Per-deck escalation beam (value_play.beam_width / beam_leafdepth),
+                                           // passed only for the deck's play depth. <= 0 => off; >0 => expand the
+                                           // top-N value-ranked plans near the leaf first and re-price the rest
+                                           // (the ordered re-price: complete at an unlimited budget).
+                                           // beam_leafdepth: beam only nodes within that many plies of the leaf
+                                           // (protects the top plies / committed play).
                                            int beam_width = -1, int beam_leafdepth = 2,
                                            // Per-deck single-depth escalation cap (value_play.escalation_cap).
                                            // 0 (default) => use the MTG_ESC_SINGLE* env statics (byte-identical).

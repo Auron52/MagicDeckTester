@@ -22,7 +22,7 @@ the real ones, so every arm shares the keep table's cache entry (the cache is ke
 held-out seeds x 1000 paired games per arm, the leaf-adoption A/B's size. The arm whose depth and budget equal
 the baseline's IS the baseline and is not run -- but only when live's block is ENABLED: with no enabled block, the
 enabled block at d5 / 20 can still differ from live (an enabled block arms the static W20 beam on every depth-3
-search, TurnSolver.cpp's depth-adaptive beam regime; the d5 beam stays off unless the block sets beam_width), so it
+search, TurnSolver.cpp's beam regimes; the play-depth beam stays off unless the block sets beam_width), so it
 is an arm like any other. (Vampires 2026-10-22: byte-identical to live.) `live` itself is a variant folder too, built from the sidecar as read at
 the start, so the measurement cannot change if the real file does mid-run.
 
@@ -67,6 +67,20 @@ a SHAPE question for the shape arms, not part of this grid. The MULLIGAN-GENERAT
 (mull_gen_depth, mull_gen_budget_ms, expected_buckets) are copied in from the profile when the block lacks them: a
 sidecar's value_play REPLACES the profile's, and dropping expected_buckets would disarm the keep table's K guard.
 
+THE ESCALATION BEAM ADMISSION (USER 2026-11-25: "we need a way to admit decks in the value-leaf pipeline"; "It
+doesn't make sense to have code that is only being used for old decks"; logs/beam-staged/report.md, logs/beam-adopt/).
+The beam (value_play beam_width / beam_leafdepth, the ordered re-price; the engine runs it at the deck's play depth
+only) is decided here for every deck, old and new alike, by ONE extra arm in the SAME pooled batch: live with its beam
+flipped (`xbeam_d<d>b<b>`). A live block with a beam gets the arm without it; a live block without one gets the arm
+with beam_width 3 / beam_leafdepth 2 (an existing width is kept); a sidecar with no enabled block gets the enabled
+block at its setting plus the beam (with no enabled block no beam can fire, so live IS the no-beam arm). The baseline
+is the NO-BEAM arm and the rule is the same one, through vlq_adopt_pick.py on the same seeds: ADMIT the beam iff the
+beam arm is cheaper and not notably worse than no beam (or notably better). The beam is measured at the live setting
+and applied to whatever setting the grid installs (the grid's arms carry live's beam state). --write then writes
+beam_width / beam_leafdepth when the beam is admitted and REMOVES both keys otherwise, so a beam the rule refuses is
+deleted, not kept by inertia. (Creature Giving, 2026-11-25: the rule would refuse its beam -- no beam plays -61 net at
+x1.40 units -- and that one is with the USER; the stage is not run on any deck by this change.)
+
 --write installs the pick into the live sidecar IN THIS TREE (never committed here: it changes play, so the deck's
 smoke + regression GT must be re-accepted with it). Every outcome is appended to --decisions; nothing stops to ask.
 Exit 0 when the batch ran (whatever the verdicts), 1 when it failed (nothing is installed then).
@@ -87,6 +101,8 @@ GAMES = 1000
 TOL = 0.002
 MIN_DEPTH = 5                   # USER 2026-10-29: "It should be depth 5 minimum for play settings."
 GEN_KEYS = ("mull_gen_depth", "mull_gen_budget_ms", "expected_buckets")
+BEAM = {"beam_width": 3, "beam_leafdepth": 2}   # the admitted beam (logs/beam-staged/report.md: W3 ld2, ordered re-price)
+BEAM_KEYS = tuple(BEAM)
 PICK = os.path.join(HERE, 'vlq_adopt_pick.py')
 
 
@@ -115,6 +131,61 @@ def block(live_doc, prof_doc, d, b):
             vp[k] = pvp[k]
     vp["target_depth"], vp["budget_ms"], vp["enabled"] = d, b, True
     return vp
+
+
+def has_beam(vp):
+    """True when this value_play block carries a live escalation beam (a width > 0)."""
+    return int((vp or {}).get("beam_width") or 0) > 0
+
+
+def with_beam(vp, on):
+    """`vp` with the beam on (BEAM unless it already has a width) or off (both beam keys removed)."""
+    vp = dict(vp)
+    if on:
+        if not has_beam(vp):
+            vp.update(BEAM)
+    else:
+        for k in BEAM_KEYS:
+            vp.pop(k, None)
+    return vp
+
+
+def beam_flip(live_doc, enabled_centre_vp):
+    """The admission arm: (doc, beam_on). Live with its beam flipped; a sidecar with no enabled block gets the enabled
+    centre block plus the beam (no beam can fire without one, so live is then the no-beam arm)."""
+    lvp = live_doc.get("value_play") or {}
+    if lvp.get("enabled") and lvp.get("target_depth"):
+        on = not has_beam(lvp)
+        return dict(live_doc, value_play=with_beam(lvp, on)), on
+    return dict(live_doc, value_play=with_beam(enabled_centre_vp, True)), True
+
+
+def beam_install(doc, admit, flip_doc):
+    """The sidecar to install given the setting the grid chose (`doc`: the picked arm's, or live's) and the beam
+    verdict. Returns (doc, changed). Admitted: the block keeps / gains the beam; a block that is not enabled (live had
+    none and the grid kept it) takes the measured flip arm instead, which is that block enabled plus the beam.
+    Refused: both beam keys are removed."""
+    vp = doc.get("value_play") or {}
+    if admit:
+        if has_beam(vp):
+            return doc, False
+        if not (vp.get("enabled") and vp.get("target_depth")):
+            return flip_doc, True
+        return dict(doc, value_play=with_beam(vp, True)), True
+    if any(k in vp for k in BEAM_KEYS):
+        return dict(doc, value_play=with_beam(vp, False)), True
+    return doc, False
+
+
+def beam_log_lines(lines, key, no_arm, on_arm):
+    """The beam verdict's log: deck `key`'s job lines of the no-beam arm renamed `live` (the baseline) and of the beam
+    arm renamed `beam`, everything else dropped."""
+    out = []
+    for ln in lines:
+        for src_arm, dst in ((no_arm, 'live'), (on_arm, 'beam')):
+            if ln.startswith(f"{key}-{src_arm}_s") and ': played=' in ln:
+                out.append(dst + ln[len(key) + 1 + len(src_arm):])
+    return out
 
 
 def variant(deck, arm, doc, root):
@@ -256,8 +327,12 @@ def main():
                 vp = block(sdoc, prof_doc, dd, bb)
                 doc = dict(sdoc, value_play=vp)
                 arms[arm] = dict(doc=doc, shape=(name, path, why), paths=variant(d, arm, doc, vroot))
-        plan[d.key] = dict(deck=d, d0=d0, b0=b0, src=src, arms=arms, shapes=shapes,
-                           live=variant(d, 'live', live_doc, vroot), live_path=live_path)
+        # THE BEAM ADMISSION ARM (module doc): live with its beam flipped, in the same batch.
+        flip_doc, flip_on = beam_flip(live_doc, block(live_doc, prof_doc, max(d0, MIN_DEPTH), b0))
+        flip = f"xbeam_d{d0}b{b0}"
+        plan[d.key] = dict(deck=d, d0=d0, b0=b0, src=src, arms=arms, shapes=shapes, live_doc=live_doc,
+                           live=variant(d, 'live', live_doc, vroot), live_path=live_path,
+                           beam=dict(arm=flip, doc=flip_doc, on=flip_on, paths=variant(d, flip, flip_doc, vroot)))
 
     if plan:
         jobs = []
@@ -266,6 +341,9 @@ def main():
                 jobs.append(dict(name=f"{k}-live_s{s}", deck=p['live'][0], profile=p['live'][1], games=GAMES, seed=s))
                 for arm, x in p['arms'].items():
                     jobs.append(dict(name=f"{k}-{arm}_s{s}", deck=x['paths'][0], profile=x['paths'][1], games=GAMES, seed=s))
+                bm = p['beam']
+                jobs.append(dict(name=f"{k}-{bm['arm']}_s{s}", deck=bm['paths'][0], profile=bm['paths'][1], games=GAMES,
+                                 seed=s))
         # The dearest arms first (bigger budget, then deeper), so the batch ends on a short tail.
         def dearest_first(j):
             m = re.search(r'[-_]d(\d+)b(\d+)_s', j['name'])
@@ -284,6 +362,20 @@ def main():
                                    capture_output=True, text=True).stdout
             pick = subprocess.run([sys.executable, PICK, klog, '--tol', str(TOL),
                                    '--candidates', *p['arms']], capture_output=True, text=True)
+            # The beam verdict: the no-beam arm is the baseline (renamed `live`), the beam arm the one candidate.
+            bm = p['beam']
+            no_arm, on_arm = ('live', bm['arm']) if bm['on'] else (bm['arm'], 'live')
+            blog = os.path.join(work, f"m_{k}_beam.log")
+            with open(blog, 'w') as fo:
+                fo.writelines(x + "\n" for x in beam_log_lines(lines, k, no_arm, on_arm))
+            bpick = subprocess.run([sys.executable, PICK, blog, '--tol', str(TOL), '--candidates', 'beam'],
+                                   capture_output=True, text=True)
+            if bpick.returncode not in (0, 2):
+                raise RuntimeError(f"vlq_adopt_pick (beam) failed for {k}:\n{bpick.stdout}{bpick.stderr}")
+            admit = bpick.returncode == 0
+            bverd = " / ".join(l for l in bpick.stdout.splitlines() if l.startswith(("VERDICT", "PICK")))
+            btxt = (f"beam {'ADMITTED' if admit else 'REFUSED'} ({'beam' if bm['on'] else 'no-beam'} arm {bm['arm']} "
+                    f"vs live; baseline = no beam): {bverd}")
             if pick.returncode not in (0, 2):
                 raise RuntimeError(f"vlq_adopt_pick failed for {k}:\n{pick.stdout}{pick.stderr}")
             verdicts = [l for l in pick.stdout.splitlines() if l.startswith(("VERDICT", "PICK", "  "))]
@@ -299,7 +391,7 @@ def main():
             tree = "this tree, NOT committed" if a.write else "NOT applied (run without --write)"
             if pick.returncode == 0 and arm in p['arms']:
                 x = p['arms'][arm]
-                doc = dict(x['doc'])
+                doc, _ = beam_install(dict(x['doc']), admit, bm['doc'])
                 vp = dict(doc['value_play'])
                 shape_txt = (f"; the phase-E shape {x['shape'][0]} ({x['shape'][1]}) REPLACES the live sidecar"
                              if x['shape'] else "")
@@ -315,12 +407,27 @@ def main():
                         prev = f"\n    previous live sidecar kept as {prev}"
                     install(d.value, doc)
                 notes.append(f"PHASE E.7: ADOPTED {k} play setting {arm} (target_depth {vp['target_depth']}, budget_ms "
-                             f"{vp['budget_ms']}{shape_txt}) -- {tree}\n    {head}\n    {body}{prev}\n"
+                             f"{vp['budget_ms']}{shape_txt}) -- {tree}\n    {head}\n    {body}\n    {btxt}{prev}\n"
                              f"    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).")
-                report.append((k, f"ADOPTED {arm} ({why})"))
+                report.append((k, f"ADOPTED {arm} ({why}); beam {'admitted' if admit else 'refused'}"))
             else:
-                notes.append(f"PHASE E.7: KEPT {k} at {p['src']} (d{p['d0']} / {p['b0']}) -- {why}\n    {head}\n    {body}")
-                report.append((k, f"kept d{p['d0']}/{p['b0']} ({why})"))
+                doc, changed = beam_install(p['live_doc'], admit, bm['doc'])
+                if changed:
+                    vp = dict(doc['value_play'])
+                    stamp = (f"E.7 play-setting stage {now()[:10]}: escalation beam "
+                             f"{'admitted' if admit else 'removed'} at {p['src']} (d{p['d0']}/{p['b0']})")
+                    vp["note"] = (vp["note"] + " | " + stamp) if vp.get("note") else stamp
+                    doc = dict(doc, value_play=vp)
+                    if a.write:
+                        install(d.value, doc)
+                    notes.append(f"PHASE E.7: KEPT {k} at {p['src']} (d{p['d0']} / {p['b0']}) -- {why}; BEAM "
+                                 f"{'ADMITTED' if admit else 'REMOVED'} -- {tree}\n    {head}\n    {body}\n    {btxt}\n"
+                                 f"    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).")
+                else:
+                    notes.append(f"PHASE E.7: KEPT {k} at {p['src']} (d{p['d0']} / {p['b0']}) -- {why}\n    {head}\n"
+                                 f"    {body}\n    {btxt}")
+                report.append((k, f"kept d{p['d0']}/{p['b0']} ({why}); beam {'admitted' if admit else 'refused'}"
+                                  f"{' (sidecar changed)' if changed else ''}"))
 
     with open(os.path.join(work, 'report.txt'), 'w') as f:
         for t in notes:
