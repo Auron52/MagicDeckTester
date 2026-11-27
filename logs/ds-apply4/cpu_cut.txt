@@ -14,3 +14,20 @@ val6a (bin_l6 on: 240 Dragonstorm A/B blocks + 200 paired games) vs bin_l5 (in-p
 val6a vs A/B on (bin_l4): jobs 248 digest/avg diffs [] units diffs [('on__dragonstormplay__o0', 99239, 99292), ('on__dragonstormplay__o300', 92181, 90335), ('on__dragonstormplay__o2475', 91621, 91727), ('on__dragonstorm2hgplay__o0', 123565, 123638), ('on__dragonstorm2hgplay__o325', 95498, 95620), ('on__dragonstorm2hgplay__o2475', 169987, 170093)]
 val6b (118 non-DS o0 blocks) vs A/B on: jobs 118 digest/avg diffs ['on__extraturnsplay__o0'] units diffs [('on__extraturnsplay__o0', 308668, 308813), ('on__extraturns2hgplay__o0', 505510, 505807)]
 val6b vs A/B OFF arm: 0 digest, 0 units diffs (118 jobs)
+
+## second CPU cut (9ef05496e, source "c3"; exact: same payments, boards and backtracker calls in the same order)
+user instructions, perf stat -e instructions:u; repeat noise +-0.002%
+                                                        levers on    levers off   on/off
+Dragonstorm play, 200 games   777cba077 (bin_l6)        182.622 G    179.702 G    +1.62%
+                              c3 (9ef05496e)            181.271 G    179.540 G    +0.96%
+45 other decks x 25 games     777cba077                 1148.301 G   1147.404 G   +0.078%
+                              c3                        1148.109 G   1147.600 G   +0.045%
+per item (DS on arm): walk in place -0.55 G (-0.30%); pooled scratch boards -0.77 G (-0.42%); -1 exits first -0.04 G
+c4 (c3 without the LumpAwareBillPayable pooling): DS 181.804 / 179.740 G, 45 decks 1148.15 / 1147.611 G: no better anywhere, so c3
+the 45 decks' off-arm +0.2 G (+0.017%) is NOT the pooling (c4 has it too) and NOT Worldfire (l6 87.024, c3 87.017, c4 87.030 G):
+most likely code layout in TapForCostShared; every digest and units count equal
+identity: valall (1124 jobs, 18,500 games: the 6,000 DS A/B games on and off, 118 non-DS o0 blocks, the off arm vs the base)
+  bin_c3 vs reference: 0 missing, 0 digest/avg diffs, 0 units diffs; units 4333/4333 on bin_c3
+remaining cost: KOF summed judge 0.34%, KOF walk 0.24%, lump-rung walk ~0.19%, KOF board copies 0.18%, KOF prelude ~0.17%
+memo probe: 73% of KOF in-place entries and 91% of walks repeat a key; a verdict memo is not provably exact
+  (TapForCostBacktrack's mana cache has key holes, so skipping walk calls changes later cache contents): a play change, own A/B

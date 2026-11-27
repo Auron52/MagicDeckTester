@@ -474,6 +474,18 @@ met at exactly neutral, and the gate shows the correctness gain: Kolaghan-declar
 259 -> 211, ORDER 51 -> 35, eight events fixed (M2 five, M1 three), one game a turn faster, none slower. CPU after the
 cut: Dragonstorm +1.6% instructions, every other deck +0.08%. The USER's "cut CPU" stands against that +1.6%; what is
 left is listed above (the walk and the judge on the 24% the float misses) and is the next CPU item if it is wanted.
+
+**Second CPU cut (exact, 9ef05496e).** The walk spends a board its caller throws away instead of copying one
+(`LineSeqRestPaysOn`), and runs its last payment attempt on the walk board itself; the lever's trial and kept boards,
+the walk wrapper and `LumpAwareBillPayable`'s per-combo board come from pooled scratch boards; the two cheap `-1` exits
+run before the rest-of-line loop. Same payments, boards and backtracker calls in the same order: 1,124 jobs (18,500
+games: the 6,000 Dragonstorm A/B games both arms, 118 other-deck blocks, the off arm against the base) give 0 digest and
+0 units diffs; units 4333 / 4333. Dragonstorm levers on vs off **+1.62% -> +0.96%** user instructions (200 games); the
+45 other decks **+0.078% -> +0.045%** (of which +0.017% on the off arm is code layout, not executed work: every digest
+equal; not Worldfire, the one lump deck of the 45). What is left: the summed judge 0.34%, the two walks ~0.43%, board
+copies 0.18%. A verdict memo would remove most of it (73% of trials and 91% of walks repeat a key) but is not exact
+(the payment backtracker's mana cache is path dependent), so it is a play change with its own gate and A/B
+(`logs/ds-apply4/cpu_cut.txt`).
 GT: the cut moves no play digest relative to 3bd740edd on Dragonstorm, but the levers themselves are a default-ON play
 change, so smoke / regression GT is accepted by the parent under the landing binary (not here).
 Still open in the cluster: s30133545 (decision #5 keep-floating {B}, probably a breakpoint continuation's payment,
