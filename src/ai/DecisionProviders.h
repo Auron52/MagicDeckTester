@@ -3980,6 +3980,14 @@ public:
     // Wave X), so the rule's verdict on an axis variant is its verdict on the base: apply it before the fan too.
     // A memory bound (see the base hook); play-neutral by that argument and measured digest-identical.
     bool PlanListFilterBeforeAxes(const GameState&) const override { return true; }
+    // The USER's cleanup-discard buckets (2026-11-27: "a discard policy that just buckets mana and threats", amended:
+    // "feel free to add more mana as long as we have 1-2 scaling threats"): DEAD first; with a scaling threat (a mana
+    // sink) in hand keep the best 2 sinks and favour MANA over every other threat; with none keep up to 3 threats
+    // ahead of the mana past the land floor + 2. MTG_ELVES_BUCKET_DISCARD (default ON); =0 restores the inherited
+    // SelesnyaLifegain buckets. Prefix-stable while on (see the implementation note).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
     // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h): Genesis Wave's put subset. THIS DECK'S POLICY IS
     // "PUT EVERY LEGAL REVEAL", a SOUND DOMINANCE FOLD for this pool, not a judgement (2026-11-26, the coordinator):
     // an unpicked reveal is MILLED, and every permanent card in the Elves list is weakly better on the battlefield --
