@@ -845,13 +845,23 @@ What the design does about it (no new rule, a measurement):
   experience, turn 3 or 4 are often a fight to hit. Turn 5, for most decks, is really easy to hit and you usually
   win by a lot on that turn." So a few life pushes a turn-3 or turn-4 kill back one round, and the delayed kill
   then lands with damage to spare. The delay stops at about one round.
-* **A cheap measurement that follows from it.** The fixed-seed baseline games (section 7.5) also record each
-  gauntlet game's cumulative damage to us at the end of every round. With that, gaining L life on round t delays a
-  damage kill to the first round where the cumulative damage reaches 20 + L. That can be read off the stored
-  baselines, with no replay. It assumes the gauntlet deck's play does not change in response, which a sample of
-  real replays checks. A kill that does not go through our life total (an alternate win) is marked as such and
-  gets no delay. The same per-round damage curve shows the USER's point directly: the margin over lethal, by kill
-  turn, for each gauntlet deck. It also has a hard counter in the gauntlet: Screaming Nemesis's lockout, above. The suite's life-gain
+* **What the stored damage curve can and cannot do.** The fixed-seed baseline games (section 7.5) also record each
+  gauntlet game's cumulative damage to us at the end of every round. It does NOT price life gain by itself (USER
+  2026-11-27, verbatim): "True, if we only gained life and did nothing else, you could just force the engine to hit
+  a higher life total. However, I don't think you can just reuse the existing result. After all, the search
+  doesn't card about finding the top damage line. It finds a line that wins, but with a different life total, that
+  line might not win anymore, but a better line may." The gauntlet deck's search stops at A winning line, not the
+  most damaging one. What the curve gives, for a gain of L life on round t:
+  * **An exact zero.** If the recorded line already deals 20 + L by its kill round, that same line still wins on
+    that round, so the delay is 0. No replay is needed.
+  * **Otherwise, only an upper bound.** The first round where the recorded damage reaches 20 + L bounds the delay
+    from above. The real number needs a replay in which the gauntlet deck's search knows our higher life total from
+    round t on, so it can find a different line that still wins. That is the "force the engine to hit a higher
+    life total" replay, one goldfish game per (seed, L, t).
+  So the curve screens out the replays that cannot matter, and the replay measures the rest. A kill that does not
+  go through our life total (an alternate win) is marked as such and gets no delay. The curve also shows the
+  USER's margin point directly: the recorded margin over lethal, by kill turn, for each gauntlet deck (a lower bound
+  on the true margin, for the same reason). It also has a hard counter in the gauntlet: Screaming Nemesis's lockout, above. The suite's life-gain
 decks (Selesnya Lifegain, Critter Lifegain, Martyr Lifegain, Lifegain Heliod Combo) are goldfish decks today. If
 the USER ever wants their life gain credited, they are candidates to carry both modes.
 
@@ -989,8 +999,8 @@ potentially calculate it once and only calculate the other numbers multiple time
 * **Fixed seeds per gauntlet deck.** The mapping uses one fixed, held-out seed set per gauntlet deck (at least 20
   games each), never reused by a tier.
 * **Baseline table, built once.** Each gauntlet deck's kill turn with no control, per seed, at the mapping horizon
-  of 15 (Q5), together with its cumulative damage to us at the end of each round (which prices life gain without a
-  replay, section 5.6), is stored and reused by every mapping key and every control deck. It is NOT the suite's ground
+  of 15 (Q5), together with its cumulative damage to us at the end of each round (which screens life-gain replays,
+  section 5.6), is stored and reused by every mapping key and every control deck. It is NOT the suite's ground
   truth: the tiers stop at turn 8 and use other seeds. The suite's turn 4.6 average kill says this is a small
   run, about 63 x 20 games once.
 * **Only the controlled games are played per key.** The delay of a key is its controlled game's kill turn minus
