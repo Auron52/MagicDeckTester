@@ -810,3 +810,15 @@ Open USER decision: the tap-order default (after the fixed version's numbers).
   - **no slower searched game in any cell.**
   - **USER DECISION surfaced:** on for all lord decks / on except Elves (cpu) / off.
   - Recommendation: on for Boars+Goblins now; Elves after a cost cut. The other 19 lord decks need an A/B first.
+
+### Checkpoint 20 (2026-11-27 ~21:25 UTC): Elves keep table ADOPTED and LANDED
+- **Memory fix** (mem6, executor PickBreakpointPlan reads the memo view in place) landed as c4d5de01f; the hog rollout fell from 14.0 GB to 3.32 GB.
+- **mullgen resumed from the journal** 19:07 UTC (418,248 cell-sides reloaded, digest f5df0b66efdb48c8 unchanged), VALIDATION PASSED 21:12 UTC:
+  - keep exh vs static -0.137t (se 0.0083, 4/4 seeds); bottoming exh vs lookahead -0.024t (se 0.0028, 14/14, confounded).
+- **Landed** 930e194ec (keep table 167448402 + deck-filtered smoke/regression GT accept; check_gt_logs consistent).
+  - Regression d5 rows faster: s2002 4.3833 → 4.3167, s3003 4.3500 → 4.1833, 2HG 4.8000 → 4.7333; d0 rows faster.
+  - Smoke is small and noisy: elves2hg_smoke 4.70 → 4.80 (2 turn-games over 20), elves_smoke_d5 4.45 → 4.475.
+  - The overnight Elves rows (FULL set, accepted with the profile absent) wait for the next periodic overnight run.
+- **Next:** Maze's End K=20 mullgen launched 21:21 UTC from .claude/worktrees/maze-gen2 (wip/maze-gen2 rebased onto c4d5de01f).
+- **Still open (USER):** the lordcast default; Ezuri leftover-mana scaling counts.
+- **Later (agent):** Brigade split exception (USER-accepted), optional bandtap set-up exception, parked fold wip/elves-mem3, lordcast cost cut for Elves.
