@@ -16288,6 +16288,29 @@ static bool LordCastHandEnabled()
     static const bool env_on = EnvOn("MTG_LORDCAST_HAND", false);
     return heurarm::Flag(heurarm::LORDCAST_HAND_TMP, env_on);
 }
+// TEMPORARY attribution mask (2026-11-27 lordcast round 3; DELETE before any adoption): MTG_LORDCAST_SITE bits
+// 1 = the lever in Solve's host (rollouts / d0 policy), 2 = in EnumeratePlans' host (the search window),
+// 4 = amendment D. Default 7 = the lever as built (byte-identical). Print-free selector only.
+static int LordCastSiteMask()
+{
+    static const int v = EnvInt("MTG_LORDCAST_SITE", 15);   // + 8 = amendment E (EnumeratePlans' D twin)
+    return v;
+}
+static thread_local int t_lordcast_host = 0;   // 1 Solve, 2 EnumeratePlans (set just before BuildAttackTapCtx)
+namespace lordcaststats   // TEMPORARY (MTG_LORDCAST_STATS=1): D / E verifier calls and refusals, printed at exit
+{
+inline std::atomic<long long> g_d_calls{0}, g_d_refused{0}, g_e_calls{0}, g_e_refused{0};
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!EnvOn("MTG_LORDCAST_STATS")) { return; }
+        std::fprintf(stderr, "[lordcast-stats] D calls=%lld refused=%lld  E calls=%lld refused=%lld\n",
+                     g_d_calls.load(), g_d_refused.load(), g_e_calls.load(), g_e_refused.load());
+    }
+};
+inline Dumper g_dumper;
+}
 static bool AttackAuraHostTapEnabled()
 {
     static const bool env_on = EnvOn("MTG_ATTACK_AURA_HOST_TAP", true);   // DEFAULT ON; =0 host counted
@@ -17055,7 +17078,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
     // and (b) every HASTY body the same plan casts (Elves d0 gi3558: Clancaller + Archdruid + Visionary + Warcaller
     // under Concordant Crossroads hit for 18, read 9 -- each hasty cast was priced with the PRE-PLAN board's lords
     // only). (b) is unconditional: it is the same static bonus combat applies (CR 613.4c), read exactly.
-    ctx.board_lord = pending_atk > 0 && AttackLordCastEnabled();
+    ctx.board_lord = pending_atk > 0 && AttackLordCastEnabled() && (LordCastSiteMask() & t_lordcast_host) != 0;
     bool haste_cast = false, lord_cast = false;
     for (const Action& a : cands)
     {
@@ -66214,6 +66237,7 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
     // The attack this subset forfeits to its own taps (mana AND non-mana {T} activations) -- see
     // AttackTapLoss. Lockstep twin in EnumeratePlans.
     AttackTapCtx atk_tap_ctx;
+    t_lordcast_host = 1;
     BuildAttackTapCtx(state, is_pre_combat, pending_atk, atk_mana_srcs, cands, atk_tap_ctx);
     // Mana Cannons on the battlefield / castable, for the cast-trigger damage term. Lockstep twin.
     const CannonsCtx cannons_ctx = BuildCannonsCtx(state, cands);
@@ -68013,7 +68037,7 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
         // (LethalCutKillIsReal, the board-lethal cut's verifier), and only when it would otherwise replace `best`
         // (one apply per candidate winner, not per subset). A refused subset competes on value, exactly as the off
         // arm scores it. Lever-only: the off arm is byte-identical.
-        if (better && wins && !verified_win && is_pre_combat && atk_tap_ctx.board_lord
+        if (better && wins && !verified_win && is_pre_combat && atk_tap_ctx.board_lord && (LordCastSiteMask() & 4)
             && !atk_tap_ctx.cand_walk.empty())
         {
             bool lord_in_sel = false;
@@ -68024,8 +68048,10 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
                 Plan probe;
                 for (int j : sel) { probe.actions.push_back(j == fill_j ? fill_action : cands[static_cast<std::size_t>(j)]); }
                 ApplyCantripFirstOrder(state, probe.actions);   // as materialize_best orders it
+                lordcaststats::g_d_calls.fetch_add(1, std::memory_order_relaxed);
                 if (!LethalCutKillIsReal(state, probe, is_pre_combat, /*land_played=*/false, projected_atk, "lordcast"))
                 {
+                    lordcaststats::g_d_refused.fetch_add(1, std::memory_order_relaxed);
                     wins = false;
                     better = beats_best(false);
                 }
@@ -90029,6 +90055,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     int n = static_cast<int>(ap.hand.size());
     // The attack this subset forfeits to its own taps -- see AttackTapLoss. Lockstep twin in Solve.
     AttackTapCtx atk_tap_ctx;
+    t_lordcast_host = 2;
     BuildAttackTapCtx(state, is_pre_combat, pending_atk, atk_mana_srcs, cands, atk_tap_ctx);
     // Mana Cannons on the battlefield / castable, for the cast-trigger damage term. Lockstep twin.
     const CannonsCtx cannons_ctx = BuildCannonsCtx(state, cands);
@@ -92898,6 +92925,34 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         // its own question; widening it here would change other decks.
         if (!wins && has_extra_lethal && !ResolveProvider(state).AlternateWinNeedsAction()   // Maze's End: I3b
             && ResolveProvider(state).ProjectsAlternateWin(state, {})) { wins = true; }
+        // MTG_ATTACK_LORD_CAST amendment E (2026-11-27, Elves p20 round 3: the 12 slower Elves / Elves 2HG games all
+        // come from THIS host -- the lever in Solve alone recovers every one). Amendment D's twin. `wins` here is not
+        // just an order hint: SolveWithLookahead returns the first wins_this_turn plan as a win THIS turn without
+        // applying it, at the root and at every in-window interior node, so a lord-credited phantom lethal (the same
+        // payment-model over-read D refuses in Solve, multiplied by the lord count) scores a whole subtree as a win
+        // it does not have, and the search steers turns 1-3 toward boards that only LOOK lethal. So a subset whose
+        // lethal read rests on a kept lord (board_lord + a kWalkLord cast in sel) is applied on a copy and its
+        // combat simulated (LethalCutKillIsReal; the board already holds the land, as at the "enum" cut) before it
+        // may claim the win; a refused one is an ordinary plan, subject to every drop below exactly as the off arm
+        // reads it. Lever-only: the off arm is byte-identical.
+        if (wins && is_pre_combat && atk_tap_ctx.board_lord && (LordCastSiteMask() & 8) && !atk_tap_ctx.cand_walk.empty())
+        {
+            bool lord_in_sel = false;
+            for (int j : sel)
+            { if (atk_tap_ctx.cand_walk[static_cast<std::size_t>(j)] & kWalkLord) { lord_in_sel = true; break; } }
+            if (lord_in_sel)
+            {
+                TurnSolver::Plan probe;
+                for (int j : sel) { probe.actions.push_back(j == fill_j ? fill_action : cands[static_cast<std::size_t>(j)]); }
+                ApplyCantripFirstOrder(state, probe.actions);   // as the emitted plan orders it
+                lordcaststats::g_e_calls.fetch_add(1, std::memory_order_relaxed);
+                if (!LethalCutKillIsReal(state, probe, is_pre_combat, /*land_played=*/true, projected_atk, "lordcast-enum"))
+                {
+                    lordcaststats::g_e_refused.fetch_add(1, std::memory_order_relaxed);
+                    wins = false;
+                }
+            }
+        }
         // POISON (Beasts G): the drops below exempt a LETHAL subset, and `wins` above projects LIFE only. A subset that
         // could still finish by poison this turn (PoisonWinReachableThisTurn, an over-approximation hoisted out of the
         // walk) is kept too, so a poison kill is never dropped as a non-winning line. Not written into
