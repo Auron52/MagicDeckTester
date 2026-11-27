@@ -1,0 +1,134 @@
+diff --git a/logs/beam-adopt/mk_ab.py b/logs/beam-adopt/mk_ab.py
+index f050794ca..5e6242c26 100644
+--- a/logs/beam-adopt/mk_ab.py
++++ b/logs/beam-adopt/mk_ab.py
+@@ -16,6 +16,7 @@ ap.add_argument("out"); ap.add_argument("--kdecks", default="")
+ ap.add_argument("--games", type=int, default=5000); ap.add_argument("--games-2hg", type=int, default=2000)
+ ap.add_argument("--kgames", type=int, default=1000); ap.add_argument("--kgames-2hg", type=int, default=500)
+ ap.add_argument("--chunk", type=int, default=250); ap.add_argument("--kchunk", type=int, default=125)
++ap.add_argument("--cost", default="", help="census dir: order jobs heaviest first by its K-off ms/game")
+ a = ap.parse_args()
+ txt = open(os.path.join(R, "test/regression_cases.sh")).read()
+ blk = txt[txt.index("declare -A DECK_FILE=("):]
+@@ -46,6 +47,18 @@ for key in main:
+ b = 50100000
+ for key in kd:
+     b += 1000 * emit(key, a.kgames, a.kgames_2hg, a.kchunk, b)
++cost = {}
++if a.cost:
++    for ln in open(os.path.join(a.cost, "batch.out")):
++        m = re.match(r"^(\w+?)_d3b10_K0_s\d+: played=(\d+) avg=\S+ digest=\S+ ms=(\d+)", ln)
++        if m:
++            cost[m.group(1)] = int(m.group(3)) / int(m.group(2))
++def est(j):
++    key = re.match(r"^(\w+?)(2hg)?_[BF]_s", j["name"]).group(1)
++    return cost.get(key, 500) * j["games"] * (1.8 if "opponent_heads" in j else 1.0)
++for arm in jobs:
++    jobs[arm].sort(key=est, reverse=True)
++print(f"est {sum(est(j) for j in jobs['B']) / 1000:.0f} core-s/arm (d3 b10 ms/game proxy)")
+ os.makedirs(a.out, exist_ok=True)
+ for arm, js in jobs.items():
+     json.dump({"jobs": js}, open(os.path.join(a.out, f"ab_{arm}.json"), "w"), indent=1)
+diff --git a/src/ai/DecisionProvider.h b/src/ai/DecisionProvider.h
+index ba09d7567..d01f332b0 100644
+--- a/src/ai/DecisionProvider.h
++++ b/src/ai/DecisionProvider.h
+@@ -3498,9 +3498,6 @@ public:
+     // provider that overrides it says so (true). Read where a proof needs "no post-combat main ever opens" without a
+     // state to ask (the rollout kill-only turn's no-m2 parity, TurnSolver KillOnlyNoM2Parity).
+     virtual bool MayOpenRestrictedSecondMain() const { return false; }
+-    // Opt in to the proven no-second-main kill-only parity without enabling it for every deck.
+-    // TurnSolver still checks the deck flags above before using the shortcut.
+-    virtual bool LeafKillOnlyNoM2OptIn() const { return false; }
+     virtual bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
+     { (void)s; (void)a; return true; }
+ 
+diff --git a/src/ai/DecisionProviders.h b/src/ai/DecisionProviders.h
+index fc5cac5dd..0855c45a1 100644
+--- a/src/ai/DecisionProviders.h
++++ b/src/ai/DecisionProviders.h
+@@ -4624,7 +4624,6 @@ public:
+                "whether 'this turn' is the turn or the ROUND (the USER's rounds win-turn metric: an extra "
+                "turn untaps and attacks before the opponent's next turn)." }; }
+     const char* Name() const override { return "Cyclone"; }
+-    bool LeafKillOnlyNoM2OptIn() const override { return true; }
+ 
+     // ---- Phase 3 (2026-10-27): the searched cycle, Cyclone's free cast, Remand ------------------------
+     // THE SEARCHED CYCLE. Every distinct cycler in hand whose life half is payable is a seed the search
+diff --git a/src/ai/HeuristicArm.h b/src/ai/HeuristicArm.h
+index 0db317480..1da87fe42 100644
+--- a/src/ai/HeuristicArm.h
++++ b/src/ai/HeuristicArm.h
+@@ -805,7 +805,7 @@ enum Slot : int
+     CYCLONE_CYCLER_RULE,      // MTG_CYCLONE_CYCLER_RULE  Cyclone HARD PRUNE (USER rule 2026-10-28, "Which card to cycle ... You want to use whichever you have spare mana for ... I like to keep Street Wraith for Cyclone when that is an option, but when cyclone is out the order only matters in terms of mana utilization"): WHICH creature cycler a cycle seed uses. Cyclone out: ONE creature cycler -- Street Wraith when no {U} is spare (no untapped blue source, or the mana is needed for a Brainstorm / Brainsurge in hand), else Curator first (it keeps the free Wraith cycle). No Cyclone out but one in hand or at a known library position: Street Wraith is kept for Cyclone (not a dig cycle). No Cyclone option: both stay searched (USER: "I usually wouldn't use my last cycler, but there are hands where you don't have that luxury"), ORDER only. LOSSY where it prunes; DEFAULT ON since 2026-10-29 (adoption bar clean at d3 and d5: ledger "Hard prunes + known-top blind test"); =0 is the old play
+     CYCLONE_PB_PLAIN_RANK,    // MTG_CYCLONE_PB_PLAIN_RANK  measurement handle for MTG_CYCLONE_PB_PLANS: the JUNK put-back's pick reads the plain shared expendability rank instead of the USER's put-back keep priority (sole Cyclone > the lands for this turn's and next turn's drops > Brainstorm / Ponder > creature cyclers > the rest). DEFAULT OFF
+     LEAF_KILL_ONLY_EXTRA,     // MTG_LEAF_KILL_ONLY_EXTRA  Cyclone cost (2026-10-29, ledger Q13's "sound refinement later"): the rollout kill-only turn (MTG_LEAF_KILL_ONLY) for an EXTRA-TURN deck. A candidate that neither kills nor leaves an extra turn pending at its turn's end cannot change a slack-0 rollout's answer (the next turn is round + 1, past the cutoff); one that leaves an extra turn pending is scored exactly as before. SOUND (verify: MTG_LEAF_KILL_ONLY_VERIFY), DEFAULT ON; =0 keeps the identity off for extra-turn decks
+-    LEAF_KILL_ONLY_NOM2,      // MTG_LEAF_KILL_ONLY_NOM2  Rollout kill-only turn for a deck that can never open a second main. Its replay parity holds trivially there -- neither the candidate's evaluation nor the rollout's replay runs a post-combat main. SOUND (verify: MTG_LEAF_KILL_ONLY_VERIFY). DEFAULT provider opt-in (Cyclone only); =0 turns it off, =1 enables all eligible decks (fleet-wide budget re-spend moves 21 smoke configs)
++    LEAF_KILL_ONLY_NOM2,      // MTG_LEAF_KILL_ONLY_NOM2  Rollout kill-only turn for a deck that can never open a second main. Its replay parity holds trivially there -- neither the candidate's evaluation nor the rollout's replay runs a post-combat main. SOUND (verify: MTG_LEAF_KILL_ONLY_VERIFY). DEFAULT ON for every eligible deck since 2026-11-25 (was a Cyclone-only provider opt-in); =0 turns it off
+     NESTED_EXH_AXIS,          // MTG_NESTED_EXH_AXIS  Cyclone cost (2026-10-29; cantrip-search-optimization.md section 3.4 B2, Ponder form): a NESTED (non-enforcing) per-turn solve under a finite decision budget that is already EXHAUSTED admits a Ponder ORDER variant only below rank MTG_NESTED_EXH_AXIS_W (default 2: the scored best keep order + the next, the shuffle when it ranks there). Budget-staged admission: inert at an unlimited budget and before exhaustion; a larger budget reaches every rank. RE-PRICE (a play change under a budget), DEFAULT OFF
+     CYCLONE_CANTRIP_SITUATIONAL,// MTG_CYCLONE_CANTRIP_SITUATIONAL  Cyclone HARD PRUNE, the SITUATIONAL layer (same design; USER: "if we have no Cyclone we need to be aggressive about searching for it (shuffling with ponder, setting up junk to be shuffled with brainstorm and brainsurge)"): no Unpredictable Cyclone in hand, on the battlefield, at a KNOWN library position or in Ponder's look -> the put-back keeps only JUNK picks and Ponder only the SHUFFLE; ready to go off (k <= 1, a creature cycle payable, an Eldrazi in hand, the Cyclone available) -> the put-back keeps only SETUP picks. Reads known library positions (Library::KnownAt), never an undrawn card. LOSSY; DEFAULT OFF
+     CYCLONE_BUCKET_DISCARD,   // MTG_CYCLONE_BUCKET_DISCARD  Cyclone: the USER-designed BUCKETED cleanup discard (docs/design/cyclone-discard-buckets.md; analyze-deck 5i) -- CycloneProvider::CleanupDiscardCandidates sheds the LAST card of the bucket keep order (CycloneBucketRankOf: one Cyclone across hand + battlefield, Long-Term Plans standing in while none is found; lands to the go-off need; one Seething Song before Cyclone; three creature cyclers, Wraith first; two dig spells; one Eldrazi above every non-crucial card and a second below Remand), ONE index, re-asked per shed; the full order is the shed order the put-back tie-break reads. Replaces the generic max-MV rule (which sheds the sole Cyclone, ledger Q44(2)). DEFAULT ON (the EL2 arm, measured 2026-10-29; pending the USER's adoption); =0 -> the generic rule
+diff --git a/src/ai/TurnSolver.cpp b/src/ai/TurnSolver.cpp
+index 99891bc84..5347da825 100644
+--- a/src/ai/TurnSolver.cpp
++++ b/src/ai/TurnSolver.cpp
+@@ -113812,10 +113812,11 @@ inline bool LeafKillOnlyExtraOn()
+     static const bool v = EnvOn("MTG_LEAF_KILL_ONLY_EXTRA", true);
+     return heurarm::Flag(heurarm::LEAF_KILL_ONLY_EXTRA, v);
+ }
+-// MTG_LEAF_KILL_ONLY_NOM2 -- by default only providers that opt in (Cyclone) use the shortcut;
+-// =0 disables it and =1 enables it for every eligible deck. SOUND (the verify below is 0 mismatches),
+-// but fleet-wide adoption changes budget re-spend: smoke (2026-10-29) moved 21 of 149 configs
+-// (searched: 1 slower / 4 faster / 39 same-score digest changes). Keep other decks at their old default.
++// MTG_LEAF_KILL_ONLY_NOM2 -- DEFAULT ON for every eligible deck (=0 off). A SOUND identity fold, so it defaults ON
++// wherever its parity condition holds (CLAUDE.md "COLLAPSE WASTED SEARCH UNCONDITIONALLY"); it was a Cyclone-only
++// provider opt-in until 2026-11-25. MTG_LEAF_KILL_ONLY_VERIFY at an unlimited budget: 0 mismatches on Cyclone
++// (2026-10-29) and on every eligible suite deck (logs/beam-adopt/report.md). Under a finite budget it re-spends the
++// units it frees (a play change, A/B in the same report).
+ // The identity's one parity requirement is that a candidate's own evaluation and the rollout's replay of the pick run
+ // the same turn: the same apply, the same combat and the same post-combat main. The gate asked for a SEARCHED second
+ // main because then both worlds solve it through the same memoised solve (the rollout's Dig-only m2 would have no
+@@ -113823,17 +113824,15 @@ inline bool LeafKillOnlyExtraOn()
+ // not searched (`second_main` / uses_second_main false), no Jorn untap, no Omnitool dig, no extra-combat source, and
+ // a provider without a restricted main 2 (MayOpenRestrictedSecondMain). Deck constants only, so the answer cannot
+ // differ between the two worlds of one game.
+-inline bool LeafKillOnlyNoM2On(const GameState& s)
++inline bool LeafKillOnlyNoM2On()
+ {
+-    static const bool all_decks = EnvOn("MTG_LEAF_KILL_ONLY_NOM2");
+-    static const bool disabled = !EnvOn("MTG_LEAF_KILL_ONLY_NOM2", true);
+-    return heurarm::Flag(heurarm::LEAF_KILL_ONLY_NOM2,
+-                          all_decks || (!disabled && ResolveProvider(s).LeafKillOnlyNoM2OptIn()));
++    static const bool v = EnvOn("MTG_LEAF_KILL_ONLY_NOM2", true);
++    return heurarm::Flag(heurarm::LEAF_KILL_ONLY_NOM2, v);
+ }
+ inline bool KillOnlyNoM2Parity(const GameState& s, bool second_main)
+ {
+     return !second_main && !s.uses_second_main && !s.deck_has_attack_untap && !s.deck_has_attack_dig_hand
+-        && !s.deck_has_extra_combat && !ResolveProvider(s).MayOpenRestrictedSecondMain() && LeafKillOnlyNoM2On(s);
++        && !s.deck_has_extra_combat && !ResolveProvider(s).MayOpenRestrictedSecondMain() && LeafKillOnlyNoM2On();
+ }
+ // At a kill-only skip site, after the candidate's whole turn: true = it cannot change the rollout's answer.
+ inline bool KillOnlySkippable(const GameState& after_turn)
+diff --git a/test/unit/test_leaf_kill_only.cpp b/test/unit/test_leaf_kill_only.cpp
+index 279c850d3..583ae3dc7 100644
+--- a/test/unit/test_leaf_kill_only.cpp
++++ b/test/unit/test_leaf_kill_only.cpp
+@@ -187,7 +187,7 @@ TEST_CASE("Leaf kill-only: a full-horizon rollout and a deck without a searched
+ TEST_CASE("Leaf kill-only NOM2: a deck on which no post-combat main can open arms the scope and agrees with the full solve")
+ {
+     EnsureCardsLoaded();
+-    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // Exercise the parity proof on this generic test board.
++    // No arm: NOM2 is DEFAULT ON for every eligible deck (2026-11-25), so the generic board arms the scope.
+     for (int opp : { 20, 2 })
+     {
+         CAPTURE(opp);
+@@ -208,7 +208,7 @@ TEST_CASE("Leaf kill-only NOM2: a deck on which no post-combat main can open arm
+ TEST_CASE("Leaf kill-only EXTRA: an extra-turn deck arms the scope; an Emrakul cast whose extra turn kills is still found")
+ {
+     EnsureCardsLoaded();
+-    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // This synthetic board does not detect a Cyclone provider.
++    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // explicit (the default is ON): this case is about EXTRA.
+     auto board = [](int opp)
+     {
+         GameState s = Fresh(opp);
