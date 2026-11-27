@@ -6,6 +6,39 @@ from the primary checkout, where it is still untracked; keep that original.
 Rebased onto the pushed overnight checkpoint `ffee59231` after its landing gate
 passed; implementation work starts from this shared source.
 
+## Integration handoff (2026-11-27)
+
+The rebased implementation and audited Zombies ground truth are pushed to
+`origin/wip/zombies-analysis-1126` at `416158f44`. It is based on shared
+`695797f95`; the worktree is clean. The accepted overnight snapshot ran from
+`46271e67b`, and the ledger below records the changed same-score games, so
+remote movement does not erase the measurement. The two Windows unit failures
+seen on earlier work-branch runs were stale assertions introduced by the new
+deck: the provider census omitted Zombies, and Haven's subtype-aware graveyard
+return now sets `GyR_AllNames`. Both assertions were corrected in `416158f44`;
+the focused post-rebase tests passed (routing census 137 assertions, Haven 8,
+Zombies discard 39). Windows CI for this exact head is run `45965488850`.
+
+Post-rebase Release validation: the four Zombies smoke keys matched their
+accepted averages and play digests exactly (1,175 games). The seven Zombies
+regression keys also matched exactly (1,435 games); 964 strict viewer
+references had zero play drift, shuffle dead, board divergence, enum gaps,
+mulligan drift, or contract failures. Scenarios and suboptimal references
+passed. `test/check_gt_logs.py` reported 1,483 consistent records with none
+stale or missing, and `scripts/check_references_safe.py` passed.
+
+The remaining integration gate is a **complete full-suite smoke run plus the
+full unit suite** after the rebase. On this 12-core/10 GiB host, the full smoke
+run reached 33 exact rows of 255 (about 61% of recorded cost) before it was
+stopped to honor the push queue's two-hour lease limit. The full local unit
+build was also too slow for that window. The queue was vacated at 08:39 UTC.
+On a faster machine, fetch the WIP branch, join the push queue, rebase onto
+the current shared head if it moved, run the Release build, full unit suite,
+full smoke, and `test/check_gt_logs.py` under the queue lease, then `land`.
+The completed Zombies overnight run need not be repeated solely because the
+shared head moved; its source hash and same-score audit are recorded in this
+ledger. The shared ground-truth header can reflect another deck's later accept.
+
 ## Coverage
 
 `python3 scripts/analyze_deck.py decks/Zombies/Zombies.cod --coverage-only`
@@ -214,8 +247,8 @@ draws were unchanged. The differing lines were legal: seed 4031 changed the
 turn-1 creature/Ritual development, while seed 4067 changed a later
 Culling/Lord/Death sequence. No game became faster or slower. The five
 same-score play digests were accepted with `regression.sh --overnight
---deck=zombies,zombies2hg --accept`; the source hash is recorded in the
-ground-truth header. This snapshot is retained even if the shared branch
+--deck=zombies,zombies2hg --accept`; the source hash is recorded in this
+ledger. This snapshot is retained even if the shared branch
 moves before integration, so a later sweep can measure the remaining drift.
 
 ### Implementation order
