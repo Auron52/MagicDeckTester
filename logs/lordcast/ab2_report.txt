@@ -201,3 +201,11 @@ vampires p20               4000     +0  +0.0000     0     0         -      249.0
 vampires2hg p20            1000     +0  +0.0000     0     0         -     1761.9     1766.4  1.003
 whiteknights p20           4000     +0  +0.0000     0     0         -       18.3       18.2  0.997
 whiteknights2hg p20        1000     +0  +0.0000     0     0         -       58.8       58.8  1.000
+
+##### d8 b0 recovery of every searched slower game, onA vs off (build/scratch/elves-lordcast/m2_d8.json -> d8b.out; seed 7460000+gi)
+16 slower searched games: 14 recover (onA = off at d8 b0); 2 DO NOT:
+  elves    p20 gi1552  shipped 4->5   d8 b0 onA 5 / off 4   UNRECOVERED
+  elves2hg p20 gi480   shipped 5->6   d8 b0 onA 6 / off 5   UNRECOVERED
+(recover: beasts gi613; elves gi664 gi1372 gi2755 gi3114 gi3965; elves2hg gi73 gi392 gi533 gi591 gi680 gi729 gi766 gi771)
+VERIFY (onAV) == onA in every cell: no effect on searched play. HAND (onA) == on in every searched cell; on d0 it moves only
+Boars (+172 -> +163) and Minotaur (-615 -> -652).
