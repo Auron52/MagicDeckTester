@@ -29,12 +29,15 @@ stale or missing, and `scripts/check_references_safe.py` passed.
 
 The remaining integration gate is a **complete full-suite smoke run plus the
 full unit suite** after the rebase. On this 12-core/10 GiB host, the full smoke
-run reached 33 exact rows of 255 (about 61% of recorded cost) before it was
-stopped to honor the push queue's two-hour lease limit. The full local unit
-build was also too slow for that window. The queue was vacated at 08:39 UTC.
-On a faster machine, fetch the WIP branch, join the push queue, rebase onto
-the current shared head if it moved, run the Release build, full unit suite,
-full smoke, and `test/check_gt_logs.py` under the queue lease, then `land`.
+run reached 33 exact rows of 255 in 71 minutes; those rows used 8.7 CPU hours.
+It was stopped because this handoff incorrectly applied an obsolete two-hour
+queue limit. The current `CLAUDE.md` explicitly removes that fixed limit. The
+full unit build also ran concurrently for part of smoke, wasting scarce CPU and
+memory. The queue was vacated at 08:39 UTC, and Zombies rejoined at 09:18 UTC.
+At the next lease, fetch and rebase onto the current shared head if it moved,
+run the Release build, full unit suite, full smoke, and `test/check_gt_logs.py`
+under the queue lease, then `land`. Run the build and smoke separately on this
+host. A faster machine is optional, not a prerequisite for landing.
 The completed Zombies overnight run need not be repeated solely because the
 shared head moved; its source hash and same-score audit are recorded in this
 ledger. The shared ground-truth header can reflect another deck's later accept.
