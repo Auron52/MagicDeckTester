@@ -475,3 +475,68 @@ TEST_CASE("Elves discard: a three-card cleanup is prefix-stable")
     REQUIRE(w.size() == 10);
     CHECK(std::vector<int>(w.begin(), w.begin() + 3) == std::vector<int>{ 9, 3, 2 });
 }
+
+// ---- 4. THE GENESIS WAVE X CAP (MTG_ELVES_WAVE_XCAP, heurarm ELVES_WAVE_XCAP) -------------------------------------
+// X stops at X* = max(library size, the library's largest permanent mana value), never below 1: every larger X reveals
+// the same whole library and puts the same permanents, for more mana. =0 restores every affordable X.
+namespace {
+struct XCapArm
+{
+    std::int8_t saved;
+    explicit XCapArm(int v) : saved(heurarm::t_arm[heurarm::ELVES_WAVE_XCAP])
+    { heurarm::t_arm[heurarm::ELVES_WAVE_XCAP] = static_cast<std::int8_t>(v); }
+    ~XCapArm() { heurarm::t_arm[heurarm::ELVES_WAVE_XCAP] = saved; }
+};
+std::vector<int> Desc(int hi) { std::vector<int> v; for (int x = hi; x >= 1; --x) { v.push_back(x); } return v; }
+}   // namespace
+
+TEST_CASE("Elves Wave X cap: the menu stops at max(library, largest library permanent MV), never below 1")
+{
+    const CardDefinition& wave = PD("Genesis Wave");
+    GameState s = PBase();
+    const bool live = !DecisionUnpruned(UnprunedGate::XSpell);   // process-static (MTG_UNPRUNED / =xspell lift it)
+    {
+        XCapArm on(1);
+        s.players[0].library = Library{};                                        // empty: X = 1 only (any X does nothing)
+        CHECK(Prov().XCandidates(s, wave, 10) == (live ? Desc(1) : Desc(10)));
+        for (int i = 0; i < 3; ++i) { s.players[0].library.push_back(PCard("Forest", 950 + i)); }
+        CHECK(Prov().XCandidates(s, wave, 10) == (live ? Desc(3) : Desc(10)));   // L = 3 (lands are MV 0)
+        CHECK(Prov().XCandidates(s, wave, 2) == Desc(2));                        // the cap never raises the max
+        s.players[0].library = Library{};
+        s.players[0].library.push_back(PCard("Elvish Archdruid", 960));          // L = 1, a MV-3 permanent
+        CHECK(Prov().XCandidates(s, wave, 10) == (live ? Desc(3) : Desc(10)));
+    }
+    {
+        XCapArm off(0);
+        CHECK(Prov().XCandidates(s, wave, 10) == Desc(10));
+    }
+}
+
+TEST_CASE("Elves Wave X cap: the enumeration offers no Wave X above X*; =0 restores the affordable max")
+{
+    PruneArm prune(0);   // the scaling rule off, so the menu shows the X axis whole
+    auto wave_xs = [](const std::vector<TurnSolver::Plan>& plans)
+    {
+        std::set<int> xs;
+        for (const TurnSolver::Plan& p : plans)
+        { for (const Action& a : p.actions) { if (a.card_name.str() == "Genesis Wave") { xs.insert(a.chosen_x); } } }
+        return xs;
+    };
+    GameState s = PBase();
+    // two cards (a Llanowar Elves MV 1, a Forest): X* = 2; Wave alone affords X 5
+    s.players[0].library = Library{};
+    s.players[0].library.push_back(PCard("Llanowar Elves", 970));
+    s.players[0].library.push_back(PCard("Forest", 971));
+    {
+        XCapArm on(1);
+        const std::set<int> xs = wave_xs(TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, nullptr));
+        REQUIRE_FALSE(xs.empty());
+        if (!DecisionUnpruned(UnprunedGate::XSpell) && !HumanPlayActive()) { CHECK(*xs.rbegin() == 2); }
+    }
+    {
+        XCapArm off(0);
+        const std::set<int> xs = wave_xs(TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, nullptr));
+        REQUIRE_FALSE(xs.empty());
+        if (!HumanPlayActive()) { CHECK(*xs.rbegin() == 5); }
+    }
+}

@@ -1161,6 +1161,7 @@ enum Slot : int
     LINE_NC_LEFT,             // MTG_LINE_NC_LEFT  the line-keep rung (LineReducerKeepHold) judges the rest of the line as creature casts only once the line has no NONCREATURE cast left to pay (both apply worlds count them down at the cast site), not only when this payment's mana value covers the line's whole noncreature bill: a colored_creature_only land then makes a colour for the rest (Dragonstorm s30129376 T4 {Ruby Medallion, Seething Song, Karrthus}: at Song's payment Karrthus read as a noncreature bill, unpayable either way, so Song's {1} drained the floating {B} instead of Sandstone Needle paying it). DEFAULT ON; =0 -> the mana-value test alone, byte-identical
     ELVES_BUCKET_DISCARD,     // MTG_ELVES_BUCKET_DISCARD  Elves: the USER's cleanup-discard buckets (2026-11-27: "a discard policy that just buckets mana and threats. (mana elves can go in the mana bucket)"; amended: "feel free to add more mana as long as we have 1-2 scaling threats"): DEAD (2nd legend / 2nd world enchantment of ours) first; MANA = lands + mana creatures; SCALING = the mana sinks (Wave, Warcaller, Brigade, Ezuri, Shepherd), the best 2 kept and every other threat shed before mana; with no sink, up to 3 threats kept ahead of the mana past the land floor + 2. ElvesProvider::CleanupDiscardCandidates. Default ON (USER rule); =0 -> the inherited SelesnyaLifegain buckets
     ONDEMAND_LUMP_KEEP_OWED,  // MTG_ONDEMAND_LUMP_KEEP_OWED  when a lump crack (Lotus Bloom) that pays a bill strands the rest of the line, the bill is paid again with the lump cracked in a colour the rest owes and those units SET ASIDE, so another untapped source pays the rest and that colour floats on; the first such payment that leaves the rest payable replaces the plain one (exact judge, crediting the paying ritual's float and an Apex of Power's ten). Dragonstorm s30120119 T6: Apex's generic spent the whole Bloom crack ({B}{B}{B}) with a Mountain untapped, and Dragonlord Kolaghan's {B} had no source. DEFAULT ON; =0 -> the plain crack, byte-identical
+    ELVES_WAVE_XCAP,          // MTG_ELVES_WAVE_XCAP  Elves: Genesis Wave's autonomous X menu stops at X* = max(library size, the library's largest permanent mana value), never below 1. Every X >= X* reveals the whole library and puts the same permanents (ElvesProvider::GenesisWavePutPicks reads no X), so a larger X is the X* line plus mana spent on nothing: a sound DOMINANCE fold of the menu (X* itself is always offered). A memory bound: the T7 continuation of keep-rollout seed ...2950 enumerated X 1..91 at a 16-card library (171,404 of 210,316 Wave rows above X*; 3.8 GB). ElvesProvider::XCandidates. Default ON; =0 -> every affordable X (the 6ab2cfe77 menu)
     COUNT
 };
 
@@ -2266,6 +2267,7 @@ inline const char* Name(int slot)
         "MTG_LINE_NC_LEFT",
         "MTG_ELVES_BUCKET_DISCARD",
         "MTG_ONDEMAND_LUMP_KEEP_OWED",
+        "MTG_ELVES_WAVE_XCAP",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
