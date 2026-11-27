@@ -8,7 +8,8 @@
 //                                      without the ritual's float.
 //   MTG_CCO_RESERVE_JOINT           -- the CCO line reserve let each of two Unclaimed Territories go unheld because the
 //                                      other "covered" both of Karrthus's {B} and {G} (one tap makes one unit).
-//   MTG_LEFTOVER_SWAP_EXACT         -- the leftover swap's shortage test booked a Territory as every colour at once.
+//   MTG_LINE_NC_LEFT                -- the line-keep rung judged a creature-only rest as a noncreature bill once an
+//                                      earlier noncreature cast of the line was paid (the line's total never counts down).
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -113,7 +114,9 @@ bool PayRitualThenCreature(GameState& s, const std::vector<Action>& line, int ri
     const int credit = LineReducerCredit(s, line);
     const int bound = LineKeepBound(line);
     LineReducerCreditScope lrc(credit, (credit > 0 || bound) ? LineNoncreatureMv(line) : 0, bound);
+    LineNoncreatureLeftScope lnl(LineNoncreatureLeftCount(line));
     const Card rc = CardDlk(line[0].card_name, 40);
+    NoteLineNoncreatureCast(DefDlk(line[0].card_name));
     {
         SpellSubtypePayScope pay(&rc);
         REQUIRE(TapForCostDirect(s, line[0].cost, /*for_creature=*/false));
@@ -121,6 +124,7 @@ bool PayRitualThenCreature(GameState& s, const std::vector<Action>& line, int ri
     SubManaCost(g_line_unpaid_cost, line[0].cost);
     s.floating_mana.red += ritual_red;   // the ritual resolves
     const Card cc = CardDlk(line[1].card_name, 41);
+    NoteLineNoncreatureCast(DefDlk(line[1].card_name));
     SpellSubtypePayScope pay(&cc);
     return TapForCostDirect(s, line[1].cost, /*for_creature=*/true);
 }
@@ -138,13 +142,16 @@ bool PayLineDlk(GameState& s, const std::vector<Action>& line, std::size_t paid 
     const int credit = LineReducerCredit(at, line);
     const int bound = LineKeepBound(line);
     LineReducerCreditScope lrc(credit, (credit > 0 || bound) ? LineNoncreatureMv(line) : 0, bound);
+    LineNoncreatureLeftScope lnl(LineNoncreatureLeftCount(line));   // counted down at each cast, before its payment
     int num = 40;
-    for (std::size_t i = 0; i < paid; ++i) { SubManaCost(g_line_unpaid_cost, line[i].cost); }
+    for (std::size_t i = 0; i < paid; ++i)
+    { NoteLineNoncreatureCast(DefDlk(line[i].card_name)); SubManaCost(g_line_unpaid_cost, line[i].cost); }
     for (std::size_t i = paid; i < line.size(); ++i)
     {
         const CardDefinition& d = DefDlk(line[i].card_name);
         const Card c = CardDlk(line[i].card_name, num++);
         const ManaCost cost = EffectiveSpellCost(d, s);
+        NoteLineNoncreatureCast(d);
         {
             SpellSubtypePayScope pay(&c);
             if (!TapForCostDirect(s, cost, /*for_creature=*/d.card.IsCreature())) { return false; }
@@ -201,7 +208,6 @@ TEST_CASE("Dragonstorm line keep: s30087280 T4 -- the floating {B} is kept throu
     {
         CAPTURE(on);
         ArmDlk as(heurarm::LEFTOVER_SWAP_WIDE, on);
-        ArmDlk ex(heurarm::LEFTOVER_SWAP_EXACT, false);   // the exact test credits the ritual's float too: isolate WIDE
         GameState s = s0;
         CHECK(PayRitualThenCreature(s, line, 7) == on);
     }
@@ -363,10 +369,12 @@ TEST_CASE("Dragonstorm line keep: two Territories, one owed colour -- the joint 
 
 // Dragonstorm s30129376 gi129376 T4 m1 {Mountain, Ruby Medallion, Seething Song, Karrthus}: Ruby was paid by a Lotus
 // Bloom cracked for {B} (no land played); one {B} floats beside Sandstone Needle, one Unclaimed Territory and a Mountain. Song's {1}{R}
-// (Ruby) drained the {B} into its {1} and floated the Needle's second {R}; the leftover swap's pool count booked the
-// Territory as both of Karrthus's {B} and {G}, so it made no swap and the {G} or the {B} had no source.
-// MTG_LEFTOVER_SWAP_EXACT judges the rest exactly and keeps the {B}.
-TEST_CASE("Dragonstorm line keep: s30129376 T4 -- the exact swap test keeps the floating {B} for Karrthus")
+// (Ruby) was paid with the Mountain's {R} and the floating {B}, and Karrthus's {B} and {G} were left to the one Territory.
+// The line-keep rung judged Karrthus as a NONCREATURE bill (the line's noncreature total, Ruby + Song = 5, is above
+// Song's mana value 2, and it never counts down), so Karrthus read unpayable however Song was paid and the rung kept
+// nothing. MTG_LINE_NC_LEFT sees that no noncreature cast is left after Song: the rung keeps the {B} and Sandstone
+// Needle's {R}{R} pays Song. (Traced in game: MTG_DS2_PAYDBG, logs/ds-apply2/ds2pay-debug.snippet.cpp.)
+TEST_CASE("Dragonstorm line keep: s30129376 T4 -- no noncreature cast is left after Song, so the {B} is kept for Karrthus")
 {
     GameState s0 = BaseDlk(4);
     PutDlk(s0, "Ruby Medallion", 43);
@@ -375,7 +383,7 @@ TEST_CASE("Dragonstorm line keep: s30129376 T4 -- the exact swap test keeps the 
     PutDlk(s0, "Unclaimed Territory", 57);
     PutDlk(s0, "Mountain", 29);
     s0.floating_mana.black = 1;
-    for (const char* h : { "Apex of Power", "Seething Song", "Karrthus, Tyrant of Jund" })   // the game's hand
+    for (const char* h : { "Apex of Power", "Seething Song", "Mountain", "Karrthus, Tyrant of Jund" })   // the game's hand
     { s0.players[0].hand.push_back(CardDlk(h, 60 + static_cast<int>(s0.players[0].hand.size()))); }
     // Ruby is in the line (and the hold) and already paid; its cost as enumerated, before it was on the battlefield.
     GameState pre = s0;
@@ -385,7 +393,7 @@ TEST_CASE("Dragonstorm line keep: s30129376 T4 -- the exact swap test keeps the 
     for (const bool on : { true, false })
     {
         CAPTURE(on);
-        ArmDlk as(heurarm::LEFTOVER_SWAP_EXACT, on);
+        ArmDlk as(heurarm::LINE_NC_LEFT, on);
         GameState s = s0;
         CHECK(PayLineDlk(s, line, 1, &pre) == on);
     }

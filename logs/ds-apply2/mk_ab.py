@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # mk_ab.py (2026-11-26, from logs/worldfire-ad/mk_ab.py): held-out paired PLAY-SETTING A/B of the ds-apply levers
-# (ds-apply2: MTG_CCO_RESERVE_JOINT, MTG_LEFTOVER_SWAP_EXACT), all off vs all on, ONE pooled `mtg --batch` manifest.
+# (ds-apply2: MTG_CCO_RESERVE_JOINT, MTG_LINE_NC_LEFT), all off vs all on, ONE pooled `mtg --batch` manifest.
 #   usage: python3 logs/ds-apply2/mk_ab.py <out.json> [--base N] [--n N] [--wf N] [--hg N] [--decks k1,k2,...]
 # --wf is the Dragonstorm game count (standard and 2HG).
 # Paired: game gi -> seed BASE + gi, game_index gi on both arms (arms interleaved per chunk). Depth AND budget OMITTED
@@ -15,7 +15,7 @@ ap.add_argument('--hg', type=int, default=0, help='games per arm in 2HG, every d
 ap.add_argument('--decks', default='', help='comma list (default: every suite deck)')
 ap.add_argument('--chunk', type=int, default=25)
 o = ap.parse_args()
-L = ['MTG_CCO_RESERVE_JOINT', 'MTG_LEFTOVER_SWAP_EXACT']
+L = ['MTG_CCO_RESERVE_JOINT', 'MTG_LINE_NC_LEFT']
 ARMS = {'off': {k: False for k in L}, 'on': {k: True for k in L}}
 HG = {"starting_life": 30, "opponent_heads": 2}
 src = open('test/regression_cases.sh').read()

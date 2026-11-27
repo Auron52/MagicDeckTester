@@ -9,7 +9,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument('gate'); ap.add_argument('out')
 ap.add_argument('--loo-n', type=int, default=18000)
 o = ap.parse_args()
-L = ['MTG_CCO_RESERVE_JOINT', 'MTG_LEFTOVER_SWAP_EXACT']
+L = ['MTG_CCO_RESERVE_JOINT', 'MTG_LINE_NC_LEFT']
 arms = {'off': {k: False for k in L}, 'on': {k: True for k in L}}
 for k in L:
     a = {x: True for x in L}; a[k] = False

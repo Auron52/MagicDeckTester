@@ -9566,6 +9566,26 @@ DigContDemandScope::DigContDemandScope(const GameState& state) : prev(g_dig_cont
 }
 thread_local bool     g_line_unseen_carried = false; // see ManaPayment.h (LineUnseenCarriedScope)
 thread_local int      g_line_haste_takers = 0;       // see ManaPayment.h (LineHasteTakersScope)
+thread_local int      g_line_noncreature_left = -1;  // see ManaPayment.h (LineNoncreatureLeftScope, MTG_LINE_NC_LEFT)
+
+int LineNoncreatureLeftCount(const std::vector<Action>& acts)
+{
+    if (!LineNcLeftOn()) { return -1; }
+    int n = 0;
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::Suspend) { if (a.cost.ManaValue() > 0) { ++n; } continue; }
+        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr || !d->card.IsCreature()) { ++n; }
+    }
+    return n;
+}
+
+void NoteLineNoncreatureCast(const CardDefinition& def)
+{
+    if (g_line_noncreature_left > 0 && !def.card.IsCreature()) { --g_line_noncreature_left; }
+}
 
 // TakeHasteFloatForCreatureSpell's condition on a bill: a {C} pip, or a non-snow generic pip.
 static bool BillTakesHasteUnit(const ManaCost& c)
@@ -12394,8 +12414,12 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         if (!LineKeepCritGate(state, cost_in, rest, s_rtight && ritual_on_board ? &rock.ritual : nullptr)) { return none; }
         if (s_stats) { g_lkc_pass.fetch_add(1, std::memory_order_relaxed); }
     }
+    // MTG_LINE_NC_LEFT (EngineFlags.h): ...or the line has no noncreature cast left to pay (counted down at the cast
+    // site, before this payment), so the rest is creature casts only even when this payment's mana value is below the
+    // line's whole noncreature bill (a Ruby Medallion paid earlier in the line; Seething Song's {1}{R} after it).
     const bool rest_creature = g_line_noncreature_mv == 0
-                            || (!for_creature && cost_in.ManaValue() >= g_line_noncreature_mv);
+                            || (!for_creature && cost_in.ManaValue() >= g_line_noncreature_mv)
+                            || (g_line_noncreature_left == 0 && LineNcLeftOn());
     const ManaCost joint = AddManaCosts(cost_in, rest);
     const bool joint_creature = rest_creature || for_creature;   // a necessary-condition bound: the looser mode
     // MTG_LINE_KEEP_ROCK: a rock this payment is for is on every board the rest is judged on (it resolves before the
@@ -13730,10 +13754,7 @@ static bool OnDemandTrial(const GameState& state, const std::vector<OnDemandCrac
 // tried uncracked and cracked for each colour the bill has a pip of (a crack for a colour the bill has no pip of pays
 // only its generic, which a pip colour's crack pays as well; any colour when the bill has no coloured pip). At most
 // three lumps (4^3 boards); more, and the answer is "payable" (the caller then keeps its own judgement). Scratch only.
-// `for_creature`: whether a colored_creature_only unit (Unclaimed Territory) may make a colour (a creature bill) or
-// only {C} (MTG_LEFTOVER_SWAP_EXACT's strict judge).
-static bool LumpAwareBillPayable(const GameState& board, const ManaCost& bill, const ManaPool& extra,
-                                 bool for_creature = true)
+static bool LumpAwareBillPayable(const GameState& board, const ManaCost& bill, const ManaPool& extra)
 {
     std::vector<OnDemandCrack> lands, lumps;
     CollectOnDemandCracks(board, lands, lumps);
@@ -13764,10 +13785,10 @@ static bool LumpAwareBillPayable(const GameState& board, const ManaCost& bill, c
             if (!ApplyOnDemandCrack(*c, kk)) { ok = false; break; }
         }
         if (!ok) { continue; }
-        if (!PaymentManaCovers(*c, for_creature, bill.ManaValue() - static_cast<int>(c->floating_mana.Total())))
+        if (!PaymentManaCovers(*c, /*for_creature=*/true, bill.ManaValue() - static_cast<int>(c->floating_mana.Total())))
         { continue; }
         const ManaPool start = c->floating_mana;
-        if (TapForCostBacktrack(*c, bill, for_creature, start)) { return true; }
+        if (TapForCostBacktrack(*c, bill, /*for_creature=*/true, start)) { return true; }
     }
     return false;
 }
@@ -13842,21 +13863,8 @@ static void SwapLeftoverForLine(GameState& state, const ManaCost& cost_in, const
     // {1}, then tapped Sandstone Needle for {R}{R} and floated one; the {R} that floats was not "produced" net of the
     // float (2 -> 1), and without Irencrag's seven {R} Kolaghan's {R} read short as well, so no swap was made.
     const bool wide = LeftoverSwapWideOn();
-    // MTG_LEFTOVER_SWAP_EXACT (EngineFlags.h): AvailableManaPool books a colored_creature_only land (Unclaimed Territory)
-    // as a unit of every colour, so one Territory "covers" both of Karrthus's {B} and {G} and the swap is refused
-    // (Dragonstorm s30129376 T4 {Ruby Medallion, Seething Song, Karrthus}: Song's {1} drained the floating {B}, the
-    // Needle's second {R} floated). With the lever the rest's pips are judged exactly (LumpAwareBillPayable: every crack
-    // of the lumps left x the complete backtracker, + the ritual's float), twice: LOOSE (a creature-only unit makes any
-    // colour: every pip a creature's) and STRICT (it makes {C}: every pip a noncreature's). The line hold does not say
-    // which of its pips are a creature's, and the truth lies between: strict-payable => payable => loose-payable. So
-    // as left, strict-payable is "not short" (no swap); and a swap is made only when it proves more: loose-payable
-    // where as left the rest was loose-short (it was short for sure), or strict-payable where as left it was not
-    // (payable for sure, where it was not). The swap never turns a payable judgement unpayable. Behind a cheap
-    // prefilter (some colour the rest owes went to this payment's generic, and a leftover unit of another colour
-    // floats), so most payments reach no judge.
-    const bool exact = LeftoverSwapExactOn();
     ManaPool ritual;
-    if (wide || exact) { ritual = LineKeepRockFor(state).ritual; }
+    if (wide) { ritual = LineKeepRockFor(state).ritual; }
     auto short_by = [&](const GameState& s) -> int
     {
         ManaPool pool = AvailableManaPool(s);
@@ -13866,34 +13874,12 @@ static void SwapLeftoverForLine(GameState& state, const ManaCost& cost_in, const
         for (int c = 0; c < 5; ++c) { units += std::max(0, later[c] - have[c]); }
         return units - pool.wild;
     };
+    if (short_by(state) <= 0) { return; }
     static const Color kCol[5] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
     // Units of y this payment produced and left floating: the swap's only sources (MTG_LEFTOVER_SWAP_WIDE: every
     // leftover unit of y).
     int gain[5];
     for (int y = 0; y < 5; ++y) { gain[y] = wide ? a[y] : std::max(0, a[y] - b[y]); }
-    ManaCost pips;
-    bool loose_left = false;
-    if (exact)
-    {
-        bool cand = false;
-        for (int x = 0; x < 5 && !cand; ++x)
-        {
-            if (std::max(0, (b[x] - a[x]) - pip[x]) <= 0 || later[x] <= 0) { continue; }
-            for (int y = 0; y < 5; ++y) { if (y != x && gain[y] > 0) { cand = true; break; } }
-        }
-        if (!cand) { return; }
-        pips.white = later[0]; pips.blue = later[1]; pips.black = later[2]; pips.red = later[3]; pips.green = later[4];
-        loose_left = LumpAwareBillPayable(state, pips, ritual, /*for_creature=*/true);
-        if (loose_left && LumpAwareBillPayable(state, pips, ritual, /*for_creature=*/false)) { return; }
-    }
-    else if (short_by(state) <= 0) { return; }
-    // Is the rest no longer short after the swap (`trial`)? (MTG_LEFTOVER_SWAP_EXACT: proves more than as left, above.)
-    auto still_short = [&](const GameState& t) -> bool
-    {
-        if (!exact) { return short_by(t) > 0; }
-        if (!LumpAwareBillPayable(t, pips, ritual, /*for_creature=*/true)) { return true; }
-        return loose_left && !LumpAwareBillPayable(t, pips, ritual, /*for_creature=*/false);
-    };
     GameState trial = state;
     int moved[5][5] = {};
     for (int x = 0; x < 5; ++x)
@@ -13912,7 +13898,7 @@ static void SwapLeftoverForLine(GameState& state, const ManaCost& cost_in, const
             moved[x][y] += k;
             gain[y] -= k;
             x_generic -= k;
-            if (still_short(trial)) { continue; }
+            if (short_by(trial) > 0) { continue; }
             state.floating_mana = trial.floating_mana;
             if (available != nullptr)
             {

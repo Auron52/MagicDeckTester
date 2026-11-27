@@ -739,19 +739,22 @@ inline bool LeftoverSwapWideOn()
     return heurarm::Flag(heurarm::LEFTOVER_SWAP_WIDE, env_on);
 }
 
-// MTG_LEFTOVER_SWAP_EXACT (DEFAULT ON; =0 restores the pool-count shortage test byte for byte) -- SwapLeftoverForLine's
-// "is the rest of the line short as left / after the swap" test reads AvailableManaPool, which books a
-// colored_creature_only land (Unclaimed Territory) as a unit of EVERY colour, so one Territory "covers" both of
-// Karrthus's {B} and {G}. With the lever, once a cheap prefilter passes (a colour the rest owes went to this payment's
-// generic AND a leftover unit of another colour floats), the test is exact: LumpAwareBillPayable on the rest's pips
-// (every crack of the lumps left x the complete backtracker, + the paying ritual's float), the creature-only colours
-// counted for the creature casts only. Dragonstorm s30129376 T4 {Ruby Medallion, Seething Song, Karrthus}: Song's {1}
-// drained the floating {B} and Sandstone Needle's second {R} floated; the Territory had to make both {B} and {G}.
-// A payment choice in the shared payer (executor, rollout and payability walks alike), at every budget.
-inline bool LeftoverSwapExactOn()
+// MTG_LINE_NC_LEFT (DEFAULT ON; =0 restores the mana-value test alone byte for byte) -- the line-keep rung
+// (LineReducerKeepHold, ManaPayment.cpp) judges the rest of the applying line in creature mode (a colored_creature_only
+// land such as Unclaimed Territory makes a colour) only when g_line_noncreature_mv is 0 or THIS noncreature payment's
+// mana value reaches it. That total is the line's whole noncreature bill and is never counted down, so once a
+// noncreature cast is paid the test can no longer see that only creatures remain. With the lever both apply worlds
+// count the line's noncreature casts down at the cast site (g_line_noncreature_left, NoteLineNoncreatureCast) and the
+// rest is creature-only once none is left. Dragonstorm s30129376 T4 {Ruby Medallion, Seething Song, Karrthus}: Ruby
+// was paid with Lotus Bloom ({B} floats); at Song's payment Karrthus read as a noncreature bill (the Territory {C}),
+// unpayable however Song was paid, so the rung kept nothing and Song's {1} drained the {B} instead of Sandstone
+// Needle's {R}{R} paying Song. It only turns the rest's mode from noncreature to creature, never back. A payment
+// choice in the shared payer (executor and rollout together; the payability walks bind no count and keep the old test),
+// at every budget.
+inline bool LineNcLeftOn()
 {
-    static const bool env_on = EnvOn("MTG_LEFTOVER_SWAP_EXACT", true);
-    return heurarm::Flag(heurarm::LEFTOVER_SWAP_EXACT, env_on);
+    static const bool env_on = EnvOn("MTG_LINE_NC_LEFT", true);
+    return heurarm::Flag(heurarm::LINE_NC_LEFT, env_on);
 }
 
 // MTG_ONDEMAND_VISIBLE_LUMP_EXACT (DEFAULT ON; =0 restores the colour comparison alone byte for byte) -- Dragonstorm's

@@ -1027,6 +1027,18 @@ extern thread_local int g_line_reducer_credit;
 // ...and the mana value of the line's NONCREATURE casts, so the rung can tell when the rest of the line is creature
 // casts only (a colored_creature_only land's colour pays them).
 extern thread_local int g_line_noncreature_mv;
+// ...and how many of the line's NONCREATURE casts are still to be paid (MTG_LINE_NC_LEFT, EngineFlags.h), -1 = not
+// counted (the rung keeps the mana-value test alone). Only the two apply worlds count (ApplyPlanDirect's apply_one and
+// AIEngine::CastSpellFromHand, through LineNoncreatureLeftScope + NoteLineNoncreatureCast at the cast site, before the
+// cast's own payment); every LineUnpaidCostScope resets it to -1, so a walk or nested apply that binds its own hold
+// never reads an outer line's count, and a walk (whose payments are not cast-site payments) keeps the old test.
+extern thread_local int g_line_noncreature_left;
+// The casts in `acts` the count starts from: every noncreature hand / graveyard cast (free or not -- the cast site
+// counts each one down, so the two agree) and every paid suspend (no cast site counts it down: the rest stays
+// noncreature, the old reading). -1 with the lever off.
+int LineNoncreatureLeftCount(const std::vector<Action>& acts);
+// A cast site's count-down: a noncreature `def` is being cast now (paid or dropped, it is no longer ahead of anything).
+void NoteLineNoncreatureCast(const CardDefinition& def);
 // ...and whether the line-keep rung reaches this line WITHOUT a reducer credit, bound by the same seeds (LineKeepBound):
 // kLineKeepFull (1) for a line MTG_LINE_KEEP_ALL / MTG_LINE_KEEP_ROCK bind (every payment is tried), kLineKeepCrit (2)
 // for a line of two or more held casts only MTG_LINE_KEEP_CRIT binds (a payment is tried only when LineKeepCritGate
@@ -1040,15 +1052,17 @@ class LineUnpaidCostScope
 public:
     explicit LineUnpaidCostScope(const ManaCost& c)
         : m_prev(g_line_unpaid_cost), m_prev_acts(g_line_hold_has_acts),
-          m_prev_credit(g_line_reducer_credit), m_prev_nc(g_line_noncreature_mv), m_prev_bound(g_line_keep_bound)
+          m_prev_credit(g_line_reducer_credit), m_prev_nc(g_line_noncreature_mv), m_prev_bound(g_line_keep_bound),
+          m_prev_nc_left(g_line_noncreature_left)
     {
         g_line_unpaid_cost = c; g_line_hold_has_acts = false; g_line_reducer_credit = 0; g_line_noncreature_mv = 0;
-        g_line_keep_bound = 0;
+        g_line_keep_bound = 0; g_line_noncreature_left = -1;
     }
     ~LineUnpaidCostScope()
     {
         g_line_unpaid_cost = m_prev; g_line_hold_has_acts = m_prev_acts;
         g_line_reducer_credit = m_prev_credit; g_line_noncreature_mv = m_prev_nc; g_line_keep_bound = m_prev_bound;
+        g_line_noncreature_left = m_prev_nc_left;
     }
     LineUnpaidCostScope(const LineUnpaidCostScope&)            = delete;
     LineUnpaidCostScope& operator=(const LineUnpaidCostScope&) = delete;
@@ -1058,6 +1072,7 @@ private:
     int      m_prev_credit;
     int      m_prev_nc;
     int      m_prev_bound;
+    int      m_prev_nc_left;
 };
 
 // THE SCARCE HOLD OUTRANKS A LAND AURA'S HOST HOLD (MTG_SCARCE_COLOR_MASK). Both per-cast host holds (the rollout's
@@ -1227,6 +1242,19 @@ private:
     int  m_prev;
     int  m_prev_nc;
     int  m_prev_bound;
+};
+
+// MTG_LINE_NC_LEFT's seed (g_line_noncreature_left): bound by both apply worlds right after LineReducerCreditScope, from
+// the same action list (LineNoncreatureLeftCount); restores the outer value.
+class LineNoncreatureLeftScope
+{
+public:
+    explicit LineNoncreatureLeftScope(int n) : m_prev(g_line_noncreature_left) { g_line_noncreature_left = n; }
+    ~LineNoncreatureLeftScope() { g_line_noncreature_left = m_prev; }
+    LineNoncreatureLeftScope(const LineNoncreatureLeftScope&)            = delete;
+    LineNoncreatureLeftScope& operator=(const LineNoncreatureLeftScope&) = delete;
+private:
+    int m_prev;
 };
 
 // (The post-spell greedy mana sinks AnimateLandsShared / ActivateTapTokensShared were deleted
