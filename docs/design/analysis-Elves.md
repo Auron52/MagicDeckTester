@@ -731,3 +731,18 @@ Open USER decision: the tap-order default (after the fixed version's numbers).
 - The r4 agent is validating and flipping it (handoff in logs/elves/r3-handoff.md on wip/elves-r2).
 - MTG_ELVES_R2 and the three/two modes are deleted (USER: keep band).
 - The 2HG slower games 75/202/428/2162 under the old bandtap were the same mechanism as std 2176.
+
+### Checkpoint 15 (2026-11-27 ~14:30 UTC)
+- **Memory fix 6ab2cfe77 VALIDATED:** units 4330/4330, smoke 251/251 with 0 changed. The worst Wave rollout went 8.8 GB → 3.80 GB, which is still too much for 32 concurrent rollouts.
+- **Subset-sum fold bc988394b (wip/elves-mem3) is LOSSY:**
+  - std +0.0003 (0/1), 2HG +0.0010 (2/5); none of the slower games recovers at d8 b0;
+  - no memory gain, because the peak is while the full 212,748-plan list is built, before any filter;
+  - parked on wip/elves-mem3, not integrated. Hypothesis for the losses: an Elf dork made hasty by Concordant Crossroads is an uncounted attacker.
+- **mem4 agent** (wip/elves-mem4, base 6ab2cfe77): a SOUND enumeration-time fix, targeting a <1 GB peak so 32 rollouts fit under 20 GB.
+- **Lordcast round 3 done** (wip/elves-lordcast 0f6508d3f, logs/elves/lordcast-handoff2.md):
+  - causes A (Boars attacker set fixed pre-cast), B (Goblins Skirk sacrifice), C (legendary lord counted twice) and D (Elves phantom lethal) are fixed in the lever;
+  - preview, on non-held-out seeds: Boars -64, Elves -750, Goblins -54;
+  - the searched slower games were fixed upstream (likely 5e8e09120);
+  - the A/B logs/lordcast/run_ab3.sh (fresh seeds 7700000) stays HELD until after the Elves mullgen; the lever stays default OFF per the USER.
+- **Optional follow-up from r3:** in 4 games the old bandtap is faster than bandtapfix (std 449; 2HG 786/1226/2371). They are unrecoverable at d8 b0 because the set-up tap order is a fixed rule. Idea: a board-based exception for set-up casts.
+- **Surfaced to the USER (mem3):** with Ezuri on board, would you ever cast a scaling spell for less to keep land mana for Ezuri's pump (5 per +3/+3)? The band keeps those counts for now (the sound choice).
