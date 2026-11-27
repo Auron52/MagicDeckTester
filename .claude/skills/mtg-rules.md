@@ -73,22 +73,24 @@ For review, build, and card modes, use the rules sections below as the authorita
 - Attacking doesn't use the stack; happens as a turn-based action
 
 **Blocking**:
-- Any untapped creature may block (unless it has a restriction)
-- Multiple creatures can block one attacker (combat damage distributed by attacker)
-- One blocker can block only one attacker (unless it has reach/flying interactions)
+- Any untapped creature may block (unless it has a restriction); summoning sickness does not stop blocking
+- Multiple creatures can block one attacker
+- Each blocker blocks exactly one attacker (CR 509.1a). Blocking more than one needs an explicit ability ("can block an additional creature each combat", "can block any number of creatures"). Flying and reach only change WHICH attackers a creature can block, never how many
+- Legality (CR 509.1b–c): the declaration is illegal if it breaks any restriction (flying, menace, "can't block"); within the restrictions it must obey as many requirements ("blocks each combat if able") as possible
 
 **Combat Damage (CR 510)**:
 - Assigned simultaneously by default (first strike/double strike create extra step)
-- Trample: excess damage beyond lethal flows through to defending player/planeswalker
-- Deathtouch: any amount of combat damage is lethal
+- **No damage assignment order** (removed by Magic Foundations, Nov 2024). An attacker blocked by two or more creatures divides its damage among them however its controller chooses (CR 510.1c); a blocker blocking two or more attackers does the same (CR 510.1d). No blocker has to be assigned lethal before another gets damage
+- Lethal-first applies only with trample: lethal to every blocker, then the excess may go to the player, planeswalker or battle it is attacking (CR 702.19b)
+- Deathtouch: any nonzero combat damage assigned to a creature counts as lethal for that check (CR 702.2c)
 
 **Combat Keywords**:
-- **Flying**: blocks only creatures with flying or reach
-- **First Strike / Double Strike**: deals damage in first combat damage step
+- **Flying**: can be blocked only by creatures with flying or reach (a flyer can block anything)
+- **First Strike / Double Strike**: if any attacker or blocker has either as the damage step begins, there is a first-strike damage step for those creatures; double strike deals damage again in the regular step (CR 510.4, 702.4b)
 - **Trample**: excess damage carries through to player/planeswalker
 - **Lifelink**: damage dealt = life gained
 - **Deathtouch**: any damage dealt by this creature destroys
-- **Menace**: must be blocked by 2+ creatures
+- **Menace**: can't be blocked except by two or more creatures (a restriction, not a requirement to block; CR 702.111b)
 - **Vigilance**: does not tap when attacking
 - **Haste**: can attack and use tap abilities the turn it enters
 
@@ -112,7 +114,7 @@ For review, build, and card modes, use the rules sections below as the authorita
 | **Hexproof** | Can't be targeted by opponents' spells or abilities |
 | **Indestructible** | Can't be destroyed by damage or "destroy" effects; still dies to toughness ≤ 0 |
 | **Lifelink** | Damage dealt causes controller to gain that much life |
-| **Menace** | Must be blocked by two or more creatures |
+| **Menace** | Can't be blocked except by two or more creatures |
 | **Reach** | Can block creatures with flying |
 | **Shroud** | Can't be targeted by any spells or abilities |
 | **Trample** | Excess combat damage beyond lethal carries through to the player or planeswalker |
@@ -372,7 +374,8 @@ When reviewing MTG implementation code, check for these common rule-violation bu
 - [ ] Trample + deathtouch: only 1 damage is required to be assigned to each blocker (deathtouch makes any amount lethal), and the rest tramples through — a common bug assigns full toughness
 - [ ] First strike / double strike: two separate damage steps required — verify the engine doesn't collapse them into one
 - [ ] Attacking is a turn-based action, not a spell — it does not go on the stack and cannot be responded to during declaration
-- [ ] Blockers are declared as a group, not one at a time — order of blocker assignment matters for trample damage distribution
+- [ ] Blockers are declared as a group, not one at a time, and the whole declaration is checked for legality at once (CR 509.1) — menace in particular can only be checked against the full set
+- [ ] No damage assignment order (removed in Foundations): a multiply-blocked attacker splits damage among its blockers freely (CR 510.1c); only trample forces lethal on every blocker first — code that walks blockers in a declared order and fills each to lethal is the pre-2024 rule
 
 ### State-Based Actions
 - [ ] SBAs must be checked after every event before any player receives priority — not just at end of turn
@@ -540,14 +543,17 @@ canAttackOrTap(permanent):
 ```
 assignCombatDamage(attacker, blockers):
   if attacker.hasKeyword(TRAMPLE):
+    // lethal counts damage already marked AND damage other creatures assign in this same step (CR 702.19b)
     lethalPerBlocker = blockers.map(b =>
-      attacker.hasKeyword(DEATHTOUCH) ? 1 : b.toughness - b.damage
+      max(0, attacker.hasKeyword(DEATHTOUCH) ? min(1, b.toughness - b.damage) : b.toughness - b.damage)
     )
     mustAssign = sum(lethalPerBlocker)
     trampleDamage = max(0, attacker.power - mustAssign)
-    // assign lethalPerBlocker to each blocker, trampleDamage to player/planeswalker
+    // assign lethalPerBlocker to each blocker, trampleDamage to the player/planeswalker/battle it is attacking
+    // (or pile extra onto blockers instead; only the lethal-first floor is mandatory)
   else:
-    // distribute attacker.power among blockers (attacker chooses order, must assign lethal to each before moving on)
+    // divide attacker.power among blockers however its controller chooses (CR 510.1c);
+    // no damage assignment order and no lethal-first requirement (removed in Foundations, Nov 2024)
 ```
 
 **Zone transition (new object rule)**
