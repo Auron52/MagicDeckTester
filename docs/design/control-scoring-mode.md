@@ -1209,6 +1209,16 @@ the rest.
   * **Gauntlet value leaves are fitted to blocker-free play.** In a replay with blockers they misprice exactly this
     exchange (cf. "turn-to-win does not price resources"). Until they are refitted with blockers, a gauntlet deck
     facing a blocker runs leafless (rollout beyond the horizon), and the cost of that is measured in stage 1.
+* **The USER's attack rule for the at-risk attackers (2026-11-27, verbatim):** "If you can attack and lose your
+  attacker, but the blocker goes down it might be worth it. Attacking in when only you lose it worth it only when
+  you can get through enough damage to either kill the opponent or put them on the ropes for next turn." As a
+  provider rule on the attackers the search would otherwise branch on:
+  * **A trade** (our block kills the attacker AND the blocker dies) stays a searched option.
+  * **A one-sided loss** (the attacker dies to the block and the blocker survives) is pruned UNLESS the attack's
+    damage through is lethal this turn or leaves the defender dead to next turn's attack ("on the ropes").
+  This is a heuristic prune, unlike the can't-die and interchangeable-attacker rules above, which are sound. It
+  is therefore checked against the unpruned search at a large budget on a held-out sample. A game it makes worse
+  is a counterexample, and the fix is to the rule's ranking. Its default is the USER's call on that measurement.
 * Attack-all stays as a reported upper bound on the blocker's value.
 
 **Q11 (2026-11-27). Blocking in goldfish.** Should the new block step also let the passive opponent's spawned
