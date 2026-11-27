@@ -8434,13 +8434,51 @@ extern thread_local bool g_line_hold_has_acts;
 extern thread_local int  g_line_reducer_credit;
 void AddManaCost(ManaCost& dst, const ManaCost& add);
 bool LineBillPayableFor(const GameState& s, const ManaCost& bill, bool for_creature);
-inline bool PayDrawPlayoutSpare(const GameState& state, int controller, const ManaCost& cost,
-                                const MihailPayChoices& choice)
+// ATTACK-READY MANA CREATURES ARE NOT SPARE BEFORE COMBAT (USER's rule, applied 2026-11-27: "If you don't have anything
+// else to use the mana for it should draw" -- an untapped, non-summoning-sick creature with power > 0 has another use
+// before combat: attacking). Smoke d0 gi130/185/226: the spare {G} tapped Llanowar Elves / Elvish Mystic / Priest of
+// Titania pre-combat and the attack lost 8->2, 13->7, 4->0. When the plain payment taps none of them, nothing changes
+// (the plain probe stands); when it taps one, the {G} must be payable with every such creature held, and the REAL
+// payment then holds the same set (`held`, card numbers). After combat: the plain payment.
+// Measured 2026-11-27 (paired, seed 9900001+gi): d0 -0.0085 (6 slower / 23 faster of 2000), std d5 b20 and 2HG d5 b20
+// +0.0000 (0 / 0 of 1500 and 750; units -0.53% / -0.41%).
+inline void PayDrawSetTapped(GameState& s, const std::vector<int>& nums, bool tapped)
 {
+    for (int num : nums)
+    {
+        for (Permanent& q : s.battlefield) { if (q.card.m_number == num) { q.tapped = tapped; break; } }
+    }
+}
+inline bool PayDrawPlayoutSpare(const GameState& state, int controller, const ManaCost& cost,
+                                const MihailPayChoices& choice, std::vector<int>* held_out = nullptr)
+{
+    if (held_out != nullptr) { held_out->clear(); }
     if (state.players[controller].library.empty()) { return false; }
     TapSpeculationScope _spec;   // a probe: no play events from its payment (pain, Manabarbs)
     GameState probe = state;
     if (!TapForCostDirect(probe, cost, /*for_creature=*/false)) { return false; }
+    if (choice.SparePreCombat())
+    {
+        std::vector<int> ready;   // untapped attack-ready creatures with power > 0
+        bool tapped_one = false;
+        for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index != controller) { continue; }
+            if (!CanAttackFull(q, state.battlefield, controller) || CombatPowerOf(q, state) <= 0) { continue; }
+            ready.push_back(q.card.m_number);
+            if (i < probe.battlefield.size() && probe.battlefield[i].card.m_number == q.card.m_number
+                && probe.battlefield[i].tapped) { tapped_one = true; }
+        }
+        if (tapped_one)
+        {
+            probe = state;
+            PayDrawSetTapped(probe, ready, true);
+            if (!TapForCostDirect(probe, cost, /*for_creature=*/false)) { return false; }   // only an attacker pays
+            PayDrawSetTapped(probe, ready, false);
+            if (held_out != nullptr) { *held_out = ready; }
+        }
+    }
     ManaCost bill = g_line_unpaid_cost;
     if (g_line_reducer_credit > 0) { bill.generic = std::max(0, bill.generic - g_line_reducer_credit); }
     if (!g_line_hold_has_acts) { AddManaCost(bill, choice.SpareReserve()); }
@@ -8769,9 +8807,10 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
                 const ManaCost& cost = *def->params.cast_subtype_pay_draw_cost;
                 const std::size_t ordinal = state.scripted_mihail_trigger_ordinal++;
                 bool pay = state.scripted_mihail_pay_choice.Paid(ordinal);
+                std::vector<int> pay_held;   // attack-ready creatures the spare payment must not tap
                 // Beyond the horizon (a greedy plan's pay_spare): an unpinned trigger pays when the {G} is spare.
                 if (!pay && !state.scripted_mihail_pay_choice.IsPinned() && state.scripted_mihail_pay_choice.PaySpare())
-                { pay = PayDrawPlayoutSpare(state, active, cost, state.scripted_mihail_pay_choice); }
+                { pay = PayDrawPlayoutSpare(state, active, cost, state.scripted_mihail_pay_choice, &pay_held); }
                 if (g_play_dig_chooser != nullptr && !g_tap_speculating)
                 {
                     GameState probe = state;
@@ -8791,7 +8830,14 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
                     }
                 }
                 Player& vp = state.players[active];
-                if (pay && !vp.library.empty() && TapForCostDirect(state, cost, false))
+                bool paid_ok = false;
+                if (pay && !vp.library.empty())
+                {
+                    PayDrawSetTapped(state, pay_held, true);    // empty unless the spare test held attackers
+                    paid_ok = TapForCostDirect(state, cost, false);
+                    PayDrawSetTapped(state, pay_held, false);
+                }
+                if (paid_ok)
                 {
                     const std::size_t before = vp.hand.size();
                     vp.cards_drawn_this_turn += DrawIntoHand(state, active, 1, HandEntryReason::Draw);

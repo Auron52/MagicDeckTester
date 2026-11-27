@@ -1114,6 +1114,34 @@ TEST_CASE("Leaf-Crowned Visionary beyond the horizon: before combat the {G} may 
     CHECK(EFire(s, ESpare(true)) == 1u);
 }
 
+TEST_CASE("Leaf-Crowned Visionary beyond the horizon: before combat the {G} may not tap an attack-ready creature")
+{
+    // USER: "If you don't have anything else to use the mana for it should draw" -- an attack-ready dork's other use
+    // before combat is attacking (smoke d0 gi130: Llanowar Elves + Elvish Mystic tapped for draws, attack 8 -> 2).
+    GameState s = EBase();
+    EPut(s, "Leaf-Crowned Visionary", 1);
+    const int dork = EPut(s, "Llanowar Elves", 2);
+    // The only {G} is the attack-ready dork: decline before combat, pay after.
+    CHECK(EFire(s, ESpare(true)) == 0u);
+    CHECK(EFire(s, ESpare(false)) == 1u);
+    // A summoning-sick dork cannot attack: its {G} is spare... except it cannot tap either; a Forest beside it pays.
+    {
+        GameState t = EBase();
+        EPut(t, "Leaf-Crowned Visionary", 1);
+        EPut(t, "Llanowar Elves", 2, /*tapped=*/false, /*sick=*/true);
+        EForests(t, 1);
+        CHECK(EFire(t, ESpare(true)) == 1u);
+    }
+    // A Forest beside the attack-ready dork: pay, and the dork stays untapped to attack.
+    {
+        GameState t = s; EForests(t, 1);
+        t.scripted_mihail_pay_choice = ESpare(true);
+        FireOnCastTriggers(t, ED("Llanowar Elves"), /*mana_spent=*/1);
+        CHECK(t.players[0].hand.size() == 1u);
+        CHECK_FALSE(t.battlefield[static_cast<std::size_t>(dork)].tapped);
+    }
+}
+
 TEST_CASE("Leaf-Crowned Visionary beyond the horizon: greedy Solve marks its plan; both worlds draw the same card")
 {
     GameState s = EBase();
