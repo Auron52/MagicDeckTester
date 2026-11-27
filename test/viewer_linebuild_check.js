@@ -616,6 +616,64 @@ function checkKickerToken() {
   return fails;
 }
 
+// MULTIKICKER / SQUAD DIALOG (Joraga Warcaller, Galadhrim Brigade). USER 2026-11-27: the badge's
+// click-to-cycle "works, but I would consider it non-intuitive ... It's probably better just to pop up a
+// dialog". The dialog's plan edit is LB.setKickCount: set ONE queued cast's count to exactly K (0 =
+// unkicked), queue the cast when none is, never duplicate (the toggleKicker safety property).
+function checkSetKickCount() {
+  const fails = [];
+  const W = { name: 'Joraga Warcaller', kind: 'permanent' };
+  const enc = (plan) => LB.encodeLine(plan);
+  // From EMPTY: K = 3 queues one cast kicked three times.
+  let r = LB.setKickCount([], W.name, W.kind, 3);
+  if (r.action !== 'queued' || r.plan.length !== 1 || !r.plan[0].kicked || r.plan[0].kickCount !== 3)
+    fails.push(`K=3 from empty gave action=${r.action}, plan=${JSON.stringify(r.plan)}`);
+  if (enc(r.plan) !== 'cast=Joraga Warcaller;kicked=Joraga Warcaller x3')
+    fails.push(`K=3 encoded "${enc(r.plan)}"`);
+  // From EMPTY: K = 0 queues the PLAIN cast (no kicked flag, no stray token).
+  r = LB.setKickCount([], W.name, W.kind, 0);
+  if (r.action !== 'queued' || r.plan.length !== 1 || r.plan[0].kicked || 'kickCount' in r.plan[0])
+    fails.push(`K=0 from empty gave ${JSON.stringify(r.plan)}`);
+  if (enc(r.plan) !== 'cast=Joraga Warcaller') fails.push(`K=0 encoded "${enc(r.plan)}"`);
+  // Over a queued cast: set IN PLACE (any K, not only the next one -- 0 -> 5 directly), never append.
+  r = LB.setKickCount([{ ...W }], W.name, W.kind, 5);
+  if (r.action !== 'kicked' || r.plan.length !== 1 || r.plan[0].kickCount !== 5)
+    fails.push(`K=5 over a queued cast gave ${JSON.stringify(r.plan)}`);
+  // ...lowered 5 -> 2, then back to 0 (unkicked, both fields gone, cast still queued).
+  r = LB.setKickCount(r.plan, W.name, W.kind, 2);
+  if (r.action !== 'kicked' || r.plan.length !== 1 || r.plan[0].kickCount !== 2)
+    fails.push(`K 5->2 gave ${JSON.stringify(r.plan)}`);
+  r = LB.setKickCount(r.plan, W.name, W.kind, 0);
+  if (r.action !== 'unkicked' || r.plan.length !== 1 || r.plan[0].kicked || 'kickCount' in r.plan[0])
+    fails.push(`K 2->0 gave ${JSON.stringify(r.plan)}`);
+  // Two copies queued: `which` picks the copy; the default is the LAST (toggleKicker's target).
+  r = LB.setKickCount([{ ...W }, { ...W }], W.name, W.kind, 4);
+  if ((r.plan[0] || {}).kicked || (r.plan[1] || {}).kickCount !== 4)
+    fails.push(`default target with two copies gave ${JSON.stringify(r.plan)}`);
+  r = LB.setKickCount(r.plan, W.name, W.kind, 1, 0);
+  if ((r.plan[0] || {}).kickCount !== 1 || (r.plan[1] || {}).kickCount !== 4 || r.plan.length !== 2)
+    fails.push(`which=0 with two copies gave ${JSON.stringify(r.plan)}`);
+  if (enc(r.plan) !== 'cast=Joraga Warcaller;cast=Joraga Warcaller;kicked=Joraga Warcaller x1;kicked=Joraga Warcaller x4')
+    fails.push(`two kicked copies encoded "${enc(r.plan)}"`);
+  // An out-of-range `which` falls back to the last copy rather than throwing or appending.
+  r = LB.setKickCount([{ ...W }, { ...W }], W.name, W.kind, 2, 7);
+  if (r.plan.length !== 2 || (r.plan[1] || {}).kickCount !== 2)
+    fails.push(`which=7 gave ${JSON.stringify(r.plan)}`);
+  // A same-named ACTIVATION or LAND is never the cast edited; the dialog appends a cast instead.
+  r = LB.setKickCount([{ name: W.name, src: W.name, kind: 'activate' }], W.name, W.kind, 2);
+  if (r.action !== 'queued' || r.plan.length !== 2 || r.plan[0].kicked || r.plan[1].kickCount !== 2)
+    fails.push(`a same-named activation was edited: ${JSON.stringify(r.plan)}`);
+  // queuedCastIdxs (the dialog's rows) skips the activation and keeps queue order.
+  const q = LB.queuedCastIdxs([{ ...W }, { name: 'Forest', kind: 'land' }, { name: W.name, src: W.name, kind: 'activate' }, { ...W }], W.name);
+  if (JSON.stringify(q) !== '[0,3]') fails.push(`queuedCastIdxs gave ${JSON.stringify(q)}, expected [0,3]`);
+  // Garbage K (a dataset string, a negative) is clamped, never written raw into the line.
+  r = LB.setKickCount([], W.name, W.kind, '3');
+  if (r.plan[0].kickCount !== 3) fails.push(`K="3" gave ${JSON.stringify(r.plan)}`);
+  r = LB.setKickCount([{ ...W, kicked: true, kickCount: 2 }], W.name, W.kind, -1);
+  if (r.plan[0].kicked) fails.push(`K=-1 left ${JSON.stringify(r.plan)}`);
+  return fails;
+}
+
 function checkMultipleSuspends() {
   const fails = [];
   const decision = { me: { hand: [
@@ -1554,6 +1612,10 @@ function main() {
   kickFails.forEach(m => console.log(`  FAIL  kicker: ${m}`));
   console.log(`Viewer kicker: ${kickFails.length ? 'WRONG' : 'cast=+kicked= per kicked copy; the badge toggles in place and never over-queues'} ` +
               `(${kickFails.length} FAIL)`);
+  const setKickFails = checkSetKickCount();
+  setKickFails.forEach(m => console.log(`  FAIL  multikick dialog: ${m}`));
+  console.log(`Viewer multikick dialog: ${setKickFails.length ? 'WRONG' : 'setKickCount sets one queued cast to exactly K (0 = unkicked), queues when none is, never duplicates'} ` +
+              `(${setKickFails.length} FAIL)`);
   const morphFails = checkMorph();
   morphFails.forEach(m => console.log(`  FAIL  morph: ${m}`));
   console.log(`Viewer morph: ${morphFails.length ? 'WRONG' : 'cast=+facedown=/facedownup= per mode, +facedown step suffixes, face_up= flips; the badge sets the mode in place'} ` +
@@ -1572,7 +1634,7 @@ function main() {
               `(${fetchSuspendFails.length} FAIL)`);
   return (fail + dimFails.length + repFails.length + digFails.length + landFails.length + sacFails.length + borosFails.length + exproFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
-          + tapFails.length + topFails.length + topSpellFails.length + posFails.length + kickFails.length + morphFails.length
+          + tapFails.length + topFails.length + topSpellFails.length + posFails.length + kickFails.length + setKickFails.length + morphFails.length
           + suspendFails.length + fetchSuspendFails.length + landAfterFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
 }
 

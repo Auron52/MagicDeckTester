@@ -1359,16 +1359,24 @@ function kickerSources() {
   (d.plans || []).forEach(p => (p.actions || []).forEach(a => {
     if (a && a.kicked && a.card) out[a.card] = a.kicked_cost_mv != null
       ? (a.kick_count > 0 ? a.kicked_cost_mv / a.kick_count : a.kicked_cost_mv) : 0; }));   // multikick: per kick
+  // A multikick card the capped `plans` subset happens to list no kicked row for is still kickable: the
+  // engine's `multikick_cost_mv` (per kick, off the FULL enumeration) supplies the badge.
+  const mc = d.multikick_cost_mv || {};
+  Object.keys(mc).forEach(n => { if (!(n in out)) out[n] = mc[n]; });
   S._kickFor = d.decision_index; S._kick = out;
   return out;
 }
 function kickedCountFor(name) { return S.plan.filter(p => p.kicked && p.name === name).length; }
-// MULTIKICKER / SQUAD (Joraga Warcaller, Galadhrim Brigade): the largest kick count K the engine enumerated
-// for this card this decision (main.cpp `kick_count`); 0 = a single kicker (or none). The badge then CYCLES
-// K on the last queued cast (LB.toggleKicker's kmax branch) and shows the count.
+// MULTIKICKER / SQUAD (Joraga Warcaller, Galadhrim Brigade): the largest kick count K payable for this card
+// this decision; 0 = a single kicker (or none). The engine's `multikick_max` is read off the FULL
+// enumeration -- the `plans` array is a capped/collapsed subset with gaps (seed 1 T4 listed Warcaller-alone
+// only at K=1 and K=5), so scanning it is only the fallback for a decision dumped before that field. The
+// badge opens the kick-count dialog (openKickDialog), which offers every K = 0..max.
 function kickerMaxK(name) {
   const d = S.decision;
   if (!d || d.type !== 'main_phase') return 0;
+  const mm = d.multikick_max;
+  if (mm && Object.prototype.hasOwnProperty.call(mm, name)) return mm[name] || 0;
   let m = 0;
   (d.plans || []).forEach(p => (p.actions || []).forEach(a => {
     if (a && a.kicked && a.card === name && a.kick_count > m) m = a.kick_count; }));
@@ -1377,6 +1385,53 @@ function kickerMaxK(name) {
 function kickedKFor(name) {
   const q = S.plan.filter(p => p.kicked && p.name === name);
   return q.length ? (q[q.length - 1].kickCount || 0) : 0;
+}
+// The K each queued cast of a multikick card carries (0 = unkicked), in queue order.
+function queuedKicks(name) {
+  return LB.queuedCastIdxs(S.plan, name).map(i => S.plan[i].kicked ? (S.plan[i].kickCount || 1) : 0);
+}
+// Badge text for a multikick card: "⊕ kick…" until a kicked cast is queued, then "⊕ kicked ×K (+mana)"
+// (one ×K per queued copy, e.g. "×3 / ×0" with two copies), so the chosen count is visible on the thumb.
+function multikickBadgeLabel(name) {
+  const ks = queuedKicks(name);
+  if (!ks.some(k => k > 0)) return 'kick…';
+  const per = kickerSources()[name] || 0, tot = ks.reduce((a, k) => a + k, 0) * per;
+  return `kicked ${ks.map(k => '×' + k).join(' / ')}${tot ? ` (+${tot})` : ''}`;
+}
+// MULTIKICKER / SQUAD kick-count dialog (USER 2026-11-27: the badge's click-to-cycle "works, but I would
+// consider it non-intuitive ... It's probably better just to pop up a dialog"). One button per K = 0..max
+// (max = kickerMaxK, the engine's full-enumeration `multikick_max`), each priced K x the per-kick mana.
+// Choosing K is LB.setKickCount: it queues the cast when none is (K = 0 = the plain cast) or sets the
+// count on the queued one; with two copies queued there is one row per copy. Cancel changes nothing.
+// The look is the central #decpanel modal every chooser here uses (dimhead + pbtns, as the dig picker).
+function openKickDialog(nm, kd) {
+  const kmax = kickerMaxK(nm), per = kickerSources()[nm] || 0;
+  const panel = $('decpanel'), back = $('decback');
+  const idxs = LB.queuedCastIdxs(S.plan, nm);
+  const rows = idxs.length ? queuedKicks(nm).map((cur, w) => ({ w, cur })) : [{ w: -1, cur: -1 }];
+  back.className = 'modal'; back.style.display = 'block'; panel.className = 'show modal';
+  let h = `<div class="dimhead">${cardMini(nm, 'dimsrc')}<div class="dimtext">` +
+          `<h3>${esc(nm)}: how many times to kick?</h3>` +
+          `<div class="sub">Each kick adds <b>+${per}</b> mana. Up to <b>${kmax}</b> kick${kmax === 1 ? '' : 's'} can be paid this turn` +
+          `${idxs.length ? '' : '; choosing a count queues the cast'}. ×0 casts it unkicked.</div></div></div>`;
+  rows.forEach(r => {
+    if (rows.length > 1) h += `<div class="sub">Queued copy ${r.w + 1}${r.cur > 0 ? ` (now ×${r.cur})` : ' (now unkicked)'}</div>`;
+    h += `<div class="pbtns" style="flex-wrap:wrap">`;
+    for (let k = 0; k <= kmax; k++)
+      h += `<button class="${k === r.cur ? 'primary' : 'ghost'}" data-k="${k}" data-w="${r.w}">×${k}` +
+           `${k ? ` (+${k * per})` : ' unkicked'}</button>`;
+    h += `</div>`;
+  });
+  h += `<div class="pbtns"><span class="spacer"></span><button id="kickcancel" class="ghost">Cancel</button></div>`;
+  panel.innerHTML = h;
+  panel.querySelectorAll('button[data-k]').forEach(b => b.onclick = () => {
+    const k = +b.dataset.k, w = +b.dataset.w;
+    S.plan = LB.setKickCount(S.plan, nm, kd, k, w >= 0 ? w : null).plan;
+    hideDecPanel();
+    flashHint(k > 0 ? `Kicking ${nm} ×${k} (+${k * per} mana).` : `Casting ${nm} unkicked.`);
+    renderBoard();
+  });
+  $('kickcancel').onclick = () => { hideDecPanel(); renderBoard(); };
 }
 // MORPH / MEGAMORPH (CR 702.37a -- Den Protector, Hystrodon, Blistering Firecat). The kicker case once
 // more: the hard cast, the FACE-DOWN cast ({3}, a nameless 2/2; main.cpp `face_down: 1`) and the face-down
@@ -3163,7 +3218,7 @@ function renderHand() {
       // cast (see the handler), which is why it reads "kicked" rather than naming a second spell.
       // ⊕ is the glyph because kicker is an ADDITIONAL cost (CR 601.2b) -- it adds, it does not
       // replace -- and because ⚡/🗺/⌛ are taken by channel, adventure and suspend on this same thumb.
-      (canKick?`<span class="landface" data-kick="${esc(c.name)}" title="${c.name==='Silvergill Adept'?'PAY INSTEAD — pay {3} rather than reveal a Merfolk card':`KICKER — pay ${esc(c.name)}'s additional cost${kickMv[c.name]?` (+${kickMv[c.name]} mana)`:''} for the bigger effect`}. This toggles the paid cast${kickN?', click again to take it back':''}">⊕ ${c.name==='Silvergill Adept'?'pay {3}':`kicked${kickMv[c.name]?` (+${kickMv[c.name]})`:''}`}${kickN>1?` ×${kickN}`:''}${kickerMaxK(c.name)>0?` [${kickedKFor(c.name)}/${kickerMaxK(c.name)} kicks]`:''}</span>`:'')+
+      (canKick?`<span class="landface" data-kick="${esc(c.name)}" title="${kickerMaxK(c.name)>0?`MULTIKICKER — click to choose how many times to kick ${esc(c.name)} (0 to ${kickerMaxK(c.name)}, +${kickMv[c.name]||0} mana each)`:c.name==='Silvergill Adept'?'PAY INSTEAD — pay {3} rather than reveal a Merfolk card':`KICKER — pay ${esc(c.name)}'s additional cost${kickMv[c.name]?` (+${kickMv[c.name]} mana)`:''} for the bigger effect`}. This toggles the paid cast${kickN?', click again to take it back':''}">⊕ ${c.name==='Silvergill Adept'?'pay {3}':kickerMaxK(c.name)>0?multikickBadgeLabel(c.name):`kicked${kickMv[c.name]?` (+${kickMv[c.name]})`:''}${kickN>1?` ×${kickN}`:''}`}</span>`:'')+
       // MORPH: the kicker badge's twins (same toggle contract -- they set the MODE of a queued cast).
       // ▽ = face down; the hard cast stays the thumb's own click.
       (fdSrc.fd1?`<span class="landface" data-facedown="${esc(c.name)}" title="MORPH — cast ${esc(c.name)} FACE DOWN for {3} as a nameless 2/2 (turn it face up later for its morph cost: click it on the battlefield during your main phase, or at the opponent's end step). This toggles the queued cast${fd1N?', click again to cast it face up instead':''}">▽ face down {3}${fd1N>1?` ×${fd1N}`:''}</span>`:'')+
@@ -3287,9 +3342,11 @@ function renderHand() {
     b.onclick = e => { e.stopPropagation(); e.preventDefault();
       const nm = b.dataset.kick;
       const kd = (b.closest('.thumb') || {}).dataset ? b.closest('.thumb').dataset.kind : 'permanent';
+      // Multikicker / squad: a count, not a toggle -> the kick-count dialog (openKickDialog).
+      if (kickerMaxK(nm) > 0) { openKickDialog(nm, kd); return; }
       const mv = kickerSources()[nm];
       const paid = mv ? ` (+${mv} mana)` : '';
-      const r = LB.toggleKicker(S.plan, nm, kd, kickerMaxK(nm));
+      const r = LB.toggleKicker(S.plan, nm, kd, 0);
       S.plan = r.plan;
       if (nm === 'Silvergill Adept') {
         flashHint(r.action === 'kicked' ? 'Paying {3} instead of revealing a Merfolk card.'
