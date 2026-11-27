@@ -666,6 +666,53 @@ Train a small model offline, the way the value leaf is trained, on injection run
 * **Is it worth it over the table?** Only where stacking matters. Section 8 says whether it does, and by how
   much.
 
+### 5.6 Blocking as a control effect (USER idea, 2026-11-27; proposed, not built)
+
+USER, verbatim: "It's a bit of a mess, but I wonder whether this design should finally implement blocking. Control
+decks in particular rarely are the aggressors early, but they do judiciously block attackers, particularly from
+aggressive decks, so it might make sense to include the effectiveness of dropping a blocker."
+
+**Where the engine stands.** There is no blocking anywhere. `Step::DeclareBlockers` (`src/core/GameState.h`) is an
+unused enum value, `src/ai/Combat.cpp` has no declare-blockers step, and the attack policy is "attack with
+everything that can attack (no blockers)" (`src/ai/DecisionProviders.cpp`). Every attacker's power reaches the
+player. `docs/design/fungus-blocker-exposure-2026-10-15.md` measured what that costs on the goldfish side.
+
+**Why it fits this design.** A blocker is one more effect in the schedule: "creature X, from round t". In the
+gauntlet replay the gauntlet deck attacks into it, and the replay measures the delay to its kill exactly as for
+a removal spell. The objective, the floor, the per-deck partial scores, the mapping and the fixed-seed baselines
+(sections 4 and 7.5) need no change. It matters most against the creature decks: a burn deck is barely slowed
+by a wall. It also matters for Enchanted Evening: under Opalescence its enchantments are creatures and so are
+blockers, which is part of why the USER finds Parallax Wave followed by Opalescence so strong.
+
+**What it needs, in order:**
+1. **A rules-correct declare-blockers step** in `Combat.cpp`, from the mtg-rules skill, never from memory:
+   evasion (flying/reach, menace, can't be blocked), multiple blockers, first and double strike, trample and
+   deathtouch damage assignment, lifelink, and the combat-damage triggers already in the card pool. The 2HG and
+   viewer paths must keep their current behaviour while blocking is off for them.
+2. **The defender's block choice** (our creature in the gauntlet replay). By the Q3/Q8 rulings, the scored
+   variant is clairvoyant: try the legal block assignments and keep the one that delays the gauntlet deck most.
+   Boards are small, so that is a bounded enumeration. The reported non-clairvoyant variant is the mtg-ai skill's
+   basic rule: chump only to prevent lethal, otherwise block when the trade is even or better.
+3. **The attacker's choice against blockers** (the gauntlet deck). This is the messy part. "Attack with
+   everything" sends a 1/1 into a 4/4 wall every turn, which over-credits the blocker. Options: (a) keep attack-all,
+   as an upper bound only; (b) a provider rule that holds back an attacker that would die to a block without
+   killing or dealing damage; (c) search over attack subsets. Option (c) is a new search capability, and it is
+   the one real 1v1 needs anyway.
+4. **Mapping keys** gain creature effects (power, toughness, the keywords that matter in combat, entry round,
+   and leaving play). Blockers interact (two walls are not two times one wall), so this falls under the
+   interaction terms of section 7.5 levels 2-3, not the pure sum.
+
+**What stays wrong (open loop, section 5.4).** A blocker that dies in the gauntlet replay is still alive in our
+own game, so our own W can count on it attacking or blocking later. That is mild for a control deck that rarely
+attacks, and only co-simulation (design C) removes it.
+
+**The same step serves goldfish and 1v1, but switching it on there is a separate decision.** Once the step
+exists, goldfish could let the passive opponent's spawned creatures block our attackers (the Fungus doc's case).
+That would move every deck's ground truth, so it is not part of this design unless the USER asks for it.
+
+**Related control effects that take the same route:** life gain, damage prevention (fogs), and removal of an
+attacker mid-combat. Each one changes how much of the gauntlet deck's damage lands, which the replay measures.
+
 ## 6. What none of these designs fixes
 
 ### 6.1 The gauntlet is goldfish-fast
@@ -1098,6 +1145,16 @@ first counterspell list the USER supplies. Counter targeting, both variants:
   goes on and as counters and mana run short, so a lesser spell is let through to keep a counter for a bigger
   threat. The threshold schedule is fitted offline per control deck, not hand-set. It replaces the earlier
   draft rule (the first spell at or above the gauntlet deck's median mana value).
+
+**Q10 (2026-11-27). The gauntlet deck's attacks once blockers exist (section 5.6, step 3).** (a) keep attack-all,
+which over-credits blockers; (b) a provider rule that holds back an attacker that would die to a block for
+nothing; (c) a searched choice of attackers, a new search capability that real 1v1 also needs. Default: (b) for
+the first build, with (a) reported beside it as the upper bound, and (c) when 1v1 work starts. Reason: (b) is
+small and removes the worst over-credit, and (c) is most of a 1v1 attack search.
+
+**Q11 (2026-11-27). Blocking in goldfish.** Should the new block step also let the passive opponent's spawned
+creatures block our attackers in ordinary goldfish games? Default: no, control-mode replays only. Reason: it
+changes every deck's ground truth and the meaning of every goldfish number so far, which is a separate decision.
 
 **Q9. Is the per-pair form of section 4.1 what you mean by "<win turn - average control impact>"?** The design
 scores each (control game, gauntlet game) pair as `min over prefixes k of max(T_k, W - D_k)` and only then
