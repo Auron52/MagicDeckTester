@@ -790,9 +790,9 @@ repo's standing split: a provider may RESTRICT or ORDER the block options, and t
 own game, so our own W can count on it attacking or blocking later. That is mild for a control deck that rarely
 attacks, and only co-simulation (design C) removes it.
 
-**The same step serves goldfish and 1v1, but switching it on there is a separate decision.** Once the step
+**The same step serves 1v1 later; goldfish never gets it (USER 2026-11-27, Q11).** Once the step
 exists, goldfish could let the passive opponent's spawned creatures block our attackers (the Fungus doc's case).
-That would move every deck's ground truth, so it is not part of this design unless the USER asks for it.
+The USER ruled it out: normal goldfish games stay blocker-free, and their ground truth does not move.
 
 **Related control effects that take the same route:** life gain, damage prevention (fogs), and removal of an
 attacker mid-combat. Each one changes how much of the gauntlet deck's damage lands, which the replay measures.
@@ -1375,6 +1375,20 @@ the rest.
 **Q11 (2026-11-27). Blocking in goldfish.** Should the new block step also let the passive opponent's spawned
 creatures block our attackers in ordinary goldfish games? Default: no, control-mode replays only. Reason: it
 changes every deck's ground truth and the meaning of every goldfish number so far, which is a separate decision.
+
+*USER answer (2026-11-27), verbatim:* "No, we aren't changing normal goldfish games, but we may set up other decks to use
+this new control scored mode as well. I imagine in screens we could use a combination of both and in the future
+1v1 and the other two modes. For decks that are control heavy we would only use 1v1 and this new mode." ->
+Blocking is never switched on in goldfish games. Goldfish ground truth is untouched by this design. The modes per
+deck:
+* **Goldfish** (`goldfish`, default true): as today.
+* **Control-scored** (`control_score`): this design. Other decks may opt in beside goldfish, for example decks that
+  run some control cards.
+* **1v1** (a future key): when it exists.
+* **Control-heavy decks** (Enchanted Evening first) use only control-scored and 1v1, with `goldfish: false`.
+* **Screens** (`deck_compare.py`) on a deck with more than one mode run each mode it has and report each mode's
+  result side by side. The USER said "a combination"; until the USER gives a rule for combining them (weights, or
+  which mode decides), a screen's verdict lists every mode's number and does not blend them.
 
 **Q9. Is the per-pair form of section 4.1 what you mean by "<win turn - average control impact>"?** The design
 scores each (control game, gauntlet game) pair as `min over prefixes k of max(T_k, W - D_k)` and only then
