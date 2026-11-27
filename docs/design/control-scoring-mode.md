@@ -1200,6 +1200,15 @@ the rest.
   therefore predicts our blocks with the non-clairvoyant block rule (section 5.6). The replay itself then uses
   the scored block choice. That mismatch is stated, not hidden. This is the opponent's behaviour as seen from
   the attacker's search, not a greedy pick for the searching side.
+* **What the search weighs (USER 2026-11-27, verbatim):** "Essentially, it is the question of what you lose vs the
+  opponent in terms of resources or health." The gauntlet deck's kill-turn objective prices all three: damage
+  through brings its kill closer, a lost attacker pushes it back, and our blocker dying removes future blocks,
+  which also brings it closer. Inside the search window that is exact. Beyond it, two things need care:
+  * **The playout must block.** The rollout beyond the horizon plays combat with the same provider attack rule and
+    our non-clairvoyant block rule, or it will value every attack as free again.
+  * **Gauntlet value leaves are fitted to blocker-free play.** In a replay with blockers they misprice exactly this
+    exchange (cf. "turn-to-win does not price resources"). Until they are refitted with blockers, a gauntlet deck
+    facing a blocker runs leafless (rollout beyond the horizon), and the cost of that is measured in stage 1.
 * Attack-all stays as a reported upper bound on the blocker's value.
 
 **Q11 (2026-11-27). Blocking in goldfish.** Should the new block step also let the passive opponent's spawned
