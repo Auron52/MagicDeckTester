@@ -8841,6 +8841,43 @@ static bool BeastsLordReducerOrderDomain(const GameState& state, const std::vect
     return lord && reducer;
 }
 
+// A sacrifice ritual can be ranked after the spell it funds. The apply-side payable-order
+// decider admits rituals, but its aggregate payment walk cannot account for the creature
+// sacrificed at cast. Price alternate orders with the sequential walk in both the menu and
+// the executor, so Culling the Weak can fund a same-line Undead Warchief.
+static bool SacRitualOrderDomain(const std::vector<Action>& acts, const std::vector<int>& order)
+{
+    if (order.size() < 2) { return false; }
+    for (int j : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::CastFromHand && a.def != nullptr
+            && a.def->params.sac_additional_creature && a.def->params.ritual_floating_mana > 0)
+        { return true; }
+    }
+    return false;
+}
+
+// A ritual and a same-line spell reducer can need either order: float first to pay the
+// reducer, then the reducer first for the discounted spell. The aggregate decider declines
+// dynamic discounts, so the sequential walk must price the permutations directly.
+static bool RitualReducerOrderDomain(const std::vector<Action>& acts, const std::vector<int>& order)
+{
+    if (order.size() < 2) { return false; }
+    bool ritual = false, reducer = false;
+    for (int j : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr) { continue; }
+        ritual |= d->params.ritual_floating_mana > 0;
+        reducer |= !d->params.reduces_spell_subtype.empty() || !d->params.reduces_spell_color.empty()
+                   || d->params.chooses_creature_type;
+    }
+    return ritual && reducer;
+}
+
 static void ComputeAvailableColors(const GameState& state, bool have[5], bool pending_auras = true)
 {
     have[0] = have[1] = have[2] = have[3] = have[4] = false;
@@ -13352,6 +13389,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     int walk_pos = -1;   // index into `ord` of the cast being paid (reported through fail_at)
     static const bool _dbg = EnvOn("MTG_DBG_SEQ");   // the same static read as the caller's
     const DecisionProvider& prov = ResolveProvider(state);
+    const bool sac_ritual_line = SacRitualOrderDomain(cands, ord);
     // Warm per-thread scratch board, same contract as SubsetPayableWithFilters' (see PayScratch):
     // this probe is the same shape -- a full GameState copy on entry, thrown away on return.
     PayScratch _pay_scratch(state);
@@ -13485,6 +13523,16 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         // so the reduction applies to the summed cost (CR 601.2f order). Identity for every other
         // card and for an unkicked cast.
         const CardDefinition& def = *KickedFaceOr(a.def, a.kicked, a.kick_count);
+        if (sac_ritual_line && def.params.sac_additional_creature
+            && def.params.ritual_floating_mana > 0)
+        {
+            const bool has_victim = std::any_of(cp.battlefield.begin(), cp.battlefield.end(),
+                                               [&](const Permanent& p)
+            { return p.controller_index == cp.active_player_index && p.card.IsCreature()
+                     && (a.soulfire_own_targets <= 0 || p.card.m_number == a.soulfire_own_targets); });
+            if (!has_victim)
+            { if (fail_at != nullptr) { *fail_at = walk_pos; } return false; }
+        }
         // MTG_PO_DAMAGE_ORDER: a Needle Drop with no target dealt damage this turn cannot be cast (the apply's
         // DamagedTargetCastLegal refuses it before paying), so this order fails here.
         if (t_seq_walk_damage && def.params.target_dealt_damage_this_turn
@@ -13655,6 +13703,10 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         }
         // Resolve the cast's mana-relevant effects so they fund the NEXT payment. Anything not
         // modelled here simply earns no credit (under-optimistic -> fewer rescues, never unsound).
+        if (sac_ritual_line && def.params.sac_additional_creature
+            && def.params.ritual_floating_mana > 0)
+        { PerformSacrificeCreatureCost(cp, def.card.m_name.str(), def.params.sac_additional_creature_color,
+                                       a.soulfire_own_targets, /*readiness_route=*/true); }
         if (IsManaRitual(def)) { ApplyRitualFloat(cp, def, a.chosen_x, a.splice_count + 1); }
         // Apex adds ten mana only when cast from the hand. A second visible hand cast in the
         // same selected line can spend it even though the first Apex opens a draw breakpoint.
@@ -13799,6 +13851,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         }
         const bool joins_for_mana = (def.params.mana_rock && !def.card.IsCreature()
                                      && !def.params.lens_imprint_land)
+                                 || (sac_ritual_line && def.card.IsCreature())
                                  || def.params.hinata_cost_reducer
                                  || !def.params.reduces_spell_subtype.empty()
                                  || def.params.chooses_creature_type
@@ -13817,6 +13870,22 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             Permanent perm;
             // A kicked face's cost holds its kicker; devotion counts the printed card that enters (DevotionCardOf).
             perm.card             = grows_devotion ? DevotionCardOf(def) : def.card;
+            if (sac_ritual_line && def.card.IsCreature())
+            {
+                int wanted_id = 0;
+                for (int k : ord)
+                {
+                    const Action& sac = cands[static_cast<std::size_t>(k)];
+                    if (sac.trick_hand_target == a.card_name.str() && sac.soulfire_own_targets > 0)
+                    { wanted_id = sac.soulfire_own_targets; break; }
+                }
+                for (const Card& h : cp.players[cp.active_player_index].hand)
+                {
+                    if (h.m_name != a.card_name || (wanted_id > 0 && h.m_number != wanted_id)) { continue; }
+                    perm.card.m_number = h.m_number;   // hand cards carry identity; definition carries types
+                    break;
+                }
+            }
             perm.controller_index = cp.active_player_index;
             perm.owner_index      = cp.active_player_index;
             if (enter_haste_for_mana)
@@ -14954,7 +15023,9 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
                                 { return SeqWalkUnlockEquip(state, cands[static_cast<std::size_t>(j)]); }))
             || DevotionOrderDomain(state, cands, order)
             || EtbPutReducerOrderDomain(state, cands, order)
-            || BeastsLordReducerOrderDomain(state, cands, order));
+            || BeastsLordReducerOrderDomain(state, cands, order)
+            || SacRitualOrderDomain(cands, order)
+            || RitualReducerOrderDomain(cands, order));
     // MTG_UO_FOLD (DEFAULT ON; =0 -> the given walk, the ETB retry and the unlock-order search run one after the
     // other, as before). In the unlock-order domain this site's verdict is "the given order pays, or the ETB order
     // does, or some other class order does" -- an OR over walks, so the order they are tried in is free. The given
@@ -15205,7 +15276,9 @@ bool TurnSolver::UnlockPayableOrder(const GameState& state, const std::vector<Ac
     }
     if (!UnlockOrderHasHaste(*use, order, any_unlock) && !DevotionOrderDomain(state, *use, order)
         && !EtbPutReducerOrderDomain(state, *use, order)
-        && !BeastsLordReducerOrderDomain(state, *use, order)) { return false; }
+        && !BeastsLordReducerOrderDomain(state, *use, order)
+        && !SacRitualOrderDomain(*use, order)
+        && !RitualReducerOrderDomain(*use, order)) { return false; }
     const std::vector<int> none;
     if (SeqWalkFixedOrder(state, *use, sel, order, none)) { return false; }   // the given order pays: kept
     return UnlockOrderSearch(state, *use, sel, order, none, /*nearest=*/true);

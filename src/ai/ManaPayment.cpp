@@ -8481,6 +8481,21 @@ void ApplyPayableCastOrder(const GameState& state, const std::vector<Action>& ac
     ApplyConvokeArrivalDependencyOrder(acts, order);   // structural (Vampires item B)
     ApplyConvokeShortfallOrder(state, acts, order);    // structural (mana-clean gate, Vampires)
     ApplyGraveyardCastDependencyOrder(state, acts, order);   // structural (graveyard casts in the sequence)
+    if (order.size() < 2) { return; }
+    // Dependency moves can invalidate the aggregate decider's earlier answer. The sequential
+    // walk prices both Culling's sacrifice and a ritual that must precede a same-line reducer.
+    bool ritual = false, reducer = false, sac_ritual = false;
+    for (int j : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(j)];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (a.kind != Action::Kind::CastFromHand || d == nullptr) { continue; }
+        ritual |= d->params.ritual_floating_mana > 0;
+        reducer |= !d->params.reduces_spell_subtype.empty() || !d->params.reduces_spell_color.empty()
+                   || d->params.chooses_creature_type;
+        sac_ritual |= d->params.sac_additional_creature && d->params.ritual_floating_mana > 0;
+    }
+    if (sac_ritual || (ritual && reducer)) { TurnSolver::UnlockPayableOrder(state, acts, order); }
 }
 
 void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& acts,
