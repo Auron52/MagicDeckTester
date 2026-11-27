@@ -8,6 +8,13 @@
    "id": "a7c2d36c718e:wip/zombies-analysis-1126",
    "joined": "2026-11-27T09:18:04Z",
    "note": "Zombies integration: full unit and smoke gate, then land"
+  },
+  {
+   "branch": "land-1129",
+   "host": "839667a3a15d",
+   "id": "839667a3a15d:land-1129",
+   "joined": "2026-11-27T09:52:05Z",
+   "note": ""
   }
  ]
 }
