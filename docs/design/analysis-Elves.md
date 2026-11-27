@@ -768,3 +768,23 @@ Open USER decision: the tap-order default (after the fixed version's numbers).
 
   - Not a clean win; the lever stays OFF.
   - An agent is running d8 b0 on the 14 searched slower games and root-causing them.
+
+### Checkpoint 17 (2026-11-27 ~16:10 UTC)
+- **Integrated** on wip/elves-int (rebased onto origin ce045ad8b): mem4 (6ab2cfe77 lazy fan, f28d2045b Wave X cap, 0a2e89273 in-place filter) + the r2 net diff (tap order default ON, R2/three/two deleted) = a3d9266e8. The conflicts were additive only.
+- **Validation chain queued** on heavy.lock (build/scratch/elves-int/validate.sh, status in validate.status). Then accept the Elves GT, land, and restart the mullgen.
+- **Lordcast round 4** (amendment E, fresh seeds 7900000; wip/elves-lordcast dc6d3f92c, report logs/lordcast/ab4.report.txt):
+
+  | cell | net | faster/slower | cpu |
+  |---|---|---|---|
+  | play Elves | -2 | 2/0 | 1.22x |
+  | play Elves 2HG | -1 | 1/0 | 1.24x |
+  | play Boars | 0 | 0/0 | |
+  | play Boars 2HG | -1 | 1/0 | |
+  | play Goblins | -2 | 2/0 | |
+  | play Goblins 2HG | +1 | 0/1 (gi677) | |
+  | d0 Elves | -3641 | | 1.22x |
+  | d0 Boars | -239 | | 0.96x |
+  | d0 Goblins | -288 | | 0.95x |
+
+  - Owed: d8 b0 on goblins2hg gi677; cut the D/E verification cpu (apply+combat on a copy).
+  - Then surface the default to the USER (the USER said leave OFF for now).
