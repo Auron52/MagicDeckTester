@@ -98,8 +98,11 @@ Known gaps / items to raise:
   +0.65% std / +0.26% 2HG. Smoke: only `elves_smoke_d0_s1001` moved (4.8910 -> 4.8950, 18 slower / 14 faster), all of
   it this policy (selector off reproduced GT). Mechanism of the d0 slower games (gi130/185/226): a PRE-COMBAT spare {G}
   was paid by tapping attack-ready mana creatures (Llanowar Elves, Elvish Mystic, Priest of Titania), costing their
-  combat damage (8->2, 13->7, 4->0). Proposed amendment (USER's call): before combat, the {G} is spare only if payable
-  without tapping an untapped, non-summoning-sick creature with power > 0.
+  combat damage (8->2, 13->7, 4->0). AMENDED (the USER's rule applied: an attack-ready mana creature has another use
+  before combat): before combat the {G} must be payable without tapping an untapped, attack-ready creature with
+  power > 0, and the real payment holds the same set; when the plain payment taps none, nothing changes. Measured
+  (paired, seed 9900001+gi, amendment on vs the plain spare test): d0 -0.0085 (6 slower / 23 faster of 2000), std d5
+  b20 +0.0000 (0/0 of 1500, units -0.53%), 2HG d5 b20 +0.0000 (0/0 of 750, units -0.41%).
 * Magistrate's AUTONOMOUS target set is the board the plan starts from: a creature cast earlier in the same
   plan cannot be the target in that main (the human picks on the live board, so the viewer is not affected).
   The same holds for Kessig Wolf Run and the Merfolk tap-target pumps. A completeness gap to raise with the
