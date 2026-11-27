@@ -865,6 +865,37 @@ What the design does about it (no new rule, a measurement):
 decks (Selesnya Lifegain, Critter Lifegain, Martyr Lifegain, Lifegain Heliod Combo) are goldfish decks today. If
 the USER ever wants their life gain credited, they are candidates to carry both modes.
 
+### 5.7 Tempo counters in goldfish decks: Remand and Memory Lapse (USER example, 2026-11-27)
+
+USER, verbatim: "For example cards like Remand and Memory Lapse are both very strong, but have been heavily
+undervalued in decks like Hinata and Cyclone. This update will give those a chance to do their thing. I would also
+like to have the card draw from Remand be available."
+
+**Today (`cards.json`):** Remand is modelled only as a SELF-targeted Remand. It rides another spell's cast as one
+plan action, for that spell's cast triggers and Remand's draw. Memory Lapse is `goldfish_inert` and never cast.
+Both are in Hinata and Unpredictable Cyclone; Remand also in Niv-Mizzet Combo and Worldfire. These are goldfish
+decks that would opt into the control mode beside goldfish (section 9, Q11 answer).
+
+**In control mode, each gets a second use: countering the gauntlet deck's spell on its turn.**
+* **New effect kinds for the injection harness and the mapping:** `counter_to_hand` (Remand: the spell goes back to
+  the hand, so the gauntlet deck loses that turn's mana and recasts later) and `counter_to_top` (Memory Lapse: the
+  spell goes on top of the library, so it also loses its next draw). They are measured separately from a hard
+  counter. The probe's counters were hard counters, and a tempo counter's delay is expected to be smaller and to
+  depend most on WHICH spell it hits (section 8.3; the Q8 target rules apply).
+* **Our own game pays for it and gets the draw.** The search plans holding {1}{U} through the opponent's turn of
+  round t. In our game the card leaves our hand, the mana is spent and, for Remand, we draw a card at that point.
+  So the draw is a real card in our game, used by our search on the following turn.
+* **When there is no target.** Our game is one game, while the mapping averages over every gauntlet deck's games,
+  some of which cast nothing that turn. Default: our game treats the counter as cast (card spent, Remand's draw
+  taken) when most of the gauntlet's games cast a spell that turn. That is true from about turn 2 for nearly every
+  deck, by the stored baselines. The games with no target get zero delay in the mapping. If too few games cast a
+  spell that turn, the counter stays in hand and the mana is unused. A partial version (crediting the draw by that
+  share) is possible if the stage-1 numbers show this matters.
+* **Self-targeted Remand stays available.** The search chooses between Remand on our own spell (cast triggers and
+  the draw now) and Remand on the opponent (tempo and the draw on their turn).
+* **Goldfish play does not change.** In goldfish mode, Memory Lapse stays inert and Remand stays self-targeted only,
+  so the goldfish ground truth of these decks does not move.
+
 ## 6. What none of these designs fixes
 
 ### 6.1 The gauntlet is goldfish-fast
