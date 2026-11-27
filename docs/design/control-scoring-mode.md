@@ -702,6 +702,28 @@ blockers, which is part of why the USER finds Parallax Wave followed by Opalesce
    and leaving play). Blockers interact (two walls are not two times one wall), so this falls under the
    interaction terms of section 7.5 levels 2-3, not the pure sum.
 
+**Heuristic where obvious, searched where not (USER 2026-11-27).** USER, verbatim: "Blocking is pretty easy except
+perhaps deciding what is a priority to kill due to abilities and what is a threat to our blocker at instant speed.
+I suspect we could heuristically implement a chunk of it and search parts that are less obvious." This is the
+repo's standing split: a provider may RESTRICT or ORDER the block options, and the rest is branched on.
+* **The heuristic chunk (provider prunes).** Rule out blocks that are dominated on combat facts alone, for
+  example a block where our creature dies, deals no damage that matters, and prevents no damage that matters.
+  A one-option prune is allowed only where it is provably no worse. Each prune gets a counterexample test, and a
+  counterexample means fixing the ranking, never dropping the prune silently.
+* **"What is a priority to kill" is the trouble value of Q8.** The value of killing a given attacker is the
+  measured delay from removing that card from the gauntlet deck: the same per-card number, measured offline per
+  gauntlet deck, that ranks counter targets. Abilities (a lord, a combat-damage trigger, a mana creature) are
+  priced by measurement rather than by a hand list.
+* **"What is a threat to our blocker at instant speed"** is two pieces:
+  * The attacker needs a window to answer a block: a pump spell or removal after blockers are declared. Today no
+    goldfish deck has one, because nothing ever blocks. This is a new mid-combat search root for the attacker,
+    and by the hard rule it must offer "do nothing" there like every other root.
+  * Our block choice must allow for it. In the clairvoyant scored variant the replay simply shows the trick
+    happening, so a block that loses to it measures worse. The non-clairvoyant variant discounts a block by the
+    risk: open mana and cards in hand, priced from how often that gauntlet deck holds a trick at that point.
+* **The searched remainder.** Whatever the provider does not rule out is tried in the replay, and the block
+  that delays the gauntlet deck most is kept. The provider's prunes keep that enumeration small.
+
 **What stays wrong (open loop, section 5.4).** A blocker that dies in the gauntlet replay is still alive in our
 own game, so our own W can count on it attacking or blocking later. That is mild for a control deck that rarely
 attacks, and only co-simulation (design C) removes it.
