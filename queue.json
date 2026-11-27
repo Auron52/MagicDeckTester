@@ -1,16 +1,8 @@
 {
  "entries": [
   {
-   "branch": "wip/elves-int",
-   "head_since": "2026-11-27T08:41:18Z",
-   "heartbeat": "2026-11-27T09:22:54Z",
-   "host": "550a08fdc1f3",
-   "id": "550a08fdc1f3:wip/elves-int",
-   "joined": "2026-11-27T08:41:18Z",
-   "note": ""
-  },
-  {
    "branch": "wip/zombies-analysis-1126",
+   "head_since": "2026-11-27T09:27:48Z",
    "host": "a7c2d36c718e",
    "id": "a7c2d36c718e:wip/zombies-analysis-1126",
    "joined": "2026-11-27T09:18:04Z",
