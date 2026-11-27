@@ -686,3 +686,7 @@ then Maze's End K=20 mullgen from .claude/worktrees/maze-gen2.
     not recover (std 2176: attackers order applied to the pre-sink Elf casts too) -> fix (scaling-last before the
     sink's payment, attackers from it onward) being built + re-measured (round 3). USER decisions: band vs three/two;
     tap-order default (after round 3).
+14. USER decisions 2026-11-27: band vs three/two -> "Okay, that's fine. We'll leave it." (band stays; the three / two
+    modes are deleted in wip/elves-r2). Brigade split exception -> "Okay, that makes sense to me." (admit a second
+    scaled sink when a scaled source grown by the first sink's bodies pays for it; to implement after the tap-order
+    round, same function ElvesScalingAdmit).
