@@ -1,0 +1,300 @@
+{
+  "seed": 2, "game_index": 1, "win_turn": 4, "won": true,
+  "mulligan": { "count": 2, "bottom": [9, 14] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "opponent_land_entry": 1, "free_turns": 1, "opponent_spawn_land": 1, "opponent_bounce_opening": 1, "opponent_shuffle_ordinal": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 35, "name": "Swamp" }, { "num": 36, "name": "Swamp" }, { "num": 21, "name": "Fleshbag Marauder" }, { "num": 3, "name": "Cemetery Reaper" }, { "num": 37, "name": "Swamp" }, { "num": 38, "name": "Swamp" }, { "num": 17, "name": "Dread Wanderer" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 34, "name": "Lord of the Undead" }, { "num": 21, "name": "Fleshbag Marauder" }, { "num": 52, "name": "Swamp" }, { "num": 33, "name": "Lord of the Undead" }, { "num": 3, "name": "Cemetery Reaper" }, { "num": 60, "name": "Undead Warchief" }, { "num": 8, "name": "Dark Ritual" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 53, "name": "Swamp" }, { "num": 49, "name": "Swamp" }, { "num": 16, "name": "Diregraf Ghoul" }, { "num": 9, "name": "Dark Ritual" }, { "num": 10, "name": "Dark Ritual" }, { "num": 28, "name": "Lord of the Accursed" }, { "num": 14, "name": "Diregraf Ghoul" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 53, "name": "Swamp", "win_optimal": true }, { "num": 49, "name": "Swamp", "win_optimal": true }, { "num": 16, "name": "Diregraf Ghoul", "win_optimal": true }, { "num": 9, "name": "Dark Ritual", "win_optimal": true }, { "num": 10, "name": "Dark Ritual", "win_optimal": true }, { "num": 28, "name": "Lord of the Accursed", "win_optimal": true }, { "num": 14, "name": "Diregraf Ghoul", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 28, "name": "Lord of the Accursed" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 53, "name": "Swamp", "win_optimal": true }, { "num": 49, "name": "Swamp", "win_optimal": true }, { "num": 16, "name": "Diregraf Ghoul", "win_optimal": true }, { "num": 10, "name": "Dark Ritual", "win_optimal": true }, { "num": 28, "name": "Lord of the Accursed", "win_optimal": true }, { "num": 14, "name": "Diregraf Ghoul", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 28, "name": "Lord of the Accursed" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 4, "cast_order": ["**", "land=Swamp", "cast=Diregraf Ghoul"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 10, "name": "Dark Ritual", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }, { "num": 16, "name": "Diregraf Ghoul", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Lord of the Accursed", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: Dark Ritual, Diregraf Ghoul", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Diregraf Ghoul"], "cast_order_canonical": ["Dark Ritual", "Diregraf Ghoul"], "actions": [{ "card": "Dark Ritual" }, { "card": "Diregraf Ghoul" }] },
+    { "index": 1, "summary": "land=Swamp; cast: Diregraf Ghoul, Dark Ritual", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Dark Ritual"], "casts": ["Diregraf Ghoul", "Dark Ritual"], "cast_order_canonical": ["Diregraf Ghoul", "Dark Ritual"], "actions": [{ "card": "Diregraf Ghoul" }, { "card": "Dark Ritual" }] },
+    { "index": 2, "summary": "land=Swamp; cast: Dark Ritual, Lord of the Accursed", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Lord of the Accursed"], "cast_order_canonical": ["Dark Ritual", "Lord of the Accursed"], "actions": [{ "card": "Dark Ritual" }, { "card": "Lord of the Accursed" }] },
+    { "index": 3, "summary": "land=Swamp; cast: Lord of the Accursed, Dark Ritual", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Lord of the Accursed"], "casts": ["Lord of the Accursed", "Dark Ritual"], "cast_order_canonical": ["Lord of the Accursed", "Dark Ritual"], "actions": [{ "card": "Lord of the Accursed" }, { "card": "Dark Ritual" }] },
+    { "index": 4, "summary": "land=Swamp; cast: Diregraf Ghoul", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Diregraf Ghoul"], "actions": [{ "card": "Diregraf Ghoul" }] },
+    { "index": 5, "summary": "land=Swamp; cast: Dark Ritual", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual"], "actions": [{ "card": "Dark Ritual" }] },
+    { "index": 6, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Diregraf Ghoul", "idx": 1, "num": 16, "tapped": true, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Swamp", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Dark Ritual", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lord of the Accursed", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Diregraf Ghoul", "idx": 1, "num": 16, "tapped": true, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Swamp", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Dark Ritual", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lord of the Accursed", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Swamp", "cast=Dark Ritual", "cast=Lord of the Accursed"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Cemetery Reaper" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Bloodstained Mire" }, { "turn": 1, "kind": "fetch", "text": "opponent cracks Bloodstained Mire for Godless Shrine (tapped)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Diregraf Ghoul", "idx": 2, "num": 16, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Swamp", "idx": 1, "num": 53, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Cemetery Reaper", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "Dark Ritual", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lord of the Accursed", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Godless Shrine", "idx": 0, "num": 100050, "tapped": true, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Bloodstained Mire"] },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: Dark Ritual, Lord of the Accursed", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Lord of the Accursed"], "cast_order_canonical": ["Dark Ritual", "Lord of the Accursed"], "actions": [{ "card": "Dark Ritual" }, { "card": "Lord of the Accursed" }] },
+    { "index": 1, "summary": "land=Swamp; cast: Lord of the Accursed, Dark Ritual", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Lord of the Accursed"], "casts": ["Lord of the Accursed", "Dark Ritual"], "cast_order_canonical": ["Lord of the Accursed", "Dark Ritual"], "actions": [{ "card": "Lord of the Accursed" }, { "card": "Dark Ritual" }] },
+    { "index": 2, "summary": "land=Swamp; cast: Cemetery Reaper, Dark Ritual", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Cemetery Reaper"], "casts": ["Cemetery Reaper", "Dark Ritual"], "cast_order_canonical": ["Cemetery Reaper", "Dark Ritual"], "actions": [{ "card": "Cemetery Reaper" }, { "card": "Dark Ritual" }] },
+    { "index": 3, "summary": "land=Swamp; cast: Dark Ritual, Cemetery Reaper", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Cemetery Reaper"], "cast_order_canonical": ["Dark Ritual", "Cemetery Reaper"], "actions": [{ "card": "Dark Ritual" }, { "card": "Cemetery Reaper" }] },
+    { "index": 4, "summary": "land=none; cast: Dark Ritual, Lord of the Accursed", "declared_order_payability": "not_verified", "land": null, "casts": ["Dark Ritual", "Lord of the Accursed"], "cast_order_canonical": ["Dark Ritual", "Lord of the Accursed"], "actions": [{ "card": "Dark Ritual" }, { "card": "Lord of the Accursed" }] },
+    { "index": 5, "summary": "land=none; cast: Lord of the Accursed, Dark Ritual", "declared_order_payability": "known_drops", "land": null, "drops": ["Lord of the Accursed"], "casts": ["Lord of the Accursed", "Dark Ritual"], "cast_order_canonical": ["Lord of the Accursed", "Dark Ritual"], "actions": [{ "card": "Lord of the Accursed" }, { "card": "Dark Ritual" }] },
+    { "index": 6, "summary": "land=none; cast: Cemetery Reaper, Dark Ritual", "declared_order_payability": "known_drops", "land": null, "drops": ["Cemetery Reaper"], "casts": ["Cemetery Reaper", "Dark Ritual"], "cast_order_canonical": ["Cemetery Reaper", "Dark Ritual"], "actions": [{ "card": "Cemetery Reaper" }, { "card": "Dark Ritual" }] },
+    { "index": 7, "summary": "land=none; cast: Dark Ritual, Cemetery Reaper", "declared_order_payability": "not_verified", "land": null, "casts": ["Dark Ritual", "Cemetery Reaper"], "cast_order_canonical": ["Dark Ritual", "Cemetery Reaper"], "actions": [{ "card": "Dark Ritual" }, { "card": "Cemetery Reaper" }] },
+    { "index": 8, "summary": "land=Swamp; cast: Dark Ritual", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual"], "actions": [{ "card": "Dark Ritual" }] },
+    { "index": 9, "summary": "land=none; cast: Dark Ritual", "declared_order_payability": "not_verified", "land": null, "casts": ["Dark Ritual"], "actions": [{ "card": "Dark Ritual" }] },
+    { "index": 10, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Diregraf Ghoul", "idx": 2, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Lord of the Accursed", "idx": 4, "num": 28, "sick": true, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Swamp", "idx": 1, "num": 53, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 3, "num": 49, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Cemetery Reaper", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Dark Ritual"], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Godless Shrine", "idx": 0, "num": 100050, "tapped": true, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Bloodstained Mire"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Diregraf Ghoul (3) — 3 to opponent (19→16)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Diregraf Ghoul", "idx": 2, "num": 16, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Lord of the Accursed", "idx": 4, "num": 28, "sick": true, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Swamp", "idx": 1, "num": 53, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 3, "num": 49, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Cemetery Reaper", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Dark Ritual"], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "Godless Shrine", "idx": 0, "num": 100050, "tapped": true, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Bloodstained Mire"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "cast=Dark Ritual", "cast=Cemetery Reaper"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Dark Ritual" }],
+  "events": [{ "turn": 2, "kind": "land", "text": "opponent plays Wooded Foothills" }, { "turn": 2, "kind": "fetch", "text": "opponent cracks Wooded Foothills for Forest" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Diregraf Ghoul", "idx": 3, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Lord of the Accursed", "idx": 5, "num": 28, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Swamp", "idx": 2, "num": 53, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 4, "num": 49, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Cemetery Reaper", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Dark Ritual", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Dark Ritual"], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "Forest", "idx": 1, "num": 100015, "is_land": true }, { "name": "Godless Shrine", "idx": 0, "num": 100050, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Bloodstained Mire", "Wooded Foothills"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Cemetery Reaper, Dark Ritual", "declared_order_payability": "known_drops", "land": null, "drops": ["Cemetery Reaper"], "casts": ["Cemetery Reaper", "Dark Ritual"], "cast_order_canonical": ["Cemetery Reaper", "Dark Ritual"], "actions": [{ "card": "Cemetery Reaper" }, { "card": "Dark Ritual" }] },
+    { "index": 1, "summary": "land=none; cast: Dark Ritual, Cemetery Reaper", "declared_order_payability": "not_verified", "land": null, "casts": ["Dark Ritual", "Cemetery Reaper"], "cast_order_canonical": ["Dark Ritual", "Cemetery Reaper"], "actions": [{ "card": "Dark Ritual" }, { "card": "Cemetery Reaper" }] },
+    { "index": 2, "summary": "land=none; cast: Dark Ritual", "declared_order_payability": "not_verified", "land": null, "casts": ["Dark Ritual"], "actions": [{ "card": "Dark Ritual" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Cemetery Reaper", "idx": 6, "num": 5, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Diregraf Ghoul", "idx": 3, "num": 16, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Lord of the Accursed", "idx": 5, "num": 28, "is_land": false, "power": 3, "toughness": 4 }, { "name": "Swamp", "idx": 2, "num": 53, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 4, "num": 49, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [], "graveyard": ["Dark Ritual", "Dark Ritual"], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "Forest", "idx": 1, "num": 100015, "is_land": true }, { "name": "Godless Shrine", "idx": 0, "num": 100050, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Bloodstained Mire", "Wooded Foothills"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Diregraf Ghoul (4), Lord of the Accursed (3) — 7 to opponent (15→8)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Cemetery Reaper", "idx": 6, "num": 5, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Diregraf Ghoul", "idx": 3, "num": 16, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Lord of the Accursed", "idx": 5, "num": 28, "tapped": true, "is_land": false, "power": 3, "toughness": 4 }, { "name": "Swamp", "idx": 2, "num": 53, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 4, "num": 49, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [], "graveyard": ["Dark Ritual", "Dark Ritual"], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "Forest", "idx": 1, "num": 100015, "is_land": true }, { "name": "Godless Shrine", "idx": 0, "num": 100050, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Bloodstained Mire", "Wooded Foothills"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Blood Scrivener" }],
+  "events": [{ "turn": 3, "kind": "land", "text": "opponent plays Wooded Foothills" }, { "turn": 3, "kind": "fetch", "text": "opponent cracks Wooded Foothills for Stomping Ground (tapped)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Cemetery Reaper", "idx": 7, "num": 5, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Diregraf Ghoul", "idx": 4, "num": 16, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Lord of the Accursed", "idx": 6, "num": 28, "is_land": false, "power": 3, "toughness": 4 }, { "name": "Swamp", "idx": 3, "num": 53, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 5, "num": 49, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Scrivener", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Dark Ritual", "Dark Ritual"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "Forest", "idx": 1, "num": 100015, "is_land": true }, { "name": "Godless Shrine", "idx": 0, "num": 100050, "is_land": true }, { "name": "Stomping Ground", "idx": 2, "num": 100041, "tapped": true, "is_land": true }], "library_size": 47, "hand_size": 7, "graveyard": ["Bloodstained Mire", "Wooded Foothills", "Wooded Foothills"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Blood Scrivener", "declared_order_payability": "not_verified", "land": null, "casts": ["Blood Scrivener"], "actions": [{ "card": "Blood Scrivener" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Blood Scrivener", "idx": 8, "num": 2, "sick": true, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Cemetery Reaper", "idx": 7, "num": 5, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Diregraf Ghoul", "idx": 4, "num": 16, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Lord of the Accursed", "idx": 6, "num": 28, "is_land": false, "power": 3, "toughness": 4 }, { "name": "Swamp", "idx": 3, "num": 53, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [], "graveyard": ["Dark Ritual", "Dark Ritual"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "Forest", "idx": 1, "num": 100015, "is_land": true }, { "name": "Godless Shrine", "idx": 0, "num": 100050, "is_land": true }, { "name": "Stomping Ground", "idx": 2, "num": 100041, "tapped": true, "is_land": true }], "library_size": 47, "hand_size": 7, "graveyard": ["Bloodstained Mire", "Wooded Foothills", "Wooded Foothills"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Diregraf Ghoul (4), Lord of the Accursed (3), Cemetery Reaper (3) — 10 to opponent (7→-3)" }
+  ]
+}
