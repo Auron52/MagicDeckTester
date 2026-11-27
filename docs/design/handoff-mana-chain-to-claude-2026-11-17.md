@@ -309,6 +309,18 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 
 **12:27 UTC 11-26 (pre-compaction checkpoint):** I am HEAD of the push queue since 11:49; land-1126b validation running under `push_queue.py hold` (task bawqjsga8; log build/scratch/land-1126b/validate.log; markers UNIT.DONE (passed), TIERS.DONE). Rebased onto 9e566000b (no src change). Smoke+regression --both started ~12:18 after I killed the TH agent's gate2 (it had taken the box lock; agent told to relaunch behind TIERS.DONE). AFTER TIERS: `bash test/classify_turn_later.sh smoke` + `regression` (lane, 2 slots), then `bash test/regression.sh --both "--accept-with-regressions=<note>"`, `python3 test/check_gt_logs.py`, check_references_safe, commit GT, `push_queue.py land`. Expected moves: Maze's End rows (scoped price), maybe units-only on Elementals/Martyr/Morph; everything else byte-identical. DRAGONS agent DONE: wip/dragons-ogap 8b1dd8706 (fix) 1f7924d3c 639e947fa (report): ORACLE-GAP 3,747 -> 0, oracle-off byte-identical -> ride the NEXT landing (src-gated; recheck its 3 env unit failures). Dragons engine follow-ups (play changes): Gruul Turf {R}-float APPLY-DROP x262; dead Haven self-pay rebuy branch (sound collapse); 10 continuation rebuy drops. AGENTS RUNNING: TH APPLY-DROP (wip/th-apply, scratch build/scratch/th-apply), Dragonstorm APPLY-DROP (wip/ds-apply, scratch build/scratch/ds-apply). Then: Maze Summit 2HG g292, Cyclone d6, Hinata gi548/gi33, prepay step 5. USER questions open: K fleet-wide (kverify clean -> recommend yes); SG50+K on Creature Giving/Antilife/Dragonstorm; Creature Giving beam drop.
 
+**00:02 UTC 11-27:** LANDED f5f442801 (land-1128): MTG_LINE_FLOAT_RITUAL_NET (Dragonstorm, default ON) on
+5194cedda (elves-int). DS ab3, all three DS levers off vs on, every suite deck, base 5190000: 43,200 pairs, net 0,
+0 slower / 0 faster in every shape, units -0.00% (no d8 b0 replay owed). Validation: units 4311/4311, smoke +
+regression ALL PASS byte-identical (searched and d0 play-changed 0), refs 960 / 0 drift, check_gt_logs 1457; no GT
+accept. Lease 23:01-00:01. Gate filler claude_gate_1126 FAILED: it yielded during mana_clean's sizing step (before
+run.json), so `--resume` crashed (FileNotFoundError run.json). Relaunched as build/scratch/claude_gate_1127/chain.sh
+(chain pid 829089) in worktree land-1128 at f5f442801, run name claude-queue-20261127a, same 16 decks; the chain now
+starts fresh whenever run.json is missing. Status $D/status, DONE $D/DONE. NEXT: (1) gate_1127 DONE -> commit
+test/mana_clean.json from land-1128 (rides the next landing; a newer src only marks it stale), rank the remaining
+clusters, spawn fix agents; (2) remaining mechanisms: DS two Unclaimed Territories + exact swap shortage; TH Throes
+continuation / 257 undeclared drops / ENUM-GAP; Dragons two-dig chains.
+
 **22:37 UTC 11-26:** Status. DS ab3 (RITUAL_NET all-deck held-out A/B, $S=build/scratch/ds-apply, pid 703438) at
 32/32 workers, DONE marker $S/ab3_out/DONE (waiter bi0j2uci2). Gate filler claude_gate_1126 queued on the box lock
 behind it (waiter by05jx8g0). NEW worktree `.claude/worktrees/land-1128` (branch wip/land-1128) = origin 91ef541bb +
