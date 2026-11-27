@@ -810,7 +810,29 @@ amazing vs creature decks."):
   the same life is gone in a fraction of a round.
 It is largest on top of other delays (a blocker, a removal spell), which is where the mapping's interaction terms
 matter. The per-gauntlet-deck partial scores (section 4.5) keep the burn-vs-creature difference visible instead of
-averaging it away. It also has a hard counter in the gauntlet: Screaming Nemesis's lockout, above. The suite's life-gain
+averaging it away.
+
+**Life gain is the effect most likely to be OVERRATED (USER 2026-11-27, verbatim):** "But it still isn't too difficult
+for a bit of lifegain to delay things by a turn. This might honestly be one of the cases that the model will
+overrate the most. Pure lifegain rarely actually allows us to win the game, but here it would often give us a turn
+delay." Why the design inflates it:
+* **Kill thresholds are whole turns.** A gauntlet deck's kill is usually its last attack or burn spell finishing us
+  off, often with little to spare, so 2-3 life frequently pushes the kill back a whole round. The measured delay is
+  real, but it is a threshold effect, not lasting pressure.
+* **E credits delay in races we still lose.** E treats a round of delay like a round of speed, the same way goldfish
+  treats a turn-8 kill as better than turn 9 even against a turn-5 opponent. Life gain buys exactly that kind of
+  delay without changing the board, so it is where E and "does this win more games" part ways the most.
+* **The gauntlet does not adapt.** A real opponent facing life gain keeps developing and counts its burn
+  differently. The replay plays its goldfish line unchanged.
+What the design does about it (no new rule, a measurement):
+* **Race-win share beside E.** Every control report also gives, per gauntlet deck, the share of pairs where we win
+  the race (our kill comes before the gauntlet deck's delayed kill), with and without each effect kind. An effect
+  that moves E but not the race-win share is the overrating made visible. Life gain is the first effect checked.
+* **Stage 1 measures it directly:** life-gain singles (for example 3 and 5 life on rounds 2-5) against the
+  gauntlet, reporting delay and race-flip share separately for burn and creature decks.
+* **Calibrated against 1v1 when it exists** (stage 5): a per-effect-kind correction fitted on real games, so the
+  mapping stops crediting delay that does not win. Whether E itself should be adjusted before then is the USER's
+  call on stage 1's numbers. It also has a hard counter in the gauntlet: Screaming Nemesis's lockout, above. The suite's life-gain
 decks (Selesnya Lifegain, Critter Lifegain, Martyr Lifegain, Lifegain Heliod Combo) are goldfish decks today. If
 the USER ever wants their life gain credited, they are candidates to carry both modes.
 
