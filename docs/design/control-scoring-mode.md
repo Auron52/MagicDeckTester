@@ -731,10 +731,18 @@ blockers, which is part of why the USER finds Parallax Wave followed by Opalesce
      Chain Reaction in the replay. The non-clairvoyant rule uses a per-gauntlet-deck BODY VALUE, measured offline
      the same way as the Q8 trouble value: the delay from removing one of our creatures. Where that value is
      negative, the rule chumps and trades freely.
-   * **A related liability on the attacker's side: damage reflectors.** Blocking Stuffy Doll, Mogg Maniac, Boros
-     Reckoner, Screaming Nemesis or a Spiteful Sliver means the damage our blocker deals comes back to us. The
-     block rule counts damage dealt to a reflecting creature as damage to us, so it soaks with a blocker that
-     deals no damage (or none at all) rather than killing.
+   * **Damage reflectors on the attacker's side.** Stuffy Doll, Mogg Maniac, Boros Reckoner, Screaming Nemesis and a
+     Spiteful Sliver send the damage they are dealt on to us. The amount is our blocker's FULL power, even beyond
+     the reflector's toughness. Blocking one can still be a net good (USER 2026-11-27, verbatim): "True but
+     blocking those creatures could be a net good. Particularly if you can kill them with something around their
+     size. Even blocking with a 1/1 could be a decent play for the ones that have 3 power, since you would rather
+     take 1 than 3." So the block rule counts the reflected damage as damage to us and compares:
+     * **Soak:** block when the attacker's damage we stop is more than the power we hit it with. A 1/1 blocking a
+       3-power reflector means taking 1 instead of 3.
+     * **Kill:** block with a blocker whose power is just enough to kill it ("around their size"), so the
+       reflected damage is as small as it can be, when removing the reflector (its Q8 trouble value) is worth
+       that hit. A bigger blocker only adds reflected damage. An indestructible reflector (Stuffy Doll) can only
+       be soaked, never killed.
 3. **The attacker's choice against blockers** (the gauntlet deck). This is the messy part. "Attack with
    everything" sends a 1/1 into a 4/4 wall every turn, which over-credits the blocker. Options: (a) keep attack-all,
    as an upper bound only; (b) a provider rule that holds back an attacker that would die to a block without
