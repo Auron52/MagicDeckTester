@@ -1,0 +1,64 @@
+{
+ "rows": [
+  {
+   "row": "mazesend",
+   "deck": "mazesend",
+   "games": 3000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "mazesend2hg",
+   "deck": "mazesend",
+   "games": 1500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "gods",
+   "deck": "gods",
+   "games": 3000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "gods2hg",
+   "deck": "gods",
+   "games": 1500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "mill",
+   "deck": "mill",
+   "games": 3000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "mill2hg",
+   "deck": "mill",
+   "games": 1500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  }
+ ]
+}

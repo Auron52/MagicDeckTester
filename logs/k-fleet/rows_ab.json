@@ -1,0 +1,656 @@
+{
+ "rows": [
+  {
+   "row": "creature_giving",
+   "deck": "creature_giving",
+   "games": 5000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1",
+    "S0",
+    "S1"
+   ]
+  },
+  {
+   "row": "creature_giving2hg",
+   "deck": "creature_giving",
+   "games": 2000,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1",
+    "S0",
+    "S1"
+   ]
+  },
+  {
+   "row": "antilife",
+   "deck": "antilife",
+   "games": 5000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1",
+    "S0",
+    "S1"
+   ]
+  },
+  {
+   "row": "antilife2hg",
+   "deck": "antilife",
+   "games": 2000,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1",
+    "S0",
+    "S1"
+   ]
+  },
+  {
+   "row": "dragonstorm",
+   "deck": "dragonstorm",
+   "games": 5000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1",
+    "S0",
+    "S1"
+   ]
+  },
+  {
+   "row": "dragonstorm2hg",
+   "deck": "dragonstorm",
+   "games": 2000,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1",
+    "S0",
+    "S1"
+   ]
+  },
+  {
+   "row": "alchemist",
+   "deck": "alchemist",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "alchemist2hg",
+   "deck": "alchemist",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "auras",
+   "deck": "auras",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "auras2hg",
+   "deck": "auras",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "breaching",
+   "deck": "breaching",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "breaching2hg",
+   "deck": "breaching",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "critter",
+   "deck": "critter",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "critter2hg",
+   "deck": "critter",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "dragons",
+   "deck": "dragons",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "dragons2hg",
+   "deck": "dragons",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "edf",
+   "deck": "edf",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "edf2hg",
+   "deck": "edf",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "elementals",
+   "deck": "elementals",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "elementals2hg",
+   "deck": "elementals",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "fluctuator",
+   "deck": "fluctuator",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "fluctuator2hg",
+   "deck": "fluctuator",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "galadriel",
+   "deck": "galadriel",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "galadriel2hg",
+   "deck": "galadriel",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "gods",
+   "deck": "gods",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "gods2hg",
+   "deck": "gods",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "jumbo",
+   "deck": "jumbo",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "jumbo2hg",
+   "deck": "jumbo",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "kithkin",
+   "deck": "kithkin",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "kithkin2hg",
+   "deck": "kithkin",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "kittyv3",
+   "deck": "kittyv3",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "kittyv32hg",
+   "deck": "kittyv3",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "knights",
+   "deck": "knights",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "knights2hg",
+   "deck": "knights",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "landfall",
+   "deck": "landfall",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "landfall2hg",
+   "deck": "landfall",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "lhc",
+   "deck": "lhc",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "lhc2hg",
+   "deck": "lhc",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "mazesend",
+   "deck": "mazesend",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "mazesend2hg",
+   "deck": "mazesend",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "merfolk",
+   "deck": "merfolk",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "merfolk2hg",
+   "deck": "merfolk",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "mill",
+   "deck": "mill",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "mill2hg",
+   "deck": "mill",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "minotaur",
+   "deck": "minotaur",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "minotaur2hg",
+   "deck": "minotaur",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "mirrorwing",
+   "deck": "mirrorwing",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "mirrorwing2hg",
+   "deck": "mirrorwing",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "pd",
+   "deck": "pd",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "pd2hg",
+   "deck": "pd",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "pirates",
+   "deck": "pirates",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "pirates2hg",
+   "deck": "pirates",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "selesnyav2",
+   "deck": "selesnyav2",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "selesnyav22hg",
+   "deck": "selesnyav2",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "slivers",
+   "deck": "slivers",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "slivers2hg",
+   "deck": "slivers",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "soldiers",
+   "deck": "soldiers",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "soldiers2hg",
+   "deck": "soldiers",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "stompy",
+   "deck": "stompy",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "stompy2hg",
+   "deck": "stompy",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "th",
+   "deck": "th",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "th2hg",
+   "deck": "th",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "whiteknights",
+   "deck": "whiteknights",
+   "games": 1000,
+   "hg": false,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  },
+  {
+   "row": "whiteknights2hg",
+   "deck": "whiteknights",
+   "games": 500,
+   "hg": true,
+   "arms": [
+    "O0",
+    "O1"
+   ]
+  }
+ ]
+}
