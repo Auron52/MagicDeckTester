@@ -693,6 +693,19 @@ blockers, which is part of why the USER finds Parallax Wave followed by Opalesce
    variant is clairvoyant: try the legal block assignments and keep the one that delays the gauntlet deck most.
    Boards are small, so that is a bounded enumeration. The reported non-clairvoyant variant is the mtg-ai skill's
    basic rule: chump only to prevent lethal, otherwise block when the trade is even or better.
+   **Soaking damage (USER 2026-11-27, verbatim):** "Similarily for blocking, if you happen to have a smaller creature
+   that can't kill anything you would want to soak up as much (preferably non-trample) damage as possible." /
+   "Particularly on the turn where you would die otherwise." So a blocker that cannot kill any attacker is
+   assigned to the attacker whose damage it stops the most:
+   * the largest attacker WITHOUT trample, since it stops all of that damage; a trampler only loses damage equal
+     to the blocker's toughness (one point if the trampler has deathtouch);
+   * a blocker that survives the block (a wall) does this every turn, since it costs nothing;
+   * a blocker that dies doing it (a chump) does it above all on the turn we would otherwise die. On other turns
+     the body is usually worth more as a future blocker, and the clairvoyant scored variant measures exactly
+     that trade.
+   Several blockers are assigned together to stop the most damage in total (killing blockers to the attackers
+   worth killing, by Q8 trouble value; soakers to the biggest remaining non-tramplers). The same rule is how the
+   attacker's lookahead predicts our blocks.
 3. **The attacker's choice against blockers** (the gauntlet deck). This is the messy part. "Attack with
    everything" sends a 1/1 into a 4/4 wall every turn, which over-credits the blocker. Options: (a) keep attack-all,
    as an upper bound only; (b) a provider rule that holds back an attacker that would die to a block without
