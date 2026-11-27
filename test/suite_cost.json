@@ -168,11 +168,11 @@
   },
   "elves": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
-   "cost_per_game_ms": 1499.1,
+   "cost_per_game_ms": 2762.9,
    "jobs": 7,
    "key": "elves",
    "tier": "regression",
-   "total_core_ms": 116478,
+   "total_core_ms": 224417,
    "worst_case": "elves2hg_regression_d5_b20"
   },
   "extraturns": {

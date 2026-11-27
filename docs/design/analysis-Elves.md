@@ -643,3 +643,12 @@ then Maze's End K=20 mullgen from .claude/worktrees/maze-gen2.
    regenerate / trample, and the six INERT_PARAMS are USER-APPROVED (no longer provisional).
 6. Kick cap: "Yeah, we may want to scale it up for 2HG arguably." -> cap = the opponent's starting life (20 / 30),
    wip/elves-r2.
+7. Hold-back follow-ups (same session): "We could search the options in-between, but that seems quite costly." /
+   "If we don't need a prune then we don't need a prune. Though we should check how much this particular branch costs
+   and make a decision on whether we perhaps do want a prune. My thought was a bit rough, so if we actually need to
+   prune this then perhaps we should take the "heuristic calculation" approach to set things up for lethal as soon as
+   possible instead." / "This is also a tricky problem, because technically on earlier turns when we are setting up,
+   you usually want to use the scaling elf mana last, to get more on board before you tap it. Then in late turns you
+   want to work the other way around to leave multiple attackers." -> the payment ladder ranks a scaled dork tap-LAST
+   on every turn (DorkGrowth rank 61); wip/elves-r2 measures how often the order matters on attack turns and
+   prototypes a searched scaled-first / scaled-last payment choice (default OFF) or a lethal-aware order.
