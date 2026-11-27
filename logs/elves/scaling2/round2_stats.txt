@@ -1,0 +1,12 @@
+== std: 2000 paired games
+  holdall  avg 4.3185 | vs full: net +0.0000 f0 s0 dig!=39 slow=[] fast=[] | units/game 16,867 x0.992 won 1997
+  lump     avg 4.3185 | vs full: net +0.0000 f0 s0 dig!=42 slow=[] fast=[] | vs holdall: net +0.0000 f0 s0 dig!=3 slow=[] fast=[] | units/game 16,865 x0.992 won 1997
+  sink     avg 4.3185 | vs full: net +0.0000 f0 s0 dig!=43 slow=[] fast=[] | vs holdall: net +0.0000 f0 s0 dig!=5 slow=[] fast=[] | units/game 16,868 x0.992 won 1997
+  combo    avg 4.3185 | vs full: net +0.0000 f0 s0 dig!=45 slow=[] fast=[] | vs holdall: net +0.0000 f0 s0 dig!=7 slow=[] fast=[] | units/game 16,866 x0.992 won 1997
+  full     avg 4.3185 won 1997 units/game 16,999
+== 2hg: 1000 paired games
+  holdall  avg 4.6100 | vs full: net +0.0010 f0 s1 dig!=19 slow=[814] fast=[] | units/game 36,641 x0.981 won 997
+  lump     avg 4.6100 | vs full: net +0.0010 f0 s1 dig!=23 slow=[814] fast=[] | vs holdall: net +0.0000 f0 s0 dig!=4 slow=[] fast=[] | units/game 36,517 x0.978 won 997
+  sink     avg 4.6100 | vs full: net +0.0010 f0 s1 dig!=19 slow=[814] fast=[] | vs holdall: net +0.0000 f0 s0 dig!=0 slow=[] fast=[] | units/game 36,528 x0.978 won 997
+  combo    avg 4.6100 | vs full: net +0.0010 f0 s1 dig!=23 slow=[814] fast=[] | vs holdall: net +0.0000 f0 s0 dig!=4 slow=[] fast=[] | units/game 36,491 x0.977 won 997
+  full     avg 4.6090 won 997 units/game 37,347

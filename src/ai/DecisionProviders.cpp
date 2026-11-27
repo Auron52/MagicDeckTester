@@ -75441,12 +75441,18 @@ ElvesSink ElvesSinkOf(const Action& a)
 struct ElvesCensus
 {
     std::atomic<long long> calls{0}, plans{0}, split{0}, band{0};
+    // Scaled one-sink rows by class [follow-up 0/1][wave 0/1]: all rows, and rows kept BELOW their class top.
+    std::atomic<long long> rows[2][2] = {}, below[2][2] = {};
     ~ElvesCensus()
     {
         if (calls.load() == 0) { return; }
         std::fprintf(stderr, "[elves-scaling-census] enumerations=%lld plans=%lld dropped_split=%lld dropped_band=%lld "
                      "kept=%lld\n", calls.load(), plans.load(), split.load(), band.load(),
                      plans.load() - split.load() - band.load());
+        for (int f = 0; f < 2; ++f)
+            for (int w = 0; w < 2; ++w)
+                std::fprintf(stderr, "[elves-scaling-census] follow=%d sink=%s rows=%lld kept_below_top=%lld\n", f,
+                             w ? "wave" : "kick/squad/pump", rows[f][w].load(), below[f][w].load());
     }
 };
 ElvesCensus& ElvesCensusSink() { static ElvesCensus c; return c; }
@@ -75743,6 +75749,12 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
             const int gap = top[static_cast<std::size_t>(cls[a])] - r.count;
             const bool drop = gap > h || (gap >= 0 && !ok[static_cast<std::size_t>(gap)]);
             if (drop) { admit[r.i] = 0; ++n_band; }
+            if (ElvesCensusOn())
+            {
+                ElvesCensus& c = ElvesCensusSink();
+                c.rows[r.follow ? 1 : 0][r.wave ? 1 : 0].fetch_add(1);
+                if (!drop && gap > 0) { c.below[r.follow ? 1 : 0][r.wave ? 1 : 0].fetch_add(1); }
+            }
             if (trace)
             {
                 std::string casts;
