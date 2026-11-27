@@ -74,8 +74,19 @@ also has zero misses, zero oracle gaps and zero unmodeled cases.
 
 All ten user references were replayed after these changes at committed play
 depth 5/budget 20: human and search both average 4.400 turns, zero hand
-mismatches, zero shortfalls. The full 5,000-game gate requires a fresh PGO
-binary stamped to `HEAD:src`; that build and the full gate remain in progress.
+mismatches, zero shortfalls. The first full 5,000-game rerun on source
+`075cbb267890` reduced the failure count to 56 `APPLY-DROP-ORDER` misses,
+all from two deterministic games (seed 30004321/game 4321 and seed
+30004488/game 4488). In both, Culling the Weak sacrificed Fleshbag
+Marauder's selected victim before Fleshbag entered, so its ETB sacrificed
+Undead Warchief instead and removed the cost reducer required by a later
+spell. The payable-order walk now resolves Fleshbag's sacrifice in every
+sacrifice-ritual line. Both exact games pass with zero misses, oracle gaps,
+unmodeled cases, or capped searches. After rebasing onto shared
+`c4d5de01f`, the Release build again matched all ten references exactly
+and passed both mana reproductions. The final full 5,000-game gate requires
+a fresh PGO binary stamped to the integrated `HEAD:src`; that build and gate
+remain in progress.
 
 ## Coverage
 
