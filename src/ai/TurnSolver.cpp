@@ -16275,41 +16275,14 @@ static bool AttackLordCastEnabled()
     // 2026-11-27 root causes and AMENDMENTS (all inside the lever, off arm byte-identical): A frozen attack intent
     // (ProjectPlanWalk re-asks a held creature a kept lord pumps), B implicit sac-fodder payment (AttackTapLoss),
     // C the legend rule on a kept lord (ProjectPlanWalk), D Solve admits a lord-credited win only when applied +
-    // combat really kills (the payment-model over-reads the lord multiplies). USER 2026-11-27: "I would leave it
-    // off for now, but we probably should figure out why it doesn't work." -- still default OFF.
+    // combat really kills (the payment-model over-reads the lord multiplies), E EnumeratePlans' twin of D (its
+    // wins_this_turn is returned by SolveWithLookahead as a win unapplied), and the HAND fix (the walk takes each cast
+    // card out of the scratch hand, so Ilharg's attack-put projection cannot put a card the plan already cast; it was
+    // the temporary MTG_LORDCAST_HAND selector until 2026-11-27, always set together with this lever). USER
+    // 2026-11-27: "I would leave it off for now, but we probably should figure out why it doesn't work." -- still
+    // default OFF.
     static const bool env_on = EnvOn("MTG_ATTACK_LORD_CAST", false);
     return heurarm::Flag(heurarm::ATTACK_LORD_CAST, env_on);
-}
-// MTG_LORDCAST_HAND -- TEMPORARY selector (2026-11-27 lordcast re-test; delete or adopt with the USER's call on
-// MTG_ATTACK_LORD_CAST): the walk takes each cast card out of the scratch hand, so Ilharg's attack-put projection
-// cannot put a card the plan already cast. =1 on.
-static bool LordCastHandEnabled()
-{
-    static const bool env_on = EnvOn("MTG_LORDCAST_HAND", false);
-    return heurarm::Flag(heurarm::LORDCAST_HAND_TMP, env_on);
-}
-// TEMPORARY attribution mask (2026-11-27 lordcast round 3; DELETE before any adoption): MTG_LORDCAST_SITE bits
-// 1 = the lever in Solve's host (rollouts / d0 policy), 2 = in EnumeratePlans' host (the search window),
-// 4 = amendment D. Default 7 = the lever as built (byte-identical). Print-free selector only.
-static int LordCastSiteMask()
-{
-    static const int v = EnvInt("MTG_LORDCAST_SITE", 15);   // + 8 = amendment E (EnumeratePlans' D twin)
-    return v;
-}
-static thread_local int t_lordcast_host = 0;   // 1 Solve, 2 EnumeratePlans (set just before BuildAttackTapCtx)
-namespace lordcaststats   // TEMPORARY (MTG_LORDCAST_STATS=1): D / E verifier calls and refusals, printed at exit
-{
-inline std::atomic<long long> g_d_calls{0}, g_d_refused{0}, g_e_calls{0}, g_e_refused{0};
-struct Dumper
-{
-    ~Dumper()
-    {
-        if (!EnvOn("MTG_LORDCAST_STATS")) { return; }
-        std::fprintf(stderr, "[lordcast-stats] D calls=%lld refused=%lld  E calls=%lld refused=%lld\n",
-                     g_d_calls.load(), g_d_refused.load(), g_e_calls.load(), g_e_refused.load());
-    }
-};
-inline Dumper g_dumper;
 }
 static bool AttackAuraHostTapEnabled()
 {
@@ -16411,6 +16384,64 @@ struct AttackTapCtx
     // Point 10: the pre-plan board's attack intent, built on the first re-projection.
     AttackIntent intent;
     bool intent_built = false;
+    // The WalkBoard scratch's owner id for this ctx (0 = none yet; see WalkBoard).
+    std::uint64_t scratch_id = 0;
+};
+
+// ---- WALK SCRATCH BOARD (2026-11-27, the MTG_ATTACK_LORD_CAST cost cut; exact, play-identical) -------------
+// AttackTapLoss projects each subset on a COPY of the pre-plan state, once per memo miss: the stage-1 board (the
+// plan's ability taps and sacrifices) and the stage-2 board (the spent sources, then ProjectPlanWalk). Under
+// MTG_ATTACK_LORD_CAST every lord-casting subset walks, and on Elves p20 the copy-construct + destroy of that
+// board was ~40% of the walk's cost (perf, 24 games: AttackTapLoss 0.79 -> 3.33 Gcycles, GameState::GameState
+// 0.87 of it). The boards now share ONE thread-local scratch GameState: synced to `state` by a full copy-assign
+// the first time a ctx uses it, after which each board restores only the fields a non-lifegain projection
+// WRITES -- the battlefield (stage-1 taps / sacrifices, spent taps, amendment B's eaten fodder, the walk's entered
+// and kept bodies and pumps), the active player's hand (the lever's HAND fix: cast-card removal) and
+// spells_cast_this_turn (the walk's storm count). Every other call the projections make on the board reads it
+// (CanonicalSacVictim, SacPayFodderRank, CountOwnCreatures, ComputeLordBonus, PendingAttackDamage take it const;
+// PutPlusCounters writes only the entering Permanent). A LIFEGAIN walk (`full`) also writes life totals and gain
+// counters (ApplyCastLifegain, ProjectEnterLifegain, GainLife), so it takes a full copy-assign and leaves the
+// scratch unsynced for the next board. So the board every projection reads is field-for-field the copy it read
+// before. MAINTENANCE: a new write on the projection board in stage1 / AttackTapLoss stage 2 / ProjectPlanWalk's
+// non-lifegain path must be restored below, or its board must be built with `full`.
+// The owner id is per ctx (a ctx lives inside one Solve / EnumeratePlans call on one const `state`), never the
+// state's address, so a sibling or nested ctx that took the scratch in between forces a full re-sync. A
+// re-entered projection (the scratch busy) falls back to a private copy.
+struct WalkScratch
+{
+    GameState     s;
+    std::uint64_t owner = 0;   // the ctx id `s` is synced to (0 = unsynced)
+    bool          busy  = false;
+};
+static thread_local WalkScratch   t_walk_scratch;
+static thread_local std::uint64_t t_walk_scratch_next_id = 0;
+class WalkBoard
+{
+public:
+    WalkBoard(const GameState& state, std::uint64_t& ctx_id, bool full)
+    {
+        WalkScratch& w = t_walk_scratch;
+        if (w.busy) { own_.emplace(state); b_ = &*own_; return; }
+        w.busy = true;
+        b_ = &w.s;
+        if (ctx_id == 0) { ctx_id = ++t_walk_scratch_next_id; }
+        if (full || w.owner != ctx_id) { w.s = state; }
+        else
+        {
+            const std::size_t a = static_cast<std::size_t>(state.active_player_index);
+            w.s.battlefield           = state.battlefield;
+            w.s.players[a].hand       = state.players[a].hand;
+            w.s.spells_cast_this_turn = state.spells_cast_this_turn;
+        }
+        w.owner = full ? 0 : ctx_id;
+    }
+    ~WalkBoard() { if (!own_) { t_walk_scratch.busy = false; } }
+    WalkBoard(const WalkBoard&) = delete;
+    WalkBoard& operator=(const WalkBoard&) = delete;
+    GameState& get() { return *b_; }
+private:
+    GameState*               b_ = nullptr;
+    std::optional<GameState> own_;
 };
 
 // Point 10: the scope a re-projection runs under -- the pre-plan intent, or none (lever off).
@@ -16600,7 +16631,7 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
         // permanent it makes is the printed card `d`.
         const CardDefinition* face = KickedFaceOr(d, a.kicked, a.kick_count);
         const int kick_k = face->params.kick_times;
-        if (a.kind == Action::Kind::CastFromHand && LordCastHandEnabled())
+        if (a.kind == Action::Kind::CastFromHand && AttackLordCastEnabled())
         {
             std::vector<Card>& hand = t.players[static_cast<std::size_t>(active)].hand;
             for (auto it = hand.begin(); it != hand.end(); ++it)
@@ -17078,7 +17109,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
     // and (b) every HASTY body the same plan casts (Elves d0 gi3558: Clancaller + Archdruid + Visionary + Warcaller
     // under Concordant Crossroads hit for 18, read 9 -- each hasty cast was priced with the PRE-PLAN board's lords
     // only). (b) is unconditional: it is the same static bonus combat applies (CR 613.4c), read exactly.
-    ctx.board_lord = pending_atk > 0 && AttackLordCastEnabled() && (LordCastSiteMask() & t_lordcast_host) != 0;
+    ctx.board_lord = pending_atk > 0 && AttackLordCastEnabled();
     bool haste_cast = false, lord_cast = false;
     for (const Action& a : cands)
     {
@@ -17215,7 +17246,8 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
         { for (AttackTapCtx::Entry& m : ctx.memo) { if (m.mask == mask && m.sac == sac) { e = &m; break; } } }
         if (e == nullptr)
         {
-            GameState t = state;
+            WalkBoard board(state, ctx.scratch_id, /*full=*/false);
+            GameState& t = board.get();
             stage1(t);
             AttackTapCtx::Entry ne;
             ne.mask    = mask;
@@ -17336,7 +17368,8 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
         const auto it = ctx.memo2.find(key);
         if (it != ctx.memo2.end()) { return (ctx.pending_atk - it->second) + (reproj ? 0 : lost_base); }
     }
-    GameState t = state;
+    WalkBoard board(state, ctx.scratch_id, /*full=*/walk && walk_life);
+    GameState& t = board.get();
     stage1(t);
     if (reproj)
     {
@@ -66237,7 +66270,6 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
     // The attack this subset forfeits to its own taps (mana AND non-mana {T} activations) -- see
     // AttackTapLoss. Lockstep twin in EnumeratePlans.
     AttackTapCtx atk_tap_ctx;
-    t_lordcast_host = 1;
     BuildAttackTapCtx(state, is_pre_combat, pending_atk, atk_mana_srcs, cands, atk_tap_ctx);
     // Mana Cannons on the battlefield / castable, for the cast-trigger damage term. Lockstep twin.
     const CannonsCtx cannons_ctx = BuildCannonsCtx(state, cands);
@@ -68037,7 +68069,7 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
         // (LethalCutKillIsReal, the board-lethal cut's verifier), and only when it would otherwise replace `best`
         // (one apply per candidate winner, not per subset). A refused subset competes on value, exactly as the off
         // arm scores it. Lever-only: the off arm is byte-identical.
-        if (better && wins && !verified_win && is_pre_combat && atk_tap_ctx.board_lord && (LordCastSiteMask() & 4)
+        if (better && wins && !verified_win && is_pre_combat && atk_tap_ctx.board_lord
             && !atk_tap_ctx.cand_walk.empty())
         {
             bool lord_in_sel = false;
@@ -68048,10 +68080,8 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
                 Plan probe;
                 for (int j : sel) { probe.actions.push_back(j == fill_j ? fill_action : cands[static_cast<std::size_t>(j)]); }
                 ApplyCantripFirstOrder(state, probe.actions);   // as materialize_best orders it
-                lordcaststats::g_d_calls.fetch_add(1, std::memory_order_relaxed);
                 if (!LethalCutKillIsReal(state, probe, is_pre_combat, /*land_played=*/false, projected_atk, "lordcast"))
                 {
-                    lordcaststats::g_d_refused.fetch_add(1, std::memory_order_relaxed);
                     wins = false;
                     better = beats_best(false);
                 }
@@ -90055,7 +90085,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     int n = static_cast<int>(ap.hand.size());
     // The attack this subset forfeits to its own taps -- see AttackTapLoss. Lockstep twin in Solve.
     AttackTapCtx atk_tap_ctx;
-    t_lordcast_host = 2;
     BuildAttackTapCtx(state, is_pre_combat, pending_atk, atk_mana_srcs, cands, atk_tap_ctx);
     // Mana Cannons on the battlefield / castable, for the cast-trigger damage term. Lockstep twin.
     const CannonsCtx cannons_ctx = BuildCannonsCtx(state, cands);
@@ -92935,7 +92964,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         // combat simulated (LethalCutKillIsReal; the board already holds the land, as at the "enum" cut) before it
         // may claim the win; a refused one is an ordinary plan, subject to every drop below exactly as the off arm
         // reads it. Lever-only: the off arm is byte-identical.
-        if (wins && is_pre_combat && atk_tap_ctx.board_lord && (LordCastSiteMask() & 8) && !atk_tap_ctx.cand_walk.empty())
+        if (wins && is_pre_combat && atk_tap_ctx.board_lord && !atk_tap_ctx.cand_walk.empty())
         {
             bool lord_in_sel = false;
             for (int j : sel)
@@ -92945,10 +92974,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                 TurnSolver::Plan probe;
                 for (int j : sel) { probe.actions.push_back(j == fill_j ? fill_action : cands[static_cast<std::size_t>(j)]); }
                 ApplyCantripFirstOrder(state, probe.actions);   // as the emitted plan orders it
-                lordcaststats::g_e_calls.fetch_add(1, std::memory_order_relaxed);
                 if (!LethalCutKillIsReal(state, probe, is_pre_combat, /*land_played=*/true, projected_atk, "lordcast-enum"))
                 {
-                    lordcaststats::g_e_refused.fetch_add(1, std::memory_order_relaxed);
                     wins = false;
                 }
             }
