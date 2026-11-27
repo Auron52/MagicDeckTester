@@ -244,7 +244,33 @@ Unit test: `test_dragonstorm_line_keep.cpp`, `s30120119 T6 -- Apex taps the Moun
 Kolaghan` (on: the line pays; off: Kolaghan fails). Line-keep cases 9 / 9.
 
 **Event repros** (lever off / on, the same binary; `=0` game logs equal the round-2 binary's on all 23 games):
-KOLD_EVENTS
+```
+(seed  turn    Kolaghan-declared flags off -> on, all APPLY-DROP flags, win turn)
+30092109 4      KolD   5 ->   5  allAD   5 ->   5  win 4.0000 -> 4.0000
+30093026 4      KolD   1 ->   1  allAD   1 ->   1  win 4.0000 -> 4.0000
+30102129 4      KolD   3 ->   3  allAD   3 ->   3  win 4.0000 -> 4.0000
+30115282 5      KolD   9 ->   9  allAD   9 ->   9  win 5.0000 -> 5.0000
+30118865 7      KolD   2 ->   0  allAD   2 ->   0  win 7.0000 -> 7.0000
+30120119 6      KolD  25 ->   0  allAD  25 ->   0  win 8.0000 -> 8.0000
+30127991 4      KolD   4 ->   4  allAD   4 ->   4  win 4.0000 -> 4.0000
+30129637 5      KolD   1 ->   0  allAD   1 ->   0  win 5.0000 -> 5.0000
+30130531 6      KolD   8 ->   8  allAD   8 ->   8  win 6.0000 -> 6.0000
+30131013 6      KolD   5 ->   5  allAD   5 ->   5  win 6.0000 -> 6.0000
+30132752 4      KolD   8 ->   8  allAD   8 ->   8  win 4.0000 -> 4.0000
+30133545 5      KolD  15 ->  15  allAD  15 ->  15  win 5.0000 -> 5.0000
+30134453 6      KolD   4 ->   4  allAD   4 ->   4  win 6.0000 -> 6.0000
+30135813 6      KolD   2 ->   2  allAD   2 ->   2  win 6.0000 -> 6.0000
+30140711 5      KolD   1 ->   1  allAD   1 ->   1  win 5.0000 -> 5.0000
+30141736 6      KolD   3 ->   3  allAD  19 ->  19  win 6.0000 -> 6.0000
+30142598 5      KolD   7 ->   0  allAD   7 ->   0  win 5.0000 -> 5.0000
+30142750 7      KolD   4 ->   4  allAD   4 ->   4  win 7.0000 -> 7.0000
+30145461 4      KolD   4 ->   4  allAD   4 ->   4  win 5.0000 -> 5.0000
+30149079 4      KolD   1 ->   1  allAD   1 ->   1  win 4.0000 -> 4.0000
+30152803 4      KolD  14 ->  14  allAD  14 ->  14  win 4.0000 -> 4.0000
+30155333 5      KolD  10 ->   0  allAD  10 ->   0  win 5.0000 -> 4.0000
+30157929 4      KolD   9 ->   9  allAD   9 ->   9  win 4.0000 -> 4.0000
+total KolD 145 -> 100, all AD 161 -> 116
+```
 
 **What is left in the cluster (not fixed, mechanisms named, not measured further):**
 - *Two Apexes.* In every two-Apex line the loss is at the first Apex or before it, and the rest of the line holds the
@@ -287,3 +313,93 @@ faster in every shape (Dragonstorm 3,000 + 3,000 pairs included). Units -0.00% o
 Verdict: **ADOPT, default ON** (`MTG_ONDEMAND_LUMP_KEEP_OWED`; `=0` byte-identical). It removes 45 Kolaghan declared flags
 with no slower game anywhere and no CPU cost. Still open: the two-Apex shape (42 flags), the later-Song float (24) and
 the Territory {B} source (3), plus the need-later Karrthus cluster.
+
+### Round 4 (ds-apply4): `MTG_LINE_SEQ_REST` and `MTG_UNSEEN_SCARCE_RITUAL_NET` (2026-11-27)
+
+Target: round 3's open Kolaghan-declared shapes, re-measured on the round-4 base (land-1129 42fe79749: round 3 + SG50 +
+K NOM2, whose search moved several events). The 18 still-open events of round 3's `on` arm replay at play settings on
+this base with 123 Kolaghan-declared flags (single games, the oracle on the event turn, `MTG_DS2_PAYDBG` trace plus
+`MTG_UNSEEN_SCARCE_TRACE`; `logs/ds-apply4/dbgrun.sh`, `blost.py`, `evcmp.py`).
+
+**The hypothesis in the brief was wrong for the two-Apex shape.** The oracle's rollback names the failing decision: in
+s30093026 T4 ({Pyretic Ritual, Seething Song, Apex of Power, Apex of Power, Dragonlord Kolaghan}) the engine's first six
+payments are fine and the seventh is a breakpoint CONTINUATION's Seething Song {2}{R}, paid from the float alone
+(B1 R14, Mercadian Bazaar and the Mountain tapped). No lump is involved, so `LumpAwareBillPayableOpener` is never asked.
+The line opens a breakpoint, so the drain is the unseen-keep-scarce order (`MTG_UNSEEN_KEEP_SCARCE`): with no untapped
+source of either colour BOTH {B} and {R} are "scarce" (keep mask 12); red's spare is its float beyond the named later
+red (13 - 12 = 1), and the second generic unit came off the keep colours in hand order, {B} first. Song's own five red
+pay those later red pips, so red had six to spare.
+
+**M1 (`MTG_UNSEEN_SCARCE_RITUAL_NET`, heurarm `UNSEEN_SCARCE_RITUAL_NET`, DEFAULT ON, `=0` byte-identical).** In the
+unseen-keep-scarce drain the later pips are netted by the output of the RITUAL this payment is for before a scarce
+colour's spare units are computed (the `MTG_LINE_FLOAT_RITUAL_NET` argument, applied to the drain): it resolves before
+the rest. A reorder of floating units only; the same total is spent. Sound dominance in that payment: the kept {B} plus
+the red left and the ritual's float cover every later pip the plain drain covered.
+
+**M2 (`MTG_LINE_SEQ_REST`, heurarm `LINE_SEQ_REST`, DEFAULT ON, `=0` byte-identical): the rest of the line walked in
+order.** The line hold is one summed bill, so no payer judgement could credit what the rest's own casts add. Both apply
+worlds now bind the plan's casts in order (`LineSeqScope` beside the hold, ApplyPlanDirect and AIEngine::TakeTurn;
+`NoteLineSeqCast` at both cast sites before the payment; every `LineUnpaidCostScope` binds none, so continuations and
+payability walks never read it, in either world). `LineSeqRestPays` walks the rest after the cast being paid: each
+cast at its live cost (`EffectiveSpellCost` on the walk's board, so a Ruby Medallion earlier in the line reduces it),
+paid by the complete backtracker over every crack of the lumps left, keeping where it can the units of colours the later
+casts owe and none of them makes; then its output (a ritual's float, an Apex of Power's ten in the plan's chosen colour
+when cast from hand, an artifact onto the battlefield). It is a WITNESS: true only by exhibiting a legal sequence of
+payments; anything it does not model (an alternative / kicked / evoked cast, an unknown card) ends it false. It is used
+only when the sequence is in step with the payment (the stepped cast is the spell being paid; the rest's pips equal the
+hold's; its generic is within the hold's reducer credit) and the hold holds casts only. Two readers:
+- the round-3 lump keep-owed rung's judge: the plain crack strands when neither the summed judge nor the walk pays the
+  rest; the kept payment is taken when either does;
+- the OWED FLOAT KEEP (`KeepOwedFloatPay`, at the top of TapForCostShared, outermost autonomous payments): units of a
+  colour floating that the rest owes and none of its casts makes are set aside for the payment when the plain payment
+  (tried on a copy) strands the rest by both judges and the kept payment pays the bill and the walk pays the rest after
+  it (CR 601.2h). s30152803 T4 {Mountain, Ruby Medallion, Seething Song x2, Dragonlord Kolaghan, Irencrag Feat,
+  Dragonstorm}: the first Song's {1}{R} spent the Bloom's floating {B} on the {1} with a Mountain untapped (the float
+  rung reads it as non-spare: the rest owes red beyond the paying Song's five); kept, both Mountains pay and the walk
+  (Song, Kolaghan, Irencrag's seven, Dragonstorm) pays the rest. The same rule covers the storage-land and Sandstone
+  Needle variants of the shape (the {B} spent while Mercadian Bazaar or a Needle stayed untapped): "spend the counters
+  if they are required for the line" (USER).
+Both replace only a payment that provably strands the named line (no witness, summed or ordered) by one with a witness,
+so neither can strand a line the old judgement kept. A payment choice in the shared payer, executor and rollout
+together, at every budget.
+
+Unit tests (`test_dragonstorm_line_keep.cpp`): `s30152803 T4 -- the first Song taps both Mountains and the Bloom's {B}
+floats to Kolaghan` (`LINE_SEQ_REST` on: the line pays; off: Kolaghan fails) and `s30093026 T4 -- Song's own red nets the
+later red, the scarce drain keeps the {B}` (`UNSEEN_SCARCE_RITUAL_NET` on: {B} floats; off: spent). Line-keep 11 / 11;
+full suite 4333 / 4333.
+
+**Event repros** (both levers `=0` vs default, the same binary; with the levers `=0` all 18 game logs equal the round-4
+base's, `logs/ds-apply4/logcmp_base_off.txt`):
+```
+(seed  turn    Kolaghan-declared flags off -> on, all APPLY-DROP flags, win turn)
+30092109 4      KolD   5 ->   5  allAD   5 ->   5  win 4.0000 -> 4.0000
+30093026 4      KolD   1 ->   0  allAD   1 ->   0  win 4.0000 -> 4.0000
+30102129 4      KolD   3 ->   3  allAD   3 ->   3  win 4.0000 -> 4.0000
+30115282 5      KolD   9 ->   0  allAD   9 ->   0  win 5.0000 -> 5.0000
+30127991 4      KolD   4 ->   0  allAD   4 ->   0  win 4.0000 -> 4.0000
+30130531 6      KolD   8 ->   0  allAD   8 ->   0  win 6.0000 -> 6.0000
+30131013 6      KolD   2 ->   0  allAD   2 ->   0  win 6.0000 -> 6.0000
+30132752 4      KolD   8 ->   0  allAD   8 ->   0  win 4.0000 -> 4.0000
+30133545 5      KolD  15 ->  18  allAD  15 ->  18  win 5.0000 -> 5.0000
+30134453 6      KolD   4 ->   0  allAD   4 ->   0  win 6.0000 -> 6.0000
+30135813 6      KolD   2 ->   2  allAD   2 ->   2  win 6.0000 -> 6.0000
+30140711 5      KolD   1 ->   1  allAD   1 ->   1  win 5.0000 -> 5.0000
+30141736 6      KolD   3 ->   3  allAD  19 ->  19  win 6.0000 -> 6.0000
+30142750 7      KolD   4 ->   4  allAD   4 ->   4  win 7.0000 -> 7.0000
+30145461 4      KolD  30 ->  36  allAD  30 ->  36  win 5.0000 -> 5.0000
+30149079 4      KolD   1 ->   1  allAD   1 ->   1  win 4.0000 -> 4.0000
+30152803 4      KolD  14 ->   0  allAD  14 ->   0  win 4.0000 -> 4.0000
+30157929 4      KolD   9 ->   9  allAD   9 ->   9  win 4.0000 -> 4.0000
+total KolD 123 -> 82, all AD 139 -> 98
+```
+Eight events fixed (s30093026 two-Apex, M1; s30115282 Territory; s30127991; s30130531 one-Apex; s30131013 two-Apex;
+s30132752 / s30152803 the later-Song float, M2; s30134453). Two count more flags with the same failing decision on both
+arms (s30133545 decision #5 "keep-floating {B}", 15 -> 18; s30145461 decision #11, 30 -> 36): the oracle examines more
+plans on the on arm; neither is a new mechanism. Four final game logs move (30130531, 30134453, 30145461, 30152803);
+every win turn is unchanged.
+
+GATE4
+
+AB4
+
+VERDICT4

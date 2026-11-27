@@ -1,0 +1,2 @@
+[unit_par] 4333 / 4333 test cases in 8 shards on 2 cores; PASS
+rc=0
