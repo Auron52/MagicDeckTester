@@ -98,3 +98,10 @@ walk's backtracker calls changes later cache contents. NOT implemented; it is a 
   never settled; do NOT accept GT; do not run regression/smoke tiers.
 - Lane memory: the box has ~11-13 GB free; use `--cap-gb 3` for engine batches and `--cap-gb 4` for builds
   (`$C/build.sh <tag>` does the build + copy to `$S/bin_<tag>`; `SLEEP=0` skips its 200 s 9p wait).
+
+## Update (after the handoff was written)
+- n_c4off = 1147.611 G: c4 (LumpAwareBillPayable pooling reverted) shows the SAME +0.2 G on the 45 other decks'
+  off arm as c2/c3. So that +0.017% is NOT the LumpAwareBillPayable pooling (most likely a code-generation /
+  inlining shift in TapForCostShared from c2's edits; the executed play is identical, every digest/units equal).
+  c4 is worse than c3 on Dragonstorm (+0.53 G on, +0.20 G off) and no better elsewhere: **keep c3 (c14125eb4)**;
+  step 1 of "Remaining" is settled -- no rebuild needed. The Worldfire runs (wf_*) and n_c4on are now informational.
