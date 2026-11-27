@@ -665,3 +665,15 @@ then Maze's End K=20 mullgen from .claude/worktrees/maze-gen2.
     scaling back. After that you usually want to attack. But ideally how we handle this would depend more on our board
     than the turn." -> the preserve-scaling / preserve-attackers choice keys on board features (attack damage vs life,
     scaled-dork growth, a sink in hand), never the turn number; the A/B reports the chosen mode's turn distribution.
+11. Brigade 814 EXPLAINED (wip/elves-lordcast 184a7cb71, confirmed on the same board at d5 b20 and d8 b0): the USER's
+    guess holds -- the first Brigade's bodies make the mana for the second. T4 board: Warcaller, Priest, Archdruid,
+    Marwyn 3/3, 3 Forests; hand Brigade x2 + Wirewood Lodge; opp 26. Brigade squad 3 -> 4 Elves enter -> Marwyn +4
+    counters (+4 from the pumps), her tap 3 -> ~11 mana -> pays Brigade squad 2; Lodge untaps Marwyn; Warcaller 9 +
+    Marwyn 17 = 26 lethal. One cast must pay everything before any body enters (squad 7 taps Marwyn: 11 dmg; squad 5,
+    the largest leaving Marwyn to attack: 23). OPEN USER QUESTION: admit a second sink when a scaled source grown by
+    the first sink's bodies pays for it?
+12. Lordcast mechanisms (round-2 d0 slower games): A (Boars 206/237, CONFIRMED) the attacker set is fixed from the
+    pre-cast board, so a 0-power dork pumped by the cast lord still "holds"; B (Goblins 136/150, hypothesis) Skirk
+    Prospector's sac mana counted like land mana, the sacrificed Goblins never leave the attack; C (Boars 23,
+    hypothesis) a 2nd copy of a legendary lord already in play is counted (legend rule). Amended version in
+    184a7cb71 (default OFF); round 3 continuing from logs/elves/lordcast-handoff.md.
