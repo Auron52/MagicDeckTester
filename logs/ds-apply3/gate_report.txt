@@ -1,0 +1,7 @@
+arm                              gi     games    turns    cpu_s ADdecl ADundc ADordr   ENUM  ORGAP    CAP CAPdec |   ev_d   ev_u | games_d/u
+off                              all    72000   313583    83760    270    323     66     27      0     21    292 |     50     49 | 50/49
+off                              loo    18109    78957    19497     51     72     14      5      0      0      0 |     10     13 | 10/13
+on                               all    72000   313580    83798    231    318     58     25      0     21    291 |     46     49 | 46/49
+on                               loo    18109    78956    19641     51     72     14      5      0      0      0 |     10     13 | 10/13
+off undecl Karrthus=279, decl Dragonlord Kolaghan=144, decl Irencrag Feat=40, decl Karrthus=35, decl Scourge of Valkas=25, undecl Dragonlord Kolaghan=22, decl Desperate Ritual=16, undecl Scourge of Valkas=15, undecl Irencrag Feat=7, decl Rite of Flame=4
+on undecl Karrthus=274, decl Dragonlord Kolaghan=99, decl Karrthus=41, decl Irencrag Feat=40, decl Scourge of Valkas=25, undecl Dragonlord Kolaghan=22, decl Desperate Ritual=16, undecl Scourge of Valkas=15, undecl Irencrag Feat=7, decl Rite of Flame=4
