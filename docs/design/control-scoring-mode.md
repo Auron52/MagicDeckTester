@@ -832,7 +832,15 @@ What the design does about it (no new rule, a measurement):
   gauntlet, reporting delay and race-flip share separately for burn and creature decks.
 * **Calibrated against 1v1 when it exists** (stage 5): a per-effect-kind correction fitted on real games, so the
   mapping stops crediting delay that does not win. Whether E itself should be adjusted before then is the USER's
-  call on stage 1's numbers. It also has a hard counter in the gauntlet: Screaming Nemesis's lockout, above. The suite's life-gain
+  call on stage 1's numbers.
+* **The overrating is bounded (USER 2026-11-27, verbatim):** "Though not against combo I suppose, many of those decks
+  don't care about the total at all, but I could still see this being a bit of an issue. That said, it should
+  usually only shift some of the decks a turn. It shouldn't allow the deck to get away with much, if any, more."
+  Against a combo deck whose kill ignores our life total (infinite damage, an alternate win), life gain measures
+  close to zero delay. The per-deck partial scores keep it at zero there rather than averaging in the burn-deck
+  gain. Elsewhere it is mostly a single round on some of the gauntlet decks, so averaged over all of them it moves
+  E by a fraction of a round. The race-win check above stays as the guard. No correction is planned unless stage 1
+  shows a larger effect. It also has a hard counter in the gauntlet: Screaming Nemesis's lockout, above. The suite's life-gain
 decks (Selesnya Lifegain, Critter Lifegain, Martyr Lifegain, Lifegain Heliod Combo) are goldfish decks today. If
 the USER ever wants their life gain credited, they are candidates to carry both modes.
 
