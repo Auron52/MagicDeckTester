@@ -1221,6 +1221,22 @@ the rest.
     safe one attacks, the useless one stays home. "Useless" is judged against the WHOLE attack, though. With more
     attackers than our untapped blockers, someone gets through unblocked, so an attacker is a one-sided loss only
     if our block rule would actually block it, with a blocker that survives, given everything else attacking.
+  * **A swarm decides as a group (USER 2026-11-27, verbatim):** "If you have a big board of small creatures they
+    cannot all say 'oh there is a blocker that would kill me' and not attack, even though that gives each the best
+    chance at survival. The question is whether they outnumber the blockers that would kill them and by how much."
+    So the rule is applied to the attack as a whole, by count:
+    * Our blockers that can kill an attacker can each take at most one attacker (more, only by giving up other
+      blocks, as in a double block on a big attacker). With n at-risk attackers and b killing blockers, at most
+      b die, and the rest connect or meet blockers that cannot kill them.
+    * The searched options are counts, not subsets: with interchangeable attackers folded, "send k of the n" for
+      k = 0..n. A k whose losses are one-sided is pruned unless the damage of the k - b that get through is
+      lethal or sets up next-turn lethal. Trades stay searched. How far n outnumbers b is what makes a large k
+      worth it.
+  * **A blocker that kills nothing threatens nothing (USER 2026-11-27, verbatim):** "Also note that a blocker that
+    kills nothing (a 0-power wall for example) doesn't prevent anything from attacking." An attacker that no
+    blocker can kill is in the can't-die group above and attacks. Such a wall still stops one attacker's damage,
+    so it reduces the damage that gets through, which the search and the replay count, but it never makes an
+    attacker stay home.
   This is a heuristic prune, unlike the can't-die and interchangeable-attacker rules above, which are sound. It
   is therefore checked against the unpruned search at a large budget on a held-out sample. A game it makes worse
   is a counterexample, and the fix is to the rule's ranking. Its default is the USER's call on that measurement.
