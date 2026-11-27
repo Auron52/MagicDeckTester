@@ -350,6 +350,10 @@ TEST_CASE("ctrl_inject: skip -- the round advances, TurnSeq does not; no untap, 
     sc.card = CiCard("Lightning Bolt", 60);
     sc.expiry_turn = s.TurnSeq() + 1;             // Light Up the Stage cast this turn: "until the end of your NEXT turn"
     s.players[0].staged_cards.push_back(sc);
+    // The opponent's creature scheduled for round 3 still arrives in the skipped round (its side of the round).
+    static const std::vector<OpponentSpawn> spawns = { OpponentSpawn{ 3, 4, 4 } };
+    s.opponent_spawns = &spawns;
+    CiPerm(s, "Forest", 2, /*controller=*/1);   // an opponent land (the spawn land requirement, if armed)
     const int seq0 = s.TurnSeq();
     const std::size_t hand0 = s.players[0].hand.size();
     const std::size_t lib0 = s.players[0].library.size();
@@ -366,6 +370,9 @@ TEST_CASE("ctrl_inject: skip -- the round advances, TurnSeq does not; no untap, 
     CHECK(s.battlefield[static_cast<std::size_t>(CiFind(s, 1))].tapped);   // no untap step
     CHECK(s.players[0].hand.size() == hand0);                              // no draw step
     CHECK(s.players[0].library.size() == lib0);
+    int opp_creatures = 0;
+    for (const Permanent& p : s.battlefield) { if (p.controller_index == 1 && p.card.IsCreature()) { ++opp_creatures; } }
+    CHECK(opp_creatures == 1);
     if (opp_lib0 > 0) { CHECK(s.players[1].library.size() == opp_lib0 - 1); }   // its turn: its notional draw
     GameState next = s;
     next.AdvanceTurnCounter();

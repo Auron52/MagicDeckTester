@@ -257,6 +257,48 @@ static void NoteOwnDeath(const GameState& state)
     }
 }
 
+// The passive opponent's creatures scheduled for this round (UntapStep's site, and a control-injection `skip`
+// round's: the opponent's side of the round still happens when the goldfisher's turn does not).
+static void MaterializeOpponentSpawns(GameState& state)
+{
+    // Materialise any passive opponent creatures scheduled for this turn.
+    // Spawns are keyed on the ROUND and arrive at the regular turn's untap only: an extra turn is not
+    // a new round (the schedule would otherwise fire twice). Lockstep twin: the rollout's spawn site.
+    int opp_index = 1 - state.active_player_index;
+    // The schedule keys on the RAW round (GameState::RawRound; == turn_number unless a FREE turn was taken):
+    // the opponent took its turns, locked or not, so a free turn is a new raw round and its spawns arrive.
+    // The spawn land requirement (freeturn::SpawnMayAppear; MTG_OPP_SPAWN_NEEDS_LAND, USER 2026-11-22): with no land
+    // on the opponent's side no token appears. Inert unless the free-turn rule is armed for this deck or the flag is
+    // =1. Lockstep twin: the rollout's spawn site.
+    if (state.opponent_spawns && !state.in_extra_turn && freeturn::SpawnMayAppear(state))
+    for (const OpponentSpawn& spawn : *state.opponent_spawns)
+    {
+        if (spawn.turn != state.RawRound()) { continue; }
+
+        Card token;
+        token.m_name      = std::to_string(spawn.power) + "/"
+                          + std::to_string(spawn.toughness) + " Creature";
+        token.RehashName();
+        token.AddType(CardType::Creature);
+        token.m_power     = spawn.power;
+        token.m_toughness = spawn.toughness;
+        token.m_number    = state.next_opp_spawn_number++;   // stable per-copy id (GameState.h)
+
+        Permanent perm;
+        perm.card             = token;
+        perm.controller_index = opp_index;
+        perm.owner_index      = opp_index;
+        // entered_this_turn = false: passive creatures are treated as already present,
+        // not subject to summoning sickness (irrelevant since they never attack).
+        state.battlefield.push_back(perm);
+        // Enter-watchers (Suture Priest / Wardens): a scheduled opponent spawn IS a creature
+        // entering under the opponent's control. This site does not run the universal enter
+        // cascade, so fire the watchers directly (mirrors the rollout's spawn site, lockstep).
+        FireCreatureEnterWatchers(state, opp_index,
+                                  static_cast<int>(state.battlefield.size()) - 1);
+    }
+}
+
 void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
 {
     const int at = static_cast<int>(from);
@@ -344,7 +386,15 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         {
             const ctrlinject::RoundStart rs = ctrlinject::OnRoundStart(state);
             if (rs.changed) { m_ai.DropCommittedLineForCtrlInject(); }
-            if (rs.skip) { ctrl_skipped = true; goto ctrl_skipped_round; }
+            if (rs.skip)
+            {
+                // The opponent's scheduled creatures of this round still arrive (they are its side of the
+                // round, not part of our turn); Forbidden Orchard's Spirits do not (no Orchard was tapped).
+                MaterializeOpponentSpawns(state);
+                TypeStaticsSbaCheckpoint(state);
+                ctrl_skipped = true;
+                goto ctrl_skipped_round;
+            }
         }
         UntapStep(state);
         // ...and a `tap` effect (a land tapped down at upkeep) after the untap step, before the upkeep.
@@ -584,42 +634,7 @@ void GameEngine::UntapStep(GameState& state)
     // rollout's per-turn reset).
     state.free_casts_available = 0;
 
-    // Materialise any passive opponent creatures scheduled for this turn.
-    // Spawns are keyed on the ROUND and arrive at the regular turn's untap only: an extra turn is not
-    // a new round (the schedule would otherwise fire twice). Lockstep twin: the rollout's spawn site.
-    int opp_index = 1 - state.active_player_index;
-    // The schedule keys on the RAW round (GameState::RawRound; == turn_number unless a FREE turn was taken):
-    // the opponent took its turns, locked or not, so a free turn is a new raw round and its spawns arrive.
-    // The spawn land requirement (freeturn::SpawnMayAppear; MTG_OPP_SPAWN_NEEDS_LAND, USER 2026-11-22): with no land
-    // on the opponent's side no token appears. Inert unless the free-turn rule is armed for this deck or the flag is
-    // =1. Lockstep twin: the rollout's spawn site.
-    if (state.opponent_spawns && !state.in_extra_turn && freeturn::SpawnMayAppear(state))
-    for (const OpponentSpawn& spawn : *state.opponent_spawns)
-    {
-        if (spawn.turn != state.RawRound()) { continue; }
-
-        Card token;
-        token.m_name      = std::to_string(spawn.power) + "/"
-                          + std::to_string(spawn.toughness) + " Creature";
-        token.RehashName();
-        token.AddType(CardType::Creature);
-        token.m_power     = spawn.power;
-        token.m_toughness = spawn.toughness;
-        token.m_number    = state.next_opp_spawn_number++;   // stable per-copy id (GameState.h)
-
-        Permanent perm;
-        perm.card             = token;
-        perm.controller_index = opp_index;
-        perm.owner_index      = opp_index;
-        // entered_this_turn = false: passive creatures are treated as already present,
-        // not subject to summoning sickness (irrelevant since they never attack).
-        state.battlefield.push_back(perm);
-        // Enter-watchers (Suture Priest / Wardens): a scheduled opponent spawn IS a creature
-        // entering under the opponent's control. This site does not run the universal enter
-        // cascade, so fire the watchers directly (mirrors the rollout's spawn site, lockstep).
-        FireCreatureEnterWatchers(state, opp_index,
-                                  static_cast<int>(state.battlefield.size()) - 1);
-    }
+    MaterializeOpponentSpawns(state);
 
     // Forbidden Orchard: one opponent 1/1 Spirit per Orchard the active player controls this turn
     // (assume each is tapped for mana). Same point + order as the rollout (TurnSolver SimulateToEnd)
