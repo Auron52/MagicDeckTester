@@ -85,8 +85,13 @@ sacrifice-ritual line. Both exact games pass with zero misses, oracle gaps,
 unmodeled cases, or capped searches. After rebasing onto shared
 `c4d5de01f`, the Release build again matched all ten references exactly
 and passed both mana reproductions. The final full 5,000-game gate requires
-a fresh PGO binary stamped to the integrated `HEAD:src`; that build and gate
-remain in progress.
+a fresh PGO binary stamped to the integrated `HEAD:src`. The fresh PGO+LTO
+build completed its 320 training jobs (8,562 games) and stamped source
+`a9090dff06e5`. The final 5,000-game gate on games 0-4999 passed clean:
+zero issues, `MISS=0`, `ORACLE-GAP=0`, `UNMODELED=0`, `CAPPED=0`, and
+oracle-off play was byte-identical. The detailed report is
+`logs/mana_clean/20261127-215946/report.md`; the committed gate record is
+`test/mana_clean.json`.
 
 ## Coverage
 

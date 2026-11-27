@@ -16322,6 +16322,48 @@
      "verdict": "issues"
     }
    ]
+  },
+  "zombies": {
+   "runs": [
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 313,
+      "DROP-COVERED": 35672,
+      "PHANTOM": 38111
+     },
+     "commit": "ce6c97a7b693bd4504cfc0fed416a963c43dc1d4",
+     "date": "2026-11-27T22:06:39Z",
+     "decisions": 39257,
+     "deck": "decks/Zombies/Zombies.cod",
+     "deck_sha": "770a3ed526ae562aed6c3a2989b1adccb06ed36b",
+     "game_index": 0,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 2543803,
+     "ms_on": 2272674,
+     "report": "logs/mana_clean/20261127-215946/report.md",
+     "run": "20261127-215946",
+     "seed": 30000000,
+     "src": "a9090dff06e50473de2e899d1ad5c1a05bed120a",
+     "verdict": "clean"
+    }
+   ]
   }
  },
  "disclosed_classes": [
