@@ -1498,6 +1498,64 @@ function testMorphHandBadges(win) {
   return fails;
 }
 
+// MULTIKICKER / SQUAD kick-count dialog, DOM-only (Joraga Warcaller). USER 2026-11-27: the badge's
+// click-to-cycle "works, but I would consider it non-intuitive ... It's probably better just to pop up a
+// dialog". The badge opens #decpanel with one button per K = 0..max; max is the engine's FULL-enumeration
+// `multikick_max` (here 6), NOT the largest K the capped `plans` subset happens to list (here 5, with gaps).
+function testMultikickDialog(win) {
+  const S = win.__getS(), fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const W = 'Joraga Warcaller';
+  const mk = (idx, withMax) => ({ type: 'main_phase', decision_index: idx, turn: 4, phase: 'pre_main', on_the_play: true,
+    me: { life: 20, library_size: 40, land_drops_left: 0, battlefield: [], graveyard: [],
+          hand: [{ num: 21, name: W, cost: '{G}', mv: 1, kind: 'permanent', is_creature: true }] },
+    opponent: { life: 20, battlefield: [] },
+    ...(withMax ? { multikick_max: { [W]: 6 }, multikick_cost_mv: { [W]: 1 } } : {}),
+    plans: [{ index: 0, summary: `cast: ${W}`, casts: [W], actions: [{ card: W }] },
+            { index: 1, summary: `cast: ${W} (kicked x1)`, casts: [W], actions: [{ card: W, kicked: true, kick_count: 1, kicked_cost_mv: 1 }] },
+            { index: 2, summary: `cast: ${W} (kicked x5)`, casts: [W], actions: [{ card: W, kicked: true, kick_count: 5, kicked_cost_mv: 5 }] }] });
+  // A FRESH object per decision: the viewer caches Maps on it (d.__feScan), which a JSON clone would mangle.
+  S.decision = mk(9, true); S.prev = null; S.plan = []; S.over = false; S.busy = false; S.handOrder = [];
+  S.leMode = false; S.vialMode = null; S._kickFor = null; win.renderBoard();
+  const q = sel => win.document.querySelector(sel);
+  const click = el => el.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  const badge = () => q(`#handrow .landface[data-kick="${W}"]`);
+  const panel = () => q('#decpanel');
+  chk(!!badge(), 'the kicker badge renders on a multikick card');
+  chk(badge() && /kick…/.test(badge().textContent), `unset badge reads "kick…": "${badge() && badge().textContent}"`);
+  if (!badge()) return fails;
+  click(badge());
+  chk(/show/.test(panel().className), 'clicking the badge opens the dialog');
+  chk(S.plan.length === 0, 'opening the dialog queues nothing');
+  chk(panel().textContent.includes(`${W}: how many times to kick?`), 'the dialog asks how many times');
+  const ks = [...panel().querySelectorAll('button[data-k]')].map(b => +b.dataset.k);
+  chk(JSON.stringify(ks) === '[0,1,2,3,4,5,6]', `one button per K = 0..multikick_max, got ${JSON.stringify(ks)}`);
+  const b3 = panel().querySelector('button[data-k="3"]');
+  chk(b3 && /\+3/.test(b3.textContent), `K=3 shows its +3 mana, got "${b3 && b3.textContent}"`);
+  // Cancel leaves the plan unchanged.
+  click(q('#kickcancel'));
+  chk(!/show/.test(panel().className) && S.plan.length === 0, 'Cancel closes the dialog and changes nothing');
+  // K=3 (absent from the listed plans) queues the cast kicked three times.
+  click(badge()); click(panel().querySelector('button[data-k="3"]'));
+  chk(S.plan.length === 1 && S.plan[0].kickCount === 3, `K=3 queues a ×3 cast: ${JSON.stringify(S.plan)}`);
+  chk(win.LineBuild.encodeLine(S.plan) === `cast=${W};kicked=${W} x3`, `encodes "${win.LineBuild.encodeLine(S.plan)}"`);
+  chk(!/show/.test(panel().className), 'choosing a count closes the dialog');
+  chk(badge() && /kicked ×3/.test(badge().textContent), `badge shows the count: "${badge() && badge().textContent}"`);
+  // Reopening marks the current K and choosing 0 unkicks IN PLACE (the cast stays queued, no duplicate).
+  click(badge());
+  const cur = panel().querySelector('button.primary[data-k]');
+  chk(cur && cur.dataset.k === '3', 'the current count is the highlighted button');
+  click(panel().querySelector('button[data-k="0"]'));
+  chk(S.plan.length === 1 && !S.plan[0].kicked, `K=0 casts it unkicked in place: ${JSON.stringify(S.plan)}`);
+  // Fallback: a decision without `multikick_max` reads the max off the plans (5 here).
+  S.decision = mk(10, false); S.plan = []; S._kickFor = null; win.renderBoard();
+  click(badge());
+  const ks2 = [...panel().querySelectorAll('button[data-k]')].map(b => +b.dataset.k);
+  chk(ks2.length === 6 && ks2[5] === 5, `without multikick_max the dialog falls back to the plans' max 5, got ${JSON.stringify(ks2)}`);
+  click(q('#kickcancel'));
+  return fails;
+}
+
 function testMdfcLandFace(win) {
   const S = win.__getS(), fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
@@ -2535,6 +2593,9 @@ async function testMorph() {
     const lfFails = testMdfcLandFace(win);
     if (lfFails.length) { anyFail = true; console.log(`✗ mdfc land face: ${lfFails.length} fail`); lfFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ MDFC land back playable from the palette (badge → land= line, gated on the offer)'); }
+    const mkFails = testMultikickDialog(win);
+    if (mkFails.length) { anyFail = true; console.log(`✗ multikick dialog: ${mkFails.length} fail`); mkFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ multikick dialog (badge → "how many times to kick?" K = 0..multikick_max; Cancel is a no-op; ×K on the badge)'); }
     const mhFails = testMorphHandBadges(win);
     if (mhFails.length) { anyFail = true; console.log(`✗ morph hand badges: ${mhFails.length} fail`); mhFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ morph hand badges (face down / down+up toggle the cast mode; "flip it" queues the hand-source flip)'); }

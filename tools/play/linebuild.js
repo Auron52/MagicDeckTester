@@ -800,9 +800,12 @@
   // count is therefore the gesture -- 0 -> 1 -> 2 -> 0 over n queued casts -- which is this GUI's
   // standing idiom for a repeated click on one affordance, and reads off the badge's "xN".
   // Returns { plan, action }, action being 'kicked' | 'unkicked' | 'queued' for the GUI's hint.
-  // MULTIKICKER / SQUAD (Joraga Warcaller, Galadhrim Brigade; kmax > 0): the badge CYCLES the kick count of
+  // MULTIKICKER / SQUAD (Joraga Warcaller, Galadhrim Brigade; kmax > 0): this branch CYCLES the kick count of
   // the last queued cast, 0 -> 1 -> ... -> kmax -> 0 (kickCount; encodeLine writes `kicked=<name> xK` and
-  // `+kickedx<K>`). kmax is the largest K the engine enumerated this decision (index.html kickerMaxK).
+  // `+kickedx<K>`). The GUI no longer uses it for a multikick card -- the badge opens a "how many times?"
+  // dialog that calls setKickCount below (USER 2026-11-27: the cycling "works, but I would consider it
+  // non-intuitive ... It's probably better just to pop up a dialog"). Kept for the single-kicker path and
+  // for any caller that still wants the cycle.
   function toggleKicker(plan, name, kind, kmax) {
     const idxs = plan.map((p, i) => ({ p, i }))
                      .filter(x => x.p.name === name && isSpecCast(x.p) && lineVerb(x.p) === 'cast')
@@ -819,6 +822,37 @@
     const un = idxs.filter(i => !plan[i].kicked);
     if (un.length) { plan[un[un.length - 1]].kicked = true; return { plan, action: 'kicked' }; }
     idxs.forEach(i => { delete plan[i].kicked; });
+    return { plan, action: 'unkicked' };
+  }
+
+  // MULTIKICKER / SQUAD DIALOG (Joraga Warcaller, Galadhrim Brigade): the plan edit behind index.html's
+  // "how many times to kick?" dialog. Sets the kick count of ONE queued cast of `name` to exactly k
+  // (k = 0 = the unkicked cast) -- the same no-duplicate contract as toggleKicker, for its reason (both
+  // modes share a hand slot, so a second entry would build `cast=X;cast=X;kicked=X xK`):
+  //   * nothing of this name queued -> append a cast kicked k times (k = 0: a plain cast)
+  //   * otherwise                   -> set the count on the queued cast at position `which` among this
+  //                                    name's queued casts (default: the LAST one, toggleKicker's target),
+  //                                    so with two copies queued each can carry its own K.
+  // A board activation or a land of the same name is never a cast and is never edited (isSpecCast).
+  // Returns { plan, action }, action being 'queued' | 'kicked' | 'unkicked' for the GUI's hint.
+  // The plan indices of the queued CASTS of `name` (not a same-named activation or land), in queue order:
+  // the entries setKickCount's `which` counts over, and the ones the dialog shows a row for.
+  function queuedCastIdxs(plan, name) {
+    return plan.map((p, i) => ({ p, i }))
+               .filter(x => x.p.name === name && isSpecCast(x.p) && lineVerb(x.p) === 'cast')
+               .map(x => x.i);
+  }
+  function setKickCount(plan, name, kind, k, which) {
+    const n = Math.max(0, Math.floor(+k || 0));
+    const idxs = queuedCastIdxs(plan, name);
+    if (!idxs.length) {
+      plan.push(n > 0 ? { name, kind, kicked: true, kickCount: n } : { name, kind });
+      return { plan, action: 'queued' };
+    }
+    const w = (which != null && which >= 0 && which < idxs.length) ? which : idxs.length - 1;
+    const e = plan[idxs[w]];
+    if (n > 0) { e.kicked = true; e.kickCount = n; return { plan, action: 'kicked' }; }
+    delete e.kicked; delete e.kickCount;
     return { plan, action: 'unkicked' };
   }
 
@@ -1203,7 +1237,7 @@
   return { planLand, planLands, landDropsLeft, queuedLandGrants, handCounts, stagedCounts, castableCount, plannedCount,
            toggleSuspend,
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
-           toggleKicker, toggleFaceDown,
+           toggleKicker, setKickCount, queuedCastIdxs, toggleFaceDown,
            offersLandAfter, topLandOffered, landPosition, karooPositionsOffered,
            sequenceToken, sequenceTokens, sequenceSteps, sequencePinned, validationLine, shrinkingIndices,
            stampPlanNums, isPreTap, preTapToken,

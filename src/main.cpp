@@ -2899,6 +2899,41 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         && static_cast<size_t>(chosen_index) < plans.size()
         && std::find(emit_order.begin(), emit_order.end(),
                      static_cast<size_t>(chosen_index)) == emit_order.end();
+    // MULTIKICKER / SQUAD (Joraga Warcaller, Galadhrim Brigade): the largest kick count K any plan of
+    // the FULL enumeration casts each such card with. The `plans` array below is a capped/collapsed
+    // subset with gaps (seed 1 T4 listed Warcaller-alone only at K=1 and K=5), so the viewer's kick
+    // dialog cannot read the real maximum off it. Human play enumerates every K = 1..kmax and the subset
+    // solve drops an unaffordable K, so this max is the largest PAYABLE K, and every smaller K is payable
+    // too (--validate-line accepts any of them). Display-only: nothing reads it back, play is untouched.
+    {
+        // (name, max K, per-kick mana value). The per-kick MV rides along in `multikick_cost_mv` so the
+        // badge can price the dialog even when the emitted subset holds no kicked row of the card.
+        struct MkRow { std::string name; int max; int per_kick_mv; };
+        std::vector<MkRow> mk;
+        for (const TurnSolver::Plan& p : plans)
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand || !a.kicked || a.kick_count <= 0) { continue; }
+                const std::string nm = a.card_name.str();
+                auto it = std::find_if(mk.begin(), mk.end(), [&](const MkRow& e) { return e.name == nm; });
+                if (it != mk.end()) { it->max = std::max<int>(it->max, a.kick_count); continue; }
+                const CardDefinition* kd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (kd == nullptr || !HasRepeatKicker(kd->params)) { continue; }
+                mk.push_back({ nm, a.kick_count, RepeatKickerCost(kd->params)->ManaValue() });
+            }
+        }
+        if (!mk.empty())
+        {
+            os << "  \"multikick_max\": {";
+            for (size_t k = 0; k < mk.size(); ++k)
+            { os << (k ? ", " : " "); JsonStr(os, mk[k].name); os << ": " << mk[k].max; }
+            os << " },\n  \"multikick_cost_mv\": {";
+            for (size_t k = 0; k < mk.size(); ++k)
+            { os << (k ? ", " : " "); JsonStr(os, mk[k].name); os << ": " << mk[k].per_kick_mv; }
+            os << " },\n";
+        }
+    }
     os << "  \"plans\": [\n";
     auto emit_plan = [&](size_t i, bool last)
     {
