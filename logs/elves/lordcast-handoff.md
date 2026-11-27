@@ -15,7 +15,7 @@ Lever default stays OFF (USER's call). Investigation: deliverable is mechanism +
 ## Done
 - Rebase (hashes rewritten; the old head ebffd51bf = the round-2 d8 b0 commit, now the commit just below the WIP).
 - WIP commit (this file + the amendment code, see "Commits" in git log): amendments A/B/C in src/ai/TurnSolver.cpp,
-  all under MTG_ATTACK_LORD_CAST (off arm byte-identical by construction). NOT YET COMPILED / NOT YET RUN (see Running).
+  all under MTG_ATTACK_LORD_CAST (off arm byte-identical by construction). COMPILED (build_m.log exit 0), NOT YET RUN on any game.
 - Helpers (logs/lordcast/): gdiff.sh (one game per arm with logs, first divergence; BASE/BIN/PLAYARGS env), turnview.py
   (hand/board/actions of a turn), mk_cls.py (per-game manifest of a cell's slower games under arbitrary arms),
   feat.py + featall.sh (divergence features: legendary dup, bodies lost in the diverging main), run_ab3.sh (round-3
@@ -75,16 +75,15 @@ Archdruid (yield 4), Marwyn 3/3 (1 counter, yield 3); hand Brigade, Brigade, Wir
   single-Brigade rows (squad 1-5 without Lodge, 1-7 with it).
 
 ## Running jobs
-- Build of the amendments: `./build.sh release -- --target mtg` via box_lane, PID 2770509 (box_lane) / 2770518 (build.sh),
-  log `$SC/build_m.log`; FINISHED when that log's last line is `exit <rc>` (rc 0 = ok). Binary build/Release/mtg
-  (worktree build/ -> build/wt/elves-lordcast). The earlier full build was stopped at 67/404 (unit tests not built).
-  A waiter (bwp1p0maf, this session) watches it; it dies with the session.
+None. The amendment build FINISHED 2026-11-27 ~10:35 UTC: `$SC/build_m.log` ends `exit 0` (compiles clean, no errors);
+binary build/Release/mtg (= build/wt/elves-lordcast/Release/mtg) holds commit 184a7cb71's src. Unit tests are NOT built
+(the full build was stopped at 67/404); run `./build.sh` (full) before any unit-test run. Not yet run on any game.
 
 ## Remaining, in order
 1. When build_m.log says exit 0: run the recovery manifest `$SC/cls/r1.json` (off vs onB over every round-2 d0 slower
    game: Boars 237, Goblins 150, Elves 183) on build/Release/mtg:
    `bash scripts/box_lane.sh --slots 2 --cap-gb 2 -- env MTG_DUMP_WINS=1 build/Release/mtg --batch $SC/cls/r1.json --threads 2 > $SC/cls/r1.out 2> $SC/cls/r1.err`
-   Count onB <= off per class (A/B/C/other). Fix compile errors first if any (code is unbuilt).
+   Count onB <= off per class (A/B/C/other). (The binary is already built.)
 2. Launch the round-3 A/B queued on the heavy lock: `bash logs/lordcast/run_ab3.sh` (run_in_background; it copies
    build/Release/mtg to $SC/mtg.ab3, writes $SC/m3.json (2,366 jobs / 330k games: boars/goblins/elves d0 50k, play 4000,
    2HG 1000, arms off/onB, BASE 7460000), out $SC/ab3.out/err, PID in $SC/run_ab3.pid, DONE marker $SC/DONE3).
