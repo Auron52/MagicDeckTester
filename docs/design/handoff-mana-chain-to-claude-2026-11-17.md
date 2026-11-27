@@ -309,6 +309,17 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 
 **12:27 UTC 11-26 (pre-compaction checkpoint):** I am HEAD of the push queue since 11:49; land-1126b validation running under `push_queue.py hold` (task bawqjsga8; log build/scratch/land-1126b/validate.log; markers UNIT.DONE (passed), TIERS.DONE). Rebased onto 9e566000b (no src change). Smoke+regression --both started ~12:18 after I killed the TH agent's gate2 (it had taken the box lock; agent told to relaunch behind TIERS.DONE). AFTER TIERS: `bash test/classify_turn_later.sh smoke` + `regression` (lane, 2 slots), then `bash test/regression.sh --both "--accept-with-regressions=<note>"`, `python3 test/check_gt_logs.py`, check_references_safe, commit GT, `push_queue.py land`. Expected moves: Maze's End rows (scoped price), maybe units-only on Elementals/Martyr/Morph; everything else byte-identical. DRAGONS agent DONE: wip/dragons-ogap 8b1dd8706 (fix) 1f7924d3c 639e947fa (report): ORACLE-GAP 3,747 -> 0, oracle-off byte-identical -> ride the NEXT landing (src-gated; recheck its 3 env unit failures). Dragons engine follow-ups (play changes): Gruul Turf {R}-float APPLY-DROP x262; dead Haven self-pay rebuy branch (sound collapse); 10 continuation rebuy drops. AGENTS RUNNING: TH APPLY-DROP (wip/th-apply, scratch build/scratch/th-apply), Dragonstorm APPLY-DROP (wip/ds-apply, scratch build/scratch/ds-apply). Then: Maze Summit 2HG g292, Cyclone d6, Hinata gi548/gi33, prepay step 5. USER questions open: K fleet-wide (kverify clean -> recommend yes); SG50+K on Creature Giving/Antilife/Dragonstorm; Creature Giving beam drop.
 
+**03:50 UTC 11-27:** Status before compaction. DS agent 4 (wip/ds-apply2, ~194K tokens at last check) holds the
+box lock: its Dragonstorm gate started 02:19 (binary build/scratch/ds-apply2/bin_new4), its all-deck held-out A/B
+(base 5220000) chained after it; markers under build/scratch/ds-apply2/ (chain.pid, gate_out, then the A/B out dir).
+When it reports: write logs/ds-apply2/report.md from its final message (git add -f), check its d8 b0 replay results,
+then land from a NEW worktree via the push queue (queue was empty at 02:37). Gate filler claude_gate_1127 (chain pid
+829089, worktree land-1128 at f5f442801, run claude-queue-20261127a) yielded 02:19 and resumes when the lock frees;
+waiter bsizo6g4g on $D/DONE (2 h cap, re-arm). When DONE: commit test/mana_clean.json from land-1128 into the next
+landing, rank remaining clusters, spawn fix agents (TH Throes continuation / undeclared drops / ENUM-GAP; Dragons
+two-dig chains; older: Maze Summit 2HG g292, Cyclone d6, Hinata gi548/gi33, prepay step 5). CI on f5f442801 not
+checked (gh unauthenticated in this shell). USER questions open: K fleet-wide; SG50+K; Creature Giving beam drop.
+
 **01:05 UTC 11-27:** DS agent 3 handed off at 266K (wip/ds-apply2 eae78830d + report 027e411d8;
 logs/ds-apply2/handoff.md). (a) root-caused: the greedy's CCO line reserve (MTG_CCO_RESERVE_OTHER) judges "the other
 Territory covers it" per colour, so two Territories each count the other for both {B} and {G}; lever
