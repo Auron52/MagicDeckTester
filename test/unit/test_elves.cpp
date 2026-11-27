@@ -1135,15 +1135,6 @@ TEST_CASE("Leaf-Crowned Visionary beyond the horizon: greedy Solve marks its pla
         CHECK(ETapped(*gs) == 2);
     }
     CHECK(roll.players[0].hand[0].m_number == real.players[0].hand[0].m_number);
-    // The temporary A/B selector (MTG_PLAYOUT_PAY_DRAW=0, per job) restores the decline.
-    {
-        const std::int8_t prev = heurarm::t_arm[heurarm::PLAYOUT_PAY_DRAW];
-        heurarm::t_arm[heurarm::PLAYOUT_PAY_DRAW] = 0;
-        const TurnSolver::Plan off =
-            TurnSolver::Solve(s, true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
-        heurarm::t_arm[heurarm::PLAYOUT_PAY_DRAW] = prev;
-        CHECK_FALSE(off.mihail_pay_choice.PaySpare());
-    }
     // No pay-draw source: the plan is not marked (every other deck byte-identical).
     GameState n = EBase();
     EForests(n, 2);

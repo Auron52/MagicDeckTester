@@ -93,6 +93,13 @@ Known gaps / items to raise:
   pays when the {G} is spare -- the rest of the line's casts (`g_line_unpaid_cost`), the plan's activations, and before
   combat the combat pump count (Ezuri) all stay payable (`PayDrawPlayoutSpare`). Searched turns still branch both ways
   (unpinned = decline there). Was: never pay beyond the horizon.
+  Measured 2026-11-27 (pooled A/B, d5 b20, std 1500 + 2HG 750 paired games, seed 9800001+gi): std delta +0.0000
+  (0 slower / 0 faster; play moved in 5 of 30 chunks), 2HG -0.0013 (0 slower / 1 faster; 3 of 15 chunks); units
+  +0.65% std / +0.26% 2HG. Smoke: only `elves_smoke_d0_s1001` moved (4.8910 -> 4.8950, 18 slower / 14 faster), all of
+  it this policy (selector off reproduced GT). Mechanism of the d0 slower games (gi130/185/226): a PRE-COMBAT spare {G}
+  was paid by tapping attack-ready mana creatures (Llanowar Elves, Elvish Mystic, Priest of Titania), costing their
+  combat damage (8->2, 13->7, 4->0). Proposed amendment (USER's call): before combat, the {G} is spare only if payable
+  without tapping an untapped, non-summoning-sick creature with power > 0.
 * Magistrate's AUTONOMOUS target set is the board the plan starts from: a creature cast earlier in the same
   plan cannot be the target in that main (the human picks on the live board, so the viewer is not affected).
   The same holds for Kessig Wolf Run and the Merfolk tap-target pumps. A completeness gap to raise with the
