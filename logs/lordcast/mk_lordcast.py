@@ -13,7 +13,16 @@ import json, os, re, sys
 sys.path.insert(0, "logs/lordcast")
 BASE = int(os.environ.get("BASE", 7340000))
 # ARMS="name:lord:hand,..." (hand = MTG_LORDCAST_HAND); default the original off/on (+null) run.
-ARMS = [(a, b == "1", h == "1") for a, b, h in (x.split(":") for x in os.environ.get("ARMS", "off:0:0,on:1:0").split(","))]
+# ARMS_D0 / ARMS_PLAY = "name:lord[:hand[:verify]],..." (MTG_ATTACK_LORD_CAST, MTG_LORDCAST_HAND, MTG_LORDCAST_VERIFY)
+NAMES = ("MTG_ATTACK_LORD_CAST", "MTG_LORDCAST_HAND", "MTG_LORDCAST_VERIFY")
+def parse_arms(v):
+    out = []
+    for x in v.split(","):
+        f = x.split(":")
+        out.append((f[0], {NAMES[i]: f[1 + i] == "1" for i in range(len(f) - 1)}))
+    return out
+ARMS_D0 = parse_arms(os.environ.get("ARMS_D0", os.environ.get("ARMS", "off:0,on:1")))
+ARMS_PLAY = parse_arms(os.environ.get("ARMS_PLAY", os.environ.get("ARMS", "off:0,on:1")))
 PLAY_KEYS = os.environ.get("PLAY_KEYS")   # comma list: play rows only for these keys (d0 for every key)
 WITH_NULL = os.environ.get("NULL", "1") == "1"
 N_D0, N_PLAY, N_2HG = 50000, 4000, 1000
@@ -38,13 +47,14 @@ cost = json.load(open("test/suite_cost.json"))["decks"]
 keys = sys.argv[2:] or LORDS
 jobs = []
 def emit(key, shape, n, chunk, extra, weight, null_n):
+    ARMS = ARMS_D0 if shape == "d0" else ARMS_PLAY
     base = key[:-3] if key.endswith("2hg") else key
     for gi0 in range(0, n, chunk):
         g = min(chunk, n - gi0)
-        arms = list(ARMS) + ([("null", False, False)] if WITH_NULL and gi0 < null_n else [])
-        for arm, on, hand in arms:
+        arms = list(ARMS) + ([("null", dict(ARMS[0][1]))] if WITH_NULL and gi0 < null_n else [])
+        for arm, flags in arms:
             j = {"name": f"{key}|{shape}|{arm}|{gi0}", "deck": FILE[base], "profile": PROF[base], "games": g,
-                 "seed": BASE + gi0, "game_index": gi0, "flags": dict({"MTG_ATTACK_LORD_CAST": on}, **({"MTG_LORDCAST_HAND": hand} if len(ARMS[0]) and os.environ.get("ARMS") else {})), "weight": weight}
+                 "seed": BASE + gi0, "game_index": gi0, "flags": flags, "weight": weight}
             j.update(extra)
             jobs.append(j)
 for key in keys:

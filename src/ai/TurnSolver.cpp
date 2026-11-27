@@ -134487,9 +134487,17 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     }
     // Candidates are sorted highest-value first, so the first winning plan
     // (if any) is also the highest-value winning plan.
+    // MTG_LORDCAST_VERIFY (TEMPORARY selector, 2026-11-27 lordcast re-test): the projection behind wins_this_turn
+    // is optimistic, and this return reports the node won THIS turn at any budget. Under the selector a projected
+    // winner is taken only when the applied plan + combat really kills; a refused one falls through.
+    static const bool s_lc_verify_env = EnvOn("MTG_LORDCAST_VERIFY", false);
+    const bool lc_verify = heurarm::Flag(heurarm::LORDCAST_VERIFY_TMP, s_lc_verify_env);
     for (const Plan& p : candidates)
     {
-        if (p.wins_this_turn) { report(state.turn_number, depth - 1); return p; }
+        if (!p.wins_this_turn) { continue; }
+        if (lc_verify && !LethalCutKillIsReal(state, p, is_pre_combat, /*land_played=*/false, 0, "lookahead"))
+        { continue; }
+        report(state.turn_number, depth - 1); return p;
     }
 
     // ---- THE SEARCH QUERIES THE COMBO OFF RULE (see EdfComboOffShortcut above) -----------------

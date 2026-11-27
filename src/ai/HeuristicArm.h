@@ -1161,6 +1161,7 @@ enum Slot : int
     LINE_NC_LEFT,             // MTG_LINE_NC_LEFT  the line-keep rung (LineReducerKeepHold) judges the rest of the line as creature casts only once the line has no NONCREATURE cast left to pay (both apply worlds count them down at the cast site), not only when this payment's mana value covers the line's whole noncreature bill: a colored_creature_only land then makes a colour for the rest (Dragonstorm s30129376 T4 {Ruby Medallion, Seething Song, Karrthus}: at Song's payment Karrthus read as a noncreature bill, unpayable either way, so Song's {1} drained the floating {B} instead of Sandstone Needle paying it). DEFAULT ON; =0 -> the mana-value test alone, byte-identical
     ELVES_BUCKET_DISCARD,     // MTG_ELVES_BUCKET_DISCARD  Elves: the USER's cleanup-discard buckets (2026-11-27: "a discard policy that just buckets mana and threats. (mana elves can go in the mana bucket)"; amended: "feel free to add more mana as long as we have 1-2 scaling threats"): DEAD (2nd legend / 2nd world enchantment of ours) first; MANA = lands + mana creatures; SCALING = the mana sinks (Wave, Warcaller, Brigade, Ezuri, Shepherd), the best 2 kept and every other threat shed before mana; with no sink, up to 3 threats kept ahead of the mana past the land floor + 2. ElvesProvider::CleanupDiscardCandidates. Default ON (USER rule); =0 -> the inherited SelesnyaLifegain buckets
     LORDCAST_HAND_TMP,        // MTG_LORDCAST_HAND  TEMPORARY A/B selector (2026-11-27 lordcast re-test): ProjectPlanWalk removes each walked cast's card from the scratch HAND, so a hand reader in the attack projection (Ilharg's attack put) cannot put a card the plan just cast (Boars d0 gi10/gi696). Default OFF; =1 on
+    LORDCAST_VERIFY_TMP,      // MTG_LORDCAST_VERIFY  TEMPORARY A/B selector (2026-11-27 lordcast re-test): SolveWithLookahead's first-projected-winner return is taken only when LethalCutKillIsReal confirms the kill (apply + combat on a copy); a refused phantom win falls through to the next winner / the full search. Default OFF; =1 on
     COUNT
 };
 
@@ -2266,6 +2267,7 @@ inline const char* Name(int slot)
         "MTG_LINE_NC_LEFT",
         "MTG_ELVES_BUCKET_DISCARD",
         "MTG_LORDCAST_HAND",
+        "MTG_LORDCAST_VERIFY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
