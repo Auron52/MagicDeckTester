@@ -3399,6 +3399,19 @@ public:
     // Blood Sun step 6: the WAVE-k continuation list (Plan::rv_cont_wave; waves 0..k admitted, wave k's tranche kept)
     // -- the executor's twin of the rollout's rv_cont_wave resolution, so both index the one memoised derivation.
     static std::vector<Plan> EnumerateBreakpointPlansAtWave(const GameState& state, bool is_pre_combat, int wave);
+    // THE EXECUTOR'S CONTINUATION PICK, without building the list (memory only; Elves 2026-11-27). The executor's
+    // four replay sites read the continuation list for three things only: its size, the chain sentinel's walk and
+    // ONE entry. Taking EnumerateBreakpointPlans[AtWave] by value for that built the WHOLE list -- every lazy
+    // pay-draw / put-back clone of a lazy memo entry materialised as a full Plan -- and on an Elves keep-rollout
+    // that was ~10 GB of a 14 GB peak for one call (the 236,031-plan T7 continuation, lazy fans included).
+    // This reads the SAME memo entry (BpEnumEntryForWave when wave > 0, else BpEnumEntryFor) through its view, as
+    // the rollout's own site does: returns the list's size; idx := ch resolved (kBpChainChoice + j -> the j-th
+    // continuation that opens a breakpoint, -1 when there is none; any other value is itself); and when out !=
+    // nullptr and 0 <= idx < size, *out := entry idx. CandSeq::Materialised IS position-by-position At(), the walk
+    // is BpChainCandIndex's on the same entries, and Plan holds only vectors and strings, so `*out = entry` leaves
+    // exactly what `*out = list[idx]` left: byte-identical play. Nothing here re-enters the enumerator between the
+    // lookup and the copy (the lifetime contract above).
+    static int PickBreakpointPlan(const GameState& state, bool is_pre_combat, int wave, int ch, int& idx, Plan* out);
 
     // TEST SEAM (unit tests only; not read by play). Drives the deferred wave walker (BpWaveWalker in
     // TurnSolver.cpp) over `plans` exactly as a host does -- Next(), apply, Report() -- with every

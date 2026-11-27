@@ -6774,19 +6774,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             // Blood Sun step 6 lockstep: a continuation-wave variant (Plan::rv_cont_wave) scored its TARGETED
             // occurrence from the wave-k list, so the executor indexes that same list there.
-            const std::vector<TurnSolver::Plan> cands =
-                (plan.rv_cont_wave > 0 && !plan.bp_all && bp_idx == plan.rv_cont_at)
-                    ? TurnSolver::EnumerateBreakpointPlansAtWave(state, is_pre_combat_main, plan.rv_cont_wave)
-                    : TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
+            // The list is read through the memo entry's view (TurnSolver::PickBreakpointPlan): its size, the chain walk
+            // and the one entry played -- never the whole list by value (Elves 2026-11-27: ~10 GB of lazy clones).
             // CHAIN SLOT lockstep (TurnSolver's kBpChainChoice): the search scored a turn in which
             // this breakpoint took the j-th CHAIN continuation, so the executor must resolve the
             // sentinel the same way. Resolving it as a rank would overrun into the greedy fallback
             // and realise a different turn than the one that was ranked (the fd-diverge class).
-            const int bp_idx_resolved =
-                (bp_ch >= TurnSolver::kBpChainChoice)
-                    ? TurnSolver::BpChainCandIndex(state, cands,
-                                                   bp_ch - TurnSolver::kBpChainChoice)
-                    : bp_ch;
+            const int bp_wave = (plan.rv_cont_wave > 0 && !plan.bp_all && bp_idx == plan.rv_cont_at)
+                              ? static_cast<int>(plan.rv_cont_wave) : 0;
+            TurnSolver::Plan bp_pick;
+            int bp_idx_resolved = -1;
+            const int n_cands = TurnSolver::PickBreakpointPlan(state, is_pre_combat_main, bp_wave, bp_ch, bp_idx_resolved,
+                                                               TurnSolver::IsBpDemotedChoice(bp_ch) ? nullptr : &bp_pick);
             // EMPTY ARM lockstep (TurnSolver::kBpEmptyChoice). The search scored this turn with the
             // continuation deliberately EMPTY -- "done acting in this phase" -- so the executor must
             // realise nothing here. Without this the sentinel (1<<20) simply fails the
@@ -6804,7 +6803,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     : std::vector<TurnSolver::Plan>{};
             const std::size_t dj = TurnSolver::IsBpDemotedChoice(bp_ch)
                 ? static_cast<std::size_t>(bp_ch - TurnSolver::kBpDemotedChoice) : 0;
-            dbg_cands = static_cast<int>(cands.size()); dbg_resolved = bp_idx_resolved;
+            dbg_cands = n_cands; dbg_resolved = bp_idx_resolved;
             if (bp_ch == TurnSolver::kBpEmptyChoice
                 || (TurnSolver::IsBpDemotedChoice(bp_ch) && dj >= demoted.size()))
             {
@@ -6813,10 +6812,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 bp_searched_here   = true;
             }
             else if (TurnSolver::IsBpDemotedChoice(bp_ch)
-                     || (bp_idx_resolved >= 0 && bp_idx_resolved < static_cast<int>(cands.size())))
+                     || (bp_idx_resolved >= 0 && bp_idx_resolved < n_cands))
             {
-                extra            = TurnSolver::IsBpDemotedChoice(bp_ch) ? demoted[dj]
-                                                                                 : cands[bp_idx_resolved];
+                extra            = TurnSolver::IsBpDemotedChoice(bp_ch) ? demoted[dj] : bp_pick;
                 bp_searched_here = true;
                 // The continuation's land drop is part of the searched decision; play it first so
                 // its mana funds the casts (mirrors bp_play_searched_land in ApplyPlanDirect).
@@ -7294,16 +7292,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const int s9_idx = bp_seen_exec++;
             const int s9_ch  = TurnSolver::BpChoiceAt(plan, s9_idx);
             TurnSolver::Site9Trace(s9d_pass == 0 ? "exd" : "exd+", state, plan, is_pre_combat_main);
-            const std::vector<TurnSolver::Plan> s9_cands = TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
             const bool s9_dem = TurnSolver::IsBpDemotedChoice(s9_ch);
+            TurnSolver::Plan s9_pick;   // the one entry played, read through the memo entry's view (PickBreakpointPlan)
+            int s9_ci = -1;
+            const int s9_n = TurnSolver::PickBreakpointPlan(state, is_pre_combat_main, 0, s9_ch, s9_ci,
+                                                            s9_dem ? nullptr : &s9_pick);
             const std::vector<TurnSolver::Plan> s9_demoted = s9_dem
                 ? TurnSolver::EnumerateBreakpointDemoted(state, is_pre_combat_main) : std::vector<TurnSolver::Plan>{};
             const std::size_t s9_dj = s9_dem ? static_cast<std::size_t>(s9_ch - TurnSolver::kBpDemotedChoice) : 0;
-            const int s9_ci = (s9_ch >= TurnSolver::kBpChainChoice)
-                ? TurnSolver::BpChainCandIndex(state, s9_cands, s9_ch - TurnSolver::kBpChainChoice) : s9_ch;
-            if (!(s9_dem ? (s9_dj < s9_demoted.size()) : (s9_ci >= 0 && s9_ci < static_cast<int>(s9_cands.size()))))
+            if (!(s9_dem ? (s9_dj < s9_demoted.size()) : (s9_ci >= 0 && s9_ci < s9_n)))
             { break; }
-            extra = s9_dem ? s9_demoted[s9_dj] : s9_cands[static_cast<std::size_t>(s9_ci)];
+            extra = s9_dem ? s9_demoted[s9_dj] : s9_pick;
             // Its land (bp_play_searched_land's twin, as the main site-9 twin plays it).
             if (extra.land_decided && !extra.land_to_play.empty() && exec_cont_lands_held == 0
                 && !exec_cont_land_defer(rdb_land, extra))
@@ -7613,13 +7612,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     const int pod_ch = TurnSolver::BpChoiceAt(plan, pod_bp_idx);   // incl. MTG_BP_DEV_SEQ's bp_pre
                     if (pod_bp_idx >= 0 && pod_ch >= 0 && !blindsearch::NoReplay())
                     {
-                        const std::vector<TurnSolver::Plan> cands =
-                            TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
-                        const int pod_ci =
-                            (pod_ch >= TurnSolver::kBpChainChoice)
-                                ? TurnSolver::BpChainCandIndex(state, cands,
-                                                               pod_ch - TurnSolver::kBpChainChoice)
-                                : pod_ch;
+                        // Size, chain walk and the one entry played, through the memo entry's view (PickBreakpointPlan).
+                        TurnSolver::Plan pod_pick;
+                        int pod_ci = -1;
+                        const int pod_n = TurnSolver::PickBreakpointPlan(
+                            state, is_pre_combat_main, 0, pod_ch, pod_ci,
+                            TurnSolver::IsBpDemotedChoice(pod_ch) ? nullptr : &pod_pick);
                         // EMPTY ARM lockstep -- the pod twin of the main site's special-case. Same
                         // reason, same shape: the sentinel is not an index and must not fall through
                         // to the re-solve, which would act where the search scored "done".
@@ -7637,9 +7635,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             extra.land_decided = true;
                             pod_bp_searched    = true;
                         }
-                        else if (pod_dem || (pod_ci >= 0 && pod_ci < static_cast<int>(cands.size())))
+                        else if (pod_dem || (pod_ci >= 0 && pod_ci < pod_n))
                         {
-                            extra           = pod_dem ? pod_demoted[pod_dj] : cands[pod_ci];
+                            extra           = pod_dem ? pod_demoted[pod_dj] : pod_pick;
                             pod_bp_searched = true;
                             // The continuation's land is part of the searched decision
                             // (mirrors bp_play_searched_land; no Karoo reservation can be live
@@ -9764,10 +9762,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (pe_idx >= 0 && pe_ch >= 0)
             {
                 TurnSolver::Site9Trace("ex", state, plan, is_pre_combat_main);
-                const std::vector<TurnSolver::Plan> cands =
-                    TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
+                // Size, chain walk and the one entry played, through the memo entry's view (PickBreakpointPlan).
                 // DEMOTED lockstep (MTG_BP_NEW_ONLY_DEMOTE) -- the site-9 twin of the main site's.
                 const bool pe_dem = TurnSolver::IsBpDemotedChoice(pe_ch);
+                TurnSolver::Plan pe_pick;
+                int pe_ci = -1;
+                const int pe_n = TurnSolver::PickBreakpointPlan(state, is_pre_combat_main, 0, pe_ch, pe_ci,
+                                                                pe_dem ? nullptr : &pe_pick);
                 const std::vector<TurnSolver::Plan> pe_demoted = pe_dem
                     ? TurnSolver::EnumerateBreakpointDemoted(state, is_pre_combat_main)
                     : std::vector<TurnSolver::Plan>{};
@@ -9777,13 +9778,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // through BpChainCandIndex like every site; indexing with the raw value overran the list
                 // and applied nothing where the scored line had applied the chain continuation. A chain
                 // scan that finds no entry (-1) applies nothing, as the rollout's unresolved site 9 does.
-                const int pe_ci = (pe_ch >= TurnSolver::kBpChainChoice)
-                    ? TurnSolver::BpChainCandIndex(state, cands, pe_ch - TurnSolver::kBpChainChoice)
-                    : pe_ch;
+                // (pe_ci is resolved by PickBreakpointPlan above, through BpChainCandIndex's walk.)
                 if (pe_dem ? (pe_dj < pe_demoted.size())
-                           : (pe_ci >= 0 && pe_ci < static_cast<int>(cands.size())))
+                           : (pe_ci >= 0 && pe_ci < pe_n))
                 {
-                    extra       = pe_dem ? pe_demoted[pe_dj] : cands[pe_ci];
+                    extra       = pe_dem ? pe_demoted[pe_dj] : pe_pick;
                     pe_searched = true;
                     if (extra.land_decided && !extra.land_to_play.empty() && exec_cont_lands_held == 0
                         && !exec_cont_land_defer(pe_land, extra))   // a positioned land waits for its slot

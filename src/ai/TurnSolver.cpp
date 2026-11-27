@@ -139401,6 +139401,22 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlansAtWave(const G
     return BpEnumEntryForWave(state, is_pre_combat, wave)->View().Materialised();
 }
 
+// See the declaration: the executor's size / chain walk / one-entry read of the shared list, through its view.
+int TurnSolver::PickBreakpointPlan(const GameState& state, bool is_pre_combat, int wave, int ch, int& idx, Plan* out)
+{
+    BpEnumEntry* const e = wave > 0 ? BpEnumEntryForWave(state, is_pre_combat, wave)
+                                    : BpEnumEntryFor(state, is_pre_combat);
+    const CandSeq cands = e->View();
+    const int n = static_cast<int>(cands.size());
+    idx = (ch >= kBpChainChoice) ? BpChainCandIndexView(state, cands, ch - kBpChainChoice) : ch;
+    if (out != nullptr && idx >= 0 && idx < n)
+    {
+        Plan syn;
+        *out = cands.At(static_cast<std::size_t>(idx), syn);
+    }
+    return n;
+}
+
 // See the LIFETIME CONTRACT on the declaration: valid only until the next enumeration on this thread.
 const std::vector<TurnSolver::Plan>& TurnSolver::EnumerateBreakpointPlansRef(const GameState& state,
                                                                             bool is_pre_combat)
@@ -141936,6 +141952,60 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                 static_cast<unsigned long long>(raw.h1), nr, cache.size(), bp_enum_cap,
                 plancache::PoolUsed().load(), plancache::BudgetBytes(),
                 static_cast<unsigned long long>(g_decision_epoch));
+            // MTG_BP_DERIVE_HIST=1 (DIAGNOSTIC, print-only, with MTG_BP_DERIVE_SLOW_MS; Elves 2026-11-27): for a list
+            // of 20,000+ real plans, its SHAPES -- plans grouped by the ordered (kind, card) of their actions, counts
+            // and targets left out -- the 12 largest with their size, each with the distinct per-action
+            // (kick, X, enchant / pump / player target, mode) tuples it holds, and 3 example plans of the largest.
+            static const bool s_hist = EnvOn("MTG_BP_DERIVE_HIST");
+            if (s_hist && plans.size() >= 20000)
+            {
+                std::unordered_map<std::string, std::vector<std::size_t>> shp;
+                for (std::size_t i = 0; i < plans.size(); ++i)
+                {
+                    std::string k = plans[i].land_to_play + "|";
+                    for (const Action& a : plans[i].actions)
+                    { k += std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str() + " "; }
+                    shp[k].push_back(i);
+                }
+                std::vector<std::pair<std::size_t, const std::string*>> ord;
+                for (const auto& [k, v] : shp) { ord.push_back({ v.size(), &k }); }
+                std::sort(ord.begin(), ord.end(), [](const auto& x, const auto& y) { return x.first > y.first; });
+                std::fprintf(stderr, "[bp-derive-hist] plans=%zu shapes=%zu\n", plans.size(), ord.size());
+                for (std::size_t r = 0; r < ord.size() && r < 12; ++r)
+                {
+                    const std::vector<std::size_t>& v = shp[*ord[r].second];
+                    std::string var;
+                    const std::size_t na = plans[v[0]].actions.size();
+                    for (std::size_t ai = 0; ai < na; ++ai)
+                    {
+                        std::set<std::string> d;
+                        for (std::size_t i : v)
+                        {
+                            const Action& a = plans[i].actions[ai];
+                            d.insert(std::to_string(a.kick_count) + "/" + std::to_string(a.chosen_x) + "/"
+                                     + std::to_string(a.enchant_target) + "/" + std::to_string(a.rec_pump_target) + "/"
+                                     + std::to_string(a.player_target) + "/" + std::to_string(static_cast<int>(a.ability_mode))
+                                     + "/" + std::to_string(a.gy_exile_mode) + "/" + std::to_string(a.sac_victim_id));
+                        }
+                        var += " a" + std::to_string(ai) + ":" + std::to_string(d.size());
+                    }
+                    std::set<std::string> pl;
+                    for (std::size_t i : v)
+                    {
+                        const TurnSolver::Plan& p = plans[i];
+                        pl.insert(std::to_string(p.bp_choice) + "/" + std::to_string(p.bp_at) + "/"
+                                  + std::to_string(p.putback_choice) + "/" + std::to_string(p.ponder_choice) + "/"
+                                  + std::to_string(p.sac_pins.size()) + "/" + std::to_string(p.look_top_pins.size()));
+                    }
+                    std::fprintf(stderr, "[bp-derive-hist]   #%zu n=%zu plan-fields=%zu distinct-per-action:%s | %s\n", r,
+                                 ord[r].first, pl.size(), var.c_str(), ord[r].second->c_str());
+                    if (r == 0)
+                    {
+                        for (std::size_t e = 0; e < 3 && e < v.size(); ++e)
+                        { std::fprintf(stderr, "[bp-derive-hist]     eg %s\n", FsPlanText(plans[v[e * (v.size() / 3)]]).c_str()); }
+                    }
+                }
+            }
             // MTG_BP_DERIVE_DUMP=1 (DIAGNOSTIC, print-only, with MTG_BP_DERIVE_SLOW_MS): the derivation's
             // board in FULL identity detail (card numbers, tapped, sickness, attachments, the hand and the
             // library top in order) plus a content hash of the derived list (signatures in order), so two
