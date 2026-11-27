@@ -75750,8 +75750,8 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
 // MTG_ELVES_CHOSEN_CENSUS=1 -- DIAGNOSTIC ONLY (it re-enumerates the rule-lifted menu at the real state, which may warm
 // caches, so run it in its own batch, never inside an A/B arm). Called by the executor once per main phase, after the
 // plan is chosen and before anything executes. One stderr line per main phase of an Elves game:
-//   [elves-chosen] job seed T pre sink count top hn h cat fixed_atk scaled_atk sick_dorks land_mana cost
-// cat = top | normal (top - h_normal) | all (top - h_all) | between (inside the band, none of the three) | below |
+//   [elves-chosen] job seed T pre sink count top hn h cat fixed_atk scaled_atk sick_dorks land_mana cost members
+// members: the rule-lifted menu's plans matching the chosen one but for the sink's count (-1: no single sink). cat = top | normal (top - h_normal) | all (top - h_all) | between (inside the band, none of the three) | below |
 // nosink (no scaled sink in the plan). fixed_atk / scaled_atk: untapped attack-capable 1-mana / scaled dorks;
 // land_mana: untapped lands; cost: the plan's cast cost total (mana value). A payment where the tap ORDER matters is
 // pre=1, fixed_atk >= 1, scaled_atk >= 1 and cost > land_mana.
@@ -75779,19 +75779,33 @@ void ElvesChosenCensus(const GameState& s, const void* chosen_plan, bool is_pre_
         const ElvesSink e = ElvesSinkOf(chosen.actions[k]);
         if (e.count > 0) { ++n_scaled; at = static_cast<int>(k); count = e.count; unit = e.unit; }
     }
-    int top = -1, h = -1, hn = -1;
+    int top = -1, h = -1, hn = -1, n_members = -1;
     const char* cat = "nosink";
     if (n_scaled == 1)
     {
         sink = chosen.actions[static_cast<std::size_t>(at)].card_name.str();
+        // The match key: the land and the SORTED actions' identity (kind, name, hand slot, sac source, targets, mode),
+        // the sink's count left out. Plan::operator== on a blanked copy (the admit rule's class test, sound there
+        // because it only ever compares freshly enumerated plans) never matched here: the CHOSEN plan carries fields
+        // the solver set after enumeration, so every main phase read as "top" (round-2 census, 2026-11-27).
         auto canon = [](const TurnSolver::Plan& p)
         {
-            TurnSolver::Plan out = p;
-            for (Action& a : out.actions) { if (ElvesSinkOf(a).count >= 0) { ElvesBlankSink(a); } }
-            out.value = 0; out.wins_this_turn = false; out.land_tie_key = -1; out.bp_base = -1;
-            return out;
+            std::vector<std::string> parts;
+            for (const Action& a : p.actions)
+            {
+                parts.push_back(std::to_string(static_cast<int>(a.kind)) + ':' + a.card_name.str() + ':'
+                                + std::to_string(a.hand_index) + ':' + std::to_string(a.sac_source_id) + ':'
+                                + std::to_string(a.sac_victim_id) + ':' + std::to_string(a.enchant_target) + ':'
+                                + std::to_string(a.player_target) + ':' + std::to_string(static_cast<int>(a.ability_mode))
+                                + (ElvesSinkOf(a).count >= 0 ? std::string(":sink") : ':' + std::to_string(a.kick_count)
+                                                                 + ':' + std::to_string(a.chosen_x)));
+            }
+            std::sort(parts.begin(), parts.end());
+            std::string key = p.land_to_play;
+            for (const std::string& x : parts) { key += '\x1e'; key += x; }
+            return key;
         };
-        const TurnSolver::Plan want = canon(chosen);
+        const std::string want = canon(chosen);
         std::vector<TurnSolver::Plan> full;
         {
             const std::int8_t saved = heurarm::t_arm[heurarm::ELVES_SCALING_PRUNE];
@@ -75806,6 +75820,7 @@ void ElvesChosenCensus(const GameState& s, const void* chosen_plan, bool is_pre_
             for (const Action& a : p.actions) { const ElvesSink e = ElvesSinkOf(a); if (e.count > 0) { ++ns; c = e.count; } }
             if (ns == 1 && canon(p) == want) { members.push_back(c); }
         }
+        n_members = static_cast<int>(members.size());
         top = count;
         for (int m : members) { top = std::max(top, m); }
         int elf_casts = 0;
@@ -75829,10 +75844,10 @@ void ElvesChosenCensus(const GameState& s, const void* chosen_plan, bool is_pre_
         cat = count == top ? "top" : count == stand_in(top - hn) ? "normal" : count == stand_in(top - h) ? "all"
             : count >= top - h ? "between" : "below";
     }
-    std::fprintf(stderr, "[elves-chosen] %s %llu %d %d %s %d %d %d %d %s %d %d %d %d %d\n",
+    std::fprintf(stderr, "[elves-chosen] %s %llu %d %d %s %d %d %d %d %s %d %d %d %d %d %d\n",
                  heurarm::t_job_name ? heurarm::t_job_name : "-",
                  static_cast<unsigned long long>(s.game_seed), s.turn_number, is_pre_combat ? 1 : 0, sink.c_str(),
-                 count, top, hn, h, cat, fixed_atk, scaled_atk, sick, land_mana, cost);
+                 count, top, hn, h, cat, fixed_atk, scaled_atk, sick, land_mana, cost, n_members);
 }
 
 std::vector<int> ElvesProvider::XCandidates(const GameState& s, const CardDefinition& def, int max_affordable) const
