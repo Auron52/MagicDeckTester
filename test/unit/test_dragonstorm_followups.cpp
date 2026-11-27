@@ -1332,11 +1332,11 @@ TEST_CASE("Line-spare generic, filter feed: {Land's Edge + Treasure Hunt} off Sk
     }
 }
 
-TEST_CASE("Line-spare generic, apply level: the USER order's T2 line on Needle + Territory casts Dragonstorm (MTG_LINE_SPARE_GENERIC_FIRST)")
+TEST_CASE("Line-spare generic, apply level: the T2 line on Needle + Territory casts Dragonstorm (MTG_LINE_SPARE_GENERIC_FIRST)")
 {
     // The rollout apply (ApplyPlanDirect) pays through the same shared payer as the executor: the whole
     // ordered line "Medallion, Rite, Seething, Seething, Dragonstorm" resolves (s3104 gi101's T2 kill).
-    // Lever off: the Medallion's {2} takes both of the Needle's {R}, Rite is unpayable and the line dies.
+    // The ritual-plus-reducer payable-order walk also finds this paying line with the generic lever off.
     for (const bool on : { true, false })
     {
         CAPTURE(on);
@@ -1353,8 +1353,8 @@ TEST_CASE("Line-spare generic, apply level: the USER order's T2 line on Needle +
             if (c.m_name.str() == "Dragonstorm")   { ++in_hand_storm; }
             if (c.m_name.str() == "Rite of Flame") { ++in_hand_rite; }
         }
-        CHECK(in_hand_storm == (on ? 0 : 1));
-        CHECK(in_hand_rite == (on ? 0 : 1));
+        CHECK(in_hand_storm == 0);
+        CHECK(in_hand_rite == 0);
     }
 }
 

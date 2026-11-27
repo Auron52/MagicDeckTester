@@ -93,6 +93,13 @@ oracle-off play was byte-identical. The detailed report is
 `logs/mana_clean/20261127-215946/report.md`; the committed gate record is
 `test/mana_clean.json`.
 
+The full Release unit suite initially found three stale Dragonstorm expectations:
+the ritual-plus-reducer payable-order domain now finds a paying generic line
+that the old tests expected to strand. The assertions now verify that both
+ordering arms cast the spells and that both exact-order settings find the
+nearest paying order. The rebuilt full unit suite passed 4,342/4,342 cases
+in 48 shards on 12 cores.
+
 ## Coverage
 
 `python3 scripts/analyze_deck.py decks/Zombies/Zombies.cod --coverage-only`

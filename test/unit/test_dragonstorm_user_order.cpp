@@ -14,9 +14,9 @@
 //   1. the rank lays the deck's cards out in that list (lever on) and is the generic tier (lever off);
 //   2. the shared comparator sorts a shuffled go-off set into it, a SPLICED Desperate after Seething;
 //   3. the Medallion goes to its EARLIEST PAYABLE slot -- not first when first cannot be paid, after one
-//      ritual when that pays -- and the old payable-order fallback alone does not put it there;
+//      ritual when that pays -- including through the ritual-plus-reducer payable-order walk;
 //   4. executor level (the rollout apply, ApplyPlanDirect -- the executor's lockstep twin, same shared
-//      order functions): that Medallion line casts every spell, where the generic order strands the Dragon;
+//      order functions): that Medallion line casts every spell under either ordering arm;
 //   5. an Apex set holding Irencrag: Apex BEFORE Irencrag (lever off: Irencrag -> Apex, the trap), and the
 //      exact walk refuses the trap order;
 //   6. Irencrag before a lone Dragon closer; splice legality; the searched orderings.
@@ -324,12 +324,8 @@ TEST_CASE("Dragonstorm USER order: Ruby Medallion at its EARLIEST PAYABLE slot -
         CHECK(ord == arranged);
     }
     {
-        // What the payable-order fallback ALONE does with "Medallion first" (no arrangement, the plain walk):
-        // its walk never credits the Medallion's discount, so it cannot see that slot 1 pays the line -- the
-        // order-free bound (13 to pay against 2 + 10 float) says NO permutation pays and it returns the order
-        // untouched: Medallion first, the rest stranded. It does NOT produce the earliest payable slot.
-        // (The plain walk is pinned: MTG_PAYABLE_ORDER_EXACT, default ON since the follow-up round, judges
-        // this producer domain with the exact walk for every deck -- see the block below.)
+        // The ritual-plus-reducer domain now invokes the exact walk even with the diagnostic
+        // MTG_PAYABLE_ORDER_EXACT lever off. Both arms find the nearest paying order.
         UoArms arms(false);
         heurarm::t_arm[heurarm::PAYABLE_ORDER_EXACT] = 0;
         std::vector<int> ord;
@@ -340,9 +336,8 @@ TEST_CASE("Dragonstorm USER order: Ruby Medallion at its EARLIEST PAYABLE slot -
         }
         std::vector<int> ord_exact = ord;
         ApplyPayableCastOrder(s, acts, ord);
-        CHECK(NamesUo(acts, ord) == std::vector<std::string>{ kMed, kRite, kPyr, kSeeth, kScour });
-        // With MTG_PAYABLE_ORDER_EXACT the same fallback credits the discount and finds slot 1 even with the
-        // USER order off: the nearest order that pays is "Rite, Medallion, ...".
+        CHECK(NamesUo(acts, ord) == std::vector<std::string>{ kRite, kMed, kPyr, kSeeth, kScour });
+        // The explicit exact arm finds the same nearest order.
         heurarm::t_arm[heurarm::PAYABLE_ORDER_EXACT] = 1;
         ApplyPayableCastOrder(s, acts, ord_exact);
         CHECK(NamesUo(acts, ord_exact) == std::vector<std::string>{ kRite, kMed, kPyr, kSeeth, kScour });
@@ -350,7 +345,7 @@ TEST_CASE("Dragonstorm USER order: Ruby Medallion at its EARLIEST PAYABLE slot -
     }
 }
 
-TEST_CASE("Dragonstorm USER order, apply level: the Medallion line casts every spell; the generic order strands the Dragon")
+TEST_CASE("Dragonstorm USER order, apply level: the Medallion line casts every spell under either arm")
 {
     // The rollout apply (ApplyPlanDirect) -- the executor's lockstep twin through the same shared order
     // functions. A clean set (no breakpoint card), in raw plan order Scourge, Seething, Pyretic, Medallion, Rite.
@@ -358,7 +353,7 @@ TEST_CASE("Dragonstorm USER order, apply level: the Medallion line casts every s
     {
         CAPTURE(lever);
         UoArms arms(lever);
-        // The generic arm describes the PLAIN walk (pinned; MTG_PAYABLE_ORDER_EXACT would find the paying order).
+        // The ritual-plus-reducer domain invokes the exact walk under either arm.
         heurarm::t_arm[heurarm::PAYABLE_ORDER_EXACT] = lever ? -1 : 0;
         GameState s = BoardUo(2, { kMed, kRite, kPyr, kSeeth, kScour });
         TurnSolver::Plan plan;
@@ -373,9 +368,8 @@ TEST_CASE("Dragonstorm USER order, apply level: the Medallion line casts every s
         }
         else
         {
-            // Generic tiers: Scourge (creature 10) first -- unpayable on two Mountains -- and no order the
-            // plain walk can find pays the whole line, so the Dragon is never cast.
-            CHECK(InHandUo(s, kScour) == 1);
+            CHECK(InHandUo(s, kScour) == 0);
+            CHECK(OnBattlefieldUo(s, kScour) == 1);
         }
         heurarm::t_arm[heurarm::PAYABLE_ORDER_EXACT] = -1;
     }
