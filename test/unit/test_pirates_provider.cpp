@@ -14,6 +14,7 @@
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
+#include "core/SpellEffects.h"
 #include "deck/DeckLoader.h"
 
 #include <algorithm>
@@ -236,6 +237,7 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         {"Minotaur", "Minotaur"},             {"Mirrorwing Dragon", "Mirrorwing"},
         {"Snow", "Snow"},                     {"Stompy Surprise", "Stompy"},
         {"Burn", "Burn"},                     {"Slivers", "Vial"},
+        {"Zombies", "Zombies"},
         {"Treasure Hunt", "TreasureHunt"},
         // WhiteKnights (adopted 2026-09-26 on the other machine; met this table at the 2026-09-27
         // rebase): the second shipping Knight list, routed by its own signature ABOVE Knights --

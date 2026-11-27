@@ -415,7 +415,7 @@ TEST_CASE("Haunted Fengraf: the random return is a function of the eligible MULT
     CHECK(CountOnBf(s, "Haunted Fengraf", false) == 1);
 }
 
-TEST_CASE("Graveyard readers: Haven and Haunted Fengraf both set GyR_CreatureNames")
+TEST_CASE("Graveyard readers: Haven tracks all names and Haunted Fengraf tracks creature names")
 {
     LoadCards();
     Decklist fen;
@@ -424,7 +424,8 @@ TEST_CASE("Graveyard readers: Haven and Haunted Fengraf both set GyR_CreatureNam
     CHECK((GoldFishRunner::DeckGraveyardReaders(fen) & GyR_CreatureNames) != 0);
     Decklist haven;
     haven.mainboard.push_back(D("Haven of the Spirit Dragon").card);
-    CHECK((GoldFishRunner::DeckGraveyardReaders(haven) & GyR_CreatureNames) != 0);
+    // A subtype-filtered return also admits tribal noncreature cards.
+    CHECK((GoldFishRunner::DeckGraveyardReaders(haven) & GyR_AllNames) != 0);
     Decklist plain;
     plain.mainboard.push_back(D("Forest").card);
     CHECK((GoldFishRunner::DeckGraveyardReaders(plain) & GyR_CreatureNames) == 0);
