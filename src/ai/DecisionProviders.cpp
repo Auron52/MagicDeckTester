@@ -75653,3 +75653,220 @@ void ElvesProvider::PlanListAdmitAt(const GameState& s, bool is_pre_combat, cons
 {
     ElvesScalingAdmit(s, is_pre_combat, plans, admit);
 }
+
+// ---- ElvesProvider::CleanupDiscardCandidates -- the USER's MANA / THREATS buckets ---------------------------------
+//
+// THE USER'S RULE (verbatim). 2026-11-27: "We should have a discard policy that just buckets mana and threats. (mana
+// elves can go in the mana bucket) It doesn't need to be complicated." Amended the same day: "We want a lot of mana in
+// this deck, so we can feel free to add more mana as long as we have 1-2 scaling threats to take advantage of it. If
+// not, I suppose we need more threats. Even small mana-producing elves can be useful here as a mix of producer and
+// attacker." And on this deck: "Taunting Elf's ability does nothing in goldfish."
+// MTG_ELVES_BUCKET_DISCARD (heurarm ELVES_BUCKET_DISCARD), DEFAULT ON; =0 restores what the deck inherited before
+// (SelesnyaLifegainProvider's buckets, settled for another list: they file the lords and sinks here as "other" and
+// shed them ahead of a surplus land).
+//
+// THE BUCKETS (by params / types, never names; the coordinator's readings of the rule, the USER may amend):
+//   DEAD     a Legendary or World card with a copy of ours on the battlefield or an earlier copy in hand (a 2nd Ezuri,
+//            a 2nd Marwyn, Concordant Crossroads while one is ours). Shed first, in hand order.
+//   MANA     lands, and every creature with a mana ability (`produces`: Llanowar Elves, Elvish Mystic, Priest of
+//            Titania, Elvish Archdruid, Marwyn).
+//   SCALING  the mana sinks: Genesis Wave (reveal_x_put_permanents), Joraga Warcaller (multikicker), Galadhrim Brigade
+//            (squad), Ezuri (team pump activation), Allosaurus Shepherd (team base P/T activation).
+//   OTHER    every other spell (Elvish Clancaller, Leaf-Crowned Visionary, Immaculate Magistrate, Taunting Elf,
+//            Concordant Crossroads).
+// THREAT ORDER (worst first; the same order picks the best kept): a creature with no modelled ability first (Taunting
+// Elf); then the threat farthest from castable (mana value minus REACH = board mana + every mana card in hand, each 1);
+// then the value rank, lowest first (1 Crossroads, 2 Magistrate / Shepherd, 3 the lords incl. Warcaller / Brigade,
+// 4 Ezuri / Genesis Wave); ties: the later hand copy first.
+// MANA ORDER (shed first): a land making no green (Wirewood Lodge) < a creature-only land (Cavern of Souls) < Forest
+// < a flat mana Elf (Llanowar = Mystic: "a mix of producer and attacker", kept over a surplus land) < a scaled one
+// (Priest, Archdruid, Marwyn). LAND FLOOR: while we have fewer than 4 lands on the battlefield, the best land in hand
+// is the last mana card shed. Ties: the later hand copy first.
+// SHED ORDER:
+//   WITH a SCALING threat in hand: DEAD > the spare threats (Taunting-type bodies, then the 3rd+ scaling threats, then
+//     the OTHER threats, each in the threat order) > MANA (no cap: "feel free to add more mana") > the <= 2 kept
+//     scaling threats (best / nearest kept longest).
+//   WITH NONE ("we need more threats"): DEAD > OTHER threats past the best 3 > MANA past the floor land + the next 2
+//     mana cards > the best 3 threats > those 2 mana cards > the floor land. (Reading: "the land floor + 2 mana cards"
+//     is additive -- the floor land, when it applies, plus two more.)
+// Below 7 cards the order is only a completion (cleanup never sheds that far); the hand limit is 7 (no card in this
+// list changes it). Prefix-stable for every shed a cleanup makes: shedding a threat never moves REACH, and mana is
+// only shed once every threat that could move has gone (MTG_DISCARD_SHED_VERIFY=1 checks it). Every non-staged hand
+// index is named once, through CleanupDiscardRankingWithOrder.
+static bool ElvesBucketDiscardOn()
+{
+    static const bool e = EnvOn("MTG_ELVES_BUCKET_DISCARD", true);   // DEFAULT ON (USER rule 2026-11-27); =0 -> inherited
+    return heurarm::Flag(heurarm::ELVES_BUCKET_DISCARD, e);
+}
+
+bool ElvesProvider::CleanupDiscardShedStable() const
+{
+    return ElvesBucketDiscardOn() ? true : SelesnyaLifegainProvider::CleanupDiscardShedStable();
+}
+
+// The simple value rank of a THREAT (higher = kept longer). 0 = no modelled ability (a plain body).
+static int ElvesThreatValue(const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    if (p.team_pump_power > 0 || p.reveal_x_put_permanents) { return 4; }                   // Ezuri, Genesis Wave
+    if (!p.subtypes_affected.empty() && p.power_bonus > 0)  { return 3; }                   // the lords
+    if (!p.tap_target_counters_per_subtype.empty() || p.team_base_pt_power > 0) { return 2; } // Magistrate, Shepherd
+    if (p.grants_haste)                                      { return 1; }                   // Concordant Crossroads
+    return 0;                                                                                // Taunting Elf
+}
+
+// A SCALING threat: a mana sink that turns surplus mana into damage.
+static bool ElvesScalingThreat(const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    return p.reveal_x_put_permanents || p.multikicker_cost.has_value() || p.squad_cost.has_value()
+        || p.team_pump_power > 0 || p.team_base_pt_power > 0;
+}
+
+std::vector<int> ElvesProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    const bool on = ElvesBucketDiscardOn();
+    const int me = s.active_player_index;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    if (!on)
+    {
+        std::vector<int> inh = SelesnyaLifegainProvider::CleanupDiscardCandidates(s, required_pieces);
+        // MTG_TRACE=discard (diagnostic only): tag the =0 arm's REAL cleanups so a pooled ON / =0 census can pair them.
+        if (TRACE_ON("discard") && g_real_resolution && !g_le_pitch_ranking && !inh.empty())
+        {
+            TRACE("discard", "elves-off g%llu T%d hand=%zu shed=%s", static_cast<unsigned long long>(s.game_seed),
+                  s.turn_number, ap.hand.size(), ap.hand[static_cast<std::size_t>(inh.front())].m_name.str().c_str());
+        }
+        return inh;
+    }
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto at = [](int i) { return static_cast<std::size_t>(i); };
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto mana_creature = [](const CardDefinition& d) { return d.card.IsCreature() && !d.params.produces.empty(); };
+
+    // ---- 1. the board -------------------------------------------------------------------------------------------
+    int board_mana = 0, board_lands = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (p.card.IsLand()) { ++board_lands; board_mana += d ? ManaProducedPerTap(*d) : 1; continue; }
+        if (d == nullptr || !mana_creature(*d)) { continue; }
+        board_mana += IsScaledManaDork(*d) ? ScaledDorkCount(s, me, *d) : ManaProducedPerTap(*d);
+    }
+
+    // ---- 2. classify the hand -----------------------------------------------------------------------------------
+    enum : signed char { C_SKIP, C_DEAD, C_MANA, C_SCALE, C_OTHER };
+    std::vector<signed char> cls(at(n), C_SKIP);
+    std::vector<int> rank(at(n), 0), mv(at(n), 0);
+    std::vector<char> land(at(n), 0);
+    auto already_ours = [&](int i)
+    {
+        const Card& hc = ap.hand[at(i)];
+        for (const Permanent& p : s.battlefield) { if (p.controller_index == me && p.card.m_name == hc.m_name) { return true; } }
+        for (int j = 0; j < i; ++j)
+        { const Card& o = ap.hand[at(j)]; if (!o.m_is_staged && o.m_name == hc.m_name) { return true; } }
+        return false;
+    };
+    std::vector<int> mana, scaling, other;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[at(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(hc);
+        if (d != nullptr && (d->card.HasSupertype(Supertype::Legendary) || d->card.HasSupertype(Supertype::World))
+            && already_ours(i))
+        { cls[at(i)] = C_DEAD; continue; }
+        if (CleanupDiscardIsLand(hc))
+        {
+            cls[at(i)] = C_MANA; land[at(i)] = 1; mana.push_back(i);
+            const bool green = d != nullptr && std::find(d->params.produces.begin(), d->params.produces.end(),
+                                                         Color::Green) != d->params.produces.end();
+            rank[at(i)] = !green ? 0 : (d->params.colored_creature_only ? 1 : 2);
+            continue;
+        }
+        if (d != nullptr && mana_creature(*d))
+        { cls[at(i)] = C_MANA; mana.push_back(i); rank[at(i)] = IsScaledManaDork(*d) ? 4 : 3; continue; }
+        const bool sc = d != nullptr && ElvesScalingThreat(*d);
+        cls[at(i)] = sc ? C_SCALE : C_OTHER;
+        (sc ? scaling : other).push_back(i);
+        mv[at(i)]   = d ? d->card.m_mana_cost.ManaValue() : 0;
+        rank[at(i)] = d ? ElvesThreatValue(*d) : 0;
+    }
+    const int reach = board_mana + static_cast<int>(mana.size());
+
+    // ---- 3. the orders inside the buckets (shed first) --------------------------------------------------------------
+    auto dist = [&](int i) { return std::max(0, mv[at(i)] - reach); };
+    auto worse = [&](int a, int b)   // the threat order: true when a is shed before b
+    {
+        const bool za = rank[at(a)] == 0, zb = rank[at(b)] == 0;
+        if (za != zb) { return za; }
+        if (dist(a) != dist(b)) { return dist(a) > dist(b); }
+        if (rank[at(a)] != rank[at(b)]) { return rank[at(a)] < rank[at(b)]; }
+        return a > b;
+    };
+    std::sort(scaling.begin(), scaling.end(), worse);
+    std::sort(other.begin(), other.end(), worse);
+    std::sort(mana.begin(), mana.end(), [&](int a, int b)
+    { return rank[at(a)] != rank[at(b)] ? rank[at(a)] < rank[at(b)] : a > b; });
+    if (board_lands < 4)   // LAND FLOOR: the best land in hand is the last mana card shed
+    {
+        for (int k = static_cast<int>(mana.size()) - 1; k >= 0; --k)
+        {
+            if (!land[at(mana[at(k)])]) { continue; }
+            const int keep = mana[at(k)];
+            mana.erase(mana.begin() + k);
+            mana.push_back(keep);
+            break;
+        }
+    }
+
+    // ---- 4. the shed order ------------------------------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(at(n));
+    auto put_all = [&](const std::vector<int>& v, std::size_t from, std::size_t to)
+    { for (std::size_t k = from; k < to && k < v.size(); ++k) { shed.push_back(v[k]); } };
+    for (int i = 0; i < n; ++i) { if (cls[at(i)] == C_DEAD) { shed.push_back(i); } }
+    if (!scaling.empty())
+    {
+        // Keep the best two sinks; the spares (Taunting-type bodies, the 3rd+ sinks, the other threats) go before mana.
+        const std::size_t kept = std::min<std::size_t>(2, scaling.size());
+        std::vector<int> spare(scaling.begin(), scaling.end() - static_cast<std::ptrdiff_t>(kept));
+        spare.insert(spare.end(), other.begin(), other.end());
+        std::stable_sort(spare.begin(), spare.end(), [&](int a, int b)
+        {
+            const bool za = rank[at(a)] == 0, zb = rank[at(b)] == 0;
+            if (za != zb) { return za; }
+            const bool ea = cls[at(a)] == C_SCALE, eb = cls[at(b)] == C_SCALE;
+            if (ea != eb) { return ea; }
+            return worse(a, b);
+        });
+        put_all(spare, 0, spare.size());
+        put_all(mana, 0, mana.size());
+        put_all(scaling, scaling.size() - kept, scaling.size());
+    }
+    else
+    {
+        // "we need more threats": the best 3 other threats rank ahead of the mana past the floor land + 2 mana cards.
+        const std::size_t keep_t = std::min<std::size_t>(3, other.size());
+        const std::size_t floor_n = (board_lands < 4 && !mana.empty() && land[at(mana.back())]) ? 1 : 0;
+        const std::size_t keep_m = std::min(mana.size(), floor_n + 2);
+        put_all(other, 0, other.size() - keep_t);
+        put_all(mana, 0, mana.size() - keep_m);
+        put_all(other, other.size() - keep_t, other.size());
+        put_all(mana, mana.size() - keep_m, mana.size());
+    }
+
+    // MTG_TRACE=discard (diagnostic only): the state each REAL cleanup was decided in, for the shed census.
+    if (TRACE_ON("discard") && g_real_resolution && !g_le_pitch_ranking && !shed.empty())
+    {
+        std::string names;
+        for (int i : shed) { if (!names.empty()) { names += '|'; } names += ap.hand[at(i)].m_name.str(); }
+        TRACE("discard", "elves g%llu T%d hand=%d board_mana=%d board_lands=%d scaling=%zu reach=%d order=%s",
+              static_cast<unsigned long long>(s.game_seed), s.turn_number, n, board_mana, board_lands, scaling.size(),
+              reach, names.c_str());
+    }
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
+}

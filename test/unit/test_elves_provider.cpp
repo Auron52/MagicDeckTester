@@ -258,3 +258,181 @@ TEST_CASE("Elves scaling rule: not live with no sink in hand (the lazy layout is
     // provider-level liveness ignores HumanPlayActive(); only the unpruned gates lift it here.
     CHECK(Prov().PlanListFilterLive(s) == (!DecisionUnpruned(UnprunedGate::Replicate) && !DecisionUnpruned(UnprunedGate::XSpell)));
 }
+
+// ---- 4. THE USER'S CLEANUP-DISCARD BUCKETS (2026-11-27: "a discard policy that just buckets mana and threats",
+// amended: "feel free to add more mana as long as we have 1-2 scaling threats ... If not, I suppose we need more
+// threats") -- ElvesProvider::CleanupDiscardCandidates. Every expected order below was derived BY HAND from the rule as
+// built (the header note above the implementation):
+//   DEAD first. MANA shed order Lodge < Cavern < Forest < Llanowar = Mystic < Priest / Archdruid / Marwyn, the best
+//   land last while < 4 lands are in play. THREAT order (worst first): a no-ability body, then farthest from castable
+//   (MV - (board mana + mana cards in hand)), then value Crossroads 1 < Magistrate / Shepherd 2 < lords 3 < Ezuri /
+//   Wave 4, ties the later copy first. WITH a sink (Wave / Warcaller / Brigade / Ezuri / Shepherd): DEAD > spares
+//   (bodies, 3rd+ sinks, other threats) > MANA > the 2 kept sinks. WITHOUT: DEAD > threats past the best 3 > mana past
+//   floor + 2 > the best 3 threats > those 2 mana > the floor land.
+namespace {
+Card EdCard(const std::string& name, int number)   // a NAME-ONLY placeholder, as real hand cards are
+{
+    REQUIRE_MESSAGE(CardDatabase::Instance().Lookup(name) != nullptr, "card not in cards.json: ", name);
+    Card c; c.m_name = name; c.RehashName(); c.m_number = number;
+    return c;
+}
+GameState EdState(const std::vector<std::string>& hand, const std::vector<std::string>& board)
+{
+    (void)PD("Forest");   // loads cards.json
+    GameState s; s.active_player_index = 0; s.turn_number = 5; s.game_seed = 777;
+    s.players[0].life = 20; s.players[1].life = 20; s.players[0].lands_played_this_turn = 1;
+    int id = 1;
+    for (const std::string& n : hand) { s.players[0].hand.push_back(EdCard(n, id++)); }
+    for (const std::string& n : board) { PPut(s, n, 500 + id++); }
+    s.m_provider = &Prov();
+    return s;
+}
+std::vector<int> EdArm(const GameState& s, int arm)
+{
+    heurarm::t_arm[heurarm::ELVES_BUCKET_DISCARD] = static_cast<std::int8_t>(arm);
+    std::vector<int> v = Prov().CleanupDiscardCandidates(s, nullptr);
+    heurarm::t_arm[heurarm::ELVES_BUCKET_DISCARD] = -1;
+    return v;
+}
+std::vector<int> Ed(const GameState& s) { return EdArm(s, 1); }
+// A full permutation of the hand, and PREFIX-STABLE (CleanupDiscardShedStable() == true): the per-shed loop a cleanup
+// would otherwise run (ask, shed the first, ask again, down to 7 cards) sheds exactly the single consultation's prefix.
+void EdCheck(const GameState& s, const std::vector<int>& v)
+{
+    std::vector<int> sorted = v;
+    std::sort(sorted.begin(), sorted.end());
+    std::vector<int> want;
+    for (int i = 0; i < static_cast<int>(s.players[0].hand.size()); ++i) { want.push_back(i); }
+    REQUIRE(sorted == want);
+    heurarm::t_arm[heurarm::ELVES_BUCKET_DISCARD] = 1;
+    CHECK(Prov().CleanupDiscardShedStable());
+    heurarm::t_arm[heurarm::ELVES_BUCKET_DISCARD] = -1;
+    GameState cur = s;
+    for (std::size_t k = 0; cur.players[0].hand.size() > 7; ++k)
+    {
+        auto& h = cur.players[0].hand;
+        const std::vector<int> o = Ed(cur);
+        REQUIRE(!o.empty());
+        CHECK(h[static_cast<std::size_t>(o.front())].m_number == s.players[0].hand[static_cast<std::size_t>(v[k])].m_number);
+        h.erase(h.begin() + o.front());
+    }
+}
+const char* kEFo = "Forest";
+const char* kELo = "Wirewood Lodge";
+const char* kECa = "Cavern of Souls";
+const char* kELl = "Llanowar Elves";
+const char* kEPr = "Priest of Titania";
+const char* kEMa = "Marwyn, the Nurturer";
+const char* kEEz = "Ezuri, Renegade Leader";
+const char* kEJo = "Joraga Warcaller";
+const char* kECl = "Elvish Clancaller";
+const char* kEVi = "Leaf-Crowned Visionary";
+const char* kEBr = "Galadhrim Brigade";
+const char* kETa = "Taunting Elf";
+const char* kEIm = "Immaculate Magistrate";
+const char* kEWa = "Genesis Wave";
+const char* kECr = "Concordant Crossroads";
+}   // namespace
+
+// WITH sinks (Ezuri 3, Brigade 5), board 2 Forests. Spares: Taunting 6, then Clancaller 4 -- both before any mana. Mana:
+// Lodge 7, Llanowar 1, Priest 2, then the floor Forest 0. Kept sinks last, Brigade (value 3) before Ezuri (4).
+TEST_CASE("Elves discard: with a scaling threat, Taunting Elf and the other threats go before mana; =0 = inherited")
+{
+    const GameState s = EdState({ kEFo, kELl, kEPr, kEEz, kECl, kEBr, kETa, kELo }, { kEFo, kEFo });
+    const std::vector<int> v = Ed(s);
+    EdCheck(s, v);
+    CHECK(v == std::vector<int>{ 6, 4, 7, 1, 2, 0, 5, 3 });
+    CHECK(EdArm(s, 0) == Prov().SelesnyaLifegainProvider::CleanupDiscardCandidates(s, nullptr));
+    CHECK(EdArm(s, -1) == v);   // default ON
+}
+
+// Same mana and lords, sink vs no sink. Board 2 Forests; hand Forest 0, Forest 1, Llanowar 2, Priest 3, Clancaller 4,
+// Visionary 5, X 6, Taunting 7. Mana order Forest 1, Llanowar 2, Priest 3, Forest 0 (floor).
+//   X = Ezuri (a sink): spares Taunting 7, Visionary 5, Clancaller 4 (later lord first), then all mana, then Ezuri.
+//   X = Magistrate (no sink): the best 3 threats are Clancaller, Visionary, Magistrate (castable: reach 2 + 4); past them
+//   Taunting 7; then the mana past floor + 2 = Forest 1; then Magistrate 6, Visionary 5, Clancaller 4; then Llanowar 2,
+//   Priest 3, the floor Forest 0.
+TEST_CASE("Elves discard: no scaling threat in hand keeps up to 3 threats ahead of the surplus mana")
+{
+    const GameState a = EdState({ kEFo, kEFo, kELl, kEPr, kECl, kEVi, kEEz, kETa }, { kEFo, kEFo });
+    const std::vector<int> va = Ed(a);
+    EdCheck(a, va);
+    CHECK(va == std::vector<int>{ 7, 5, 4, 1, 2, 3, 0, 6 });
+    const GameState b = EdState({ kEFo, kEFo, kELl, kEPr, kECl, kEVi, kEIm, kETa }, { kEFo, kEFo });
+    const std::vector<int> vb = Ed(b);
+    EdCheck(b, vb);
+    CHECK(vb == std::vector<int>{ 7, 1, 6, 5, 4, 2, 3, 0 });
+}
+
+// Four sinks: Ezuri 2, Warcaller 3, Brigade 4, Wave 5 (board 4 Forests, reach 6: all castable). Kept: Wave 5 and Ezuri 2
+// (value 4); the spares Brigade 4, Warcaller 3 go after Taunting 7 and before Clancaller 6, all before mana (Forest 0,
+// Llanowar 1; no floor at 4 lands); then Wave, Ezuri.
+TEST_CASE("Elves discard: at most 2 scaling threats are kept; a 3rd+ goes before mana")
+{
+    const GameState s = EdState({ kEFo, kELl, kEEz, kEJo, kEBr, kEWa, kECl, kETa }, { kEFo, kEFo, kEFo, kEFo });
+    const std::vector<int> v = Ed(s);
+    EdCheck(s, v);
+    CHECK(v == std::vector<int>{ 7, 4, 3, 6, 0, 1, 5, 2 });
+}
+
+// DEAD first: Ezuri on our battlefield (hand Ezuri 0), the 2nd Marwyn in hand (2), Concordant Crossroads while one is
+// ours in play (3).
+TEST_CASE("Elves discard: a 2nd legend and a 2nd Concordant Crossroads are shed first")
+{
+    const GameState s = EdState({ kEEz, kEMa, kEMa, kECr, kEFo, kECl, kELl, kEBr }, { kEFo, kEFo, kEFo, kEEz, kECr });
+    const std::vector<int> v = Ed(s);
+    EdCheck(s, v);
+    REQUIRE(v.size() == 8);
+    CHECK(std::vector<int>(v.begin(), v.begin() + 3) == std::vector<int>{ 0, 2, 3 });
+    // A 2nd Crossroads held with none in play: the later copy is dead, the first is a threat.
+    const GameState t = EdState({ kECr, kECr, kEFo, kEFo, kELl, kEEz, kECl, kEBr }, { kEFo });
+    const std::vector<int> w = Ed(t);
+    EdCheck(t, w);
+    CHECK(w.front() == 1);
+}
+
+// MANA ORDER and the LAND FLOOR. Hand Forest 0, Forest 1, Lodge 2, Llanowar 3, Priest 4, Ezuri 5, Brigade 6, Cavern 7
+// (6 mana, 2 sinks): Lodge, Cavern, the surplus Forest, Llanowar (a mana Elf over a surplus land), Priest, and -- with
+// 2 lands in play -- the floor Forest 0 last; with 4 lands in play no floor, so both Forests go before Llanowar.
+TEST_CASE("Elves discard: Lodge < Cavern < Forest < mana Elves, one land kept while fewer than 4 are in play")
+{
+    const std::vector<std::string> hand{ kEFo, kEFo, kELo, kELl, kEPr, kEEz, kEBr, kECa };
+    const GameState s = EdState(hand, { kEFo, kEFo });
+    const std::vector<int> v = Ed(s);
+    EdCheck(s, v);
+    CHECK(v == std::vector<int>{ 2, 7, 1, 3, 4, 0, 6, 5 });
+    const GameState t = EdState(hand, { kEFo, kEFo, kEFo, kEFo });
+    const std::vector<int> w = Ed(t);
+    EdCheck(t, w);
+    CHECK(w == std::vector<int>{ 2, 7, 1, 0, 3, 4, 6, 5 });
+}
+
+// No sink, board 1 Forest: hand Magistrate 0, Taunting 1, Clancaller 2, Visionary 3, Crossroads 4, Forest 5,
+// Llanowar 6, Clancaller 7. Reach 1 + 2 = 3, so Magistrate (MV 4) is 1 short. Threat order: Taunting 1, Magistrate 0,
+// Crossroads 4, Clancaller 7, Visionary 3, Clancaller 2 -- the first three are past the best 3. Mana: Llanowar 6 and the
+// floor Forest 5 are the protected floor + 2 (no surplus).
+TEST_CASE("Elves discard: Taunting Elf first, then the threat farthest from castable, then the value rank")
+{
+    const GameState s = EdState({ kEIm, kETa, kECl, kEVi, kECr, kEFo, kELl, kECl }, { kEFo });
+    const std::vector<int> v = Ed(s);
+    EdCheck(s, v);
+    CHECK(v == std::vector<int>{ 1, 0, 4, 7, 3, 2, 6, 5 });
+}
+
+// 10-card hands (a cleanup that sheds three): the single consultation's prefix is the per-shed loop's answer.
+//   With sinks (Ezuri 5, Brigade 7), board 2 Forests: Taunting 8, Magistrate 9 (castable at reach 7), Clancaller 6.
+//   No sink, board 2 Forests: Crossroads 9 (past the best 3), then the surplus Forests 3, 2 -- the mana shed moves the
+//   reach (8 -> 7) and the threat order stays put.
+TEST_CASE("Elves discard: a three-card cleanup is prefix-stable")
+{
+    const GameState s = EdState({ kEFo, kEFo, kEFo, kELl, kEPr, kEEz, kECl, kEBr, kETa, kEIm }, { kEFo, kEFo });
+    const std::vector<int> v = Ed(s);
+    EdCheck(s, v);
+    REQUIRE(v.size() == 10);
+    CHECK(std::vector<int>(v.begin(), v.begin() + 3) == std::vector<int>{ 8, 9, 6 });
+    const GameState t = EdState({ kEFo, kEFo, kEFo, kEFo, kELl, kEPr, kECl, kEVi, kEIm, kECr }, { kEFo, kEFo });
+    const std::vector<int> w = Ed(t);
+    EdCheck(t, w);
+    REQUIRE(w.size() == 10);
+    CHECK(std::vector<int>(w.begin(), w.begin() + 3) == std::vector<int>{ 9, 3, 2 });
+}
