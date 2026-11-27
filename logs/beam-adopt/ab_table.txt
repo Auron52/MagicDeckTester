@@ -1,0 +1,40 @@
+| row | n | net (slower-faster) | faster / slower | d turns | se | t | units F/B | cpu F/B |
+|---|---|---|---|---|---|---|---|---|
+| creature_giving | 5000 | -13 | 22 / 9 | -0.0024 | 0.0012 | -2.06 | x1.033 | x1.007 |
+| creature_giving2hg | 2000 | -1 | 9 / 8 | -0.0005 | 0.0021 | -0.24 | x1.048 | x0.939 |
+| antilife | 5000 | +1 | 0 / 1 | +0.0002 | 0.0002 | +1.00 | x1.019 | x1.009 |
+| antilife2hg | 2000 | +0 | 1 / 1 | +0.0000 | 0.0007 | +0.00 | x1.023 | x1.006 |
+| dragonstorm | 5000 | -3 | 5 / 2 | -0.0006 | 0.0005 | -1.13 | x1.056 | x1.036 |
+| dragonstorm2hg | 2000 | +0 | 0 / 0 | +0.0000 | 0.0000 | +0.00 | x1.063 | x1.099 |
+| creature_givingd3 | 2000 | +0 | 0 / 0 | +0.0000 | 0.0000 | +0.00 | x0.999 | x0.996 |
+| antilifed3 | 2000 | +0 | 0 / 0 | +0.0000 | 0.0000 | +0.00 | x1.000 | x0.994 |
+| dragonstormd3 | 2000 | +0 | 0 / 0 | +0.0000 | 0.0000 | +0.00 | x0.994 | x0.999 |
+
+slower games (21):
+  creature_giving seed 49106000 gi 3: B 4 -> F 5
+  creature_giving seed 49104000 gi 249: B 4 -> F 5
+  creature_giving seed 49108000 gi 172: B 5 -> F 6
+  creature_giving seed 49112000 gi 78: B 4 -> F 5
+  creature_giving seed 49101000 gi 140: B 4 -> F 5
+  creature_giving seed 49103000 gi 165: B 5 -> F 7
+  creature_giving seed 49119000 gi 240: B 5 -> F 6
+  creature_giving seed 49100000 gi 191: B 4 -> F 5
+  creature_giving seed 49114000 gi 220: B 5 -> F 6
+  creature_giving2hg seed 49121000 gi 16: B 6 -> F 7
+  creature_giving2hg seed 49126000 gi 36: B 5 -> F 6
+  creature_giving2hg seed 49120000 gi 207: B 5 -> F 6
+  creature_giving2hg seed 49125000 gi 182: B 6 -> F 7
+  creature_giving2hg seed 49124000 gi 148: B 4 -> F 5
+  creature_giving2hg seed 49124000 gi 208: B 5 -> F 6
+  creature_giving2hg seed 49123000 gi 88: B 5 -> F 6
+  creature_giving2hg seed 49123000 gi 125: B 5 -> F 6
+  antilife seed 49134000 gi 28: B 4 -> F 5
+  antilife2hg seed 49148000 gi 207: B 7 -> F 8
+  dragonstorm seed 49173000 gi 66: B 7 -> F 8
+  dragonstorm seed 49163000 gi 176: B 6 -> F 7
+repro_creature_giving_d5b30_SG50_s46136000: 250 games, same turn 250, same turn+digest 250 (vs report SG50)
+repro_antilife_d5b20_SG50_s46100000: 250 games, same turn 250, same turn+digest 250 (vs report SG50)
+repro_dragonstorm_d5b20_SG50_s46172000: 250 games, same turn 250, same turn+digest 250 (vs report SG50)
+repro_antilife_d3b10_SG50_s46128000: 250 games, same turn 250, same turn+digest 250 (vs report SG50)
+repro_creature_giving_d3b10_SG50_s46164000: 250 games, same turn 250, same turn+digest 250 (vs report SG50)
+repro_creature_giving2hg_d5b30_SG50_s46156000: 250 games, same turn 250, same turn+digest 250 (vs report SG50)
