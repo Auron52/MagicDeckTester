@@ -2,7 +2,7 @@
 #include "OpponentDeck.h"
 #include "EffectHandler.h"
 #include "SpellEffects.h"
-#include "ControlInject.h"     // PROTOTYPE ctrl_inject (default off)
+#include "ControlInject.h"     // ctrl_inject / ctrl_record batch fields (default off; docs/design/control-inject-harness.md)
 #include "FreeTurns.h"         // MTG_FREE_TURNS: the end-of-opponent-turn lock check (lockstep twin in TurnSolver)
 #include "../ai/AIEngine.h"
 #include "../ai/Combat.h"
@@ -213,7 +213,12 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
         // death in the same turn, the win still counts.
         if (CheckWinCondition(state)) { return tnote(state.turn_number); }
         if (state.ActivePlayer().HasLost()) { return tnote(-1); }
-        // The search refuted every line through max_turns (see GameState::proven_no_win).
+        // The search refuted every line through max_turns (see GameState::proven_no_win). Not while a
+        // control-injection benefit the search cannot see is still to come (an exiled card due back, a tax due to
+        // end): the proof was made without it. Inert (false) for every game without ctrl_inject.
+        if (state.proven_no_win && ctrlinject::Armed() && !m_ai.InRolloutForCtrlInject()
+            && ctrlinject::BenefitPending(state))
+        { state.proven_no_win = false; }
         if (state.proven_no_win) { return tnote(-1); }
     }
     return tnote(-1);
@@ -252,143 +257,61 @@ static void NoteOwnDeath(const GameState& state)
     }
 }
 
-// ---- PROTOTYPE control-effect injection (ControlInject.h; docs/design/control-scoring-mode.md) ----------
-// Destroy OUR permanent at battlefield index i. Returns false when it is indestructible.
-static bool CtrlInjectDestroyAt(GameState& state, int i)
-{
-    Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
-    if (p.HasKeyword(Keyword::Indestructible)) { return false; }
-    const Permanent dead = p;
-    if (UnearthExileInstead(state, static_cast<std::size_t>(i), "destroyed")) { return true; }
-    for (Permanent& q : state.battlefield)
-    {
-        if (q.equipped_to      == dead.card.m_number) { q.equipped_to      = 0; }
-        if (q.aura_attached_to == dead.card.m_number) { q.aura_attached_to = 0; }
-    }
-    if (!dead.is_token) { state.players[static_cast<std::size_t>(dead.owner_index)].graveyard.push_back(RevealedCard(dead.card)); }
-    state.battlefield.erase(state.battlefield.begin() + i);
-    return true;
-}
-
-// Apply every turn-start effect due this turn. Returns true when the turn is skipped; `any` = something applied.
-static bool CtrlInjectTurnStart(GameState& state, bool& any)
-{
-    using namespace ctrlinject;
-    bool skip = false;
-    const int me = state.active_player_index;
-    for (std::size_t k = 0; k < t_spec.size(); ++k)
-    {
-        const Effect& e = t_spec[k];
-        if (t_done[k] || e.turn != state.turn_number || e.kind == Kind::Counter) { continue; }
-        t_done[k] = 1;
-        int count = 0, applied = 0;
-        std::string what;
-        auto nth = [&](auto pred) -> int
-        {
-            int n = 0, at = -1;
-            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-            {
-                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
-                if (q.controller_index != me || !pred(q)) { continue; }
-                if (n == e.arg) { at = i; }
-                ++n;
-            }
-            count = n;
-            return at;
-        };
-        int at = -1;
-        switch (e.kind)
-        {
-        case Kind::Land:     at = nth([](const Permanent& q) { return q.card.IsLand(); }); break;
-        case Kind::Creature: at = nth([](const Permanent& q) { return q.card.IsCreature(); }); break;
-        case Kind::Nonland:  at = nth([](const Permanent& q) { return !q.card.IsLand(); }); break;
-        case Kind::BigCreature:
-        {
-            int best = -1000;
-            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-            {
-                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
-                if (q.controller_index != me || !q.card.IsCreature()) { continue; }
-                ++count;
-                if (q.EffectivePower() > best) { best = q.EffectivePower(); at = i; }
-            }
-            break;
-        }
-        case Kind::Sweep:
-            for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
-            {
-                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
-                if (q.controller_index != me || !q.card.IsCreature()) { continue; }
-                ++count;
-                if (CtrlInjectDestroyAt(state, i)) { ++applied; }
-            }
-            break;
-        case Kind::Discard: case Kind::BigDiscard:
-        {
-            auto& hand = state.players[static_cast<std::size_t>(me)].hand;
-            int pick = -1;
-            if (e.kind == Kind::Discard)
-            {
-                count = static_cast<int>(hand.size());
-                if (e.arg < count) { pick = e.arg; }
-            }
-            else
-            {
-                int best = -1;
-                for (int i = 0; i < static_cast<int>(hand.size()); ++i)
-                {
-                    if (hand[static_cast<std::size_t>(i)].IsLand()) { continue; }
-                    ++count;
-                    const int mv = hand[static_cast<std::size_t>(i)].m_mana_cost.ManaValue();
-                    if (mv > best) { best = mv; pick = i; }
-                }
-            }
-            if (pick >= 0)
-            {
-                const Card c = hand[static_cast<std::size_t>(pick)];
-                what = c.m_name.str();
-                hand.erase(hand.begin() + pick);
-                state.players[static_cast<std::size_t>(me)].graveyard.push_back(RevealedCard(c));
-                applied = 1;
-            }
-            break;
-        }
-        case Kind::Skip: count = 1; applied = 1; skip = true; break;
-        case Kind::Counter: case Kind::None: break;
-        }
-        if (at >= 0)
-        {
-            what = state.battlefield[static_cast<std::size_t>(at)].card.m_name.str();
-            applied = CtrlInjectDestroyAt(state, at) ? 1 : 0;
-        }
-        if (applied) { any = true; }
-        Report(state, e, count, applied, what);
-    }
-    return skip;
-}
-
-// The counter effect, at the executor's stack resolution: true = this entry was countered.
-static bool CtrlInjectCounter(GameState& state, const StackEntry& entry)
-{
-    using namespace ctrlinject;
-    if (entry.type != StackEntry::EntryType::Spell || entry.controller_index != state.active_player_index) { return false; }
-    for (std::size_t k = 0; k < t_spec.size(); ++k)
-    {
-        const Effect& e = t_spec[k];
-        if (t_done[k] || e.kind != Kind::Counter || e.turn != state.turn_number) { continue; }
-        if (entry.source.m_mana_cost.ManaValue() < e.arg) { continue; }
-        t_done[k] = 1;
-        Report(state, e, 1, 1, entry.source.m_name.str());
-        return true;
-    }
-    return false;
-}
-
 void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
 {
     const int at = static_cast<int>(from);
+    // The passive opponent's turn, run after ours below. Defined up front so a control-injection `skip` round
+    // (core/ControlInject.h) can jump past the goldfisher's whole turn straight to it; a lambda definition has
+    // no side effects, so where it sits changes nothing else.
+    auto opponent_turn = [&]()
+    {
+        // Their notional turn starts: under a per-turn draw cap every player's draw count restarts
+        // (core/DrawCap.h). Deck-gated no-op elsewhere. Lockstep twin in the other world's opponent_turn.
+        drawcap::TurnBoundary(state);
+        state.ephara_creature_entered_last_turn = state.ephara_creature_entered_this_turn;
+        state.ephara_creature_entered_this_turn = false;
+        state.compressed_opponent_upkeep = true;
+        PerformMogisOpponentUpkeep(state);
+        if (OpponentHasLost(state)) { state.compressed_opponent_upkeep = false; return; }
+        PerformEpharaUpkeep(state);
+        state.compressed_opponent_upkeep = false;
+        if (state.player_lost_on_draw) { return; }
+        // Asylum Visitor at THE OPPONENT'S upkeep (Vampires A1), which precedes their notional draw below.
+        // A no-op unless the opponent was dealt a hand and holds none. Lockstep twin: the rollout's.
+        if (!PerformOpponentUpkeepHellbentDraw(state)) { state.player_lost_on_draw = true; }
+        // The passive opponent's notional draw for THEIR turn, which falls between ours (see
+        // core/OpponentDeck.h for why here, and why that makes a deck-out's win turn OUR turn).
+        // No-op for every deck that was not dealt an opponent library. Lockstep with the rollout's
+        // TurnSolver::SimulateEndAndStartNextTurn.
+        opponentdeck::EndOfTurnDraw(state);
+        if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
+        if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
+        // ...and Maze's End's off-main WIN after a Burgeoning put on their turn (F1 defect 4; rollout twin).
+        TryOffMainAltWinActivation(state);
+        // Parallax Wave + Opalescence at the OPPONENT's end step (USER ruling 7, the deck default; lock cluster step 4):
+        // every targetable opponent creature exiled for good through the self-exile loop, before the rest of the
+        // end-step window and so before the lock check below. Deck-gated (deck_has_wave_opal_sweep). Rollout twin.
+        PerformWaveOpalSweep(state);
+        // Sire of Insanity at the OPPONENT's notional end step ("each end step"): after their draw.
+        // Our hand is empty by then in this pool (our own end step discarded it), so it is faithful and
+        // inert; the opponent discards a dealt hand. Lockstep twin in the rollout; deck-gated.
+        freeturn::NoteSireBeforeDiscard(state);   // MTG_FREE_TURN_SIRE_FAIR: the hand Sire meets (rollout twin)
+        PerformEndStepDiscardHands(state, state.active_player_index);
+        // MORPH at the opponent's end step: its self-sacrifice sweep (inert -- a face-up Firecat died at ours),
+        // then the searched flip window (the plan's pin, the human's `face_up` prompt, or beyond the horizon the
+        // provider's front). Lockstep twin: SimulateEndAndStartNextTurn's opponent_turn. Deck-gated.
+        PerformEndStepSelfSacrifices(state);
+        // ...and Soulstoke's delayed "sacrifice it at the beginning of the next end step" for a body a previous
+        // opponent-end-step window put (only an opponent EXTRA turn reaches one; our own end step swept every other).
+        // The window below (flips, then Soulstoke puts) runs after it, so ITS puts meet our end step. Deck-gated.
+        if (state.deck_has_eot_tap_put) { PerformEndStepDelayedSacrifices(state); }
+        PerformOpponentEndStepFaceUp(state);
+        opponentdeck::EndOfTurnCleanup(state);
+        DayNightTurnBoundary(state);
+    };
     // MTG_FREE_TURN_REACH_AUDIT: the opponent's hand as OUR turn starts (empty unless the audit is on; no behaviour).
     std::vector<int> reach_hand_at_start;
+    bool ctrl_skipped = false;   // a control-injection `skip` took this round's goldfisher turn
     if (from == ResumeAt::NewTurn)
     {
         // On the draw, their first turn precedes ours. They skip that draw,
@@ -412,15 +335,22 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
                           "\xE2\x8F\xB3 Extra turn begins (turn " + std::to_string(state.turn_number)
                           + ", extra " + std::to_string(static_cast<int>(state.extra_turns_taken)) + ")");
         }
-        // PROTOTYPE control-effect injection (ControlInject.h): inert unless a batch job set ctrl_inject.
+        // CONTROL-EFFECT INJECTION (core/ControlInject.h): inert unless a batch job set ctrl_inject / ctrl_record.
+        // The REAL game only (never a mulligan trial or rollout on this engine), at the first turn of each new
+        // round. A change makes every queued plan stale: the committed line is dropped and the turn re-searched.
+        // A `skip` round is an opponent's extra turn: the goldfisher takes no part of it, and the opponent's own
+        // turn of that round still follows (ctrl_skipped_round below).
         if (ctrlinject::Armed() && !m_ai.InRolloutForCtrlInject() && !state.InSameRoundTurn())
         {
-            bool any = false;
-            const bool skip = CtrlInjectTurnStart(state, any);
-            if (any) { m_ai.DropCommittedLineForCtrlInject(); }
-            if (skip) { return; }
+            const ctrlinject::RoundStart rs = ctrlinject::OnRoundStart(state);
+            if (rs.changed) { m_ai.DropCommittedLineForCtrlInject(); }
+            if (rs.skip) { ctrl_skipped = true; goto ctrl_skipped_round; }
         }
         UntapStep(state);
+        // ...and a `tap` effect (a land tapped down at upkeep) after the untap step, before the upkeep.
+        if (ctrlinject::Armed() && !m_ai.InRolloutForCtrlInject() && !state.InSameRoundTurn()
+            && ctrlinject::OnAfterUntap(state))
+        { m_ai.DropCommittedLineForCtrlInject(); }
         UpkeepStep(state);   // includes UpkeepTail
     }
     else if (at <= static_cast<int>(ResumeAt::UpkeepTail))
@@ -477,57 +407,12 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     m_ai.DecideCrossingFetch(state);
     if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
     CleanupStep(state);
+ctrl_skipped_round:
     state.boundary_dredge_active = true;
     state.scripted_boundary_dredge_cursor = 0;
     // EXTRA TURN NEXT (pending_extra_turns > 0): the opponent takes NO turn before it, so neither
     // their upkeep nor their notional draw happens (CR 500.7: the extra turn is taken directly after
     // this one). Lockstep twin: SimulateEndAndStartNextTurn. 0 for every deck without the card.
-    auto opponent_turn = [&]()
-    {
-        // Their notional turn starts: under a per-turn draw cap every player's draw count restarts
-        // (core/DrawCap.h). Deck-gated no-op elsewhere. Lockstep twin in the other world's opponent_turn.
-        drawcap::TurnBoundary(state);
-        state.ephara_creature_entered_last_turn = state.ephara_creature_entered_this_turn;
-        state.ephara_creature_entered_this_turn = false;
-        state.compressed_opponent_upkeep = true;
-        PerformMogisOpponentUpkeep(state);
-        if (OpponentHasLost(state)) { state.compressed_opponent_upkeep = false; return; }
-        PerformEpharaUpkeep(state);
-        state.compressed_opponent_upkeep = false;
-        if (state.player_lost_on_draw) { return; }
-        // Asylum Visitor at THE OPPONENT'S upkeep (Vampires A1), which precedes their notional draw below.
-        // A no-op unless the opponent was dealt a hand and holds none. Lockstep twin: the rollout's.
-        if (!PerformOpponentUpkeepHellbentDraw(state)) { state.player_lost_on_draw = true; }
-        // The passive opponent's notional draw for THEIR turn, which falls between ours (see
-        // core/OpponentDeck.h for why here, and why that makes a deck-out's win turn OUR turn).
-        // No-op for every deck that was not dealt an opponent library. Lockstep with the rollout's
-        // TurnSolver::SimulateEndAndStartNextTurn.
-        opponentdeck::EndOfTurnDraw(state);
-        if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
-        if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
-        // ...and Maze's End's off-main WIN after a Burgeoning put on their turn (F1 defect 4; rollout twin).
-        TryOffMainAltWinActivation(state);
-        // Parallax Wave + Opalescence at the OPPONENT's end step (USER ruling 7, the deck default; lock cluster step 4):
-        // every targetable opponent creature exiled for good through the self-exile loop, before the rest of the
-        // end-step window and so before the lock check below. Deck-gated (deck_has_wave_opal_sweep). Rollout twin.
-        PerformWaveOpalSweep(state);
-        // Sire of Insanity at the OPPONENT's notional end step ("each end step"): after their draw.
-        // Our hand is empty by then in this pool (our own end step discarded it), so it is faithful and
-        // inert; the opponent discards a dealt hand. Lockstep twin in the rollout; deck-gated.
-        freeturn::NoteSireBeforeDiscard(state);   // MTG_FREE_TURN_SIRE_FAIR: the hand Sire meets (rollout twin)
-        PerformEndStepDiscardHands(state, state.active_player_index);
-        // MORPH at the opponent's end step: its self-sacrifice sweep (inert -- a face-up Firecat died at ours),
-        // then the searched flip window (the plan's pin, the human's `face_up` prompt, or beyond the horizon the
-        // provider's front). Lockstep twin: SimulateEndAndStartNextTurn's opponent_turn. Deck-gated.
-        PerformEndStepSelfSacrifices(state);
-        // ...and Soulstoke's delayed "sacrifice it at the beginning of the next end step" for a body a previous
-        // opponent-end-step window put (only an opponent EXTRA turn reaches one; our own end step swept every other).
-        // The window below (flips, then Soulstoke puts) runs after it, so ITS puts meet our end step. Deck-gated.
-        if (state.deck_has_eot_tap_put) { PerformEndStepDelayedSacrifices(state); }
-        PerformOpponentEndStepFaceUp(state);
-        opponentdeck::EndOfTurnCleanup(state);
-        DayNightTurnBoundary(state);
-    };
     while (state.NextExtraTurnIsOpponent() && !state.opponent_decked)
     {
         state.ConsumeOpponentExtraTurn();
@@ -554,6 +439,8 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     // DAY / NIGHT turn-based check (CR 726.3a) for the opponent's notional untap and our next one
     // (Brutal Cathar). Lockstep with SimulateEndAndStartNextTurn; no-op unless a daybound card set it.
     if (state.NextExtraTurnIsOurs()) { DayNightTurnBoundary(state); }
+    // CONTROL-EFFECT INJECTION's per-round record (the damage curve): the state at the end of the round.
+    if (ctrlinject::Armed() && !m_ai.InRolloutForCtrlInject()) { ctrlinject::OnTurnEnd(state, ctrl_skipped); }
 }
 
 void GameEngine::UntapStep(GameState& state)
@@ -1886,17 +1773,13 @@ void GameEngine::ResolveStack(GameState& state)
             { hand_before_nums.push_back(c.m_number); }
         }
 
-        // PROTOTYPE control-effect injection: an opponent's counterspell (ControlInject.h). Real game only.
-        if (ctrlinject::Armed() && !m_ai.InRolloutForCtrlInject() && CtrlInjectCounter(state, entry))
+        // CONTROL-EFFECT INJECTION: an opponent's counterspell (core/ControlInject.h), REAL game only. The spell's
+        // cast triggers have already fired (CR 603.2: they trigger on the cast) and its mana stays spent; the
+        // counter moves it to the zone it names and the spell never resolves. The plan that cast it is stale.
+        if (ctrlinject::Armed() && !m_ai.InRolloutForCtrlInject() && ctrlinject::OnSpellResolving(state, entry))
         {
-            // A countered spell leaves the stack for its owner's graveyard (CR 701.6a); flashback exiles it;
-            // a copy ceases to exist. (Prototype: an adventure / kicked face goes to the graveyard as cast.)
-            if (!entry.is_copy)
-            {
-                if (entry.cast_with_flashback) { state.exile.push_back(entry.source); }
-                else { state.players[static_cast<std::size_t>(entry.controller_index)].graveyard.push_back(entry.source); }
-            }
             m_ai.DropCommittedLineForCtrlInject();
+            CheckStateBasedActions(state);
             continue;
         }
         EffectHandler::Resolve(state, entry, *def);

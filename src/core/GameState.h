@@ -693,6 +693,20 @@ struct GameState
     // NoteOpponentTurnEnd). LIVE at search nodes (our combat -> the opponent's turn end), so it IS folded, value-gated
     // (BuildSimKey, dominance::Build, the route signature). Never set unless the lever and the rule are armed.
     bool                     annihilator_lock_veto        = false;
+    // CONTROL-EFFECT INJECTION (core/ControlInject.h; docs/design/control-inject-harness.md), in the 3-byte hole
+    // before extra_turn_order (sizeof(GameState) unchanged). All 0 for every game whose batch job carries no
+    // ctrl_inject, so TurnSeq() and EffectiveSpellCost are byte-identical there.
+    //   ctrl_skipped_turns -- rounds whose goldfisher turn a `skip` effect removed (an opponent's extra turn). The
+    //     ROUND advanced but the goldfisher took no turn, so TurnSeq() subtracts it: an "until the end of your next
+    //     turn" window (Light Up the Stage's staged cards) stays open through the skipped round.
+    //   ctrl_tax_all / ctrl_tax_split -- a `tax` effect's generic surcharge on the goldfisher's spells, read where
+    //     Thalia's tax is (ManaPayment.cpp EffectiveSpellCost): every spell pays ctrl_tax_all more, a noncreature
+    //     spell also the low nibble of ctrl_tax_split, a creature spell its high nibble.
+    // Written only between turns by the real game's injection hook, so they are constant inside every search tree
+    // (and change only with turn_number); never folded into a state key.
+    std::uint8_t             ctrl_skipped_turns           = 0;
+    std::uint8_t             ctrl_tax_all                 = 0;
+    std::uint8_t             ctrl_tax_split               = 0;
     // Extra turns are taken in reverse creation order (CR 500.7). Zero names our player;
     // one names the passive opponent. Keep the old own-turn count for the existing search
     // gates and for scenario states that install pending_extra_turns directly.
@@ -825,7 +839,8 @@ struct GameState
     // search pins, shuffle salts, the T1 draw skip) use this, never turn_number, so a stamp written in
     // the regular turn of a round is stale inside that round's extra turn.
     int TurnSeq() const
-    { return turn_number + static_cast<int>(extra_turns_taken) + static_cast<int>(free_turns_taken); }
+    { return turn_number + static_cast<int>(extra_turns_taken) + static_cast<int>(free_turns_taken)
+             - static_cast<int>(ctrl_skipped_turns); }
     // TERMINATION BACKSTOP for extra-turn chains (both worlds): a game / rollout / search node whose
     // turns taken exceed 4x the round horizon is ended as a no-win. A deck can
     // repeatedly cast turn spells, so depth counted in ROUNDS alone would not

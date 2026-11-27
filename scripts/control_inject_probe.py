@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""PROTOTYPE probe for docs/design/control-scoring-mode.md: control-effect injection into suite goldfishers.
+"""Probe for docs/design/control-scoring-mode.md section 8: control-effect injection into suite goldfishers.
 
   make  <out_manifest.json> [--games N] [--seed S]   write ONE pooled --batch manifest (every deck x arm)
   report <game_log_dir> <batch_stderr>                per (deck, arm) paired delay vs the base arm
 
 Every arm of a deck plays the SAME seeds (paired), at the cheap suite shape d3 b10 with max_turns 12 so a
-delayed kill is not truncated at the goldfish horizon (unwon = 13). The `ctrl_inject` job field is the
-prototype hook in src/core/ControlInject.h (inert without it).
+delayed kill is not truncated at the goldfish horizon (unwon = 13). The `ctrl_inject` job field and its
+grammar are specified in docs/design/control-inject-harness.md (src/core/ControlInject.h; inert without it).
+The counter arms use the stage-1 grammar: `counter:T:mv>=M` (the probe's "first spell of mana value >= M").
 """
 import json
 import math
 import os
-import re
 import sys
 from collections import defaultdict
 
@@ -33,10 +33,10 @@ ARMS = {
     "land3x2": "land:3:0;land:4:0", "land3x3": "land:3:0;land:4:0;land:5:0",
     "crt2": "bigcrt:2", "crt3": "bigcrt:3", "crt4": "bigcrt:4",
     "crt3x2": "bigcrt:3;bigcrt:4", "crt3x3": "bigcrt:3;bigcrt:4;bigcrt:5",
-    "ctr2": "counter:2:1", "ctr3": "counter:3:1", "ctr4": "counter:4:1",
-    "ctr3x2": "counter:3:1;counter:4:1", "ctr3x3": "counter:3:1;counter:4:1;counter:5:1",
-    "ctr3same2": "counter:3:1;counter:3:1",
-    "ctr3mv3": "counter:3:3",
+    "ctr2": "counter:2:mv>=1", "ctr3": "counter:3:mv>=1", "ctr4": "counter:4:mv>=1",
+    "ctr3x2": "counter:3:mv>=1;counter:4:mv>=1", "ctr3x3": "counter:3:mv>=1;counter:4:mv>=1;counter:5:mv>=1",
+    "ctr3same2": "counter:3:mv>=1;counter:3:mv>=1",
+    "ctr3mv3": "counter:3:mv>=3",
     "disc2": "bigdisc:2", "disc3": "bigdisc:3", "disc4": "bigdisc:4",
     "disc2x2": "bigdisc:2;bigdisc:3", "disc2x3": "bigdisc:2;bigdisc:3;bigdisc:4",
     "sweep3": "sweep:3", "sweep4": "sweep:4",
@@ -73,15 +73,17 @@ def read_wins(path):
 
 def report(logdir, stderr_path):
     applied = defaultdict(lambda: [0, 0])   # (job) -> [effects applied, effects attempted]
-    pat = re.compile(r"\[ctrl-inject\] job=(\S+) gi=(\d+) .* applied=(\d+)")
     if stderr_path and os.path.exists(stderr_path):
         with open(stderr_path, errors="replace") as f:
             for line in f:
-                m = pat.search(line)
-                if m:
-                    a = applied[m.group(1)]
-                    a[1] += 1
-                    a[0] += 1 if int(m.group(3)) > 0 else 0
+                if not line.startswith("[ctrl-inject] "):
+                    continue
+                rec = json.loads(line[len("[ctrl-inject] "):])
+                if rec.get("phase") in ("end", "return"):
+                    continue
+                a = applied[rec["job"]]
+                a[1] += 1
+                a[0] += 1 if rec.get("applied", 0) > 0 else 0
     rows = []
     for deck in DECKS:
         bp = os.path.join(logdir, f"{deck}__base.wins")

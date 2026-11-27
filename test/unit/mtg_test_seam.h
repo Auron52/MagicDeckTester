@@ -141,4 +141,6 @@ struct MtgTestSeam
     static void GeUpkeepStep(GameEngine& g, GameState& s) { g.UpkeepStep(s); }
     // EE lock step 4: our end step, cleanup and the opponent's turn (its end-step window), stopping before our untap.
     static void GeRunTurnFromEnd(GameEngine& g, GameState& s) { g.RunTurnFrom(s, GameEngine::ResumeAt::End); }
+    // A whole real turn (control-effect injection: a `skip` round and the per-round hooks).
+    static void GeRunTurn(GameEngine& g, GameState& s) { g.RunTurn(s); }
 };

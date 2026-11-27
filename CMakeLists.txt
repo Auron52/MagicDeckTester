@@ -133,6 +133,7 @@ add_custom_target(mtg_flag_registry
 # Shared game engine library — linked by both the runner and the analyzer
 add_library(mtg-core STATIC
     src/core/GameEngine.cpp
+    src/core/ControlInject.cpp
     src/core/SpellEffects.cpp
     src/core/GameLogger.cpp
     src/core/EffectHandler.cpp
@@ -681,6 +682,7 @@ add_executable(mtg-test
     test/unit/test_mazes_end_rank_object.cpp
     test/unit/test_greedy_tie_scoring.cpp
     test/unit/test_free_turns.cpp
+    test/unit/test_control_inject.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Precompiled header for the unit tests ONLY (the engine binaries are untouched, so codegen and determinism

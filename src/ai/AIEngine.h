@@ -178,9 +178,10 @@ public:
     // MTG_DOTH_AXIS_STATS census at the real upkeep (GameEngine::UpkeepTail), which counts a searched game's
     // Defense of the Heart resolutions that no plan's pin covered.
     bool SearchesTurnsForCensus() const { return m_lookahead_depth > 0 && !m_in_rollout && !HumanPlayActive(); }
-    // PROTOTYPE control-effect injection (core/ControlInject.h): only the REAL game is disrupted (never a
-    // bottoming / keep trial playout on this shared engine), and the disruption makes every queued plan stale,
-    // so the committed line and its pins are dropped and the disrupted turn is searched afresh.
+    // CONTROL-EFFECT INJECTION (core/ControlInject.h, default off): only the REAL game is disrupted (never a
+    // bottoming / keep trial playout on this shared engine -- RolloutWinTurnFrom sets m_in_rollout around every
+    // one), and a disruption makes every queued plan stale, so the committed line and its pins are dropped and
+    // the disrupted turn is searched afresh.
     bool InRolloutForCtrlInject() const { return m_in_rollout; }
     void DropCommittedLineForCtrlInject()
     {

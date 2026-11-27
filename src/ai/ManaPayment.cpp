@@ -4921,6 +4921,16 @@ static int NoncreatureSpellTax(const CardDefinition& def, const GameState& state
     return tax;
 }
 
+// CONTROL-EFFECT INJECTION's `tax` (core/ControlInject.h; docs/design/control-inject-harness.md): an opponent's
+// Sphere of Resistance / Thalia, as GameState::ctrl_tax_all / ctrl_tax_split. Joins the raw cost exactly where
+// Thalia's tax does (all three sites), so the search and the executor price it alike. 0 -- and byte-identical --
+// for every game whose batch job carries no ctrl_inject.
+static int CtrlInjectSpellTax(const CardDefinition& def, const GameState& state)
+{
+    if (state.ctrl_tax_all == 0 && state.ctrl_tax_split == 0) { return 0; }
+    return state.ctrl_tax_all + (def.card.IsCreature() ? (state.ctrl_tax_split >> 4) : (state.ctrl_tax_split & 0x0F));
+}
+
 // `x_excess` (nullptr at every ordinary caller): for an {X} spell, the generic reduction that the
 // floors below threw away because the printed generic (X counted as 0) was too small to absorb it. CR
 // 601.2f applies a cost reduction to the TOTAL cost, X included, so that excess still comes off the X
@@ -4938,7 +4948,7 @@ static ManaCost EffectiveSpellCostImpl(const CardDefinition& def, const GameStat
     {
         // An alternative cost still takes cost increases (CR 118.9d).
         ManaCost sc = def.params.spectacle_cost.value();
-        sc.generic += NoncreatureSpellTax(def, state);
+        sc.generic += NoncreatureSpellTax(def, state) + CtrlInjectSpellTax(def, state);
         return sc;
     }
     ManaCost cost = alternate_base ? *alternate_base : def.card.m_mana_cost;
@@ -4989,6 +4999,7 @@ static ManaCost EffectiveSpellCostImpl(const CardDefinition& def, const GameStat
     // increases - reductions), like the additional cost above. Gated on the per-game deck stamp
     // (GameState::deck_has_spell_tax), so a deck without a taxer never walks the board here.
     cost.generic += NoncreatureSpellTax(def, state);
+    cost.generic += CtrlInjectSpellTax(def, state);   // the control-injection tax (0 unless a job set one)
     if (def.params.affinity_for_subtype && !def.params.subtypes_affected.empty())
     {
         int reduction = 0;
@@ -5412,7 +5423,7 @@ ManaCost SpectacleLiveCost(const CardDefinition& def, const GameState& state)
 {
     // EffectiveSpellCost's spectacle branch, verbatim but for the life-loss test (see the header).
     ManaCost sc = def.params.spectacle_cost.value();
-    sc.generic += NoncreatureSpellTax(def, state);
+    sc.generic += NoncreatureSpellTax(def, state) + CtrlInjectSpellTax(def, state);
     return sc;
 }
 
