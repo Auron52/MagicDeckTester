@@ -652,3 +652,8 @@ then Maze's End K=20 mullgen from .claude/worktrees/maze-gen2.
    want to work the other way around to leave multiple attackers." -> the payment ladder ranks a scaled dork tap-LAST
    on every turn (DorkGrowth rank 61); wip/elves-r2 measures how often the order matters on attack turns and
    prototypes a searched scaled-first / scaled-last payment choice (default OFF) or a lethal-aware order.
+8. Sink turns: "That said, when using a scaling spell, (Joraga, Galadhrim, Genesis Wave) you usually would want to
+   prioritize attackers or just pump all of the mana into the spell." -> candidate for sink turns = two options,
+   all-in (class top) or attackers-first (scaled dorks pay first, fixed attack-capable dorks held); the set-up
+   tap-last order applies to the non-sink casts. wip/elves-r2 adds a `two` arm and counts how often the band's
+   winning count is neither.
