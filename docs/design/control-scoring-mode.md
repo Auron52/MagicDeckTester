@@ -1389,6 +1389,19 @@ deck:
 * **Screens** (`deck_compare.py`) on a deck with more than one mode run each mode it has and report each mode's
   result side by side. The USER said "a combination"; until the USER gives a rule for combining them (weights, or
   which mode decides), a screen's verdict lists every mode's number and does not blend them.
+* **A control card needs control evidence (USER 2026-11-27, verbatim):** "When screening out a card that is
+  control-based we would need the evidence of this mode and 1v1 most likely. It isn't possible to do with
+  goldfishing only." Goldfish sees only a control card's cost (the mana and the slot), never what it does to the
+  opponent, so a goldfish-only screen would always cut it. Consequences:
+  * **A guard in `deck_compare.py` (to build with stage 2):** when an arm adds or removes a control-based card, the
+    screen refuses a goldfish-only verdict and names the missing mode. That matches its existing guard for an
+    unscored card.
+  * **"Control-based" is derived from the card data, not a hand list:** a card with an effect the injection
+    harness and the mapping model (removal, counter, discard, land destruction, sweeper, life gain, damage
+    prevention, a blocker the deck casts mainly to block, a lock piece). The classification is listed in the
+    screen report so the USER can correct it.
+  * **In such a screen the control-scored result decides,** with 1v1 joining when it exists. The goldfish result is
+    still reported beside it, because it shows what the card costs the deck's own clock.
 
 **Q9. Is the per-pair form of section 4.1 what you mean by "<win turn - average control impact>"?** The design
 scores each (control game, gauntlet game) pair as `min over prefixes k of max(T_k, W - D_k)` and only then
