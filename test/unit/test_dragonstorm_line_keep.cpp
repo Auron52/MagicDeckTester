@@ -10,6 +10,8 @@
 //                                      other "covered" both of Karrthus's {B} and {G} (one tap makes one unit).
 //   MTG_LINE_NC_LEFT                -- the line-keep rung judged a creature-only rest as a noncreature bill once an
 //                                      earlier noncreature cast of the line was paid (the line's total never counts down).
+//   MTG_ONDEMAND_LUMP_KEEP_OWED     -- a Bloom crack that paid a bill spent all its {B} on the generic, though another
+//                                      untapped source could pay that part and let the {B} the line owes float on.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -158,6 +160,7 @@ bool PayLineDlk(GameState& s, const std::vector<Action>& line, std::size_t paid 
         }
         SubManaCost(g_line_unpaid_cost, cost);
         if (d.params.ritual_floating_mana > 0) { s.floating_mana.red += d.params.ritual_floating_mana; }
+        if (d.params.impulse_float_amount > 0) { s.floating_mana.red += d.params.impulse_float_amount; }   // Apex: red
     }
     return true;
 }
@@ -396,5 +399,34 @@ TEST_CASE("Dragonstorm line keep: s30129376 T4 -- no noncreature cast is left af
         ArmDlk as(heurarm::LINE_NC_LEFT, on);
         GameState s = s0;
         CHECK(PayLineDlk(s, line, 1, &pre) == on);
+    }
+}
+
+// Dragonstorm s30120119 gi120119 T6 m1 {Dwarven Hold, Desperate Ritual, Seething Song, Apex of Power, Irencrag Feat,
+// Dragonlord Kolaghan}: Desperate (Mountain#31) and Song (Ruby) leave six {R} floating beside Mountain#26 and Lotus Bloom.
+// Apex's {6}{R}{R}{R} (Ruby) drained the six {R} and cracked the Bloom for its last three generic with the Mountain still
+// untapped (the crack is in {B}, the colour the line has no other source of, but the drain spent all three); Apex's ten
+// {R} and Irencrag's seven left Kolaghan's {B} with no source. MTG_ONDEMAND_LUMP_KEEP_OWED sets the owed {B} aside: the
+// Mountain pays one generic, two {B} pay the rest, one {B} floats on to Kolaghan. (Traced in game: MTG_DS2_PAYDBG.)
+TEST_CASE("Dragonstorm line keep: s30120119 T6 -- Apex taps the Mountain and the Bloom's {B} floats to Kolaghan")
+{
+    GameState s0 = BaseDlk(6);
+    PutDlk(s0, "Mountain", 31).tapped = true;
+    PutDlk(s0, "Mountain", 26);
+    PutDlk(s0, "Ruby Medallion", 44);
+    PutDlk(s0, "Lotus Bloom", 18);
+    PutDlk(s0, "Dwarven Hold", 14).tapped = true;
+    s0.floating_mana.red = 6;
+    for (const char* h : { "Apex of Power", "Lotus Bloom", "Irencrag Feat", "Dragonlord Kolaghan" })   // the game's hand
+    { s0.players[0].hand.push_back(CardDlk(h, 60 + static_cast<int>(s0.players[0].hand.size()))); }
+    const std::vector<Action> line = { CastDlk(s0, "Apex of Power"), CastDlk(s0, "Irencrag Feat"),
+                                       CastDlk(s0, "Dragonlord Kolaghan") };
+    LineOpensUnseenScope unseen(true);   // Apex opens a breakpoint
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmDlk as(heurarm::ONDEMAND_LUMP_KEEP_OWED, on);
+        GameState s = s0;
+        CHECK(PayLineDlk(s, line) == on);
     }
 }

@@ -13728,24 +13728,35 @@ static std::uint64_t OnDemandLandHold(const GameState& state)
 }
 
 // Apply `recipe` to `out` and pay `cost_in` there (the remaining crackable lands held when `hold_lands`).
+// `keep` (MTG_ONDEMAND_LUMP_KEEP_OWED): coloured units of the general float set aside for the payment (after the cracks)
+// and floated again after it, so the payer spends other mana on the bill (CR 601.2h). Null: none.
 static bool OnDemandPayWith(GameState& out, const std::vector<OnDemandCrack>& recipe, bool hold_lands,
-                            const ManaCost& cost_in, bool for_creature, ManaPool* avail, bool honor_legacy_cco)
+                            const ManaCost& cost_in, bool for_creature, ManaPool* avail, bool honor_legacy_cco,
+                            const ManaPool* keep = nullptr)
 {
     for (const OnDemandCrack& k : recipe) { if (!ApplyOnDemandCrack(out, k)) { return false; } }
     const dmgev::PayHoldScope h(dmgev::t_pay_hold | (hold_lands ? OnDemandLandHold(out) : 0));
-    return TapForCostSharedCore(out, cost_in, for_creature, avail, honor_legacy_cco);
+    if (keep == nullptr) { return TapForCostSharedCore(out, cost_in, for_creature, avail, honor_legacy_cco); }
+    ManaPool& f = out.floating_mana;
+    if (f.white < keep->white || f.blue < keep->blue || f.black < keep->black || f.red < keep->red
+        || f.green < keep->green) { return false; }
+    f.white -= keep->white; f.blue -= keep->blue; f.black -= keep->black; f.red -= keep->red; f.green -= keep->green;
+    const bool paid = TapForCostSharedCore(out, cost_in, for_creature, avail, honor_legacy_cco);
+    ManaPool& g = out.floating_mana;
+    g.white += keep->white; g.blue += keep->blue; g.black += keep->black; g.red += keep->red; g.green += keep->green;
+    return paid;
 }
 
 // One trial payment on a copy, quiet. Returns the recipe's success; `out` holds the paid board.
 static bool OnDemandTrial(const GameState& state, const std::vector<OnDemandCrack>& recipe, bool hold_lands,
                           const ManaCost& cost_in, bool for_creature, ManaPool* available, ManaPool& avail_out,
-                          bool honor_legacy_cco, GameState& out)
+                          bool honor_legacy_cco, GameState& out, const ManaPool* keep = nullptr)
 {
     const RevealLogPause quiet;
     out = state;
     if (available != nullptr) { avail_out = *available; }
     return OnDemandPayWith(out, recipe, hold_lands, cost_in, for_creature,
-                           available != nullptr ? &avail_out : nullptr, honor_legacy_cco);
+                           available != nullptr ? &avail_out : nullptr, honor_legacy_cco, keep);
 }
 } // namespace
 
@@ -13791,6 +13802,32 @@ static bool LumpAwareBillPayable(const GameState& board, const ManaCost& bill, c
         if (TapForCostBacktrack(*c, bill, /*for_creature=*/true, start)) { return true; }
     }
     return false;
+}
+
+// LumpAwareBillPayable plus the mana the spell being paid for adds when it resolves (MTG_ONDEMAND_LUMP_KEEP_OWED): the
+// paying ritual's float (`ritual`) and, for an impulse-exile spell cast from hand (Apex of Power: "add ten mana of any
+// one color"), its ten in each colour the bill has a pip of (red when it has none) -- payable when some colour pays.
+static bool LumpAwareBillPayableOpener(const GameState& board, const ManaCost& bill, const ManaPool& ritual)
+{
+    const Card* pc = PayingSpellCard();
+    const CardDefinition* d = pc != nullptr ? CardDatabase::Instance().LookupCached(*pc) : nullptr;
+    const int ten = (d != nullptr && !pc->m_is_staged) ? d->params.impulse_float_amount : 0;
+    if (ten <= 0) { return LumpAwareBillPayable(board, bill, ritual); }
+    static const char* kCol[5] = { "W", "U", "B", "R", "G" };
+    const int pip[5] = { bill.white, bill.blue, bill.black, bill.red, bill.green };
+    bool any_pip = false;
+    for (int c = 0; c < 5; ++c)
+    {
+        if (pip[c] <= 0) { continue; }
+        any_pip = true;
+        ManaPool extra = ritual;
+        AddColorToPool(extra, kCol[c], ten);
+        if (LumpAwareBillPayable(board, bill, extra)) { return true; }
+    }
+    if (any_pip) { return false; }
+    ManaPool extra = ritual;
+    AddColorToPool(extra, "R", ten);
+    return LumpAwareBillPayable(board, bill, extra);
 }
 
 static thread_local int t_pilgrimage_pay_depth = 0;
@@ -14249,6 +14286,53 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         }
     }
     static const char* kCol[5] = { "W", "U", "B", "R", "G" };
+    // KEEP THE OWED COLOUR OF A LUMP (MTG_ONDEMAND_LUMP_KEEP_OWED, EngineFlags.h). `rec` (its last crack a lump) pays this
+    // bill, and *scratch holds that payment. When that payment STRANDS the rest of the line (LumpAwareBillPayableOpener:
+    // every crack of the lumps left, the paying ritual's float, an Apex of Power's ten), the bill is paid again with the
+    // lump cracked in a colour x the rest owes and the owed x units SET ASIDE (CR 601.2h: the player chooses which mana
+    // pays), so the other untapped sources pay the rest and x floats on; the first x (in the lump's colour order) whose
+    // payment leaves the rest payable is made instead. Dragonstorm s30120119 T6: Apex's {6}{R}{R}{R} over six floating
+    // {R} cracked the Bloom for {B} and spent all three on the generic while a Mountain stayed untapped; Kolaghan's {B}
+    // had no source.
+    auto keep_owed = [&](const std::vector<OnDemandCrack>& rec, const int order[5]) -> bool
+    {
+        int rest_pips[5];
+        const int rest_mv = LineRestAfter(cost_in, rest_pips);
+        if (rest_mv <= 0) { return false; }
+        const ManaPool& pf = scratch->floating_mana;
+        const int left[5] = { pf.white, pf.blue, pf.black, pf.red, pf.green };
+        bool short_any = false;
+        for (int x = 0; x < 5; ++x) { if (rest_pips[x] > left[x]) { short_any = true; } }
+        if (!short_any) { return false; }
+        ManaCost bill;
+        bill.white = rest_pips[0]; bill.blue = rest_pips[1]; bill.black = rest_pips[2];
+        bill.red = rest_pips[3]; bill.green = rest_pips[4];
+        bill.generic = std::max(0, rest_mv - (rest_pips[0] + rest_pips[1] + rest_pips[2] + rest_pips[3] + rest_pips[4]));
+        const ManaPool ritual = LineKeepRockFor(state).ritual;
+        if (LumpAwareBillPayableOpener(*scratch, bill, ritual)) { return false; }
+        const ManaPool& f0 = state.floating_mana;
+        const int had[5] = { f0.white, f0.blue, f0.black, f0.red, f0.green };
+        const std::unique_ptr<GameState> kept = std::make_unique<GameState>();
+        for (int oi = 0; oi < 5; ++oi)
+        {
+            const int x = order[oi];
+            if (rest_pips[x] <= left[x]) { continue; }
+            std::vector<OnDemandCrack> r2 = rec;
+            r2.back().color = kCol[x];
+            int cracked = 0;
+            for (const OnDemandCrack& k : r2) { if (k.color == kCol[x]) { cracked += std::max(0, k.amount); } }
+            ManaPool keep;
+            int* kp[5] = { &keep.white, &keep.blue, &keep.black, &keep.red, &keep.green };
+            *kp[x] = std::min(rest_pips[x], had[x] + cracked);
+            if (*kp[x] <= 0) { continue; }
+            ManaPool kept_avail;
+            if (!OnDemandTrial(state, r2, true, cost_in, for_creature, available, kept_avail, honor_legacy_cco, *kept, &keep)
+                || (held_strands && strands(*kept))) { continue; }
+            if (!LumpAwareBillPayableOpener(*kept, bill, ritual)) { continue; }
+            return OnDemandPayWith(state, r2, true, cost_in, for_creature, available, honor_legacy_cco, &keep);
+        }
+        return false;
+    };
     for (const OnDemandCrack& k0 : lumps)
     {
         // The colour is read off the board the previous cracks leave.
@@ -14264,7 +14348,11 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
             OnDemandCrack k = k0;
             k.color = kCol[order[c]];
             recipe.push_back(k);
-            if (trial_keeps(recipe, true)) { return commit(recipe, true); }
+            if (trial_keeps(recipe, true))
+            {
+                if (OnDemandLumpKeepOwedOn() && keep_owed(recipe, order)) { return true; }
+                return commit(recipe, true);
+            }
             recipe.pop_back();
         }
         // No colour of this lump completes the payment alone: crack it in its first colour and add the next.

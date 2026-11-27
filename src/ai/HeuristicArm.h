@@ -1159,6 +1159,7 @@ enum Slot : int
     LINE_FLOAT_RITUAL_NET,    // MTG_LINE_FLOAT_RITUAL_NET  the LINE_FLOAT_TAP_FIRST rung's spare-source colour test nets the later pips of the float of the ritual this payment is for: a source whose colours the ritual's own output covers is spare (Dragonstorm s30096957 T4 {Ruby Medallion, Seething Song, Karrthus}: Song's {1} drained the floating {B} Karrthus owes because the Mountain read as Karrthus's {R}, which Song's {R}x5 pays). DEFAULT ON; =0 -> the float-blind spare test, byte-identical
     CCO_RESERVE_JOINT,        // MTG_CCO_RESERVE_JOINT  the CCO line reserve's "the other creature-only lands cover the shortfall" test is JOINT (Hall's condition over the held colours): one tap makes one unit, so two Unclaimed Territories do not each cover both of Karrthus's {B} and {G} (Dragonstorm s30096797 T5: Desperate Ritual's generic took a Territory's {C}). DEFAULT ON; =0 -> the per-colour test, byte-identical
     LINE_NC_LEFT,             // MTG_LINE_NC_LEFT  the line-keep rung (LineReducerKeepHold) judges the rest of the line as creature casts only once the line has no NONCREATURE cast left to pay (both apply worlds count them down at the cast site), not only when this payment's mana value covers the line's whole noncreature bill: a colored_creature_only land then makes a colour for the rest (Dragonstorm s30129376 T4 {Ruby Medallion, Seething Song, Karrthus}: at Song's payment Karrthus read as a noncreature bill, unpayable either way, so Song's {1} drained the floating {B} instead of Sandstone Needle paying it). DEFAULT ON; =0 -> the mana-value test alone, byte-identical
+    ONDEMAND_LUMP_KEEP_OWED,  // MTG_ONDEMAND_LUMP_KEEP_OWED  when a lump crack (Lotus Bloom) that pays a bill strands the rest of the line, the bill is paid again with the lump cracked in a colour the rest owes and those units SET ASIDE, so another untapped source pays the rest and that colour floats on; the first such payment that leaves the rest payable replaces the plain one (exact judge, crediting the paying ritual's float and an Apex of Power's ten). Dragonstorm s30120119 T6: Apex's generic spent the whole Bloom crack ({B}{B}{B}) with a Mountain untapped, and Dragonlord Kolaghan's {B} had no source. DEFAULT ON; =0 -> the plain crack, byte-identical
     COUNT
 };
 
@@ -2262,6 +2263,7 @@ inline const char* Name(int slot)
         "MTG_LINE_FLOAT_RITUAL_NET",
         "MTG_CCO_RESERVE_JOINT",
         "MTG_LINE_NC_LEFT",
+        "MTG_ONDEMAND_LUMP_KEEP_OWED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
