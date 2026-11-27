@@ -3312,6 +3312,13 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         if (held != 0 && CcoReserveOtherOn())
                         {
                             int other[5] = { 0, 0, 0, 0, 0 };
+                            // MTG_CCO_RESERVE_JOINT (EngineFlags.h): each other land's colour mask and units, for the
+                            // joint test below (at most kJointMax lands; a wider board keeps the per-colour test).
+                            constexpr int kJointMax = 16;
+                            const bool joint = CcoReserveJointOn();
+                            int o_mask[kJointMax];
+                            int o_amt[kJointMax];
+                            int n_o = 0;
                             for (const Permanent& q : state.battlefield)
                             {
                                 if (&q == &p || q.controller_index != active || q.tapped) { continue; }
@@ -3327,9 +3334,32 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                                     seen |= 1 << ci;
                                     other[ci] += amt;
                                 }
+                                if (joint && seen != 0)
+                                {
+                                    if (n_o == kJointMax) { n_o = -1; }
+                                    if (n_o >= 0) { o_mask[n_o] = seen; o_amt[n_o] = amt; ++n_o; }
+                                }
                             }
+                            const int held0 = held;
                             for (int ci = 0; ci < 5; ++ci)
                             { if ((held & (1 << ci)) && cco_short_def[ci] <= other[ci]) { held &= ~(1 << ci); } }
+                            // MTG_CCO_RESERVE_JOINT: the test above counts each other land toward EVERY colour it makes,
+                            // but a tap makes ONE of them. So the other lands cover the shortfall only if they cover it
+                            // JOINTLY: for every set T of the held colours, the shortfall summed over T is at most the
+                            // units of the other lands that make some colour of T (Hall's condition; a single-colour T is
+                            // the test above). Dragonstorm s30096797 T5 {Desperate Ritual, Seething Song, Karrthus}:
+                            // Karrthus owes {B} and {G}, which only the two Unclaimed Territories make; each read the
+                            // other as covering both, neither was held, and Desperate's generic took one Territory's {C}.
+                            if (joint && held == 0 && n_o > 0)
+                            {
+                                for (int t = held0; t != 0; t = (t - 1) & held0)
+                                {
+                                    int need = 0, cover = 0;
+                                    for (int ci = 0; ci < 5; ++ci) { if (t & (1 << ci)) { need += cco_short_def[ci]; } }
+                                    for (int k = 0; k < n_o; ++k) { if (o_mask[k] & t) { cover += o_amt[k]; } }
+                                    if (need > cover) { held = t; break; }
+                                }
+                            }
                         }
                         if (held != 0) { cco_hold = 1; }
                     }
@@ -13700,7 +13730,10 @@ static bool OnDemandTrial(const GameState& state, const std::vector<OnDemandCrac
 // tried uncracked and cracked for each colour the bill has a pip of (a crack for a colour the bill has no pip of pays
 // only its generic, which a pip colour's crack pays as well; any colour when the bill has no coloured pip). At most
 // three lumps (4^3 boards); more, and the answer is "payable" (the caller then keeps its own judgement). Scratch only.
-static bool LumpAwareBillPayable(const GameState& board, const ManaCost& bill, const ManaPool& extra)
+// `for_creature`: whether a colored_creature_only unit (Unclaimed Territory) may make a colour (a creature bill) or
+// only {C} (MTG_LEFTOVER_SWAP_EXACT's strict judge).
+static bool LumpAwareBillPayable(const GameState& board, const ManaCost& bill, const ManaPool& extra,
+                                 bool for_creature = true)
 {
     std::vector<OnDemandCrack> lands, lumps;
     CollectOnDemandCracks(board, lands, lumps);
@@ -13731,10 +13764,10 @@ static bool LumpAwareBillPayable(const GameState& board, const ManaCost& bill, c
             if (!ApplyOnDemandCrack(*c, kk)) { ok = false; break; }
         }
         if (!ok) { continue; }
-        if (!PaymentManaCovers(*c, /*for_creature=*/true, bill.ManaValue() - static_cast<int>(c->floating_mana.Total())))
+        if (!PaymentManaCovers(*c, for_creature, bill.ManaValue() - static_cast<int>(c->floating_mana.Total())))
         { continue; }
         const ManaPool start = c->floating_mana;
-        if (TapForCostBacktrack(*c, bill, /*for_creature=*/true, start)) { return true; }
+        if (TapForCostBacktrack(*c, bill, for_creature, start)) { return true; }
     }
     return false;
 }
@@ -13809,8 +13842,21 @@ static void SwapLeftoverForLine(GameState& state, const ManaCost& cost_in, const
     // {1}, then tapped Sandstone Needle for {R}{R} and floated one; the {R} that floats was not "produced" net of the
     // float (2 -> 1), and without Irencrag's seven {R} Kolaghan's {R} read short as well, so no swap was made.
     const bool wide = LeftoverSwapWideOn();
+    // MTG_LEFTOVER_SWAP_EXACT (EngineFlags.h): AvailableManaPool books a colored_creature_only land (Unclaimed Territory)
+    // as a unit of every colour, so one Territory "covers" both of Karrthus's {B} and {G} and the swap is refused
+    // (Dragonstorm s30129376 T4 {Ruby Medallion, Seething Song, Karrthus}: Song's {1} drained the floating {B}, the
+    // Needle's second {R} floated). With the lever the rest's pips are judged exactly (LumpAwareBillPayable: every crack
+    // of the lumps left x the complete backtracker, + the ritual's float), twice: LOOSE (a creature-only unit makes any
+    // colour: every pip a creature's) and STRICT (it makes {C}: every pip a noncreature's). The line hold does not say
+    // which of its pips are a creature's, and the truth lies between: strict-payable => payable => loose-payable. So
+    // as left, strict-payable is "not short" (no swap); and a swap is made only when it proves more: loose-payable
+    // where as left the rest was loose-short (it was short for sure), or strict-payable where as left it was not
+    // (payable for sure, where it was not). The swap never turns a payable judgement unpayable. Behind a cheap
+    // prefilter (some colour the rest owes went to this payment's generic, and a leftover unit of another colour
+    // floats), so most payments reach no judge.
+    const bool exact = LeftoverSwapExactOn();
     ManaPool ritual;
-    if (wide) { ritual = LineKeepRockFor(state).ritual; }
+    if (wide || exact) { ritual = LineKeepRockFor(state).ritual; }
     auto short_by = [&](const GameState& s) -> int
     {
         ManaPool pool = AvailableManaPool(s);
@@ -13820,12 +13866,34 @@ static void SwapLeftoverForLine(GameState& state, const ManaCost& cost_in, const
         for (int c = 0; c < 5; ++c) { units += std::max(0, later[c] - have[c]); }
         return units - pool.wild;
     };
-    if (short_by(state) <= 0) { return; }
     static const Color kCol[5] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
     // Units of y this payment produced and left floating: the swap's only sources (MTG_LEFTOVER_SWAP_WIDE: every
     // leftover unit of y).
     int gain[5];
     for (int y = 0; y < 5; ++y) { gain[y] = wide ? a[y] : std::max(0, a[y] - b[y]); }
+    ManaCost pips;
+    bool loose_left = false;
+    if (exact)
+    {
+        bool cand = false;
+        for (int x = 0; x < 5 && !cand; ++x)
+        {
+            if (std::max(0, (b[x] - a[x]) - pip[x]) <= 0 || later[x] <= 0) { continue; }
+            for (int y = 0; y < 5; ++y) { if (y != x && gain[y] > 0) { cand = true; break; } }
+        }
+        if (!cand) { return; }
+        pips.white = later[0]; pips.blue = later[1]; pips.black = later[2]; pips.red = later[3]; pips.green = later[4];
+        loose_left = LumpAwareBillPayable(state, pips, ritual, /*for_creature=*/true);
+        if (loose_left && LumpAwareBillPayable(state, pips, ritual, /*for_creature=*/false)) { return; }
+    }
+    else if (short_by(state) <= 0) { return; }
+    // Is the rest no longer short after the swap (`trial`)? (MTG_LEFTOVER_SWAP_EXACT: proves more than as left, above.)
+    auto still_short = [&](const GameState& t) -> bool
+    {
+        if (!exact) { return short_by(t) > 0; }
+        if (!LumpAwareBillPayable(t, pips, ritual, /*for_creature=*/true)) { return true; }
+        return loose_left && !LumpAwareBillPayable(t, pips, ritual, /*for_creature=*/false);
+    };
     GameState trial = state;
     int moved[5][5] = {};
     for (int x = 0; x < 5; ++x)
@@ -13844,7 +13912,7 @@ static void SwapLeftoverForLine(GameState& state, const ManaCost& cost_in, const
             moved[x][y] += k;
             gain[y] -= k;
             x_generic -= k;
-            if (short_by(trial) > 0) { continue; }
+            if (still_short(trial)) { continue; }
             state.floating_mana = trial.floating_mana;
             if (available != nullptr)
             {
