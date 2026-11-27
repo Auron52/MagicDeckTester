@@ -378,8 +378,8 @@ so depth alone was the wrong axis. `scripts/play_setting_stage.py` does it in ON
   `escalation_cap = min(depth, max H)` on every arm; on Vampires that cap alone cost 1.05x units at identical quality
   and skewed every cell -- the cap is a shape question.) The arm equal to the baseline's numbers is not run when
   live's block is enabled; with NO enabled block the enabled d5 / 20 arm can still differ from live (an enabled block
-  arms the static W20 beam on every depth-3 search; the d5 beam stays off unless the block sets `beam_width`), so it
-  is run like any other (Vampires: byte-identical). The profile's
+  arms the static W20 beam on every depth-3 search; the play-depth beam stays off unless the block sets `beam_width`),
+  so it is run like any other (Vampires: byte-identical). The profile's
   mulligan-generation keys (`mull_gen_*`, `expected_buckets`) copied in, because a sidecar's `value_play` replaces
   the profile's and losing `expected_buckets` would disarm the keep table's K guard. The install appends to the
   block's `note` (a changelog).
@@ -393,6 +393,13 @@ so depth alone was the wrong axis. `scripts/play_setting_stage.py` does it in ON
   measured, never assumed. In the suite an enabled block sets the d5 cases' DEPTH only (their budget is the
   case's), and the d0/d3 cases pin depth with `ignore_play_profile` -- but an enabled block arms the static d3 beam
   whatever the depth, so enabling a block on a deck that had none moves its d3 rows too.
+* **The escalation beam is admitted here too** (USER 2026-11-25: *"we need a way to admit decks in the value-leaf
+  pipeline"*; *"It doesn't make sense to have code that is only being used for old decks"*). One more arm in the same
+  batch: live with its beam flipped (`xbeam_d<d>b<b>`: a beamed block without `beam_width` / `beam_leafdepth`, an
+  unbeamed one with `beam_width 3` / `beam_leafdepth 2`). Baseline = no beam, same seeds, same rule (cheaper and not
+  notably worse admits). `--write` writes the two keys when admitted and REMOVES them when refused. The engine runs
+  the beam at the deck's play depth only (`target_depth`), in its one form, the ordered re-price (complete at an
+  unlimited budget).
 
 **Phase E.7b re-checks TRUST when E.7 moved the setting** (USER 2026-10-22). Phase E decides trust at the staged
 model's setting, and which unverified lines `value_trust_depth` spares depends on the depth and budget played.
