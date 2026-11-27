@@ -739,6 +739,24 @@ inline bool LeftoverSwapWideOn()
     return heurarm::Flag(heurarm::LEFTOVER_SWAP_WIDE, env_on);
 }
 
+// MTG_LINE_NC_LEFT (DEFAULT ON; =0 restores the mana-value test alone byte for byte) -- the line-keep rung
+// (LineReducerKeepHold, ManaPayment.cpp) judges the rest of the applying line in creature mode (a colored_creature_only
+// land such as Unclaimed Territory makes a colour) only when g_line_noncreature_mv is 0 or THIS noncreature payment's
+// mana value reaches it. That total is the line's whole noncreature bill and is never counted down, so once a
+// noncreature cast is paid the test can no longer see that only creatures remain. With the lever both apply worlds
+// count the line's noncreature casts down at the cast site (g_line_noncreature_left, NoteLineNoncreatureCast) and the
+// rest is creature-only once none is left. Dragonstorm s30129376 T4 {Ruby Medallion, Seething Song, Karrthus}: Ruby
+// was paid with Lotus Bloom ({B} floats); at Song's payment Karrthus read as a noncreature bill (the Territory {C}),
+// unpayable however Song was paid, so the rung kept nothing and Song's {1} drained the {B} instead of Sandstone
+// Needle's {R}{R} paying Song. It only turns the rest's mode from noncreature to creature, never back. A payment
+// choice in the shared payer (executor and rollout together; the payability walks bind no count and keep the old test),
+// at every budget.
+inline bool LineNcLeftOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_NC_LEFT", true);
+    return heurarm::Flag(heurarm::LINE_NC_LEFT, env_on);
+}
+
 // MTG_ONDEMAND_VISIBLE_LUMP_EXACT (DEFAULT ON; =0 restores the colour comparison alone byte for byte) -- Dragonstorm's
 // visible-closer lump rule (MTG_ONDEMAND_VISIBLE_LUMP, the on-demand payer in ManaPayment.cpp) cracks a Lotus Bloom
 // early, for a colour a later cast owes, when the early crack's board "gains" a colour over the ordinary payment's.
@@ -1267,6 +1285,20 @@ inline bool CcoReserveOtherOn()
 {
     static const bool env_on = EnvOn("MTG_CCO_RESERVE_OTHER", true);
     return heurarm::Flag(heurarm::CCO_RESERVE_OTHER, env_on);
+}
+
+// MTG_CCO_RESERVE_JOINT -- DEFAULT ON; =0 restores MTG_CCO_RESERVE_OTHER's per-colour test byte for byte. That test lets
+// a colored_creature_only land go unheld when, for each colour the line is short of, the OTHER untapped creature-only
+// lands make that colour -- counting each of them toward every colour it makes, though one tap makes one unit. With the
+// lever the others must cover the shortfall JOINTLY (Hall's condition over the held colours). Dragonstorm (mana-clean
+// gate claude-queue-20261125a) s30096797 T5 {Desperate Ritual, Seething Song, Karrthus, Tyrant of Jund}: Karrthus owes
+// {B} and {G}, which only the two Unclaimed Territories make; each read the other as covering both, neither was held,
+// and Desperate's generic took a Territory's {C}. Ordering only (the backtracker still runs on any greedy failure); a
+// payment choice in the shared payer, so executor, rollout and payability walks move together, at every budget.
+inline bool CcoReserveJointOn()
+{
+    static const bool env_on = EnvOn("MTG_CCO_RESERVE_JOINT", true);
+    return heurarm::Flag(heurarm::CCO_RESERVE_JOINT, env_on);
 }
 
 // MTG_PAY_HAND_GENERIC -- DEFAULT ON; =0 restores WUBRG (item I (2), mana-clean). When the line owes no colour, a

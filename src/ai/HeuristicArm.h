@@ -1157,6 +1157,8 @@ enum Slot : int
     LEFTOVER_SWAP_WIDE,       // MTG_LEFTOVER_SWAP_WIDE  MTG_LEFTOVER_LINE_SWAP's re-attribution also moves a leftover unit that floated BEFORE the payment (not only one the payment produced), and its strand test credits the float of the ritual the payment is for (Dragonstorm s30087280 T4: Irencrag Feat's {1} ate the floating {B} Dragonlord Kolaghan owes while Sandstone Needle's second {R} floated). DEFAULT ON; =0 -> the produced-only swap, byte-identical
     ONDEMAND_VISIBLE_LUMP_EXACT, // MTG_ONDEMAND_VISIBLE_LUMP_EXACT  Dragonstorm's visible-closer lump rule refuses an early Lotus Bloom crack that STRANDS the later bill: the ordinary payment pays it and the early crack does not (both judged with every crack of the lumps left and the ritual's float; when both pay, the crack still saves a source for later mana use, 2HG s5131993 firebreathing); its colour comparison read an uncracked Bloom as no supply (s30152662 T5: Irencrag Feat cracked the second Bloom for {B} with {B} already floating, and Karrthus's {G} had no source). DEFAULT ON; =0 -> the comparison alone, byte-identical
     LINE_FLOAT_RITUAL_NET,    // MTG_LINE_FLOAT_RITUAL_NET  the LINE_FLOAT_TAP_FIRST rung's spare-source colour test nets the later pips of the float of the ritual this payment is for: a source whose colours the ritual's own output covers is spare (Dragonstorm s30096957 T4 {Ruby Medallion, Seething Song, Karrthus}: Song's {1} drained the floating {B} Karrthus owes because the Mountain read as Karrthus's {R}, which Song's {R}x5 pays). DEFAULT ON; =0 -> the float-blind spare test, byte-identical
+    CCO_RESERVE_JOINT,        // MTG_CCO_RESERVE_JOINT  the CCO line reserve's "the other creature-only lands cover the shortfall" test is JOINT (Hall's condition over the held colours): one tap makes one unit, so two Unclaimed Territories do not each cover both of Karrthus's {B} and {G} (Dragonstorm s30096797 T5: Desperate Ritual's generic took a Territory's {C}). DEFAULT ON; =0 -> the per-colour test, byte-identical
+    LINE_NC_LEFT,             // MTG_LINE_NC_LEFT  the line-keep rung (LineReducerKeepHold) judges the rest of the line as creature casts only once the line has no NONCREATURE cast left to pay (both apply worlds count them down at the cast site), not only when this payment's mana value covers the line's whole noncreature bill: a colored_creature_only land then makes a colour for the rest (Dragonstorm s30129376 T4 {Ruby Medallion, Seething Song, Karrthus}: at Song's payment Karrthus read as a noncreature bill, unpayable either way, so Song's {1} drained the floating {B} instead of Sandstone Needle paying it). DEFAULT ON; =0 -> the mana-value test alone, byte-identical
     COUNT
 };
 
@@ -2258,6 +2260,8 @@ inline const char* Name(int slot)
         "MTG_LEFTOVER_SWAP_WIDE",
         "MTG_ONDEMAND_VISIBLE_LUMP_EXACT",
         "MTG_LINE_FLOAT_RITUAL_NET",
+        "MTG_CCO_RESERVE_JOINT",
+        "MTG_LINE_NC_LEFT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -3312,6 +3312,13 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         if (held != 0 && CcoReserveOtherOn())
                         {
                             int other[5] = { 0, 0, 0, 0, 0 };
+                            // MTG_CCO_RESERVE_JOINT (EngineFlags.h): each other land's colour mask and units, for the
+                            // joint test below (at most kJointMax lands; a wider board keeps the per-colour test).
+                            constexpr int kJointMax = 16;
+                            const bool joint = CcoReserveJointOn();
+                            int o_mask[kJointMax];
+                            int o_amt[kJointMax];
+                            int n_o = 0;
                             for (const Permanent& q : state.battlefield)
                             {
                                 if (&q == &p || q.controller_index != active || q.tapped) { continue; }
@@ -3327,9 +3334,32 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                                     seen |= 1 << ci;
                                     other[ci] += amt;
                                 }
+                                if (joint && seen != 0)
+                                {
+                                    if (n_o == kJointMax) { n_o = -1; }
+                                    if (n_o >= 0) { o_mask[n_o] = seen; o_amt[n_o] = amt; ++n_o; }
+                                }
                             }
+                            const int held0 = held;
                             for (int ci = 0; ci < 5; ++ci)
                             { if ((held & (1 << ci)) && cco_short_def[ci] <= other[ci]) { held &= ~(1 << ci); } }
+                            // MTG_CCO_RESERVE_JOINT: the test above counts each other land toward EVERY colour it makes,
+                            // but a tap makes ONE of them. So the other lands cover the shortfall only if they cover it
+                            // JOINTLY: for every set T of the held colours, the shortfall summed over T is at most the
+                            // units of the other lands that make some colour of T (Hall's condition; a single-colour T is
+                            // the test above). Dragonstorm s30096797 T5 {Desperate Ritual, Seething Song, Karrthus}:
+                            // Karrthus owes {B} and {G}, which only the two Unclaimed Territories make; each read the
+                            // other as covering both, neither was held, and Desperate's generic took one Territory's {C}.
+                            if (joint && held == 0 && n_o > 0)
+                            {
+                                for (int t = held0; t != 0; t = (t - 1) & held0)
+                                {
+                                    int need = 0, cover = 0;
+                                    for (int ci = 0; ci < 5; ++ci) { if (t & (1 << ci)) { need += cco_short_def[ci]; } }
+                                    for (int k = 0; k < n_o; ++k) { if (o_mask[k] & t) { cover += o_amt[k]; } }
+                                    if (need > cover) { held = t; break; }
+                                }
+                            }
                         }
                         if (held != 0) { cco_hold = 1; }
                     }
@@ -9536,6 +9566,26 @@ DigContDemandScope::DigContDemandScope(const GameState& state) : prev(g_dig_cont
 }
 thread_local bool     g_line_unseen_carried = false; // see ManaPayment.h (LineUnseenCarriedScope)
 thread_local int      g_line_haste_takers = 0;       // see ManaPayment.h (LineHasteTakersScope)
+thread_local int      g_line_noncreature_left = -1;  // see ManaPayment.h (LineNoncreatureLeftScope, MTG_LINE_NC_LEFT)
+
+int LineNoncreatureLeftCount(const std::vector<Action>& acts)
+{
+    if (!LineNcLeftOn()) { return -1; }
+    int n = 0;
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::Suspend) { if (a.cost.ManaValue() > 0) { ++n; } continue; }
+        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr || !d->card.IsCreature()) { ++n; }
+    }
+    return n;
+}
+
+void NoteLineNoncreatureCast(const CardDefinition& def)
+{
+    if (g_line_noncreature_left > 0 && !def.card.IsCreature()) { --g_line_noncreature_left; }
+}
 
 // TakeHasteFloatForCreatureSpell's condition on a bill: a {C} pip, or a non-snow generic pip.
 static bool BillTakesHasteUnit(const ManaCost& c)
@@ -12364,8 +12414,12 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         if (!LineKeepCritGate(state, cost_in, rest, s_rtight && ritual_on_board ? &rock.ritual : nullptr)) { return none; }
         if (s_stats) { g_lkc_pass.fetch_add(1, std::memory_order_relaxed); }
     }
+    // MTG_LINE_NC_LEFT (EngineFlags.h): ...or the line has no noncreature cast left to pay (counted down at the cast
+    // site, before this payment), so the rest is creature casts only even when this payment's mana value is below the
+    // line's whole noncreature bill (a Ruby Medallion paid earlier in the line; Seething Song's {1}{R} after it).
     const bool rest_creature = g_line_noncreature_mv == 0
-                            || (!for_creature && cost_in.ManaValue() >= g_line_noncreature_mv);
+                            || (!for_creature && cost_in.ManaValue() >= g_line_noncreature_mv)
+                            || (g_line_noncreature_left == 0 && LineNcLeftOn());
     const ManaCost joint = AddManaCosts(cost_in, rest);
     const bool joint_creature = rest_creature || for_creature;   // a necessary-condition bound: the looser mode
     // MTG_LINE_KEEP_ROCK: a rock this payment is for is on every board the rest is judged on (it resolves before the

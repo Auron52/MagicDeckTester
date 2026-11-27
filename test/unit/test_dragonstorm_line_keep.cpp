@@ -6,6 +6,10 @@
 //                                      read an uncracked Bloom as no supply.
 //   MTG_LEFTOVER_SWAP_WIDE          -- the leftover swap moved only units the payment produced and judged the rest
 //                                      without the ritual's float.
+//   MTG_CCO_RESERVE_JOINT           -- the CCO line reserve let each of two Unclaimed Territories go unheld because the
+//                                      other "covered" both of Karrthus's {B} and {G} (one tap makes one unit).
+//   MTG_LINE_NC_LEFT                -- the line-keep rung judged a creature-only rest as a noncreature bill once an
+//                                      earlier noncreature cast of the line was paid (the line's total never counts down).
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -110,7 +114,9 @@ bool PayRitualThenCreature(GameState& s, const std::vector<Action>& line, int ri
     const int credit = LineReducerCredit(s, line);
     const int bound = LineKeepBound(line);
     LineReducerCreditScope lrc(credit, (credit > 0 || bound) ? LineNoncreatureMv(line) : 0, bound);
+    LineNoncreatureLeftScope lnl(LineNoncreatureLeftCount(line));
     const Card rc = CardDlk(line[0].card_name, 40);
+    NoteLineNoncreatureCast(DefDlk(line[0].card_name));
     {
         SpellSubtypePayScope pay(&rc);
         REQUIRE(TapForCostDirect(s, line[0].cost, /*for_creature=*/false));
@@ -118,8 +124,42 @@ bool PayRitualThenCreature(GameState& s, const std::vector<Action>& line, int ri
     SubManaCost(g_line_unpaid_cost, line[0].cost);
     s.floating_mana.red += ritual_red;   // the ritual resolves
     const Card cc = CardDlk(line[1].card_name, 41);
+    NoteLineNoncreatureCast(DefDlk(line[1].card_name));
     SpellSubtypePayScope pay(&cc);
     return TapForCostDirect(s, line[1].cost, /*for_creature=*/true);
+}
+
+// Pay the line in order under the seeds the apply worlds bind (each cast's own creature flag; a ritual's float is added
+// after its payment, as it resolves). The first `paid` casts were paid before this board (only the hold is reduced).
+// True when every other cast is paid.
+bool PayLineDlk(GameState& s, const std::vector<Action>& line, std::size_t paid = 0, const GameState* seed = nullptr)
+{
+    // The scopes are seeded on the board the line was enumerated on (`seed`, before the `paid` casts), as both apply
+    // worlds seed them; each cast pays and leaves the hold at its EFFECTIVE cost (a Ruby Medallion cast in the line
+    // reduces the casts after it).
+    const GameState& at = seed != nullptr ? *seed : s;
+    LineUnpaidCostScope luc(LineCastCostTotal(line));
+    const int credit = LineReducerCredit(at, line);
+    const int bound = LineKeepBound(line);
+    LineReducerCreditScope lrc(credit, (credit > 0 || bound) ? LineNoncreatureMv(line) : 0, bound);
+    LineNoncreatureLeftScope lnl(LineNoncreatureLeftCount(line));   // counted down at each cast, before its payment
+    int num = 40;
+    for (std::size_t i = 0; i < paid; ++i)
+    { NoteLineNoncreatureCast(DefDlk(line[i].card_name)); SubManaCost(g_line_unpaid_cost, line[i].cost); }
+    for (std::size_t i = paid; i < line.size(); ++i)
+    {
+        const CardDefinition& d = DefDlk(line[i].card_name);
+        const Card c = CardDlk(line[i].card_name, num++);
+        const ManaCost cost = EffectiveSpellCost(d, s);
+        NoteLineNoncreatureCast(d);
+        {
+            SpellSubtypePayScope pay(&c);
+            if (!TapForCostDirect(s, cost, /*for_creature=*/d.card.IsCreature())) { return false; }
+        }
+        SubManaCost(g_line_unpaid_cost, cost);
+        if (d.params.ritual_floating_mana > 0) { s.floating_mana.red += d.params.ritual_floating_mana; }
+    }
+    return true;
 }
 }   // namespace
 
@@ -265,5 +305,96 @@ TEST_CASE("Dragonstorm line keep: s30096957 T4 -- Song's own float makes the Mou
         ArmDlk as(heurarm::LINE_FLOAT_RITUAL_NET, on);
         GameState s = s0;
         CHECK(PayRitualThenCreature(s, line, 5) == on);
+    }
+}
+
+// Dragonstorm s30096797 gi96797 T5 m1 {Mountain, Desperate Ritual, Seething Song, Karrthus}: Mercadian Bazaar (two
+// counters), Sandstone Needle, two Unclaimed Territories and the new Mountain. Karrthus's {B} and {G} have only the two
+// Territories; the CCO line reserve let each go unheld because the other "covered" both colours, so Desperate's generic
+// took a Territory's {C}. MTG_CCO_RESERVE_JOINT holds both (they jointly make only two units for the two pips).
+TEST_CASE("Dragonstorm line keep: s30096797 T5 -- two Territories are held jointly for Karrthus's {B}{G}")
+{
+    GameState s0 = BaseDlk(5);
+    Permanent& n = PutDlk(s0, "Sandstone Needle", 49);
+    PutDepletionCounters(s0, n, 2);
+    PutDlk(s0, "Mercadian Bazaar", 22).storage_counters = 2;
+    PutDlk(s0, "Unclaimed Territory", 57);
+    PutDlk(s0, "Unclaimed Territory", 58);
+    PutDlk(s0, "Mountain", 31);
+    // The game's hand (the casts' cards and two Dragonstorms): a noncreature card with a coloured pip in hand is what
+    // sends an unheld Territory to the narrow rung (MTG_CCO_HAND_DEMAND), ahead of the Bazaar and the Needle.
+    for (const char* h : { "Seething Song", "Dragonstorm", "Dragonstorm", "Karrthus, Tyrant of Jund" })
+    { s0.players[0].hand.push_back(CardDlk(h, 60 + static_cast<int>(s0.players[0].hand.size()))); }
+    const std::vector<Action> line = { CastDlk(s0, "Desperate Ritual"), CastDlk(s0, "Seething Song"),
+                                       CastDlk(s0, "Karrthus, Tyrant of Jund") };
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmDlk as(heurarm::CCO_RESERVE_JOINT, on);
+        GameState s = s0;
+        CHECK(PayLineDlk(s, line) == on);
+    }
+}
+
+// Control: the same board, the line owes only Dragonlord Kolaghan's {B} -- either Territory covers it, so neither is
+// held under either test and both arms pay the same way.
+TEST_CASE("Dragonstorm line keep: two Territories, one owed colour -- the joint test holds nothing more")
+{
+    GameState s0 = BaseDlk(5);
+    Permanent& n = PutDlk(s0, "Sandstone Needle", 49);
+    PutDepletionCounters(s0, n, 2);
+    PutDlk(s0, "Mercadian Bazaar", 22).storage_counters = 2;
+    PutDlk(s0, "Unclaimed Territory", 57);
+    PutDlk(s0, "Unclaimed Territory", 58);
+    PutDlk(s0, "Mountain", 31);
+    // The game's hand (the casts' cards and two Dragonstorms): a noncreature card with a coloured pip in hand is what
+    // sends an unheld Territory to the narrow rung (MTG_CCO_HAND_DEMAND), ahead of the Bazaar and the Needle.
+    for (const char* h : { "Seething Song", "Dragonstorm", "Dragonstorm", "Karrthus, Tyrant of Jund" })
+    { s0.players[0].hand.push_back(CardDlk(h, 60 + static_cast<int>(s0.players[0].hand.size()))); }
+    const std::vector<Action> line = { CastDlk(s0, "Desperate Ritual"), CastDlk(s0, "Seething Song"),
+                                       CastDlk(s0, "Dragonlord Kolaghan") };
+    GameState a = s0, b = s0;
+    {
+        ArmDlk as(heurarm::CCO_RESERVE_JOINT, true);
+        CHECK(PayLineDlk(a, line));
+    }
+    {
+        ArmDlk as(heurarm::CCO_RESERVE_JOINT, false);
+        CHECK(PayLineDlk(b, line));
+    }
+    REQUIRE(a.battlefield.size() == b.battlefield.size());
+    for (std::size_t i = 0; i < a.battlefield.size(); ++i) { CHECK(a.battlefield[i].tapped == b.battlefield[i].tapped); }
+    CHECK(a.floating_mana.Total() == b.floating_mana.Total());
+}
+
+// Dragonstorm s30129376 gi129376 T4 m1 {Mountain, Ruby Medallion, Seething Song, Karrthus}: Ruby was paid by a Lotus
+// Bloom cracked for {B} (no land played); one {B} floats beside Sandstone Needle, one Unclaimed Territory and a Mountain. Song's {1}{R}
+// (Ruby) was paid with the Mountain's {R} and the floating {B}, and Karrthus's {B} and {G} were left to the one Territory.
+// The line-keep rung judged Karrthus as a NONCREATURE bill (the line's noncreature total, Ruby + Song = 5, is above
+// Song's mana value 2, and it never counts down), so Karrthus read unpayable however Song was paid and the rung kept
+// nothing. MTG_LINE_NC_LEFT sees that no noncreature cast is left after Song: the rung keeps the {B} and Sandstone
+// Needle's {R}{R} pays Song. (Traced in game: MTG_DS2_PAYDBG, logs/ds-apply2/ds2pay-debug.snippet.cpp.)
+TEST_CASE("Dragonstorm line keep: s30129376 T4 -- no noncreature cast is left after Song, so the {B} is kept for Karrthus")
+{
+    GameState s0 = BaseDlk(4);
+    PutDlk(s0, "Ruby Medallion", 43);
+    Permanent& n = PutDlk(s0, "Sandstone Needle", 49);
+    PutDepletionCounters(s0, n, 2);
+    PutDlk(s0, "Unclaimed Territory", 57);
+    PutDlk(s0, "Mountain", 29);
+    s0.floating_mana.black = 1;
+    for (const char* h : { "Apex of Power", "Seething Song", "Mountain", "Karrthus, Tyrant of Jund" })   // the game's hand
+    { s0.players[0].hand.push_back(CardDlk(h, 60 + static_cast<int>(s0.players[0].hand.size()))); }
+    // Ruby is in the line (and the hold) and already paid; its cost as enumerated, before it was on the battlefield.
+    GameState pre = s0;
+    pre.battlefield.erase(pre.battlefield.begin());   // the Ruby
+    const std::vector<Action> line = { CastDlk(pre, "Ruby Medallion"), CastDlk(pre, "Seething Song"),
+                                       CastDlk(pre, "Karrthus, Tyrant of Jund") };
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmDlk as(heurarm::LINE_NC_LEFT, on);
+        GameState s = s0;
+        CHECK(PayLineDlk(s, line, 1, &pre) == on);
     }
 }
