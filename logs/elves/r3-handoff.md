@@ -24,7 +24,7 @@ then `logs/elves/r3-notes.md` (round 3, all measurements), then `logs/elves/r2-h
 - 2HG 75, 202, 428, 2162 and std 2176: bandtapfix == band action for action; same mechanism as 2176 (pre-sink tap order).
 
 ## Running jobs at handoff
-1. **Final tidy rebuild:** waiting on heavy.lock behind elves-mem2's taskA. flock PID 2821122, log
+1. **Final tidy rebuild: FINISHED after the handoff, EXIT=0, 0 errors** (build/Release/mtg 13:11:03, mtg-test 13:17:39 UTC; the tidy tree at c3c8981da; logs/docs commits since are not built and need no rebuild). Originally: waiting on heavy.lock behind elves-mem2's taskA. flock PID 2821122, log
    `logs/elves/r3-build3.log` (ends `EXIT=<rc>`). Check the exit code and the mtime of build/Release/mtg and mtg-test;
    never trust `| tail`. If it was killed or failed, rerun:
    `flock /workspaces/MagicDeckTester/build/heavy.lock env MTG_BUILD_JOBS=12 ./build.sh > logs/elves/r3-build3.log 2>&1; echo EXIT=$? >> logs/elves/r3-build3.log`
