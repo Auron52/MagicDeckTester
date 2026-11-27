@@ -8,9 +8,9 @@ passed; implementation work starts from this shared source.
 
 ## Integration handoff (2026-11-27)
 
-The rebased implementation and audited Zombies ground truth are pushed to
-`origin/wip/zombies-analysis-1126` at `416158f44`. It is based on shared
-`695797f95`; the worktree is clean. The accepted overnight snapshot ran from
+An earlier implementation and audited Zombies ground truth were pushed to
+`origin/wip/zombies-analysis-1126` at `416158f44`, based on shared
+`695797f95`. The accepted overnight snapshot ran from
 `46271e67b`, and the ledger below records the changed same-score games, so
 remote movement does not erase the measurement. The two Windows unit failures
 seen on earlier work-branch runs were stale assertions introduced by the new
@@ -27,17 +27,25 @@ mulligan drift, or contract failures. Scenarios and suboptimal references
 passed. `test/check_gt_logs.py` reported 1,483 consistent records with none
 stale or missing, and `scripts/check_references_safe.py` passed.
 
-The remaining integration gate is a **complete full-suite smoke run plus the
-full unit suite** after the rebase. On this 12-core/10 GiB host, the full smoke
-run reached 33 exact rows of 255 in 71 minutes; those rows used 8.7 CPU hours.
-It was stopped because this handoff incorrectly applied an obsolete two-hour
-queue limit. The current `CLAUDE.md` explicitly removes that fixed limit. The
-full unit build also ran concurrently for part of smoke, wasting scarce CPU and
-memory. The queue was vacated at 08:39 UTC, and Zombies rejoined at 09:18 UTC.
-At the next lease, fetch and rebase onto the current shared head if it moved,
-run the Release build, full unit suite, full smoke, and `test/check_gt_logs.py`
-under the queue lease, then `land`. Run the build and smoke separately on this
-host. A faster machine is optional, not a prerequisite for landing.
+The final integration gate rebased onto shared `f2e307fe3` and built the
+Release engine and test binary. The full unit suite passed 4,333/4,333 cases
+in 48 shards. The full smoke tier passed 255/255 cases with exact averages and
+digests, zero per-game play changes, and zero slowdowns; its batch took 87m29s
+on this 12-core host. Zombies-scoped regression then passed all seven Zombies
+and Zombies2HG cases exactly (1,435 games). Its concurrent side stages passed
+678 scenarios, 970 strict viewer references (zero play drift, shuffle dead,
+board divergence, enum gaps, mulligan drift, or contract failures), and both
+suboptimal require-beat references. Regression took about 10m26s. The full
+suite regression was not needed for the scoped Zombies change; its manifest
+would have run 409 cases and roughly 2.3 times the smoke tier's expected work.
+
+The earlier stopped smoke run reached 33 exact rows of 255 in 71 minutes and
+used 8.7 CPU hours. It was stopped because this handoff incorrectly applied an
+obsolete two-hour queue limit. The current `CLAUDE.md` removes that fixed
+limit. The full unit build also ran concurrently for part of that attempt,
+wasting scarce CPU and memory. The final build, unit, and smoke gates ran in
+sequence. No swap growth was observed during smoke.
+
 The completed Zombies overnight run need not be repeated solely because the
 shared head moved; its source hash and same-score audit are recorded in this
 ledger. The shared ground-truth header can reflect another deck's later accept.
