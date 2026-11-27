@@ -330,3 +330,4 @@ when this validates. Melira Pod's paused value leaf stays paused until then (sta
   - Fix 9b9e82fa4 (the executor reads the breakpoint continuation in place; play-identical, 2000-game digest 0 changed) took the hog rollout 14.0 → 3.32 GB.
   - The 37 worst rollouts at once on 32 threads peak at 15.2 GB under the 20 GB cap.
   - Cherry-picked onto elves-int; build/units/smoke running (validate2.status). Then land, and RESUME the mullgen from the journal (same play).
+- 2026-11-27 20:47 UTC Elves mullgen (resumed 19:07 from journal, mullgen5.sh, head c4d5de01f): phase=refine, frozen 242146/279352 cells (86.6%), roll7 388/s, idle 0.0%, ~27 cores busy, RSS 9.5 GB (8 GB free). Slowest rollout 165 s (Wave + 4 Priest). Healthy.
