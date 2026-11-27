@@ -105,3 +105,21 @@ VALIDATION for a play-changing fix: (a) gate re-run on the TH slice (logs/th-app
 USER-OWNED decisions (cast order, mulligan policy, a lossy lever's default) are never settled by you: state them in your final message with numbers and a recommendation.
 
 CONTEXT LIMIT (USER rule): when your context passes ~250K tokens, finish the current step, commit WIP, write logs/th-resid/handoff.md (done with hashes; remaining in order; these rules verbatim; running jobs with PIDs, outputs and DONE markers; measurements), push wip/th-resid, and stop with a short report. Normally stop between 250K and 350K; never exceed 400K. If a fix line iterates without progress, park it and report rather than grinding.
+
+## UPDATE 15:3x UTC: unit build done (rc=0), the 3 new TEST_CASEs run
+
+Command: `build/Release/mtg-test --test-case="*provider's prune*,*already won is DROP-COVERED*,*undeclared continuation drop*"`.
+
+- **Drop-won test:** PASSES (lever off gives APPLY-DROP, on gives DROP-COVERED).
+- **Provider-prune test:** the main assertions PASS (off gives ENUM-GAP and names the Island; on gives "").
+  - The Land's Edge-in-play CONTROL (lines ~1943 and ~1946) FAILS: the verdict is "" in BOTH arms. That is
+    probably not the prune (the off arm is "" too). With an Edge out, the realisation is likely rejected some other
+    way (noop / cont_land), or the continuation itself casts the 2nd Treasure Hunt.
+  - Fix: run it at oracle trace level 3 (`MTG_MANA_ORACLE=3`) to see the EgTrace reason. Either replace the control
+    with one where the provider admits the cast but the verdict is still ENUM-GAP, or drop it.
+- **Undeclared-cover test:** the FIXTURE does not reproduce. Alone it gives CONTINUATION-DIFFERS, not APPLY-DROP,
+  because the greedy continuation in the unit context is not the game's.
+  - Fix: rebuild the fixture so the continuation pins the game's choice, or find a smaller natural undeclared drop.
+    Candidate seeds are in the new gate's `AD-undecl-cov` lines.
+  - The lever itself is verified on the real game (s30106563 T4 repro: 2 to 0).
+- The full unit suite (`scripts/unit_par.sh`) has NOT been run yet. Run it after fixing the two fixtures.
