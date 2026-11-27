@@ -718,7 +718,10 @@ blockers, which is part of why the USER finds Parallax Wave followed by Opalesce
      life loss."):
      * **Hinata:** our creatures are targets for its spells, and Hinata, Dawn-Crowned makes each extra target
        cheaper.
-     * **Stuffy Doll:** each creature on the battlefield makes Blasphemous Act cost 1 less.
+     * **Stuffy Doll:** each creature on the battlefield makes Blasphemous Act cost 1 less, and Chain Reaction
+       deals damage equal to the number of creatures, so our little creatures scale it too (USER 2026-11-27,
+       verbatim: "stuffy also has Chain reaction which scales damage including little critters"). Either one
+       hits Stuffy Doll and its reflectors, which pass the damage on to us.
      * **Creature Giving:** each of our creatures that dies to Massacre Wurm costs us 2 life. It also hands us
        tokens itself (Hunted Phantasm, Varchild's War-Riders).
      Against these, a body on our side is a liability, so trading or chumping it away early costs nothing or
