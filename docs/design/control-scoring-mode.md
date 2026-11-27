@@ -865,7 +865,7 @@ What the design does about it (no new rule, a measurement):
 decks (Selesnya Lifegain, Critter Lifegain, Martyr Lifegain, Lifegain Heliod Combo) are goldfish decks today. If
 the USER ever wants their life gain credited, they are candidates to carry both modes.
 
-### 5.7 Tempo counters in goldfish decks: Remand and Memory Lapse (USER example, 2026-11-27)
+### 5.7 Counters in goldfish decks: Remand (tempo) and Memory Lapse (control) (USER example, 2026-11-27)
 
 USER, verbatim: "For example cards like Remand and Memory Lapse are both very strong, but have been heavily
 undervalued in decks like Hinata and Cyclone. This update will give those a chance to do their thing. I would also
@@ -877,11 +877,16 @@ Both are in Hinata and Unpredictable Cyclone; Remand also in Niv-Mizzet Combo an
 decks that would opt into the control mode beside goldfish (section 9, Q11 answer).
 
 **In control mode, each gets a second use: countering the gauntlet deck's spell on its turn.**
-* **New effect kinds for the injection harness and the mapping:** `counter_to_hand` (Remand: the spell goes back to
-  the hand, so the gauntlet deck loses that turn's mana and recasts later) and `counter_to_top` (Memory Lapse: the
-  spell goes on top of the library, so it also loses its next draw). They are measured separately from a hard
-  counter. The probe's counters were hard counters, and a tempo counter's delay is expected to be smaller and to
-  depend most on WHICH spell it hits (section 8.3; the Q8 target rules apply).
+* **Two different kinds of counter (USER 2026-11-27, verbatim):** "Memory Lapse is not a tempo counter. It is a
+  control counter, because the card goes to the top of their deck." / "But Remand is indeed a Tempo Counter."
+  * **Remand, a tempo counter (`counter_to_hand`):** the spell goes back to its owner's hand. The gauntlet deck
+    loses that turn's mana and recasts the spell later, and it loses no card.
+  * **Memory Lapse, a control counter (`counter_to_top`):** the spell goes on top of its owner's library, so the
+    gauntlet deck redraws it instead of a new card. That is a whole draw lost as well as the turn's mana, which is
+    why it sits much closer to a hard counter than Remand does.
+  Both are new effect kinds for the injection harness and the mapping, measured separately from each other and
+  from a hard counter (the probe's counters were hard counters). Each depends most on WHICH spell it hits (section
+  8.3; the Q8 target rules apply).
 * **Our own game pays for it and gets the draw.** The search plans holding {1}{U} through the opponent's turn of
   round t. In our game the card leaves our hand, the mana is spent and, for Remand, we draw a card at that point.
   So the draw is a real card in our game, used by our search on the following turn.
