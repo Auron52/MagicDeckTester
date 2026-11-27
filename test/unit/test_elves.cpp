@@ -1064,7 +1064,7 @@ TEST_CASE("Joraga Warcaller: the kick-count cap is the opponent's starting life 
         ELife life(30);   // Two-Headed Giant: the opposing team's 30 life
         CHECK(MultikickCountCap() == 30);
         CHECK(EWarcallerTopK(EBase(), 65) == 30);   // 61 mana pays K = 30; 31 (63) is past the cap
-        CHECK(EWarcallerTopK(EBase(), 45) == 21);   // below the cap the pool binds: (45 - 1) / 2 = 22? no: 43 pays 21
+        CHECK(EWarcallerTopK(EBase(), 45) == 22);   // below the cap the pool binds: 45 = {G} + 22 x {1}{G}
         const std::int8_t saved = heurarm::t_arm[heurarm::ELVES_R2];
         heurarm::t_arm[heurarm::ELVES_R2] = 0;     // round 1: the flat 20
         CHECK(MultikickCountCap() == 20);

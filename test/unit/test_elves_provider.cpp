@@ -11,6 +11,7 @@
 //     contract in whichever process runs it (run once under MTG_UNPRUNED=1 and once under MTG_HUMAN_PLAY=1 to
 //     exercise the open branch).
 #include <doctest/doctest.h>
+#include <cstdlib>
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
@@ -113,6 +114,14 @@ struct SlotArm
     ~SlotArm() { heurarm::t_arm[slot] = saved; }
 };
 
+// The band tests pin the hold-back mode slots to band (0), so an MTG_ELVES_HOLDBACK_MODE=three|two process (the env
+// path of the TEMPORARY selector) runs them unchanged; a test that measures a mode sets its slot inside this scope.
+struct BandMode
+{
+    SlotArm three{ heurarm::ELVES_HOLDBACK_THREE, 0 };
+    SlotArm two{ heurarm::ELVES_HOLDBACK_TWO, 0 };
+};
+
 bool RuleLive() { return !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::Replicate) && !DecisionUnpruned(UnprunedGate::XSpell); }
 
 // The full (rule-lifted) menu's facts this board must show, whatever lifted it.
@@ -187,6 +196,7 @@ TEST_CASE("Elves scaling rule: hold-back sources -- untapped attack-capable mana
 TEST_CASE("Elves scaling rule: one sink at the max after the other casts, hold-back counts, no splits")
 {
     if (!RuleLive()) { return; }   // the unpruned / human process: the lift case below covers it
+    BandMode band_mode;
     PruneArm on(1);
     GameState s = PBase();
     const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, nullptr);
@@ -217,6 +227,7 @@ TEST_CASE("Elves scaling rule: one sink at the max after the other casts, hold-b
 TEST_CASE("Elves scaling rule: post-combat (and no attacker) keeps the top count only")
 {
     if (!RuleLive()) { return; }
+    BandMode band_mode;
     // The rule-lifted list run through the rule with an explicit phase: post-combat, h = 0.
     std::vector<TurnSolver::Plan> plans;
     GameState s = PBase();
@@ -246,6 +257,7 @@ TEST_CASE("Elves scaling rule: post-combat (and no attacker) keeps the top count
 TEST_CASE("Elves scaling rule: a held SCALED dork widens the band by its live yield; post-combat keeps the top")
 {
     if (!RuleLive()) { return; }
+    BandMode band_mode;
     PruneArm on(1);
     GameState s = PBase();
     PPut(s, "Priest of Titania", 202);                        // 7 Forests + Llanowar 1 + Priest 2 = 10 mana
@@ -281,6 +293,7 @@ TEST_CASE("Elves scaling rule: a held SCALED dork widens the band by its live yi
 TEST_CASE("Elves scaling rule: MTG_ELVES_HOLDBACK_MODE=three keeps top, top - h_normal, top - h_all only")
 {
     if (!RuleLive()) { return; }
+    BandMode band_mode;
     PruneArm on(1);
     GameState s = PBase();
     PPut(s, "Elvish Mystic", 201);
@@ -302,7 +315,8 @@ TEST_CASE("Elves scaling rule: MTG_ELVES_HOLDBACK_MODE=three keeps top, top - h_
     };
     CHECK(sink_counts("Genesis Wave", 0) == std::set<int>{ 4, 5, 6, 7, 8, 9 });          // band
     CHECK(sink_counts("Genesis Wave", 1) == std::set<int>{ 4, 7, 9 });                   // three
-    CHECK(sink_counts("Genesis Wave", -1) == sink_counts("Genesis Wave", 0));            // default = band
+    if (std::getenv("MTG_ELVES_HOLDBACK_MODE") == nullptr)                               // the env path picks its own
+    { CHECK(sink_counts("Genesis Wave", -1) == sink_counts("Genesis Wave", 0)); }        // default = band
     CHECK(sink_counts("Joraga Warcaller", 0) == std::set<int>{ 0, 2, 3, 4, 5 });         // band (+ the unkicked cast)
     CHECK(sink_counts("Joraga Warcaller", 1) == std::set<int>{ 0, 2, 4, 5 });            // three (+ the unkicked cast)
     {
