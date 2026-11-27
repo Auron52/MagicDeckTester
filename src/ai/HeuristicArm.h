@@ -1158,6 +1158,7 @@ enum Slot : int
     ONDEMAND_VISIBLE_LUMP_EXACT, // MTG_ONDEMAND_VISIBLE_LUMP_EXACT  Dragonstorm's visible-closer lump rule refuses an early Lotus Bloom crack that STRANDS the later bill: the ordinary payment pays it and the early crack does not (both judged with every crack of the lumps left and the ritual's float; when both pay, the crack still saves a source for later mana use, 2HG s5131993 firebreathing); its colour comparison read an uncracked Bloom as no supply (s30152662 T5: Irencrag Feat cracked the second Bloom for {B} with {B} already floating, and Karrthus's {G} had no source). DEFAULT ON; =0 -> the comparison alone, byte-identical
     LINE_FLOAT_RITUAL_NET,    // MTG_LINE_FLOAT_RITUAL_NET  the LINE_FLOAT_TAP_FIRST rung's spare-source colour test nets the later pips of the float of the ritual this payment is for: a source whose colours the ritual's own output covers is spare (Dragonstorm s30096957 T4 {Ruby Medallion, Seething Song, Karrthus}: Song's {1} drained the floating {B} Karrthus owes because the Mountain read as Karrthus's {R}, which Song's {R}x5 pays). DEFAULT ON; =0 -> the float-blind spare test, byte-identical
     ELVES_BUCKET_DISCARD,     // MTG_ELVES_BUCKET_DISCARD  Elves: the USER's cleanup-discard buckets (2026-11-27: "a discard policy that just buckets mana and threats. (mana elves can go in the mana bucket)"; amended: "feel free to add more mana as long as we have 1-2 scaling threats"): DEAD (2nd legend / 2nd world enchantment of ours) first; MANA = lands + mana creatures; SCALING = the mana sinks (Wave, Warcaller, Brigade, Ezuri, Shepherd), the best 2 kept and every other threat shed before mana; with no sink, up to 3 threats kept ahead of the mana past the land floor + 2. ElvesProvider::CleanupDiscardCandidates. Default ON (USER rule); =0 -> the inherited SelesnyaLifegain buckets
+    PLAYOUT_PAY_DRAW,         // MTG_PLAYOUT_PAY_DRAW      TEMPORARY A/B selector (Elves 2026-11-27, delete after the A/B): beyond the horizon an unpinned Leaf-Crowned Visionary pay-draw trigger pays when the mana is spare. Default ON; =0 -> decline (the old playout policy)
     COUNT
 };
 
@@ -2260,6 +2261,7 @@ inline const char* Name(int slot)
         "MTG_ONDEMAND_VISIBLE_LUMP_EXACT",
         "MTG_LINE_FLOAT_RITUAL_NET",
         "MTG_ELVES_BUCKET_DISCARD",
+        "MTG_PLAYOUT_PAY_DRAW",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

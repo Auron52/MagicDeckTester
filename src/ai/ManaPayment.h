@@ -1105,6 +1105,9 @@ extern thread_local bool g_line_opens_unseen;
 // pay `bill`. `unavailable` (card numbers) are treated as tapped.
 int LinePayKeepSet(const GameState& s, const ManaCost& bill, const std::vector<int>& cands,
                    const std::vector<int>& unavailable, std::vector<char>& keep);
+// Can `bill` be paid on `s` (the complete backtracker on a scratch copy; floating mana first)? The pay-first keep set's
+// judge with no candidates. Used by the beyond-horizon pay-draw policy (PayDrawPlayoutSpare, SpellEffects.h).
+bool LineBillPayableFor(const GameState& s, const ManaCost& bill, bool for_creature);
 
 // Does this line cast a breakpoint opener (see g_line_opens_unseen)? Defined in TurnSolver.cpp beside
 // LineCastCostTotal. Returns false without looking unless MTG_LINE_FLOAT_UNSEEN_GUARD's rung is live

@@ -11968,6 +11968,10 @@ bool LineBillPayable(const GameState& s, const ManaCost& bill, bool for_creature
     RampScratch sc(s);
     return LineBillPayableOn(sc.Board(), bill, for_creature, rock);
 }
+// The exported form (ManaPayment.h): no line-keep rock. The beyond-horizon pay-draw policy (PayDrawPlayoutSpare,
+// SpellEffects.h) asks it whether the rest of the applying line is still payable after a trigger's {G}.
+bool LineBillPayableFor(const GameState& s, const ManaCost& bill, bool for_creature)
+{ return LineBillPayable(s, bill, for_creature); }
 
 // PayHolding for a SET of sources (card numbers): each untapped one is unable to pay for the span of the payment.
 bool PayHoldingSet(GameState& b, const std::vector<int>& held, const ManaCost& cost_in, bool for_creature,

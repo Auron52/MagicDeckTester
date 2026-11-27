@@ -8418,6 +8418,68 @@ inline void ResolveUntapPumpTarget(GameState& state, int controller, const std::
 inline void FireBounceTriggerInstance(GameState& state, int controller, const CardDefinition& src,
                                       const char* which);                                       // defined below
 inline void TapPingCastUntap(GameState& state, int active, const CardDefinition& cast_def);   // defined below
+
+// THE BEYOND-HORIZON PAY-DRAW POLICY (Leaf-Crowned Visionary; USER 2026-11-27: "If you don't have anything else to use
+// the mana for it should draw."). Read only when the applying plan came from the greedy Solve() -- a horizon playout
+// turn or the depth-0 runner (MihailPayChoices::PaySpare, set by TurnSolver's MarkPlayoutPayDraw) -- and the trigger
+// is unpinned. Inside the search window the trigger is a searched pin and this is never consulted.
+// Pays when, after `cost` is really tapped (the same TapForCostDirect the payment below makes), the rest of the
+// applying line is still payable: g_line_unpaid_cost (the line's casts not yet paid -- both cast sites take a cast
+// out of it BEFORE its triggers fire), net of the same-turn reducer credit, plus the plan's non-cast spends
+// (SpareReserve) unless the joint prepay already put them in the hold. Before combat, also every controlled combat
+// pump source (the firebreathing converter's: a team_pump_cost body, an attacker's firebreathing_cost) keeps its
+// affordable activation COUNT -- leftover mana becomes face damage there, so it is not spare. Judged with
+// for_creature = false (creature-only colours unused), which can only under-count mana: a doubtful case declines.
+extern thread_local bool g_line_hold_has_acts;
+extern thread_local int  g_line_reducer_credit;
+void AddManaCost(ManaCost& dst, const ManaCost& add);
+bool LineBillPayableFor(const GameState& s, const ManaCost& bill, bool for_creature);
+inline bool PayDrawPlayoutSpare(const GameState& state, int controller, const ManaCost& cost,
+                                const MihailPayChoices& choice)
+{
+    if (state.players[controller].library.empty()) { return false; }
+    TapSpeculationScope _spec;   // a probe: no play events from its payment (pain, Manabarbs)
+    GameState probe = state;
+    if (!TapForCostDirect(probe, cost, /*for_creature=*/false)) { return false; }
+    ManaCost bill = g_line_unpaid_cost;
+    if (g_line_reducer_credit > 0) { bill.generic = std::max(0, bill.generic - g_line_reducer_credit); }
+    if (!g_line_hold_has_acts) { AddManaCost(bill, choice.SpareReserve()); }
+    if (bill.ManaValue() > 0 && !LineBillPayableFor(probe, bill, false)) { return false; }
+    if (!choice.SparePreCombat()) { return true; }
+    // The combat pump units this board can spend leftover mana on.
+    std::vector<ManaCost> units;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.team_pump_cost.has_value() && d->params.team_pump_power > 0 && !d->params.team_pump_mainphase)
+        {
+            ManaCost u = *d->params.team_pump_cost;
+            if (d->params.team_pump_taps_source) { u.generic += 1; }
+            units.push_back(u);
+        }
+        if (d->params.firebreathing_cost.has_value() && d->card.IsCreature()) { units.push_back(*d->params.firebreathing_cost); }
+    }
+    if (units.empty()) { return true; }
+    constexpr int kPumpCap = 32;   // a safety bound only: the walk stops at the first unaffordable count
+    for (const ManaCost& u : units)
+    {
+        ManaCost with = bill;
+        int k0 = 0;   // the pump count the line leaves affordable WITHOUT the payment
+        while (k0 < kPumpCap)
+        {
+            AddManaCost(with, u);
+            if (!LineBillPayableFor(state, with, false)) { break; }
+            ++k0;
+        }
+        if (k0 == 0) { continue; }
+        ManaCost keep = bill;
+        for (int k = 0; k < k0; ++k) { AddManaCost(keep, u); }
+        if (!LineBillPayableFor(probe, keep, false)) { return false; }   // the {G} would cost a pump
+    }
+    return true;
+}
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def, int mana_spent)
 {
     g_cast_trigger_mana_spent_probe = mana_spent;
@@ -8690,7 +8752,8 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
 
         // LEAF-CROWNED VISIONARY: "Whenever you cast an Elf spell, you may pay {G}. If you do, draw a card."
         // Mihail's optional-payment shape directly above with a DRAW payload, on the SAME ordinal stream and
-        // pin (GameState::scripted_mihail_pay_choice, Plan::mihail_pay_choice; unpinned = decline). "You cast"
+        // pin (GameState::scripted_mihail_pay_choice, Plan::mihail_pay_choice; unpinned = decline inside the search window,
+        // pay-when-spare on a greedy beyond-horizon plan: PayDrawPlayoutSpare). "You cast"
         // only. The drawn card is an ordinary draw (DrawIntoHand), so the site-10 put-in-hand breakpoint arms
         // off the hand growing and a drawn Elf is castable this phase. Human play: the dig-chooser yes/no
         // (Mihail's prompt), offered only when the {G} is payable. Every cast site calls this function, so the
@@ -8706,6 +8769,9 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
                 const ManaCost& cost = *def->params.cast_subtype_pay_draw_cost;
                 const std::size_t ordinal = state.scripted_mihail_trigger_ordinal++;
                 bool pay = state.scripted_mihail_pay_choice.Paid(ordinal);
+                // Beyond the horizon (a greedy plan's pay_spare): an unpinned trigger pays when the {G} is spare.
+                if (!pay && !state.scripted_mihail_pay_choice.IsPinned() && state.scripted_mihail_pay_choice.PaySpare())
+                { pay = PayDrawPlayoutSpare(state, active, cost, state.scripted_mihail_pay_choice); }
                 if (g_play_dig_chooser != nullptr && !g_tap_speculating)
                 {
                     GameState probe = state;
