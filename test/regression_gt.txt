@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 8fb1d2c29  date 2026-11-26
+# Regression ground truth -- commit a35c0ccc0  date 2026-11-27
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
@@ -7,6 +7,7 @@
 # accepted-with-regressions (overnight, 2026-11-26): Periodic full checkpoint measured e430cc58529ef75cf507a46b25967436903d1246 (2026-11-25/26; 793 jobs, 766896 games); searched pooled -0.0087 turns/game, 3136 faster/1151 slower, 24 win-to-unwon: Creature Burn mulligans 14, Antilife shuffle 2, TH opponent life 2, Fungus budget 2, PD/Giants opponent life 2, Goblins2HG/Shadowborn budget 2; d0 pooled -0.0219. Prior binding debt/rationale: docs/design/handoff-mana-overnight-2026-11-14.md and docs/design/overnight-accept-2026-11-20.md. Later Worldfire artifacts and land-1126 play changes are outside this measured checkpoint.
 # accepted-with-regressions (smoke, 2026-11-26): land-1127: Dragons oracle Haven fix, MTG_LINE_KEEP_CRIT_FILTER (TH), MTG_GYRETURN_TAP_DEBIT + MTG_DIG_FLOAT_HAND_DEMAND (Dragons), MTG_LEFTOVER_SWAP_WIDE + MTG_ONDEMAND_VISIBLE_LUMP_EXACT (Dragonstorm). Searched slower=0 faster=0 (5 play-changed same score); d0 slower 1 faster 3; held-out A/Bs all 0 slower
 # accepted-with-regressions (regression, 2026-11-26): land-1127: Dragons oracle Haven fix, MTG_LINE_KEEP_CRIT_FILTER (TH), MTG_GYRETURN_TAP_DEBIT + MTG_DIG_FLOAT_HAND_DEMAND (Dragons), MTG_LEFTOVER_SWAP_WIDE + MTG_ONDEMAND_VISIBLE_LUMP_EXACT (Dragonstorm). Searched slower=0 faster=0 (5 play-changed same score); d0 slower 1 faster 3; held-out A/Bs all 0 slower
+# accepted-with-regressions (overnight, 2026-11-27): elves overnight rows resized ENTRY->FULL (d3 s4004 25->75, d5 x4 300->425) before the keep-table adoption, profile absent; the overlapping games are unchanged (0 play-changed)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (full sweep; host-dependent); seeds disjoint.
 
@@ -690,11 +691,11 @@ elves_overnight_d0_s4004=4.8930/2886bb77673a8997
 elves_overnight_d0_s6006=4.8960/8f5703da0e501ada
 elves_overnight_d0_s8008=4.8955/449ee6d60200b09b
 elves_overnight_d0_s10010=4.9040/eefc80f1cf77f077
-elves_overnight_d3_s4004=4.4000/6be83857a6ad50b9
-elves_overnight_d5_s4004=4.3567/d0e5b97ef21faeca
-elves_overnight_d5_s5005=4.3267/a1010c19c2898bb9
-elves_overnight_d5_s6006=4.3333/228d634deb299a5a
-elves_overnight_d5_s7007=4.3233/2a86dff313997464
+elves_overnight_d3_s4004=4.4400/ae84ee8de291715f
+elves_overnight_d5_s4004=4.3459/f4d7846c49c7e4f1
+elves_overnight_d5_s5005=4.3153/efc62a73e68b7cd3
+elves_overnight_d5_s6006=4.3365/4cfc3a22149c49fe
+elves_overnight_d5_s7007=4.3341/65b62810020c3afa
 elves_overnight_d3_s30381=4.5500/9ac8dceeec9f9094
 elves_overnight_d5_s30381=4.5500/9ac8dceeec9f9094
 worldfire_overnight_d3_s30521=5.0000/0fc0a7c5cd1d47ab

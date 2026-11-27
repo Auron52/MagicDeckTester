@@ -1479,17 +1479,18 @@ OVERNIGHT_CASES=(
   "worldfire    5  5005  300 20"
   "worldfire    5  6006  300 20"
   "worldfire    5  7007  300 20"
-  # elves: overnight ENTRY set (2026-11-26; Hinata's pre-keep-table shape, P5: one d3 sanity row). No elves2hg
-  # overnight rows (the smoke/regression canary covers the 2HG path).
+  # elves: overnight FULL set (2026-11-27, resized from the ENTRY set just before the keep-table adoption and
+  # accepted with the profile ABSENT). Landfall's shape: similar per-game cost (suite_cost 1499 vs 1352 ms/game).
+  # No elves2hg overnight rows (the smoke/regression canary covers the 2HG path).
   "elves        0  4004 2000 0"
   "elves        0  6006 2000 0"
   "elves        0  8008 2000 0"
   "elves        0 10010 2000 0"
-  "elves        3  4004   25 10"
-  "elves        5  4004  300 20"
-  "elves        5  5005  300 20"
-  "elves        5  6006  300 20"
-  "elves        5  7007  300 20"
+  "elves        3  4004   75 10"
+  "elves        5  4004  425 20"
+  "elves        5  5005  425 20"
+  "elves        5  6006  425 20"
+  "elves        5  7007  425 20"
   # Elves unlimited backstop: see the REGRESSION block (screen 2026-11-26).
   "elves        3 30381   20 0"
   "elves        5 30381   20 0"
