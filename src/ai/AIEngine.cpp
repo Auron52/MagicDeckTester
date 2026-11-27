@@ -5253,6 +5253,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // GameState::m1_hand): the plan is chosen, nothing has executed -- the same
             // post-plan / pre-land / pre-cast point ApplyPlanDirect stamps, so the split-turn
             // affordability test sees the same pool and the same plan costs in both worlds.
+            // MTG_ELVES_CHOSEN_CENSUS (diagnostic only; a no-op unless set and the deck is Elves).
+            if (!m_in_rollout && g_real_resolution) { ElvesChosenCensus(state, &plan, is_pre_combat_main); }
             if (is_pre_combat_main)
             {
                 static const bool s_condemn_trace = EnvOn("MTG_CONDEMN_TRACE");

@@ -11,6 +11,7 @@
 //     contract in whichever process runs it (run once under MTG_UNPRUNED=1 and once under MTG_HUMAN_PLAY=1 to
 //     exercise the open branch).
 #include <doctest/doctest.h>
+#include <cstdlib>
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
@@ -265,6 +266,50 @@ TEST_CASE("Elves scaling rule: a held SCALED dork widens the band by its live yi
     CHECK(mk.count(CastSet{ { "Joraga Warcaller", 3 } }) == 0);
 }
 
+// THE BAND on a mixed board (round 2 measured the narrower {top, top - h_normal, top - h_all} sets and the USER kept the
+// band, 2026-11-27: "Okay, that's fine. We'll leave it."). 7 Forests + Llanowar + Mystic + Priest of Titania (3 Elves:
+// taps for 3) = 12 mana; all three dorks can attack, H = 1 + 1 + 3 = 5.
+//   Wave alone ({X}{G}{G}{G}, 1 a step): top X 9, h 5 -> X 4..9.
+//   Warcaller alone ({G} + K x {1}{G}, 2 a step): top K 5, h ceil(5/2) = 3 -> K 2..5 (+ the unkicked cast).
+// Post-combat the attack is over (h = 0): the top alone.
+TEST_CASE("Elves scaling rule: the band on a mixed board -- every count from the top down to every attacker held")
+{
+    if (!RuleLive()) { return; }
+    PruneArm on(1);
+    GameState s = PBase();
+    PPut(s, "Elvish Mystic", 201);
+    PPut(s, "Priest of Titania", 202);
+    const std::vector<ElvesHoldBackSource> src = ElvesHoldBackSources(s, true);
+    REQUIRE(src.size() == 3);
+    CHECK(ElvesHoldBackNormalMana(src) == 2);
+    CHECK(ElvesHoldBackMana(src, 0) == 5);
+    auto sink_counts = [&](const char* card)
+    {
+        GameState t = s;
+        t.players[0].hand.clear();
+        PHand(t, card, 1);
+        std::set<int> out;
+        for (const CastSet& c : Menu(TurnSolver::EnumerateMainPlansExhaustive(t, true, nullptr, nullptr)))
+        { for (const auto& [n, k] : c) { if (n == card) { out.insert(k); } } }
+        return out;
+    };
+    CHECK(sink_counts("Genesis Wave") == std::set<int>{ 4, 5, 6, 7, 8, 9 });
+    CHECK(sink_counts("Joraga Warcaller") == std::set<int>{ 0, 2, 3, 4, 5 });
+    std::vector<TurnSolver::Plan> plans;
+    GameState w = s;
+    w.players[0].hand.clear();
+    PHand(w, "Genesis Wave", 1);
+    { PruneArm off(0); plans = TurnSolver::EnumerateMainPlansExhaustive(w, true, nullptr, nullptr); }
+    std::vector<DecisionProvider::PlanView> views;
+    for (const TurnSolver::Plan& p : plans) { views.push_back({ &p.actions, &p.land_to_play, &p }); }
+    std::vector<char> admit(plans.size(), 1);
+    ElvesScalingAdmit(w, /*is_pre_combat=*/false, views, admit);
+    std::set<int> xs;
+    for (std::size_t i = 0; i < plans.size(); ++i)
+    { if (admit[i]) { for (const auto& [n, k] : Casts(plans[i])) { if (n == "Genesis Wave") { xs.insert(k); } } } }
+    CHECK(xs == std::set<int>{ 9 });
+}
+
 // ---- 3. THE LIFT SWITCHES ----------------------------------------------------------------------------------------
 
 TEST_CASE("Elves scaling rule: MTG_ELVES_SCALING_PRUNE=0 restores every count and every split")
@@ -303,7 +348,7 @@ TEST_CASE("Elves scaling rule: not live with no sink in hand (the lazy layout is
 // threats") -- ElvesProvider::CleanupDiscardCandidates. Every expected order below was derived BY HAND from the rule as
 // built (the header note above the implementation):
 //   DEAD first. MANA shed order Lodge < Cavern < Forest < Llanowar = Mystic < Priest / Archdruid / Marwyn, the best
-//   land last while < 4 lands are in play. THREAT order (worst first): a no-ability body, then farthest from castable
+//   land last at every land count. THREAT order (worst first): a no-ability body, then farthest from castable
 //   (MV - (board mana + mana cards in hand)), then value Crossroads 1 < Magistrate / Shepherd 2 < lords 3 < Ezuri /
 //   Wave 4, ties the later copy first. WITH a sink (Wave / Warcaller / Brigade / Ezuri / Shepherd): DEAD > spares
 //   (bodies, 3rd+ sinks, other threats) > MANA > the 2 kept sinks. WITHOUT: DEAD > threats past the best 3 > mana past
@@ -403,15 +448,15 @@ TEST_CASE("Elves discard: no scaling threat in hand keeps up to 3 threats ahead 
     CHECK(vb == std::vector<int>{ 7, 1, 6, 5, 4, 2, 3, 0 });
 }
 
-// Four sinks: Ezuri 2, Warcaller 3, Brigade 4, Wave 5 (board 4 Forests, reach 6: all castable). Kept: Wave 5 and Ezuri 2
-// (value 4); the spares Brigade 4, Warcaller 3 go after Taunting 7 and before Clancaller 6, all before mana (Forest 0,
-// Llanowar 1; no floor at 4 lands); then Wave, Ezuri.
+// Four sinks: Ezuri 2, Warcaller 3, Brigade 4, Wave 5 (board 4 Forests, reach 6: all castable, Wave priced 6). Kept:
+// Wave 5 and Ezuri 2 (value 4); the spares Brigade 4, Warcaller 3 go after Taunting 7 and before Clancaller 6, all before
+// mana (Llanowar 1, then the floor Forest 0: the floor holds at every land count); then Wave, Ezuri.
 TEST_CASE("Elves discard: at most 2 scaling threats are kept; a 3rd+ goes before mana")
 {
     const GameState s = EdState({ kEFo, kELl, kEEz, kEJo, kEBr, kEWa, kECl, kETa }, { kEFo, kEFo, kEFo, kEFo });
     const std::vector<int> v = Ed(s);
     EdCheck(s, v);
-    CHECK(v == std::vector<int>{ 7, 4, 3, 6, 0, 1, 5, 2 });
+    CHECK(v == std::vector<int>{ 7, 4, 3, 6, 1, 0, 5, 2 });
 }
 
 // DEAD first: Ezuri on our battlefield (hand Ezuri 0), the 2nd Marwyn in hand (2), Concordant Crossroads while one is
@@ -432,8 +477,9 @@ TEST_CASE("Elves discard: a 2nd legend and a 2nd Concordant Crossroads are shed 
 
 // MANA ORDER and the LAND FLOOR. Hand Forest 0, Forest 1, Lodge 2, Llanowar 3, Priest 4, Ezuri 5, Brigade 6, Cavern 7
 // (6 mana, 2 sinks): Lodge, Cavern, the surplus Forest, Llanowar (a mana Elf over a surplus land), Priest, and -- with
-// 2 lands in play -- the floor Forest 0 last; with 4 lands in play no floor, so both Forests go before Llanowar.
-TEST_CASE("Elves discard: Lodge < Cavern < Forest < mana Elves, one land kept while fewer than 4 are in play")
+// 2 lands in play -- the floor Forest 0 last. The floor holds at every land count (USER 2026-11-27: "We ideally do want
+// to play a land next turn, though, so keeping one is nice if we can manage it"), so 4 lands in play is the same order.
+TEST_CASE("Elves discard: Lodge < Cavern < Forest < mana Elves, one land kept at every land count")
 {
     const std::vector<std::string> hand{ kEFo, kEFo, kELo, kELl, kEPr, kEEz, kEBr, kECa };
     const GameState s = EdState(hand, { kEFo, kEFo });
@@ -443,7 +489,21 @@ TEST_CASE("Elves discard: Lodge < Cavern < Forest < mana Elves, one land kept wh
     const GameState t = EdState(hand, { kEFo, kEFo, kEFo, kEFo });
     const std::vector<int> w = Ed(t);
     EdCheck(t, w);
-    CHECK(w == std::vector<int>{ 2, 7, 1, 0, 3, 4, 6, 5 });
+    CHECK(w == std::vector<int>{ 2, 7, 1, 3, 4, 0, 6, 5 });
+}
+
+// GENESIS WAVE IS NOT CHEAP (USER 2026-11-27: "Genesis Wave is technically MV 3, but realistically needs to be cast for
+// 6 mana or preferably even more to be good. It shouldn't be counted as a cheap spell in the discard heuristic"): priced
+// at X = 3, mana value 6. Board 1 Forest; hand Wave 0, Ezuri 1, Warcaller 2, Forest 3, Forest 4, Llanowar 5, Taunting 6,
+// Clancaller 7: reach 1 + 3 = 4. Wave (6) is 2 short, Ezuri (3) and Warcaller (1) castable, so the 3rd sink -- the spare
+// -- is the Wave: Taunting 6, Wave 0, Clancaller 7, then mana Forest 4, Llanowar 5, the floor Forest 3, then the kept
+// Warcaller 2, Ezuri 1.
+TEST_CASE("Elves discard: Genesis Wave is priced at X = 3 (mana value 6), not as a cheap spell")
+{
+    const GameState s = EdState({ kEWa, kEEz, kEJo, kEFo, kEFo, kELl, kETa, kECl }, { kEFo });
+    const std::vector<int> v = Ed(s);
+    EdCheck(s, v);
+    CHECK(v == std::vector<int>{ 6, 0, 7, 4, 5, 3, 2, 1 });
 }
 
 // No sink, board 1 Forest: hand Magistrate 0, Taunting 1, Clancaller 2, Visionary 3, Crossroads 4, Forest 5,

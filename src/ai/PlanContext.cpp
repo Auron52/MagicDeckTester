@@ -39,7 +39,8 @@ std::uint64_t PlanTraitsContentHash(const PlanTraits& t)
         | (static_cast<std::uint64_t>(t.copy_magnet_live) << 2) | (static_cast<std::uint64_t>(t.bodies_are_multipliers) << 3)
         | (static_cast<std::uint64_t>(t.casts_scaler_food) << 4) | (static_cast<std::uint64_t>(t.attack_matters) << 5)
         | (static_cast<std::uint64_t>(t.restr_creature_up) << 6) | (static_cast<std::uint64_t>(t.restr_inelig_overflow) << 7)
-        | (static_cast<std::uint64_t>(t.mid_turn_casts) << 8) | (static_cast<std::uint64_t>(t.own_board_hazard) << 9));
+        | (static_cast<std::uint64_t>(t.mid_turn_casts) << 8) | (static_cast<std::uint64_t>(t.own_board_hazard) << 9)
+        | (static_cast<std::uint64_t>(t.casts_scaled_sink) << 10));
     mix(static_cast<std::uint64_t>(t.pump_target_card));
     mix(static_cast<std::uint64_t>(t.mana_casts));
     mix(static_cast<std::uint64_t>(t.cast_color_mask));
@@ -75,6 +76,16 @@ std::uint64_t PlanTraitsContentHash(const PlanTraits& t)
     }
     mix(static_cast<std::uint64_t>(t.act_restr_elig_mana));
     mix(static_cast<std::uint64_t>(t.act_restr_inelig_mana));
+    // The scaled sinks' hand identities (MTG_ELVES_TAP_ORDER): mixed only when present.
+    if (t.scaled_sink_count > 0)
+    {
+        mix(static_cast<std::uint64_t>(t.scaled_sink_count) | 0x51C0ull << 8);
+        for (int i = 0; i < t.scaled_sink_count; ++i)
+        {
+            mix(t.scaled_sink_name[i] != nullptr ? std::hash<std::string>{}(*t.scaled_sink_name[i]) : 0x0CA5ull);
+            mix(static_cast<std::uint64_t>(t.scaled_sink_hand0[i]));
+        }
+    }
     // Prevent Damage deferral inputs: mixed only when present, so every other deck's hash is unchanged.
     if (t.pd_amp_count > 0 || t.pd_victim_count > 0 || t.pd_hazard_other)
     {

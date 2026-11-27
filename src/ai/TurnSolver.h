@@ -4911,3 +4911,6 @@ extern thread_local std::vector<std::string>* g_line_order_capture;
 // committed plan cannot match). Bound by AIEngine's human-commit preview (the validation turns any
 // entry into an Illegal verdict; the commit reports them); null everywhere else.
 extern thread_local std::vector<std::string>* g_human_step_fail_sink;
+
+// The kick-count cap CollectActions offers multikicker / squad casts up to (the opponent's starting life; TurnSolver.cpp).
+int MultikickCountCap();

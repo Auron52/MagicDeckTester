@@ -3977,6 +3977,11 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
 struct ElvesHoldBackSource { int yield = 0; bool scaled = false; };
 std::vector<ElvesHoldBackSource> ElvesHoldBackSources(const GameState& s, bool is_pre_combat);
 int ElvesHoldBackMana(const std::vector<ElvesHoldBackSource>& src, int plan_elf_casts);
+// The mana holding back only the UNSCALED attack-capable dorks frees (Llanowar / Mystic: the entries with scaled =
+// false). Read only by the chosen census (its `normal` category: top - h_normal).
+int ElvesHoldBackNormalMana(const std::vector<ElvesHoldBackSource>& src);
+// MTG_ELVES_CHOSEN_CENSUS=1 (DIAGNOSTIC ONLY): the executor's chosen main-phase plan, classified (see the .cpp).
+void ElvesChosenCensus(const GameState& s, const void* chosen_plan, bool is_pre_combat);   // a TurnSolver::Plan (PlanView's convention)
 class ElvesProvider : public SelesnyaLifegainProvider
 {
 public:
@@ -4000,6 +4005,8 @@ public:
     // A memory bound (see the base hook); play-neutral by that argument and measured digest-identical.
     bool PlanListFilterBeforeAxes(const GameState&) const override { return true; }
     bool PlanListAdmitReadsLazyViews(const GameState&) const override { return true; }   // ElvesScalingAdmit: CopyPlanView
+    // MTG_ELVES_TAP_ORDER (default ON, =0 hatch): what a payment preserves -- attackers on a sink turn; see the .cpp.
+    int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
     // The USER's cleanup-discard buckets (2026-11-27: "a discard policy that just buckets mana and threats", amended:
     // "feel free to add more mana as long as we have 1-2 scaling threats"): DEAD first; with a scaling threat (a mana
     // sink) in hand keep the best 2 sinks and favour MANA over every other threat; with none keep up to 3 threats

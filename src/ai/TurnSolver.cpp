@@ -78,6 +78,15 @@
 #include <unordered_set>
 #include <utility>
 
+// THE KICK-COUNT CAP (multikicker / squad, CollectActions): the opponent's STARTING life -- 20, 30 in Two-Headed Giant
+// -- a lethal count, never a deck constant. USER 2026-11-27: "I think Kick counts should be capped at lethal size of
+// 20", then on 2HG: "Yeah, we may want to scale it up for 2HG arguably." Clamped to the synthesized faces
+// (kMaxMultikick).
+int MultikickCountCap()
+{
+    return std::max(1, std::min(gamesetup::StartingLife(), kMaxMultikick));
+}
+
 // When true, SolveWithLookahead prints per-pass per-candidate win turn estimates
 // for top-level T1 pre-combat decisions.  Set via TurnSolver::SetTraceSolve().
 static bool s_trace_solve = false;
@@ -47185,7 +47194,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
             }
             int kmax = rep_mv > 0 ? std::max(0, (pool - base.ManaValue()) / rep_mv) : 0;
-            kmax = std::min(kmax, kMaxMultikick);
+            kmax = std::min(kmax, MultikickCountCap());
             std::vector<int> ks;
             // The UnprunedGate mask is full (64 gates, static-asserted), so the kick-count fan shares the
             // REPLICATE gate -- the same shape (a count of an additional cost paid at cast):
@@ -70508,6 +70517,30 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         {
             for (int ci = 0; ci < 5; ++ci)
             { if (d->card.HasColor(static_cast<Color>(ci))) { t.cast_color_mask |= (1 << ci); } }
+        }
+        if (a.kind == Action::Kind::CastFromHand
+            && (a.kick_count > 0 || (d->params.reveal_x_put_permanents && a.chosen_x > 0)))
+        {
+            t.casts_scaled_sink = true;
+            // Where the sink sits (MTG_ELVES_TAP_ORDER only): its printed name and the copies in hand now.
+            if (ElvesTapOrderOn())
+            {
+                const std::string& nm = d->params.kicked_base_name.empty() ? d->card.m_name.str()
+                                                                           : d->params.kicked_base_name;
+                int k = 0;
+                while (k < t.scaled_sink_count && *t.scaled_sink_name[k] != nm) { ++k; }
+                if (k == t.scaled_sink_count && k < PlanTraits::kMaxScaledSinks)
+                {
+                    const CardDefinition* base = d->params.kicked_base_name.empty()
+                        ? d : CardDatabase::Instance().Lookup(nm);
+                    int copies = 0;
+                    for (const Card& c : state.players[static_cast<std::size_t>(active)].hand)
+                    { if (c.m_name.str() == nm) { ++copies; } }
+                    t.scaled_sink_name[k]  = base != nullptr ? &base->card.m_name.str() : nullptr;
+                    t.scaled_sink_hand0[k] = copies;
+                    if (t.scaled_sink_name[k] != nullptr) { ++t.scaled_sink_count; }
+                }
+            }
         }
         if (d->card.IsCreature())
         {
