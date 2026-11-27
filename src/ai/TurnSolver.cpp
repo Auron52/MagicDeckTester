@@ -8878,6 +8878,29 @@ static bool RitualReducerOrderDomain(const std::vector<Action>& acts, const std:
     return ritual && reducer;
 }
 
+// A Fleshbag cast that sacrifices a live spell reducer can make a later cast dearer.
+// Price the other order when that reducer is one of the plan's available victims.
+static bool FleshbagReducerOrderDomain(const GameState& state, const std::vector<Action>& acts,
+                                      const std::vector<int>& order)
+{
+    if (order.size() < 2) { return false; }
+    for (int j : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand || a.chosen_x <= 0 || a.def == nullptr
+            || !a.def->params.etb_each_player_sacrifice_creature) { continue; }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.card.m_number != a.chosen_x) { continue; }
+            const CardDefinition* victim = CardDatabase::Instance().LookupCached(p.card);
+            if (victim && (!victim->params.reduces_spell_subtype.empty()
+                           || !victim->params.reduces_spell_color.empty()
+                           || victim->params.chooses_creature_type)) { return true; }
+        }
+    }
+    return false;
+}
+
 static void ComputeAvailableColors(const GameState& state, bool have[5], bool pending_auras = true)
 {
     have[0] = have[1] = have[2] = have[3] = have[4] = false;
@@ -13390,6 +13413,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     static const bool _dbg = EnvOn("MTG_DBG_SEQ");   // the same static read as the caller's
     const DecisionProvider& prov = ResolveProvider(state);
     const bool sac_ritual_line = SacRitualOrderDomain(cands, ord);
+    const bool fleshbag_reducer_line = FleshbagReducerOrderDomain(state, cands, ord);
     // Warm per-thread scratch board, same contract as SubsetPayableWithFilters' (see PayScratch):
     // this probe is the same shape -- a full GameState copy on entry, thrown away on return.
     PayScratch _pay_scratch(state);
@@ -13852,6 +13876,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         const bool joins_for_mana = (def.params.mana_rock && !def.card.IsCreature()
                                      && !def.params.lens_imprint_land)
                                  || (sac_ritual_line && def.card.IsCreature())
+                                 || (fleshbag_reducer_line && def.params.etb_each_player_sacrifice_creature)
                                  || def.params.hinata_cost_reducer
                                  || !def.params.reduces_spell_subtype.empty()
                                  || def.params.chooses_creature_type
@@ -13904,6 +13929,8 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             if (def.params.land_tap_bonus > 0 && def.params.etb_choose_color)   // Gauntlet's colour
             { perm.chosen_color = static_cast<int8_t>(LandTapCastColor(cp, a)); }
             cp.battlefield.push_back(perm);
+            if (fleshbag_reducer_line && def.params.etb_each_player_sacrifice_creature)
+            { ResolveEachPlayerSacrificeCreatureEtb(cp, cp.active_player_index, perm.card.m_number, a.chosen_x); }
         }
         // ETB TREASURE (Corsair Captain; MTG_ETB_TREASURE_SPEND): the enter trigger's Treasure --
         // fresh-hold EXEMPT, as FireOwnEtbTriggers makes it -- joins AFTER this cast's own payment,
@@ -15025,7 +15052,8 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
             || EtbPutReducerOrderDomain(state, cands, order)
             || BeastsLordReducerOrderDomain(state, cands, order)
             || SacRitualOrderDomain(cands, order)
-            || RitualReducerOrderDomain(cands, order));
+            || RitualReducerOrderDomain(cands, order)
+            || FleshbagReducerOrderDomain(state, cands, order));
     // MTG_UO_FOLD (DEFAULT ON; =0 -> the given walk, the ETB retry and the unlock-order search run one after the
     // other, as before). In the unlock-order domain this site's verdict is "the given order pays, or the ETB order
     // does, or some other class order does" -- an OR over walks, so the order they are tried in is free. The given
@@ -15278,7 +15306,8 @@ bool TurnSolver::UnlockPayableOrder(const GameState& state, const std::vector<Ac
         && !EtbPutReducerOrderDomain(state, *use, order)
         && !BeastsLordReducerOrderDomain(state, *use, order)
         && !SacRitualOrderDomain(*use, order)
-        && !RitualReducerOrderDomain(*use, order)) { return false; }
+        && !RitualReducerOrderDomain(*use, order)
+        && !FleshbagReducerOrderDomain(state, *use, order)) { return false; }
     const std::vector<int> none;
     if (SeqWalkFixedOrder(state, *use, sel, order, none)) { return false; }   // the given order pays: kept
     return UnlockOrderSearch(state, *use, sel, order, none, /*nearest=*/true);

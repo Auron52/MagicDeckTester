@@ -8484,7 +8484,7 @@ void ApplyPayableCastOrder(const GameState& state, const std::vector<Action>& ac
     if (order.size() < 2) { return; }
     // Dependency moves can invalidate the aggregate decider's earlier answer. The sequential
     // walk prices both Culling's sacrifice and a ritual that must precede a same-line reducer.
-    bool ritual = false, reducer = false, sac_ritual = false;
+    bool ritual = false, reducer = false, sac_ritual = false, lost_reducer = false;
     for (int j : order)
     {
         const Action& a = acts[static_cast<std::size_t>(j)];
@@ -8494,8 +8494,20 @@ void ApplyPayableCastOrder(const GameState& state, const std::vector<Action>& ac
         reducer |= !d->params.reduces_spell_subtype.empty() || !d->params.reduces_spell_color.empty()
                    || d->params.chooses_creature_type;
         sac_ritual |= d->params.sac_additional_creature && d->params.ritual_floating_mana > 0;
+        if (d->params.etb_each_player_sacrifice_creature && a.chosen_x > 0)
+        {
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index || p.card.m_number != a.chosen_x) { continue; }
+                const CardDefinition* victim = CardDatabase::Instance().LookupCached(p.card);
+                lost_reducer |= victim != nullptr && (!victim->params.reduces_spell_subtype.empty()
+                                || !victim->params.reduces_spell_color.empty()
+                                || victim->params.chooses_creature_type);
+            }
+        }
     }
-    if (sac_ritual || (ritual && reducer)) { TurnSolver::UnlockPayableOrder(state, acts, order); }
+    if (sac_ritual || (ritual && reducer) || lost_reducer)
+    { TurnSolver::UnlockPayableOrder(state, acts, order); }
 }
 
 void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& acts,
