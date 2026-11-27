@@ -5432,6 +5432,11 @@ struct PbLazyLayout
                 std::size_t pin_off = 0, int pin_w = 0)
     {
         protos.push_back(std::move(proto));
+        AddFanMeta(n, kind, base, pin_off, pin_w);
+    }
+    // AddFan without the prototype: an in-place compaction (PbLazyCompactProtos) moves the prototypes itself.
+    void AddFanMeta(int n, char kind, std::size_t base, std::size_t pin_off = 0, int pin_w = 0)
+    {
         fan_n.push_back(n);
         P += static_cast<std::size_t>(n);
         fan_end.push_back(P);
@@ -5597,6 +5602,58 @@ struct Dump
 };
 inline Dump g_dump;
 }   // namespace pblazycands
+
+// ---- IN-PLACE LIST COMPACTION (memory only; Elves 2026-11-27) ----------------------------------------------------
+// The lazy filter (ApplyProviderPlanListFilterLazy) and the continuation compaction (BpDeriveContinuationList) used to
+// build a NEW kept vector of Plans -- and a new prototype vector -- while the old ones stayed alive: on the worst
+// Elves rollout four such shell arrays (792 B a Plan) were live at once, 1.7 GB of the 4.0 GB peak. They now compact
+// in place. PLAY-IDENTICAL BY CONSTRUCTION, which takes two things because the plan pool PRICES capacities
+// (plancache::ApproxPlansBytes, PbLazyStoredBytes) and so decides admission -- i.e. play wherever the pool binds:
+//   1. an element is MOVE-CONSTRUCTED into its new slot, as the old push_back(std::move) did (move-ASSIGNMENT would
+//      keep the target's old heap buffer when the source string is short, and ApproxPlanBytes reads
+//      land_to_play / fetch_target / land_face capacity);
+//   2. every priced vector ends at exactly the capacity the old code left: PbCapacityTo re-houses it only when the
+//      in-place capacity differs, so that is the only time a second array is live, and never larger than before.
+// Plan's move constructor is noexcept under libstdc++ (std::vector growth therefore moved, never copied, the old
+// elements). Asserted there only: MSVC's node containers do not move noexcept, and the pool's capacities already
+// differ between the two libraries (PortablePlanBytes) -- it is the wall-only pool, so no tier reads that difference.
+#if defined(__GLIBCXX__)
+static_assert(std::is_nothrow_move_constructible_v<TurnSolver::Plan>,
+              "the in-place compaction's identity argument assumes vector growth moves Plans");
+#endif
+// v[dst] := move-constructed from v[src] (dst < src; v[src] is left moved-from, as the old code left it).
+static inline void PbMoveSlot(std::vector<TurnSolver::Plan>& v, std::size_t dst, std::size_t src)
+{
+    TurnSolver::Plan* const d = &v[dst];
+    std::destroy_at(d);
+    std::construct_at(d, std::move(v[src]));
+}
+// The capacity n push_backs into an empty vector leave. Read off THIS standard library's own growth rule (libstdc++
+// doubles, MSVC grows by half), which does not depend on the element type: each step fills a char vector reserved at
+// exactly the previous capacity and pushes one more. Extended on demand, ~log(n) steps per thread, ever.
+static std::size_t PbPushBackCapacity(std::size_t n)
+{
+    thread_local std::vector<std::size_t> seq{ 0 };
+    while (seq.back() < n)
+    {
+        std::vector<char> v;
+        v.reserve(seq.back());
+        v.resize(seq.back());
+        v.push_back(0);
+        seq.push_back(v.capacity());
+    }
+    return *std::lower_bound(seq.begin(), seq.end(), n);
+}
+// Re-house v at exactly `cap` (>= v.size()) when its capacity differs; elements move-constructed, in order.
+template <class T>
+static void PbCapacityTo(std::vector<T>& v, std::size_t cap)
+{
+    if (v.capacity() == cap) { return; }
+    std::vector<T> t;
+    t.reserve(cap);
+    for (T& x : v) { t.push_back(std::move(x)); }
+    v.swap(t);
+}
 
 // Builds the full list in place from L + the layout and retires the layout.
 static void PbLazyMaterialize(std::vector<TurnSolver::Plan>& all, PbLazyLayout& lz, int dbg_line = __builtin_LINE())
@@ -109223,14 +109280,23 @@ static bool ApplyProviderPlanListFilterLazy(const GameState& state, bool is_pre_
         all.resize(w);
         return true;
     }
-    // In place: the materialised filter's list, held as real entries + the surviving fans in their positions.
-    std::vector<TurnSolver::Plan> real;
-    real.reserve(all.size());
+    // The materialised filter's list, held as real entries + the surviving fans in their positions -- compacted IN
+    // PLACE (see PbMoveSlot): the real entries within `all`, the prototypes within lz.protos; the layout's small
+    // per-fan vectors are rebuilt fresh, as before. Capacities end where the old copy-out left them: `all` at its
+    // pre-filter size (the old kept vector's reserve), the prototypes at the push_back growth of the kept count.
+    const std::size_t n0 = all.size();
     PbLazyLayout nl;
-    std::size_t full = 0;
+    std::size_t full = 0, wl = 0, wf = 0;
     li = 0;
     auto take_real_until = [&](std::size_t at)
-    { for (; li < at; ++li, ++full) { if (admit[full]) { real.push_back(std::move(all[li])); } } };
+    {
+        for (; li < at; ++li, ++full)
+        {
+            if (!admit[full]) { continue; }
+            if (wl != li) { PbMoveSlot(all, wl, li); }
+            ++wl;
+        }
+    };
     for (std::size_t b = 0; b < lz.NumBlocks(); ++b)
     {
         take_real_until(lz.blk_at[b]);
@@ -109240,16 +109306,21 @@ static bool ApplyProviderPlanListFilterLazy(const GameState& state, bool is_pre_
             const std::size_t n = static_cast<std::size_t>(lz.fan_n[fi]);
             if (admit[full])
             {
-                if (!opened) { nl.OpenBlock(real.size()); opened = true; }
-                nl.AddFan(std::move(lz.protos[fi]), lz.fan_n[fi], lz.fan_kind[fi], lz.fan_base[fi], lz.fan_pin_off[fi],
-                          lz.fan_pin_w[fi]);
+                if (!opened) { nl.OpenBlock(wl); opened = true; }
+                if (wf != fi) { PbMoveSlot(lz.protos, wf, fi); }
+                ++wf;
+                nl.AddFanMeta(lz.fan_n[fi], lz.fan_kind[fi], lz.fan_base[fi], lz.fan_pin_off[fi], lz.fan_pin_w[fi]);
             }
             full += n;
         }
     }
-    take_real_until(all.size());
+    take_real_until(n0);
+    all.erase(all.begin() + static_cast<std::ptrdiff_t>(wl), all.end());
+    PbCapacityTo(all, n0);
+    lz.protos.erase(lz.protos.begin() + static_cast<std::ptrdiff_t>(wf), lz.protos.end());
+    PbCapacityTo(lz.protos, PbPushBackCapacity(wf));
+    nl.protos.swap(lz.protos);
     nl.CloseBlock();
-    all.swap(real);
     lz = std::move(nl);
     return true;
 }
@@ -140474,10 +140545,13 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         }
         else
         {
-        std::vector<TurnSolver::Plan> survivors;
-        survivors.reserve(plans.size());
-        for (TurnSolver::Plan& p : plans)
+        // IN PLACE (memory only; see PbMoveSlot): the survivors compact within `plans`, in order -- this is the
+        // derivation's own list, whose capacity nothing prices before the store shrinks it.
+        const std::size_t n_seen = plans.size();
+        std::size_t w_keep = 0;
+        for (std::size_t pi = 0; pi < n_seen; ++pi)
         {
+            TurnSolver::Plan& p = plans[pi];
             const bool k = keep(p);
             if (trace_here)
             {
@@ -140486,20 +140560,20 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                           << (k ? std::string("  <") + last_why + ">" : std::string{})
                           << "\n";
             }
-            if (k || s_newonly_dry) { survivors.push_back(std::move(p)); }
+            if (k || s_newonly_dry) { if (w_keep != pi) { PbMoveSlot(plans, w_keep, pi); } ++w_keep; }
             else if (demote)        { demoted_out->push_back(std::move(p)); }
         }
         if (count_stats && s_rollout_stats)
         {
             g_bp_newonly_lists.fetch_add(1, std::memory_order_relaxed);
-            g_bp_newonly_seen.fetch_add(static_cast<long long>(plans.size()), std::memory_order_relaxed);
+            g_bp_newonly_seen.fetch_add(static_cast<long long>(n_seen), std::memory_order_relaxed);
             g_bp_newonly_dropped.fetch_add(dropped, std::memory_order_relaxed);
             g_bp_newonly_kept_new.fetch_add(kept_new, std::memory_order_relaxed);
             g_bp_newonly_kept_act.fetch_add(kept_act, std::memory_order_relaxed);
             g_bp_newonly_kept_unknown.fetch_add(kept_unknown, std::memory_order_relaxed);
             g_bp_newonly_kept_plan.fetch_add(kept_plan, std::memory_order_relaxed);
         }
-        plans.swap(survivors);
+        plans.erase(plans.begin() + static_cast<std::ptrdiff_t>(w_keep), plans.end());
         }
     }
     // MTG_BP_CANDS_ORDER: value-best first (wins, then total_eval), so the rank window and the
@@ -140666,11 +140740,16 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
     // reads only fields a clone shares with its prototype), and a partly named one is simply kept whole --
     // each kept block re-opened at its position among the kept real entries; and the selection mapped onto
     // the compacted list, dropped when it is the identity (a filter that kept everything, no reorder).
-    std::vector<TurnSolver::Plan> real_out;
+    // IN PLACE (memory only; see PbMoveSlot): the kept real entries compact within `derived` (its capacity is never
+    // priced -- the store shrinks the list first, the scratch entry is unaccounted), the kept prototypes within
+    // lz.protos, re-housed at the push_back growth of the kept count exactly as the old copy-out left them (the store
+    // prices them: PbLazyStoredBytes); the small per-fan vectors are rebuilt fresh, as before.
+    std::size_t wl = 0, wf = 0;
     PbLazyLayout nl;
     CandOrder no;
     {
         const std::size_t N = derived.size() + lz.P;
+        const std::size_t n_real = derived.size();
         std::vector<std::uint32_t> new_of(N, UINT32_MAX);
         std::vector<char> used(N, 0);
         for (const std::uint32_t fi : sel) { used[fi] = 1; }
@@ -140682,7 +140761,8 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             {
                 if (!used[full]) { continue; }
                 new_of[full] = next++;
-                real_out.push_back(std::move(derived[li]));
+                if (wl != li) { PbMoveSlot(derived, wl, li); }
+                ++wl;
             }
         };
         for (std::size_t b = 0; b < lz.NumBlocks(); ++b)
@@ -140696,7 +140776,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                 for (std::size_t k = 0; k < n && !any; ++k) { any = used[full + k] != 0; }
                 if (any)
                 {
-                    if (!opened) { nl.OpenBlock(real_out.size()); opened = true; }
+                    if (!opened) { nl.OpenBlock(wl); opened = true; }
                     std::size_t pin_off = (lz.ProphetsFan(fi) || lz.fan_kind[fi] == kFanPayDraw) ? lz.fan_pin_off[fi] : 0;
                     if (lz.LookTopFan(fi))
                     {
@@ -140706,14 +140786,19 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                                            lz.pin_flat.begin() + static_cast<std::ptrdiff_t>(lz.fan_pin_off[fi]),
                                            lz.pin_flat.begin() + static_cast<std::ptrdiff_t>(lz.fan_pin_off[fi] + n * w));
                     }
-                    nl.AddFan(std::move(lz.protos[fi]), lz.fan_n[fi], lz.fan_kind[fi], lz.fan_base[fi], pin_off,
-                              lz.fan_pin_w[fi]);
+                    if (wf != fi) { PbMoveSlot(lz.protos, wf, fi); }
+                    ++wf;
+                    nl.AddFanMeta(lz.fan_n[fi], lz.fan_kind[fi], lz.fan_base[fi], pin_off, lz.fan_pin_w[fi]);
                     for (std::size_t k = 0; k < n; ++k) { new_of[full + k] = next++; }
                 }
                 full += n;
             }
         }
-        take_real_until(derived.size());
+        take_real_until(n_real);
+        derived.erase(derived.begin() + static_cast<std::ptrdiff_t>(wl), derived.end());
+        lz.protos.erase(lz.protos.begin() + static_cast<std::ptrdiff_t>(wf), lz.protos.end());
+        PbCapacityTo(lz.protos, PbPushBackCapacity(wf));
+        nl.protos.swap(lz.protos);
         nl.CloseBlock();
         bool identity = sel.size() == static_cast<std::size_t>(next);
         no.perm.resize(sel.size());
@@ -140728,10 +140813,32 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         if (!nl.active)
         {
             // Nothing synthesised is named: the compacted real entries ARE the list, in selection order.
+            if (identity) { return std::move(derived); }
+            if (sel.size() == wl)
+            {
+                // The selection names each kept entry once, so no.perm is a permutation of [0, wl): gather it IN
+                // PLACE, cycle by cycle (ordered[i] = derived[perm[i]], the copy-out below without the copy).
+                std::vector<char> done(wl, 0);
+                for (std::size_t i = 0; i < wl; ++i)
+                {
+                    if (done[i] || no.perm[i] == i) { done[i] = 1; continue; }
+                    TurnSolver::Plan hold(std::move(derived[i]));
+                    std::size_t j = i;
+                    for (;;)
+                    {
+                        done[j] = 1;
+                        const std::size_t k = no.perm[j];
+                        if (k == i) { std::destroy_at(&derived[j]); std::construct_at(&derived[j], std::move(hold)); break; }
+                        PbMoveSlot(derived, j, k);
+                        j = k;
+                    }
+                }
+                return std::move(derived);
+            }
             std::vector<TurnSolver::Plan> ordered;
             ordered.reserve(sel.size());
             for (std::size_t i = 0; i < sel.size(); ++i)
-            { ordered.push_back(std::move(real_out[identity ? i : no.perm[i]])); }
+            { ordered.push_back(std::move(derived[identity ? i : no.perm[i]])); }
             return ordered;
         }
     }
@@ -140739,7 +140846,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
     pblazycands::g_bp_avoided.fetch_add(static_cast<long long>(nl.P), std::memory_order_relaxed);
     *lz_out  = std::move(nl);
     *ord_out = std::move(no);
-    return real_out;
+    return std::move(derived);
 }
 
 // MTG_BP_DERIVE_STATS=1 (DIAGNOSTIC, count-only; play-neutral): every continuation-list DERIVATION
