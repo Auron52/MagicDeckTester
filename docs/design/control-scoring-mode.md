@@ -1261,6 +1261,12 @@ What this needs:
   appears.
 * **When:** after stage 3, because the rollouts need a search that already optimises E. Until then Enchanted
   Evening has no generated artifacts.
+* **For a control-heavy deck it is the ONLY keep table (USER 2026-11-27, verbatim):** "Going forward we will create a
+  mulligan profile, but it will be based on this new mode instead of goldfishing." Enchanted Evening and every
+  later `goldfish: false` deck get exactly one keep table, the scored one, under the same `.control.` file name, so
+  that nothing can mistake it for a goldfish table. Its route: control-mode suite rows first (the deck-in-suite-
+  before-artifacts rule, applied to the control-mode tier), then `mullgen` in its control mode. The goldfish route
+  keeps refusing the deck.
 * **Existing decks with control cards** may get a scored table "going forward". Such a deck carries both
   `goldfish: true` and `control_score: true`, and needs control-mode suite rows first, by the same rule that puts
   a deck in the suite before its artifacts. `mullgen.sh` today refuses a `goldfish: false` deck. A scored-table
