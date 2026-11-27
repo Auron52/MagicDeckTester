@@ -1163,6 +1163,7 @@ TEST_CASE("Prevent Damage batch timing: a Manabarbs under a Tamanoa no longer ke
 
 TEST_CASE("Prevent Damage pain deferral: {C} is generic while no {C} pip is live (s61013 T4, lone Vito)")
 {
+    EnsureCardsPd();   // the lookup runs before any Board(): load the DB here (order-independent)
     const CardDefinition* vito = CardDatabase::Instance().Lookup("Vito, Thorn of the Dusk Rose");
     REQUIRE(vito != nullptr);
     auto pay = [&](bool c_generic) -> GameState
@@ -1413,6 +1414,7 @@ TEST_CASE("Prevent Damage useful-mode payment: the rest of the line stays payabl
         Put(s, "Ancient Tomb");
         return s;
     };
+    EnsureCardsPd();   // the lookup runs before any Board(): load the DB here (order-independent)
     const CardDefinition* dina = CardDatabase::Instance().Lookup("Dina, Soul Steeper");
     REQUIRE(dina != nullptr);
     bool control_strands = false;
