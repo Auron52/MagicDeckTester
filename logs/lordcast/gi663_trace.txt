@@ -26,3 +26,8 @@ NEXT SUSPECTS (not yet run): (1) an FSLineWin T4 path that returns a kill withou
 short-circuit -- read FSLineWin (TurnSolver.cpp ~124844) for returns before the [fsw] print at ~127498; (2) the multikick Warcaller
 kick-count variants in the T4 enumeration: where the lever's AttackTapLoss walk (kept lord bodies tapped, re-projection taps the spent
 sources) changes plan values, a value-ordered cut on kick variants would drop the x8 line only under the lever.
+
+ALSO RULED OUT (off stays T4 675b2b04191b09d4; on stays T5): the winless certificate and its go-off seeds (MTG_WINLESS_SEED=0
+MTG_WINLESS_CASTSEED=0; MTG_WINLESS_CERT=0 -- on moves to digest 9dc489bccd643a54 but stays T5). So suspect (1)'s seed path is not it;
+the remaining FSLineWin kill returns to read are ~127103 (bp continuation SimulateCombat kill), ~127308 (per-plan kill, after the
+put-fold), ~127428 (dork-release swing kill) -- add the [fsw] trace (or a print) at each and replay offF/onF at MTG_FSW_TURN=4.
