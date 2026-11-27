@@ -60,9 +60,28 @@ KOLD_EVENTS
   are fixed. Item e (Karrthus need-later past Apex) is untouched (the lever reads only the named line).
 
 **Gate**:
-GATE
+Dragonstorm slice, 72,000 games per arm, off vs on (lever `=0` vs default):
+
+| | off | on |
+|---|---:|---:|
+| declared APPLY-DROP flags | 270 | 231 |
+| declared events | 50 | 46 |
+| Kolaghan declared flags | 144 | 99 |
+| Karrthus declared flags | 35 | 41 |
+| Karrthus need-later flags | 279 | 274 |
+| APPLY-DROP-ORDER | 66 | 58 |
+| ENUM-GAP | 27 | 25 |
+| turns | 313,583 | 313,580 |
+
+Units -0.019%, CPU +0.045%. One new event (Karrthus s30106357 T5) is in a block whose play moved (10 of 362 blocks
+differ). Event repros: Kolaghan declared flags 145 -> 100; five events fixed (s30118865, s30120119, s30129637,
+s30142598, s30155333; the last now wins T4 instead of T5); with the lever off all 23 game logs equal the round-2 binary.
 
 **Held-out play A/B**:
-AB
+every suite deck, standard and 2HG, seed base 5310000 + gi, game_index = gi; 43,800 pairs. Net 0, 0 slower and 0
+faster in every shape (Dragonstorm 3,000 + 3,000 pairs included). Units -0.00% overall (Dragonstorm 2HG -0.01%), CPU
+-0.05% (noise). No slower game, so no d8 b0 replay was owed.
 
-Verdict: VERDICT
+Verdict: **ADOPT, default ON** (`MTG_ONDEMAND_LUMP_KEEP_OWED`; `=0` byte-identical). It removes 45 Kolaghan declared flags
+with no slower game anywhere and no CPU cost. Still open: the two-Apex shape (42 flags), the later-Song float (24) and
+the Territory {B} source (3), plus the need-later Karrthus cluster.
