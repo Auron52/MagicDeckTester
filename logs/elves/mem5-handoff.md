@@ -40,7 +40,12 @@ Predecessor context: logs/elves/mem4-handoff.md (read its Measurement + dominanc
   not maintained by compactions, and later axes edit prototypes independently (bp_wave0, legend_keep_turn) -- a design
   change, not an in-place tidy.
 
-## Queued / running jobs (all mine)
+## DIGEST CHECK RESULT (15:40 UTC): PASSES -- play-identical
+`python3 S/dig/cmp.py S/dig/cap.out S/dig/sav.out`: std 1000 paired digest!= 0 winturn!= 0 units!= 0 (ms/game 1032 -> 935);
+2hg 1000 paired digest!= 0 winturn!= 0 units!= 0 (ms/game 2534 -> 2332); missing 0/0. Batch maxrss 5.60 -> 5.58 GB,
+wall 2:14 -> 2:04. So step 3 runs on bin_sav.
+
+## Queued / running jobs (all mine) -- as of the handoff; the digest check below is now DONE (result above)
 * DIGEST CHECK (step 2's bar): S/dig/run.sh, PID 2895452 (flock 2895453, waiting on heavy.lock behind another session's
   ./build.sh, PID 2895011). Runs S/dig/dig.json (1000 std + 1000 2HG, seeds 9740001+gi, game_index gi, d5 b20, profile
   S/ab/Elves.profile.json = committed HEAD profile, shipped cap default) under bin_cap then bin_sav, each one pooled
