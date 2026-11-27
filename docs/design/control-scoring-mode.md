@@ -840,7 +840,18 @@ What the design does about it (no new rule, a measurement):
   close to zero delay. The per-deck partial scores keep it at zero there rather than averaging in the burn-deck
   gain. Elsewhere it is mostly a single round on some of the gauntlet decks, so averaged over all of them it moves
   E by a fraction of a round. The race-win check above stays as the guard. No correction is planned unless stage 1
-  shows a larger effect. It also has a hard counter in the gauntlet: Screaming Nemesis's lockout, above. The suite's life-gain
+  shows a larger effect.
+* **Why it is bounded: early kills are close, turn-5 kills are not (USER 2026-11-27, verbatim):** "Because, in my
+  experience, turn 3 or 4 are often a fight to hit. Turn 5, for most decks, is really easy to hit and you usually
+  win by a lot on that turn." So a few life pushes a turn-3 or turn-4 kill back one round, and the delayed kill
+  then lands with damage to spare. The delay stops at about one round.
+* **A cheap measurement that follows from it.** The fixed-seed baseline games (section 7.5) also record each
+  gauntlet game's cumulative damage to us at the end of every round. With that, gaining L life on round t delays a
+  damage kill to the first round where the cumulative damage reaches 20 + L. That can be read off the stored
+  baselines, with no replay. It assumes the gauntlet deck's play does not change in response, which a sample of
+  real replays checks. A kill that does not go through our life total (an alternate win) is marked as such and
+  gets no delay. The same per-round damage curve shows the USER's point directly: the margin over lethal, by kill
+  turn, for each gauntlet deck. It also has a hard counter in the gauntlet: Screaming Nemesis's lockout, above. The suite's life-gain
 decks (Selesnya Lifegain, Critter Lifegain, Martyr Lifegain, Lifegain Heliod Combo) are goldfish decks today. If
 the USER ever wants their life gain credited, they are candidates to carry both modes.
 
@@ -978,7 +989,8 @@ potentially calculate it once and only calculate the other numbers multiple time
 * **Fixed seeds per gauntlet deck.** The mapping uses one fixed, held-out seed set per gauntlet deck (at least 20
   games each), never reused by a tier.
 * **Baseline table, built once.** Each gauntlet deck's kill turn with no control, per seed, at the mapping horizon
-  of 15 (Q5), is stored and reused by every mapping key and every control deck. It is NOT the suite's ground
+  of 15 (Q5), together with its cumulative damage to us at the end of each round (which prices life gain without a
+  replay, section 5.6), is stored and reused by every mapping key and every control deck. It is NOT the suite's ground
   truth: the tiers stop at turn 8 and use other seeds. The suite's turn 4.6 average kill says this is a small
   run, about 63 x 20 games once.
 * **Only the controlled games are played per key.** The delay of a key is its controlled game's kill turn minus
