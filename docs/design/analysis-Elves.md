@@ -582,3 +582,31 @@ and any misplays they reveal are fixed.
 * Pre-existing defect seen: test/viewer_client_check.js "no silent revert" fails 3 checks on origin too (replay drift
   to a tutor_etb decision) -- not yet assigned.
 * Cron b3381ea5 (2-hourly, session-only) armed.
+
+## Coordinator checkpoint 11 (2026-11-27 ~09:00 UTC) -- RESUME HERE
+
+USER 2026-11-27 ~07:15: "Okay, I finished the rest of seeds 1-10 in terms of references. You should check they are
+working, finish up anything else remaining and then proceed with the mulligan profile."
+* References: references/Elves/claude_s1_gi0 .. claude_s10_gi9 all committed + pushed (last e1570da74). Strict
+  viewer_protocol_check on all 10: 10 ok, 0 drift / enum-gap / board-diverged. ref_bench: human 4.50, search 4.30,
+  0/10 short, search 1 turn faster on s3 and s4.
+* Play batch on wip/elves-int (rebased onto origin e1570da74, which carries Dragonstorm APPLY-DROP dea141a1e):
+  c39ff9e5d+2c6a12975 discard buckets (default ON, USER rule; 0/1600 paired games move);
+  5e8e09120 holdall scaling band (round 2 of the smarter rules: lump / sink-aware equal holdall on win turns on fresh
+  seeds; lump saves ~0.3% 2HG units only; holdall integrated as the recommended default, USER decision open);
+  85e09656e+bf58ca704+dbcefd4ed+887a691a6 kick cap 20 + Visionary spare-{G} draw beyond the horizon, amended so a
+  pre-combat {G} never taps an attack-ready creature (the USER's "if you don't have anything else to use the mana
+  for": attacking is a use). Amendment A/B: d0 -0.0085 (6 slower / 23 faster), std/2HG d5 b20 0/0. No selector left.
+* Pre-rebase validation (78baac178): units 4327/4327; smoke + regression moved only elves/elves2hg keys, searched 0
+  slower / 3 faster, d0 net faster; 964 refs replay with 0 drift. GT commit dropped at the rebase (GT conflict with
+  the Dragonstorm accept) and is being REGENERATED under the rebased binary: push_queue hold -> heavy.lock ->
+  build/scratch/elves-int/validate.sh (status validate.status, DONE marker validate.DONE). Lease is ours.
+* Then: accept --deck=elves,elves2hg (smoke + regression), check_gt_logs, commit, `push_queue.py land`, CI watch;
+  then START the Elves mullgen from this worktree: `MTG_RSS_CAP_GB=20 flock heavy.lock bash scripts/mullgen.sh run
+  decks/Elves` (complete recipe, discovery K=17 expected, no journal exists), harness-tracked, heartbeat in 10 min,
+  2-hourly durable:false cron, append docs/design/slow-generation-jobs.md. Maze's End K=20 (wip/maze-gen2) follows it.
+* MTG_ATTACK_LORD_CAST round 2 (wip/elves-lordcast): fails the bar (Boars d0 +163, Goblins d0 +49, Elves +3, 2HG +8,
+  2 unrecoverable at d8 b0); stays OFF pending the USER. Its temp selectors live only on that wip branch.
+* OPEN USER QUESTIONS: holdall vs holdall+lump; do two Galadhrim Brigades count as a split (2HG 814, unfindable at
+  d8 b0 under the no-split rule); MTG_ATTACK_LORD_CAST off; the 4 discard-rule readings; Shepherd / Ezuri inert
+  clauses + six INERT_PARAMS sign-offs; kick cap 20 vs 2HG's 30 life.
