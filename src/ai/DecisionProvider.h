@@ -5443,7 +5443,12 @@ public:
     // `plan` (may be null: a caller holding no TurnSolver::Plan) is the whole TurnSolver::Plan the view was
     // taken from, opaque here (TurnSolver.h is not included); a provider that needs plan identity beyond the
     // actions and the land (ElvesProvider's group key) casts it back in DecisionProviders.cpp.
-    struct PlanView { const std::vector<Action>* actions; const std::string* land; const void* plan = nullptr; };
+    // `lazy` != nullptr: the view stands for entry `lazy_k` of fan `lazy_fan` of the engine's lazy clone layout
+    // (TurnSolver.cpp PbLazyLayout), and `plan` is that fan's PROTOTYPE -- every field but the one the fan varies.
+    // actions / land are the prototype's (a fan never varies them). A provider that reads any other per-plan
+    // field copies the entry with TurnSolver::CopyPlanView, and declares so with PlanListAdmitReadsLazyViews.
+    struct PlanView { const std::vector<Action>* actions; const std::string* land; const void* plan = nullptr;
+                      const void* lazy = nullptr; std::size_t lazy_fan = 0; int lazy_k = 0; };
     virtual bool PlanListFilterLive(const GameState&) const { return false; }
     // CastDominanceLive / CastDominanceClass -- a provider-DECLARED dominance premise for the engine's plan-list
     // CAST / LAND DOMINANCE FOLD (TurnSolver.cpp CastDominanceFold; Maze's End P7). Live is asked once per
@@ -5579,6 +5584,13 @@ public:
     // drops (Elves 2026-11-26: a 240,928-plan continuation list fanned to 1.66M plans, ~12 GB in one game, before
     // the scaling rule kept a few thousand). Default false: byte-identical. ElvesProvider: true.
     virtual bool PlanListFilterBeforeAxes(const GameState&) const { return false; }
+
+    // PlanListAdmitReadsLazyViews -- PlanListAdmitAt reads a plan only through its view's actions / land, or (for
+    // anything else) through TurnSolver::CopyPlanView, so the engine may hand it a LAZY list's entries as views
+    // (PlanView::lazy) instead of materialising every clone first (TurnSolver.cpp ApplyProviderPlanListFilter). A
+    // MEMORY bound: the verdicts are the verdicts on the materialised list, entry for entry. Default false:
+    // byte-identical. ElvesProvider: true (the Visionary pay-draw fan, kFanPayDraw).
+    virtual bool PlanListAdmitReadsLazyViews(const GameState&) const { return false; }
 };
 
 // ---------------------------------------------------------------------------------------------------

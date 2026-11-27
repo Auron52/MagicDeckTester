@@ -3984,6 +3984,7 @@ public:
     // Wave X), so the rule's verdict on an axis variant is its verdict on the base: apply it before the fan too.
     // A memory bound (see the base hook); play-neutral by that argument and measured digest-identical.
     bool PlanListFilterBeforeAxes(const GameState&) const override { return true; }
+    bool PlanListAdmitReadsLazyViews(const GameState&) const override { return true; }   // ElvesScalingAdmit: CopyPlanView
     // The USER's cleanup-discard buckets (2026-11-27: "a discard policy that just buckets mana and threats", amended:
     // "feel free to add more mana as long as we have 1-2 scaling threats"): DEAD first; with a scaling threat (a mana
     // sink) in hand keep the best 2 sinks and favour MANA over every other threat; with none keep up to 3 threats

@@ -5396,8 +5396,12 @@ static bool PbLazyPonderOn()
 // kFanCastTrigger (Blood Sun perf part 3, MTG_BLOODSUN_LAZY_CTT): the SEARCHED CAST-TRIGGER TARGETS fan (Ulamog's
 // "exile two target permanents"); entry k carries cast_trigger_target_choice = the k-th rank of
 // StatePinVariantRanks(inherited, width), with `inherited + 1` stored in fan_pin_w (see Edit).
+// kFanPayDraw (Elves 2026-11-27, MTG_PB_LAZY_PAYDRAW): the LEAF-CROWNED VISIONARY pay-draw fan (the put-in-hand fold's
+// "where the first payment falls, and how many of that cast's triggers pay"); entry k carries mihail_pay_choice = a
+// fresh Pin(bound) with bits [off_j, off_j + m) set, (j, m) the k-th (group, count) in the eager loop's order. The
+// group sizes are packed four bits each into fan_pin_off (group 0 lowest), their number in fan_pin_w (see Edit).
 enum : char { kFanPutBack = 0, kFanLookTop = 1, kFanPonder = 2,
-              kFanProphetsChampion = 3, kFanProphetsSac = 4, kFanCastTrigger = 5 };
+              kFanProphetsChampion = 3, kFanProphetsSac = 4, kFanCastTrigger = 5, kFanPayDraw = 6 };
 
 struct PbLazyLayout
 {
@@ -5452,6 +5456,32 @@ struct PbLazyLayout
         {
         case kFanPutBack: out.putback_choice = k; return;
         case kFanPonder:  out.ponder_choice  = k; return;
+        case kFanPayDraw:
+        {
+            // The eager loop's order: for each group j (s_j triggers), m = 1..s_j. A FRESH choice, as the eager
+            // loop assigns one (its spare word is the default's).
+            const int ng = fan_pin_w[f];
+            const std::size_t packed = fan_pin_off[f];
+            std::size_t bound = 0;
+            for (int j = 0; j < ng; ++j) { bound += (packed >> (4 * j)) & 15u; }
+            MihailPayChoices choice;
+            choice.Pin(bound);
+            std::size_t off = 0;
+            int left = k;
+            for (int j = 0; j < ng; ++j)
+            {
+                const int g = static_cast<int>((packed >> (4 * j)) & 15u);
+                if (left <= g)
+                {
+                    for (int b = 0; b < left; ++b) { choice.bits[off + static_cast<std::size_t>(b)] = 1; }
+                    break;
+                }
+                left -= g;
+                off += static_cast<std::size_t>(g);
+            }
+            out.mihail_pay_choice = std::move(choice);
+            return;
+        }
         case kFanCastTrigger:
         {
             // StatePinVariantRanks(inh, w)[k - 1]: 1..w-1 with no inherited pin, else 0..w-1 without `inh` (an
@@ -105992,9 +106022,26 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         if (!mihail_type && (!live.empty() || plan_casts_source))
         {
             const bool fold = BpPutInHandEnabled();
+            // THE LAZY FAN (kFanPayDraw; MTG_PB_LAZY_PAYDRAW, DEFAULT ON, =0 materialises it). Held as one prototype
+            // per base plan in the lazy clone layout instead of sum_j s_j Plans. WHY (Elves 2026-11-27, mulligan gen at
+            // d1 b1): a post-Genesis-Wave board with three Visionaries derived a 210,872-plan continuation list (every
+            // Wave X times the activation subsets), and this fan took it to 1,504,630 entries -- 7.0 GB and 8.8 GB RSS
+            // for ONE rollout, 28 such rollouts in flight OOM-killed the generation. EXACT: entry k is its prototype
+            // (the k = 1 clone as the eager loop builds it, every later write applied by the layout's machinery) with
+            // mihail_pay_choice set from k, so the full list is the same list, position for position; every later
+            // axis skips a clone (PlanIsAxisVariant covers a pinned mihail_pay_choice) or materialises the layout
+            // first; MTG_PB_LAZY_CANDS_VERIFY compares every index. Folded fans only (the unfolded binary walk stays
+            // eager), and only when EVERY fanned plan's groups pack (<= 15 groups of <= 15 triggers): otherwise the
+            // whole axis is eager, so the layout only ever holds a fan-only axis in the eager order.
+            static const bool s_pd_lazy = EnvOn("MTG_PB_LAZY_PAYDRAW", true);
+            const bool pd_lazy = pb_lazy != nullptr && fold && s_pd_lazy && PbLazyCandsOn();
+            struct PdFan { std::size_t pi; int n; std::size_t packed; int ng; };
+            std::vector<PdFan> pd_fans;
+            bool pd_packs = pd_lazy;
             std::vector<TurnSolver::Plan> extra;
-            for (const TurnSolver::Plan& p : all)
+            for (std::size_t pd_pi = 0, pd_n = all.size(); pd_pi < pd_n; ++pd_pi)
             {
+                const TurnSolver::Plan& p = all[pd_pi];
                 if (p.mihail_pay_choice.IsPinned()) { continue; }
                 std::vector<const CardDefinition*> srcs = live;
                 std::vector<std::size_t> groups;   // per matching cast: the number of triggers it fires
@@ -106019,6 +106066,22 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     while (choice.Next()) { TurnSolver::Plan v = p; v.mihail_pay_choice = choice; extra.push_back(std::move(v)); }
                     continue;
                 }
+                if (pd_packs)
+                {
+                    std::size_t packed = 0;
+                    if (groups.size() > 15) { pd_packs = false; }
+                    for (std::size_t j = 0; pd_packs && j < groups.size(); ++j)
+                    {
+                        if (groups[j] > 15) { pd_packs = false; break; }
+                        packed |= static_cast<std::size_t>(groups[j]) << (4 * j);
+                    }
+                    if (pd_packs)
+                    {
+                        pd_fans.push_back(PdFan{ pd_pi, static_cast<int>(bound), packed, static_cast<int>(groups.size()) });
+                        continue;
+                    }
+                    // A plan that does not pack: every fan recorded so far is emitted eagerly, in order, below.
+                }
                 std::size_t off = 0;
                 for (std::size_t g : groups)
                 {
@@ -106033,6 +106096,37 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     }
                     off += g;
                 }
+            }
+            // The fan of base plan pi, entry k (1-based), as the eager loop builds it.
+            auto pd_entry = [&](const PdFan& f, int k)
+            {
+                TurnSolver::Plan v = all[f.pi];
+                PbLazyLayout one;
+                one.fan_kind.push_back(kFanPayDraw);
+                one.fan_pin_off.push_back(f.packed);
+                one.fan_pin_w.push_back(f.ng);
+                one.Edit(v, 0, k);
+                return v;
+            };
+            if (!pd_fans.empty() && pd_packs)
+            {
+                // Every fanned plan packs, so `extra` holds nothing: the whole axis is one block at the list's end.
+                const std::size_t pd_p0 = pb_lazy->P;
+                pb_lazy->OpenBlock(all.size());
+                for (const PdFan& f : pd_fans)
+                { pb_lazy->AddFan(pd_entry(f, 1), f.n, kFanPayDraw, f.pi, f.packed, f.ng); }
+                pb_lazy->CloseBlock();
+                pblazycands::g_lazy.fetch_add(1, std::memory_order_relaxed);
+                pblazycands::g_avoided.fetch_add(static_cast<long long>(pb_lazy->P - pd_p0), std::memory_order_relaxed);
+            }
+            else if (!pd_fans.empty())
+            {
+                // A plan that did not pack came after these fans (the eager loop ran from there): expand the recorded
+                // fans in front of it, which is where the eager loop put their entries.
+                std::vector<TurnSolver::Plan> merged;
+                for (const PdFan& f : pd_fans) { for (int k = 1; k <= f.n; ++k) { merged.push_back(pd_entry(f, k)); } }
+                merged.insert(merged.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+                extra.swap(merged);
             }
             all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
         }
@@ -109063,12 +109157,111 @@ static void PreferMillFetchHold(const GameState& state, std::vector<TurnSolver::
 // both EnumeratePlansWithLandUncached and EnumerateM2PlansBody call this. (F5, 2026-11-18: the main-2 host never
 // applied it, so a searched main 2 could still branch on -- and commit -- a Treasure plan.) It only removes plans
 // (possibly every one). Not live for any other deck (one virtual call).
+void TurnSolver::CopyPlanView(const void* plan, const void* lazy, std::size_t lazy_fan, int lazy_k, Plan& out)
+{
+    out = *static_cast<const Plan*>(plan);
+    if (lazy != nullptr) { static_cast<const PbLazyLayout*>(lazy)->Edit(out, lazy_fan, lazy_k); }
+}
+
+// THE PROVIDER'S PLAN-LIST RESTRICTION ON A LAZY LIST (DecisionProvider::PlanListAdmitReadsLazyViews; Elves
+// 2026-11-27). The verdicts are taken over the FULL list, entry for entry in full-list order -- a synthesised entry
+// is handed over as a view of its fan prototype plus (fan, k), which the provider copies through CopyPlanView -- so
+// they are exactly the verdicts the materialised list gets. When every fan's entries share one verdict the list is
+// filtered IN PLACE: dropped real entries are erased and a dropped fan leaves the layout whole, and the result is
+// the materialised filter's list position for position. Otherwise (a fan split by the verdicts) the layout is
+// materialised and filtered by the same verdicts. Pay-draw fans only (kFanPayDraw: the one fan whose entries the
+// opted-in provider reads this way); returns false, touching nothing, for any other layout. WHY: the end-of-
+// enumeration filter materialised every clone, so a lazy fan bought nothing on the Elves continuation list it was
+// built for (1.5M entries, 7 GB).
+static bool ApplyProviderPlanListFilterLazy(const GameState& state, bool is_pre_combat, const DecisionProvider& prov,
+                                            std::vector<TurnSolver::Plan>& all, PbLazyLayout& lz)
+{
+    for (const char k : lz.fan_kind) { if (k != kFanPayDraw) { return false; } }
+    std::vector<DecisionProvider::PlanView> views;
+    views.reserve(all.size() + lz.P);
+    std::size_t li = 0;
+    auto real_until = [&](std::size_t at)
+    { for (; li < at; ++li) { views.push_back({ &all[li].actions, &all[li].land_to_play, &all[li] }); } };
+    for (std::size_t b = 0; b < lz.NumBlocks(); ++b)
+    {
+        real_until(lz.blk_at[b]);
+        for (std::size_t fi = lz.blk_f0[b], fe = lz.BlockFanEnd(b); fi < fe; ++fi)
+        {
+            const TurnSolver::Plan& pr = lz.protos[fi];
+            for (int k = 1; k <= lz.fan_n[fi]; ++k)
+            { views.push_back({ &pr.actions, &pr.land_to_play, &pr, &lz, fi, k }); }
+        }
+    }
+    real_until(all.size());
+    std::vector<char> admit(views.size(), 1);
+    prov.PlanListAdmitAt(state, is_pre_combat, views, admit);
+    views.clear();
+    views.shrink_to_fit();
+    // Does every fan share one verdict?
+    bool uniform = true;
+    {
+        std::size_t full = 0;
+        li = 0;
+        for (std::size_t b = 0; b < lz.NumBlocks() && uniform; ++b)
+        {
+            full += lz.blk_at[b] - li;
+            li = lz.blk_at[b];
+            for (std::size_t fi = lz.blk_f0[b], fe = lz.BlockFanEnd(b); fi < fe && uniform; ++fi)
+            {
+                const std::size_t n = static_cast<std::size_t>(lz.fan_n[fi]);
+                for (std::size_t k = 1; k < n; ++k) { if (admit[full + k] != admit[full]) { uniform = false; break; } }
+                full += n;
+            }
+        }
+    }
+    if (!uniform)
+    {
+        PbLazyMaterialize(all, lz);
+        std::size_t w = 0;
+        for (std::size_t i = 0; i < all.size(); ++i)
+        { if (admit[i]) { if (w != i) { all[w] = std::move(all[i]); } ++w; } }
+        all.resize(w);
+        return true;
+    }
+    // In place: the materialised filter's list, held as real entries + the surviving fans in their positions.
+    std::vector<TurnSolver::Plan> real;
+    real.reserve(all.size());
+    PbLazyLayout nl;
+    std::size_t full = 0;
+    li = 0;
+    auto take_real_until = [&](std::size_t at)
+    { for (; li < at; ++li, ++full) { if (admit[full]) { real.push_back(std::move(all[li])); } } };
+    for (std::size_t b = 0; b < lz.NumBlocks(); ++b)
+    {
+        take_real_until(lz.blk_at[b]);
+        bool opened = false;
+        for (std::size_t fi = lz.blk_f0[b], fe = lz.BlockFanEnd(b); fi < fe; ++fi)
+        {
+            const std::size_t n = static_cast<std::size_t>(lz.fan_n[fi]);
+            if (admit[full])
+            {
+                if (!opened) { nl.OpenBlock(real.size()); opened = true; }
+                nl.AddFan(std::move(lz.protos[fi]), lz.fan_n[fi], lz.fan_kind[fi], lz.fan_base[fi], lz.fan_pin_off[fi],
+                          lz.fan_pin_w[fi]);
+            }
+            full += n;
+        }
+    }
+    take_real_until(all.size());
+    nl.CloseBlock();
+    all.swap(real);
+    lz = std::move(nl);
+    return true;
+}
+
 static void ApplyProviderPlanListFilter(const GameState& state, bool is_pre_combat,
                                         std::vector<TurnSolver::Plan>& all, PbLazyLayout* pb_lazy)
 {
     if (all.empty() || HumanPlayActive() || DecisionUnpruned()) { return; }
     const DecisionProvider& prov = ResolveProvider(state);
     if (!prov.PlanListFilterLive(state)) { return; }
+    if (pb_lazy != nullptr && pb_lazy->active && prov.PlanListAdmitReadsLazyViews(state)
+        && ApplyProviderPlanListFilterLazy(state, is_pre_combat, prov, all, *pb_lazy)) { return; }
     if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
     std::vector<DecisionProvider::PlanView> views;
     views.reserve(all.size());
@@ -140504,7 +140697,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                 if (any)
                 {
                     if (!opened) { nl.OpenBlock(real_out.size()); opened = true; }
-                    std::size_t pin_off = lz.ProphetsFan(fi) ? lz.fan_pin_off[fi] : 0;
+                    std::size_t pin_off = (lz.ProphetsFan(fi) || lz.fan_kind[fi] == kFanPayDraw) ? lz.fan_pin_off[fi] : 0;
                     if (lz.LookTopFan(fi))
                     {
                         pin_off = nl.pin_flat.size();
