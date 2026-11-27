@@ -1,0 +1,375 @@
+{
+  "seed": 8, "game_index": 7, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "opponent_land_entry": 1, "free_turns": 1, "opponent_spawn_land": 1, "opponent_bounce_opening": 1, "opponent_shuffle_ordinal": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 10, "name": "Elvish Clancaller" }, { "num": 17, "name": "Forest" }, { "num": 18, "name": "Forest" }, { "num": 19, "name": "Forest" }, { "num": 32, "name": "Galadhrim Brigade" }, { "num": 33, "name": "Galadhrim Brigade" }, { "num": 20, "name": "Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 10, "name": "Elvish Clancaller", "cost": "{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 17, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 10, "name": "Elvish Clancaller", "cost": "{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 17, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 10, "name": "Elvish Clancaller", "cost": "{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Forest", "cast=Elvish Clancaller"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Genesis Wave" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Plains" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 17, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 10, "name": "Elvish Clancaller", "cost": "{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100026, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Elvish Clancaller", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Elvish Clancaller"], "actions": [{ "card": "Elvish Clancaller" }] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Clancaller", "idx": 3, "num": 10, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 1, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 18, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100026, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Clancaller", "idx": 3, "num": 10, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 1, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 18, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100026, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Forest", "cast=Galadhrim Brigade"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Immaculate Magistrate" }],
+  "events": [{ "turn": 2, "kind": "land", "text": "opponent plays Plains" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Clancaller", "idx": 4, "num": 10, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 2, "num": 17, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 18, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 40, "name": "Immaculate Magistrate", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Galadhrim Brigade", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Galadhrim Brigade"], "actions": [{ "card": "Galadhrim Brigade" }] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Forest; cast: Genesis Wave (X=0)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Clancaller", "idx": 4, "num": 10, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Forest", "idx": 2, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }, { "name": "Galadhrim Brigade", "idx": 7, "num": 32, "sick": true, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 40, "name": "Immaculate Magistrate", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Elvish Clancaller (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Clancaller", "idx": 4, "num": 10, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Forest", "idx": 2, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }, { "name": "Galadhrim Brigade", "idx": 7, "num": 32, "sick": true, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 40, "name": "Immaculate Magistrate", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Forest", "cast=Elvish Archdruid"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Elvish Archdruid" }],
+  "events": [{ "turn": 3, "kind": "land", "text": "opponent plays Plains" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Clancaller", "idx": 5, "num": 10, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Forest", "idx": 3, "num": 17, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 4, "num": 18, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 19, "is_land": true, "taps": "G" }, { "name": "Galadhrim Brigade", "idx": 8, "num": 32, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 6, "name": "Elvish Archdruid", "cost": "{1}{G}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 40, "name": "Immaculate Magistrate", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Galadhrim Brigade", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Galadhrim Brigade"], "actions": [{ "card": "Galadhrim Brigade" }] },
+    { "index": 1, "summary": "land=Forest; cast: Immaculate Magistrate", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Immaculate Magistrate"], "actions": [{ "card": "Immaculate Magistrate" }] },
+    { "index": 2, "summary": "land=Forest; cast: Elvish Archdruid", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Elvish Archdruid"], "actions": [{ "card": "Elvish Archdruid" }] },
+    { "index": 3, "summary": "land=none; cast: Galadhrim Brigade", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade"], "actions": [{ "card": "Galadhrim Brigade" }] },
+    { "index": 4, "summary": "land=none; cast: Elvish Archdruid", "declared_order_payability": "not_verified", "land": null, "casts": ["Elvish Archdruid"], "actions": [{ "card": "Elvish Archdruid" }] },
+    { "index": 5, "summary": "land=Forest; cast: Genesis Wave (X=1)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 6, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Forest; cast: Genesis Wave (X=0)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: Genesis Wave (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Archdruid", "idx": 10, "num": 6, "sick": true, "is_land": false, "yield": 3, "power": 4, "toughness": 4 }, { "name": "Elvish Clancaller", "idx": 5, "num": 10, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Forest", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 18, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 20, "is_land": true, "taps": "G" }, { "name": "Galadhrim Brigade", "idx": 8, "num": 32, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 40, "name": "Immaculate Magistrate", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Elvish Clancaller (3), Galadhrim Brigade (4) — 7 to opponent (18→11)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Archdruid", "idx": 10, "num": 6, "sick": true, "is_land": false, "yield": 3, "power": 4, "toughness": 4 }, { "name": "Elvish Clancaller", "idx": 5, "num": 10, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Forest", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 18, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 20, "is_land": true, "taps": "G" }, { "name": "Galadhrim Brigade", "idx": 8, "num": 32, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 40, "name": "Immaculate Magistrate", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 21, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Llanowar Elves" }],
+  "events": [{ "turn": 4, "kind": "land", "text": "opponent plays Plains" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Archdruid", "idx": 11, "num": 6, "is_land": false, "taps": "G", "yield": 3, "power": 4, "toughness": 4 }, { "name": "Elvish Clancaller", "idx": 6, "num": 10, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Forest", "idx": 4, "num": 17, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 5, "num": 18, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 8, "num": 19, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 10, "num": 20, "is_land": true, "taps": "G" }, { "name": "Galadhrim Brigade", "idx": 9, "num": 32, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 33, "name": "Galadhrim Brigade", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 40, "name": "Immaculate Magistrate", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Llanowar Elves", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }, { "name": "Plains", "idx": 3, "num": 100039, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": [] },
+  "multikick_max": { "Galadhrim Brigade": 2 },
+  "multikick_cost_mv": { "Galadhrim Brigade": 2 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Galadhrim Brigade (squad x1), Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Llanowar Elves"], "cast_order_canonical": ["Galadhrim Brigade", "Llanowar Elves"], "actions": [{ "card": "Galadhrim Brigade", "kicked": true, "verb": "kick", "kick_count": 1, "kicked_cost_mv": 2 }, { "card": "Llanowar Elves" }] },
+    { "index": 1, "summary": "land=none; cast: Llanowar Elves, Galadhrim Brigade (squad x1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Galadhrim Brigade"], "cast_order_canonical": ["Llanowar Elves", "Galadhrim Brigade"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Galadhrim Brigade", "kicked": true, "verb": "kick", "kick_count": 1, "kicked_cost_mv": 2 }] },
+    { "index": 2, "summary": "land=none; cast: Galadhrim Brigade (squad x1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade"], "actions": [{ "card": "Galadhrim Brigade", "kicked": true, "verb": "kick", "kick_count": 1, "kicked_cost_mv": 2 }] },
+    { "index": 3, "summary": "land=none; cast: Galadhrim Brigade, Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Llanowar Elves"], "cast_order_canonical": ["Galadhrim Brigade", "Llanowar Elves"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Llanowar Elves" }] },
+    { "index": 4, "summary": "land=none; cast: Llanowar Elves, Galadhrim Brigade", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Galadhrim Brigade"], "cast_order_canonical": ["Llanowar Elves", "Galadhrim Brigade"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Galadhrim Brigade" }] },
+    { "index": 5, "summary": "land=none; cast: Immaculate Magistrate, Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Immaculate Magistrate", "Llanowar Elves"], "cast_order_canonical": ["Immaculate Magistrate", "Llanowar Elves"], "actions": [{ "card": "Immaculate Magistrate" }, { "card": "Llanowar Elves" }] },
+    { "index": 6, "summary": "land=none; cast: Llanowar Elves, Immaculate Magistrate", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Immaculate Magistrate"], "cast_order_canonical": ["Llanowar Elves", "Immaculate Magistrate"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Immaculate Magistrate" }] },
+    { "index": 7, "summary": "land=none; cast: Galadhrim Brigade", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade"], "actions": [{ "card": "Galadhrim Brigade" }] },
+    { "index": 8, "summary": "land=none; cast: Immaculate Magistrate", "declared_order_payability": "not_verified", "land": null, "casts": ["Immaculate Magistrate"], "actions": [{ "card": "Immaculate Magistrate" }] },
+    { "index": 9, "summary": "land=none; cast: Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves"], "actions": [{ "card": "Llanowar Elves" }] },
+    { "index": 10, "summary": "land=none; cast: Genesis Wave (X=0), Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave", "Llanowar Elves"], "cast_order_canonical": ["Genesis Wave", "Llanowar Elves"], "actions": [{ "card": "Genesis Wave" }, { "card": "Llanowar Elves" }] },
+    { "index": 11, "summary": "land=none; cast: Genesis Wave (X=1), Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave", "Llanowar Elves"], "cast_order_canonical": ["Genesis Wave", "Llanowar Elves"], "actions": [{ "card": "Genesis Wave", "x": 1 }, { "card": "Llanowar Elves" }] },
+    { "index": 12, "summary": "land=none; cast: Llanowar Elves, Genesis Wave (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Genesis Wave"], "cast_order_canonical": ["Llanowar Elves", "Genesis Wave"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Genesis Wave", "x": 1 }] },
+    { "index": 13, "summary": "land=none; cast: Genesis Wave (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 14, "summary": "land=none; cast: Genesis Wave (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 15, "summary": "land=none; cast: Galadhrim Brigade (squad x2), Llanowar Elves", "declared_order_payability": "known_drops", "land": null, "drops": ["Llanowar Elves"], "casts": ["Galadhrim Brigade", "Llanowar Elves"], "cast_order_canonical": ["Galadhrim Brigade", "Llanowar Elves"], "actions": [{ "card": "Galadhrim Brigade", "kicked": true, "verb": "kick", "kick_count": 2, "kicked_cost_mv": 4 }, { "card": "Llanowar Elves" }] },
+    { "index": 16, "summary": "land=none; cast: Llanowar Elves, Galadhrim Brigade (squad x2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Galadhrim Brigade"], "cast_order_canonical": ["Llanowar Elves", "Galadhrim Brigade"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Galadhrim Brigade", "kicked": true, "verb": "kick", "kick_count": 2, "kicked_cost_mv": 4 }] },
+    { "index": 17, "summary": "land=none; cast: Genesis Wave (X=4), Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave", "Llanowar Elves"], "cast_order_canonical": ["Genesis Wave", "Llanowar Elves"], "actions": [{ "card": "Genesis Wave", "x": 4 }, { "card": "Llanowar Elves" }] },
+    { "index": 18, "summary": "land=none; cast: Llanowar Elves, Genesis Wave (X=4)", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Genesis Wave"], "cast_order_canonical": ["Llanowar Elves", "Genesis Wave"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Genesis Wave", "x": 4 }] },
+    { "index": 19, "summary": "land=none; cast: Genesis Wave (X=3), Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave", "Llanowar Elves"], "cast_order_canonical": ["Genesis Wave", "Llanowar Elves"], "actions": [{ "card": "Genesis Wave", "x": 3 }, { "card": "Llanowar Elves" }] },
+    { "index": 20, "summary": "land=none; cast: Llanowar Elves, Genesis Wave (X=3)", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Genesis Wave"], "cast_order_canonical": ["Llanowar Elves", "Genesis Wave"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Genesis Wave", "x": 3 }] },
+    { "index": 21, "summary": "land=none; cast: Galadhrim Brigade (squad x2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade"], "actions": [{ "card": "Galadhrim Brigade", "kicked": true, "verb": "kick", "kick_count": 2, "kicked_cost_mv": 4 }] },
+    { "index": 22, "summary": "land=none; cast: Genesis Wave (X=4)", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 4 }] },
+    { "index": 23, "summary": "land=none; cast: Galadhrim Brigade (squad x1), Genesis Wave (X=0), Llanowar Elves", "declared_order_payability": "known_drops", "land": null, "drops": ["Genesis Wave"], "casts": ["Galadhrim Brigade", "Genesis Wave", "Llanowar Elves"], "cast_order_canonical": ["Galadhrim Brigade", "Genesis Wave", "Llanowar Elves"], "actions": [{ "card": "Galadhrim Brigade", "kicked": true, "verb": "kick", "kick_count": 1, "kicked_cost_mv": 2 }, { "card": "Genesis Wave" }, { "card": "Llanowar Elves" }] },
+    { "index": 24, "summary": "land=none; cast: Genesis Wave (X=0), Galadhrim Brigade (squad x1), Llanowar Elves", "declared_order_payability": "known_drops", "land": null, "drops": ["Galadhrim Brigade"], "casts": ["Genesis Wave", "Galadhrim Brigade", "Llanowar Elves"], "cast_order_canonical": ["Genesis Wave", "Galadhrim Brigade", "Llanowar Elves"], "actions": [{ "card": "Genesis Wave" }, { "card": "Galadhrim Brigade", "kicked": true, "verb": "kick", "kick_count": 1, "kicked_cost_mv": 2 }, { "card": "Llanowar Elves" }] },
+    { "index": 25, "summary": "land=none; cast: Llanowar Elves, Galadhrim Brigade (squad x1), Genesis Wave (X=0)", "declared_order_payability": "known_drops", "land": null, "drops": ["Genesis Wave"], "casts": ["Llanowar Elves", "Galadhrim Brigade", "Genesis Wave"], "cast_order_canonical": ["Llanowar Elves", "Galadhrim Brigade", "Genesis Wave"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Galadhrim Brigade", "kicked": true, "verb": "kick", "kick_count": 1, "kicked_cost_mv": 2 }, { "card": "Genesis Wave" }] },
+    { "index": 26, "summary": "land=none; cast: Galadhrim Brigade, Immaculate Magistrate, Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Immaculate Magistrate", "Llanowar Elves"], "cast_order_canonical": ["Galadhrim Brigade", "Immaculate Magistrate", "Llanowar Elves"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Immaculate Magistrate" }, { "card": "Llanowar Elves" }] },
+    { "index": 27, "summary": "land=none; cast: Galadhrim Brigade, Llanowar Elves, Immaculate Magistrate", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Llanowar Elves", "Immaculate Magistrate"], "cast_order_canonical": ["Galadhrim Brigade", "Llanowar Elves", "Immaculate Magistrate"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Llanowar Elves" }, { "card": "Immaculate Magistrate" }] },
+    { "index": 28, "summary": "land=none; cast: Immaculate Magistrate, Galadhrim Brigade, Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Immaculate Magistrate", "Galadhrim Brigade", "Llanowar Elves"], "cast_order_canonical": ["Immaculate Magistrate", "Galadhrim Brigade", "Llanowar Elves"], "actions": [{ "card": "Immaculate Magistrate" }, { "card": "Galadhrim Brigade" }, { "card": "Llanowar Elves" }] },
+    { "index": 29, "summary": "land=none; cast: Immaculate Magistrate, Llanowar Elves, Galadhrim Brigade", "declared_order_payability": "not_verified", "land": null, "casts": ["Immaculate Magistrate", "Llanowar Elves", "Galadhrim Brigade"], "cast_order_canonical": ["Immaculate Magistrate", "Llanowar Elves", "Galadhrim Brigade"], "actions": [{ "card": "Immaculate Magistrate" }, { "card": "Llanowar Elves" }, { "card": "Galadhrim Brigade" }] },
+    { "index": 30, "summary": "land=none; cast: Llanowar Elves, Galadhrim Brigade, Immaculate Magistrate", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Galadhrim Brigade", "Immaculate Magistrate"], "cast_order_canonical": ["Llanowar Elves", "Galadhrim Brigade", "Immaculate Magistrate"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Galadhrim Brigade" }, { "card": "Immaculate Magistrate" }] },
+    { "index": 31, "summary": "land=none; cast: Llanowar Elves, Immaculate Magistrate, Galadhrim Brigade", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Immaculate Magistrate", "Galadhrim Brigade"], "cast_order_canonical": ["Llanowar Elves", "Immaculate Magistrate", "Galadhrim Brigade"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Immaculate Magistrate" }, { "card": "Galadhrim Brigade" }] },
+    { "index": 32, "summary": "land=none; cast: Genesis Wave (X=3)", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 33, "summary": "land=none; cast: Galadhrim Brigade, Genesis Wave (X=2), Llanowar Elves", "declared_order_payability": "known_drops", "land": null, "drops": ["Llanowar Elves"], "casts": ["Galadhrim Brigade", "Genesis Wave", "Llanowar Elves"], "cast_order_canonical": ["Galadhrim Brigade", "Genesis Wave", "Llanowar Elves"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Genesis Wave", "x": 2 }, { "card": "Llanowar Elves" }] },
+    { "index": 34, "summary": "land=none; cast: Galadhrim Brigade, Llanowar Elves, Genesis Wave (X=2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Llanowar Elves", "Genesis Wave"], "cast_order_canonical": ["Galadhrim Brigade", "Llanowar Elves", "Genesis Wave"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Llanowar Elves" }, { "card": "Genesis Wave", "x": 2 }] },
+    { "index": 35, "summary": "land=none; cast: Genesis Wave (X=2), Galadhrim Brigade, Llanowar Elves", "declared_order_payability": "known_drops", "land": null, "drops": ["Galadhrim Brigade"], "casts": ["Genesis Wave", "Galadhrim Brigade", "Llanowar Elves"], "cast_order_canonical": ["Genesis Wave", "Galadhrim Brigade", "Llanowar Elves"], "actions": [{ "card": "Genesis Wave", "x": 2 }, { "card": "Galadhrim Brigade" }, { "card": "Llanowar Elves" }] },
+    { "index": 36, "summary": "land=none; cast: Llanowar Elves, Galadhrim Brigade, Genesis Wave (X=2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Galadhrim Brigade", "Genesis Wave"], "cast_order_canonical": ["Llanowar Elves", "Galadhrim Brigade", "Genesis Wave"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Galadhrim Brigade" }, { "card": "Genesis Wave", "x": 2 }] },
+    { "index": 37, "summary": "land=none; cast: Llanowar Elves, Genesis Wave (X=2), Galadhrim Brigade", "declared_order_payability": "known_drops", "land": null, "drops": ["Galadhrim Brigade"], "casts": ["Llanowar Elves", "Genesis Wave", "Galadhrim Brigade"], "cast_order_canonical": ["Llanowar Elves", "Genesis Wave", "Galadhrim Brigade"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Genesis Wave", "x": 2 }, { "card": "Galadhrim Brigade" }] },
+    { "index": 38, "summary": "land=none; cast: Galadhrim Brigade (squad x1), Genesis Wave (X=0)", "declared_order_payability": "known_drops", "land": null, "drops": ["Genesis Wave"], "casts": ["Galadhrim Brigade", "Genesis Wave"], "cast_order_canonical": ["Galadhrim Brigade", "Genesis Wave"], "actions": [{ "card": "Galadhrim Brigade", "kicked": true, "verb": "kick", "kick_count": 1, "kicked_cost_mv": 2 }, { "card": "Genesis Wave" }] },
+    { "index": 39, "summary": "land=none; cast: Genesis Wave (X=0), Galadhrim Brigade (squad x1)", "declared_order_payability": "known_drops", "land": null, "drops": ["Galadhrim Brigade"], "casts": ["Genesis Wave", "Galadhrim Brigade"], "cast_order_canonical": ["Genesis Wave", "Galadhrim Brigade"], "actions": [{ "card": "Genesis Wave" }, { "card": "Galadhrim Brigade", "kicked": true, "verb": "kick", "kick_count": 1, "kicked_cost_mv": 2 }] },
+    { "index": 40, "summary": "land=none; cast: Galadhrim Brigade, Immaculate Magistrate", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Immaculate Magistrate"], "cast_order_canonical": ["Galadhrim Brigade", "Immaculate Magistrate"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Immaculate Magistrate" }] },
+    { "index": 41, "summary": "land=none; cast: Immaculate Magistrate, Galadhrim Brigade", "declared_order_payability": "not_verified", "land": null, "casts": ["Immaculate Magistrate", "Galadhrim Brigade"], "cast_order_canonical": ["Immaculate Magistrate", "Galadhrim Brigade"], "actions": [{ "card": "Immaculate Magistrate" }, { "card": "Galadhrim Brigade" }] },
+    { "index": 42, "summary": "land=none; cast: Galadhrim Brigade, Genesis Wave (X=2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Genesis Wave"], "cast_order_canonical": ["Galadhrim Brigade", "Genesis Wave"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Genesis Wave", "x": 2 }] },
+    { "index": 43, "summary": "land=none; cast: Genesis Wave (X=2), Galadhrim Brigade", "declared_order_payability": "known_drops", "land": null, "drops": ["Galadhrim Brigade"], "casts": ["Genesis Wave", "Galadhrim Brigade"], "cast_order_canonical": ["Genesis Wave", "Galadhrim Brigade"], "actions": [{ "card": "Genesis Wave", "x": 2 }, { "card": "Galadhrim Brigade" }] },
+    { "index": 44, "summary": "land=none; cast: Galadhrim Brigade, Genesis Wave (X=0), Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Genesis Wave", "Llanowar Elves"], "cast_order_canonical": ["Galadhrim Brigade", "Genesis Wave", "Llanowar Elves"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Genesis Wave" }, { "card": "Llanowar Elves" }] },
+    { "index": 45, "summary": "land=none; cast: Galadhrim Brigade, Llanowar Elves, Genesis Wave (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Llanowar Elves", "Genesis Wave"], "cast_order_canonical": ["Galadhrim Brigade", "Llanowar Elves", "Genesis Wave"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Llanowar Elves" }, { "card": "Genesis Wave" }] },
+    { "index": 46, "summary": "land=none; cast: Genesis Wave (X=0), Galadhrim Brigade, Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave", "Galadhrim Brigade", "Llanowar Elves"], "cast_order_canonical": ["Genesis Wave", "Galadhrim Brigade", "Llanowar Elves"], "actions": [{ "card": "Genesis Wave" }, { "card": "Galadhrim Brigade" }, { "card": "Llanowar Elves" }] },
+    { "index": 47, "summary": "land=none; cast: Genesis Wave (X=0), Llanowar Elves, Galadhrim Brigade", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave", "Llanowar Elves", "Galadhrim Brigade"], "cast_order_canonical": ["Genesis Wave", "Llanowar Elves", "Galadhrim Brigade"], "actions": [{ "card": "Genesis Wave" }, { "card": "Llanowar Elves" }, { "card": "Galadhrim Brigade" }] },
+    { "index": 48, "summary": "land=none; cast: Llanowar Elves, Galadhrim Brigade, Genesis Wave (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Galadhrim Brigade", "Genesis Wave"], "cast_order_canonical": ["Llanowar Elves", "Galadhrim Brigade", "Genesis Wave"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Galadhrim Brigade" }, { "card": "Genesis Wave" }] },
+    { "index": 49, "summary": "land=none; cast: Galadhrim Brigade, Genesis Wave (X=1), Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Genesis Wave", "Llanowar Elves"], "cast_order_canonical": ["Galadhrim Brigade", "Genesis Wave", "Llanowar Elves"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Genesis Wave", "x": 1 }, { "card": "Llanowar Elves" }] },
+    { "index": 50, "summary": "land=none; cast: Galadhrim Brigade, Llanowar Elves, Genesis Wave (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Llanowar Elves", "Genesis Wave"], "cast_order_canonical": ["Galadhrim Brigade", "Llanowar Elves", "Genesis Wave"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Llanowar Elves" }, { "card": "Genesis Wave", "x": 1 }] },
+    { "index": 51, "summary": "land=none; cast: Genesis Wave (X=1), Galadhrim Brigade, Llanowar Elves", "declared_order_payability": "known_drops", "land": null, "drops": ["Llanowar Elves"], "casts": ["Genesis Wave", "Galadhrim Brigade", "Llanowar Elves"], "cast_order_canonical": ["Genesis Wave", "Galadhrim Brigade", "Llanowar Elves"], "actions": [{ "card": "Genesis Wave", "x": 1 }, { "card": "Galadhrim Brigade" }, { "card": "Llanowar Elves" }] },
+    { "index": 52, "summary": "land=none; cast: Genesis Wave (X=1), Llanowar Elves, Galadhrim Brigade", "declared_order_payability": "known_drops", "land": null, "drops": ["Galadhrim Brigade"], "casts": ["Genesis Wave", "Llanowar Elves", "Galadhrim Brigade"], "cast_order_canonical": ["Genesis Wave", "Llanowar Elves", "Galadhrim Brigade"], "actions": [{ "card": "Genesis Wave", "x": 1 }, { "card": "Llanowar Elves" }, { "card": "Galadhrim Brigade" }] },
+    { "index": 53, "summary": "land=none; cast: Llanowar Elves, Galadhrim Brigade, Genesis Wave (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Galadhrim Brigade", "Genesis Wave"], "cast_order_canonical": ["Llanowar Elves", "Galadhrim Brigade", "Genesis Wave"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Galadhrim Brigade" }, { "card": "Genesis Wave", "x": 1 }] },
+    { "index": 54, "summary": "land=none; cast: Llanowar Elves, Genesis Wave (X=1), Galadhrim Brigade", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Genesis Wave", "Galadhrim Brigade"], "cast_order_canonical": ["Llanowar Elves", "Genesis Wave", "Galadhrim Brigade"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Genesis Wave", "x": 1 }, { "card": "Galadhrim Brigade" }] },
+    { "index": 55, "summary": "land=none; cast: Genesis Wave (X=0), Immaculate Magistrate, Llanowar Elves", "declared_order_payability": "known_drops", "land": null, "drops": ["Llanowar Elves"], "casts": ["Genesis Wave", "Immaculate Magistrate", "Llanowar Elves"], "cast_order_canonical": ["Genesis Wave", "Immaculate Magistrate", "Llanowar Elves"], "actions": [{ "card": "Genesis Wave" }, { "card": "Immaculate Magistrate" }, { "card": "Llanowar Elves" }] },
+    { "index": 56, "summary": "land=none; cast: Genesis Wave (X=0), Llanowar Elves, Immaculate Magistrate", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave", "Llanowar Elves", "Immaculate Magistrate"], "cast_order_canonical": ["Genesis Wave", "Llanowar Elves", "Immaculate Magistrate"], "actions": [{ "card": "Genesis Wave" }, { "card": "Llanowar Elves" }, { "card": "Immaculate Magistrate" }] },
+    { "index": 57, "summary": "land=none; cast: Immaculate Magistrate, Genesis Wave (X=0), Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Immaculate Magistrate", "Genesis Wave", "Llanowar Elves"], "cast_order_canonical": ["Immaculate Magistrate", "Genesis Wave", "Llanowar Elves"], "actions": [{ "card": "Immaculate Magistrate" }, { "card": "Genesis Wave" }, { "card": "Llanowar Elves" }] },
+    { "index": 58, "summary": "land=none; cast: Genesis Wave (X=1), Immaculate Magistrate, Llanowar Elves", "declared_order_payability": "known_drops", "land": null, "drops": ["Immaculate Magistrate"], "casts": ["Genesis Wave", "Immaculate Magistrate", "Llanowar Elves"], "cast_order_canonical": ["Genesis Wave", "Immaculate Magistrate", "Llanowar Elves"], "actions": [{ "card": "Genesis Wave", "x": 1 }, { "card": "Immaculate Magistrate" }, { "card": "Llanowar Elves" }] },
+    { "index": 59, "summary": "land=none; cast: Immaculate Magistrate, Genesis Wave (X=1), Llanowar Elves", "declared_order_payability": "known_drops", "land": null, "drops": ["Llanowar Elves"], "casts": ["Immaculate Magistrate", "Genesis Wave", "Llanowar Elves"], "cast_order_canonical": ["Immaculate Magistrate", "Genesis Wave", "Llanowar Elves"], "actions": [{ "card": "Immaculate Magistrate" }, { "card": "Genesis Wave", "x": 1 }, { "card": "Llanowar Elves" }] },
+    { "index": 60, "summary": "land=none; cast: Immaculate Magistrate, Llanowar Elves, Genesis Wave (X=1)", "declared_order_payability": "known_drops", "land": null, "drops": ["Genesis Wave"], "casts": ["Immaculate Magistrate", "Llanowar Elves", "Genesis Wave"], "cast_order_canonical": ["Immaculate Magistrate", "Llanowar Elves", "Genesis Wave"], "actions": [{ "card": "Immaculate Magistrate" }, { "card": "Llanowar Elves" }, { "card": "Genesis Wave", "x": 1 }] },
+    { "index": 61, "summary": "land=none; cast: Llanowar Elves, Genesis Wave (X=1), Immaculate Magistrate", "declared_order_payability": "known_drops", "land": null, "drops": ["Immaculate Magistrate"], "casts": ["Llanowar Elves", "Genesis Wave", "Immaculate Magistrate"], "cast_order_canonical": ["Llanowar Elves", "Genesis Wave", "Immaculate Magistrate"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Genesis Wave", "x": 1 }, { "card": "Immaculate Magistrate" }] },
+    { "index": 62, "summary": "land=none; cast: Llanowar Elves, Immaculate Magistrate, Genesis Wave (X=1)", "declared_order_payability": "known_drops", "land": null, "drops": ["Genesis Wave"], "casts": ["Llanowar Elves", "Immaculate Magistrate", "Genesis Wave"], "cast_order_canonical": ["Llanowar Elves", "Immaculate Magistrate", "Genesis Wave"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Immaculate Magistrate" }, { "card": "Genesis Wave", "x": 1 }] },
+    { "index": 63, "summary": "land=none; cast: Genesis Wave (X=2), Llanowar Elves", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave", "Llanowar Elves"], "cast_order_canonical": ["Genesis Wave", "Llanowar Elves"], "actions": [{ "card": "Genesis Wave", "x": 2 }, { "card": "Llanowar Elves" }] },
+    { "index": 64, "summary": "land=none; cast: Llanowar Elves, Genesis Wave (X=2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Genesis Wave"], "cast_order_canonical": ["Llanowar Elves", "Genesis Wave"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Genesis Wave", "x": 2 }] },
+    { "index": 65, "summary": "land=none; cast: Galadhrim Brigade, Genesis Wave (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Genesis Wave"], "cast_order_canonical": ["Galadhrim Brigade", "Genesis Wave"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Genesis Wave" }] },
+    { "index": 66, "summary": "land=none; cast: Genesis Wave (X=0), Galadhrim Brigade", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave", "Galadhrim Brigade"], "cast_order_canonical": ["Genesis Wave", "Galadhrim Brigade"], "actions": [{ "card": "Genesis Wave" }, { "card": "Galadhrim Brigade" }] },
+    { "index": 67, "summary": "land=none; cast: Galadhrim Brigade, Genesis Wave (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Galadhrim Brigade", "Genesis Wave"], "cast_order_canonical": ["Galadhrim Brigade", "Genesis Wave"], "actions": [{ "card": "Galadhrim Brigade" }, { "card": "Genesis Wave", "x": 1 }] },
+    { "index": 68, "summary": "land=none; cast: Genesis Wave (X=1), Galadhrim Brigade", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave", "Galadhrim Brigade"], "cast_order_canonical": ["Genesis Wave", "Galadhrim Brigade"], "actions": [{ "card": "Genesis Wave", "x": 1 }, { "card": "Galadhrim Brigade" }] },
+    { "index": 69, "summary": "land=none; cast: Genesis Wave (X=0), Immaculate Magistrate", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave", "Immaculate Magistrate"], "cast_order_canonical": ["Genesis Wave", "Immaculate Magistrate"], "actions": [{ "card": "Genesis Wave" }, { "card": "Immaculate Magistrate" }] },
+    { "index": 70, "summary": "land=none; cast: Immaculate Magistrate, Genesis Wave (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Immaculate Magistrate", "Genesis Wave"], "cast_order_canonical": ["Immaculate Magistrate", "Genesis Wave"], "actions": [{ "card": "Immaculate Magistrate" }, { "card": "Genesis Wave" }] },
+    { "index": 71, "summary": "land=none; cast: Genesis Wave (X=1), Immaculate Magistrate", "declared_order_payability": "known_drops", "land": null, "drops": ["Immaculate Magistrate"], "casts": ["Genesis Wave", "Immaculate Magistrate"], "cast_order_canonical": ["Genesis Wave", "Immaculate Magistrate"], "actions": [{ "card": "Genesis Wave", "x": 1 }, { "card": "Immaculate Magistrate" }] },
+    { "index": 72, "summary": "land=none; cast: Immaculate Magistrate, Genesis Wave (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Immaculate Magistrate", "Genesis Wave"], "cast_order_canonical": ["Immaculate Magistrate", "Genesis Wave"], "actions": [{ "card": "Immaculate Magistrate" }, { "card": "Genesis Wave", "x": 1 }] },
+    { "index": 73, "summary": "land=none; cast: Genesis Wave (X=2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 74, "summary": "land=none; cast: Llanowar Elves, Elvish Clancaller: search for a card named Elvish Clancaller and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Elvish Clancaller"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Elvish Clancaller", "src_num": 10, "activate": true, "cost_pips": "GG", "activation_cost": "{4}{G}{G}", "act_label": "search for a card named Elvish Clancaller and put it onto the battlefield", "tutor_target": "Elvish Clancaller" }] },
+    { "index": 75, "summary": "land=none; cast: Llanowar Elves, Elvish Clancaller: search for a card named Elvish Clancaller and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Llanowar Elves", "Elvish Clancaller"], "actions": [{ "card": "Llanowar Elves" }, { "card": "Elvish Clancaller", "src_num": 10, "activate": true, "cost_pips": "GG", "activation_cost": "{4}{G}{G}", "act_label": "search for a card named Elvish Clancaller and put it onto the battlefield", "tutor_target": "(decline search)" }] },
+    { "index": 76, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 77, "summary": "land=none; cast: Elvish Clancaller: search for a card named Elvish Clancaller and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Elvish Clancaller"], "actions": [{ "card": "Elvish Clancaller", "src_num": 10, "activate": true, "cost_pips": "GG", "activation_cost": "{4}{G}{G}", "act_label": "search for a card named Elvish Clancaller and put it onto the battlefield", "tutor_target": "Elvish Clancaller" }] },
+    { "index": 78, "summary": "land=none; cast: Elvish Clancaller: search for a card named Elvish Clancaller and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Elvish Clancaller"], "actions": [{ "card": "Elvish Clancaller", "src_num": 10, "activate": true, "cost_pips": "GG", "activation_cost": "{4}{G}{G}", "act_label": "search for a card named Elvish Clancaller and put it onto the battlefield", "tutor_target": "(decline search)" }] }
+  ],
+  "plans_hidden": 96,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "trigger", "text": "Galadhrim Brigade (squad x2): create 2 token copies" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Archdruid", "idx": 11, "num": 6, "tapped": true, "is_land": false, "yield": 6, "power": 7, "toughness": 7 }, { "name": "Elvish Clancaller", "idx": 6, "num": 10, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Forest", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 18, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 10, "num": 20, "tapped": true, "is_land": true }, { "name": "Galadhrim Brigade", "idx": 9, "num": 32, "is_land": false, "power": 7, "toughness": 7 }, { "name": "Galadhrim Brigade", "idx": 12, "num": 33, "sick": true, "is_land": false, "power": 7, "toughness": 7 }, { "name": "Galadhrim Brigade", "idx": 13, "num": 1000, "sick": true, "is_land": false, "power": 7, "toughness": 7 }, { "name": "Galadhrim Brigade", "idx": 14, "num": 1001, "sick": true, "is_land": false, "power": 7, "toughness": 7 }], "vial_counters": [], "hand": [{ "num": 36, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 40, "name": "Immaculate Magistrate", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Llanowar Elves", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }, { "name": "Plains", "idx": 3, "num": 100039, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Elvish Clancaller (6), Galadhrim Brigade (7) — 13 to opponent (11→-2)" }
+  ]
+}
