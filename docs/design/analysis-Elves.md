@@ -657,3 +657,7 @@ then Maze's End K=20 mullgen from .claude/worktrees/maze-gen2.
    all-in (class top) or attackers-first (scaled dorks pay first, fixed attack-capable dorks held); the set-up
    tap-last order applies to the non-sink casts. wip/elves-r2 adds a `two` arm and counts how often the band's
    winning count is neither.
+9. Tap order GO-AHEAD: "I see. So yeah, we should take control of the tap order a bit in the heuristic provider to
+   make sure that we maintain whatever thing we want to maintain, whether that is the attackers or the scaling mana."
+   -> wip/elves-r2 builds a provider-controlled tap order (preserve scaling mana / preserve attackers / all-in),
+   hold-back counts consistent with it, behind the selector as the `two` arm; default the USER's after the A/B.
