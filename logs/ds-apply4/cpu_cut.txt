@@ -1,0 +1,16 @@
+# CPU cut (306142886) measurements, 2026-11-27
+## user instructions (perf stat -e instructions:u), Dragonstorm play, 200 games gi 0-199 seed 5410000+, --threads 2
+ins_l4_off 179691180759
+ins_l4_on 187864875286
+ins_l6_off 179702459760
+ins_l6_on 182622385814
+## same, 45 non-Dragonstorm play shapes x 25 games (o0 blocks), bin_l6
+insn_l6_off 1147404091892
+insn_l6_on 1148300847736
+## KeepOwedFloatPay stage counters (temporary build, 100 Dragonstorm games, on arm)
+enter 206552 | kept-bound-fail 2210 | no-cracks 198427 | plain-fail 740 | plain-left-keep 200262 | post-float-covers 158268 | covers&!judge 0 | judge-true 186591 | walk-true 14027 | taken 0 | PRE-CHECK true 157830, pre&!judge 0
+## identity
+val6a (bin_l6 on: 240 Dragonstorm A/B blocks + 200 paired games) vs bin_l5 (in-place only): 648 jobs, 0 digest, 0 units diffs
+val6a vs A/B on (bin_l4): jobs 248 digest/avg diffs [] units diffs [('on__dragonstormplay__o0', 99239, 99292), ('on__dragonstormplay__o300', 92181, 90335), ('on__dragonstormplay__o2475', 91621, 91727), ('on__dragonstorm2hgplay__o0', 123565, 123638), ('on__dragonstorm2hgplay__o325', 95498, 95620), ('on__dragonstorm2hgplay__o2475', 169987, 170093)]
+val6b (118 non-DS o0 blocks) vs A/B on: jobs 118 digest/avg diffs ['on__extraturnsplay__o0'] units diffs [('on__extraturnsplay__o0', 308668, 308813), ('on__extraturns2hgplay__o0', 505510, 505807)]
+val6b vs A/B OFF arm: 0 digest, 0 units diffs (118 jobs)
