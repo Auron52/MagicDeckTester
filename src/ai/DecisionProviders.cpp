@@ -75565,7 +75565,9 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
     // The blanked copy of row r's plan: every sink's count, the cost/eval it prices and the plan value blanked.
     auto canon_of = [&](std::size_t r, TurnSolver::Plan& out)
     {
-        out = *static_cast<const TurnSolver::Plan*>(plans[rows[r].i].plan);
+        // A lazy view (PlanView::lazy) is its fan's prototype: CopyPlanView builds the entry itself (its own pin).
+        const DecisionProvider::PlanView& pv = plans[rows[r].i];
+        TurnSolver::CopyPlanView(pv.plan, pv.lazy, pv.lazy_fan, pv.lazy_k, out);
         for (Action& a : out.actions) { if (ElvesSinkOf(a).count >= 0) { ElvesBlankSink(a); } }
         out.value          = 0;
         out.wins_this_turn = false;

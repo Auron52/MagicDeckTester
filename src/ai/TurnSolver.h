@@ -3421,6 +3421,9 @@ public:
     // Test hook (Boars I5a): AppendSubdecisionAxes over `plans` (the base plans of one enumeration node), exactly
     // as the search fans them; returns the list with every axis variant appended.
     static std::vector<Plan> SubdecisionAxesForTest(const GameState& state, bool is_pre_combat, std::vector<Plan> plans);
+    // A provider's plan-list view (DecisionProvider::PlanView: plan, lazy, lazy_fan, lazy_k) as the Plan it stands
+    // for: the plan itself, or the lazy layout's entry built from its fan prototype (PbLazyLayout::Edit).
+    static void CopyPlanView(const void* plan, const void* lazy, std::size_t lazy_fan, int lazy_k, Plan& out);
     // Test hook (Blood Sun perf part 3): the same axes with the LAZY clone layout requested (MTG_PB_LAZY_CANDS), as
     // SolveWithLookahead asks for it. Returns the list as the scorer indexes it (the lazy view, position by position)
     // and sets `lazy_entries` to how many of its entries were held lazily (never built as Plans by the axes).
