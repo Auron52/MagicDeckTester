@@ -1385,7 +1385,10 @@ deck:
 * **Control-scored** (`control_score`): this design. Other decks may opt in beside goldfish, for example decks that
   run some control cards.
 * **1v1** (a future key): when it exists.
-* **Control-heavy decks** (Enchanted Evening first) use only control-scored and 1v1, with `goldfish: false`.
+* **Control-heavy decks** (Enchanted Evening first) use only control-scored and 1v1, with `goldfish: false`. They
+  get no goldfish rows, keep tables or value leaves at all (USER 2026-11-27, verbatim: "This is also why decks that
+  are heavy in control will probably not even have a goldfishing mode. It is just not worth the time to work with
+  it.").
 * **Screens** (`deck_compare.py`) on a deck with more than one mode run each mode it has and report each mode's
   result side by side. The USER said "a combination"; until the USER gives a rule for combining them (weights, or
   which mode decides), a screen's verdict lists every mode's number and does not blend them.
