@@ -1022,7 +1022,7 @@ TEST_CASE("Elves mana: a Cavern-class float unit is {C} on every float-only path
 // "I think Kick counts should be capped at lethal size of 20", then on 2HG: "Yeah, we may want to scale it up for 2HG
 // arguably." The DB synthesizes the "(Kicked xK)" faces K = 1..kMaxMultikick (40, the largest starting life of any
 // format); CollectActions offers every affordable K up to the opponent's STARTING life (gamesetup::StartingLife()):
-// 20 standard, 30 in Two-Headed Giant. MTG_ELVES_R2=0 (TEMPORARY A/B selector) is the round-1 flat 20.
+// 20 standard, 30 in Two-Headed Giant.
 namespace {
 int EWarcallerTopK(GameState s, int forests)
 {
@@ -1065,11 +1065,6 @@ TEST_CASE("Joraga Warcaller: the kick-count cap is the opponent's starting life 
         CHECK(MultikickCountCap() == 30);
         CHECK(EWarcallerTopK(EBase(), 65) == 30);   // 61 mana pays K = 30; 31 (63) is past the cap
         CHECK(EWarcallerTopK(EBase(), 45) == 22);   // below the cap the pool binds: 45 = {G} + 22 x {1}{G}
-        const std::int8_t saved = heurarm::t_arm[heurarm::ELVES_R2];
-        heurarm::t_arm[heurarm::ELVES_R2] = 0;     // round 1: the flat 20
-        CHECK(MultikickCountCap() == 20);
-        CHECK(EWarcallerTopK(EBase(), 65) == 20);
-        heurarm::t_arm[heurarm::ELVES_R2] = saved;
     }
 }
 
@@ -1278,4 +1273,87 @@ TEST_CASE("Elves tap order: a plan with no scaled sink keeps the inherited (scal
     { ETapArm a(0); off = ETapAfter(s, 0); }
     { ETapArm a(1); on  = ETapAfter(s, 0); }
     CHECK(off == on);
+}
+
+// ---- MTG_ELVES_TAP_ORDER round 3: the attackers order starts AT THE SINK, not at the plan's first payment -------------
+// std gi 2176 (round 2): under the per-plan attackers order the cheap Elf cast BEFORE the sink tapped the Archdruid
+// (one {G} per Elf, so it yields less with fewer Elves out) and the kill line became unaffordable. The USER: "use the
+// scaling elf mana last, to get more on board before you tap it" (set-up casts) and "when using a scaling spell ...
+// prioritize attackers or just pump all of the mana into the spell" (the sink).
+// Board: Elvish Archdruid + 2 attack-capable Llanowars; hand Elvish Mystic + Galadhrim Brigade. Mystic ({G}) then
+// Brigade squad x1 ({2}{G} + {1}{G} = 5) costs 6. A Llanowar pays the Mystic, then the Archdruid taps for 4 (four
+// Elves) and the other Llanowar for 1: exactly 6. Tapping the Archdruid for the Mystic yields 3 and leaves 5.
+namespace {
+GameState ETapSetupBoard(int forests)
+{
+    static const ElvesProvider prov;
+    GameState s = EBase();
+    s.m_provider = &prov;
+    EForests(s, forests);
+    EPut(s, "Elvish Archdruid", 10);
+    EPut(s, "Llanowar Elves", 11);
+    EPut(s, "Llanowar Elves", 12);
+    EHand(s, "Elvish Mystic", 20);
+    EHand(s, "Galadhrim Brigade", 21);
+    return s;
+}
+// The plan casting the Mystic, THEN the Brigade with squad count k (null when not enumerated).
+const TurnSolver::Plan* EMysticThenBrigade(const std::vector<TurnSolver::Plan>& plans, int k)
+{
+    return EFind(plans, [k](const TurnSolver::Plan& q)
+    {
+        int mystic = -1, brigade = -1;
+        for (std::size_t i = 0; i < q.actions.size(); ++i)
+        {
+            if (IsCast(q.actions[i], "Elvish Mystic")) { mystic = static_cast<int>(i); }
+            if (IsCast(q.actions[i], "Galadhrim Brigade") && q.actions[i].kick_count == k) { brigade = static_cast<int>(i); }
+        }
+        return mystic >= 0 && brigade > mystic && ECountCasts(q) == 2;
+    });
+}
+}   // namespace
+
+TEST_CASE("Elves tap order: a set-up Elf cast BEFORE the sink keeps the scaling mana (the 2176 shape)")
+{
+    const GameState s = ETapSetupBoard(0);
+    ETapArm arm(1);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* p = EMysticThenBrigade(plans, 1);
+    REQUIRE_MESSAGE(p != nullptr, "Mystic then Brigade squad x1 must be payable: a Llanowar pays the Mystic, the "
+                                  "Archdruid taps for 4 after it lands");
+    GameState roll, real;
+    EBoth(s, *p, roll, real);
+    for (const GameState* g : { &roll, &real })
+    {
+        int brigades = 0;
+        for (const Permanent& q : g->battlefield) { brigades += q.card.m_name.str() == "Galadhrim Brigade" ? 1 : 0; }
+        CHECK(brigades == 2);                     // the Brigade + one squad copy: the K = 1 cast resolved
+        CHECK(EN(*g, 20) != nullptr);             // the Mystic is on the battlefield
+        CHECK(EN(*g, 10)->tapped);                // all-in: every source tapped
+        CHECK(EN(*g, 11)->tapped);
+        CHECK(EN(*g, 12)->tapped);
+    }
+}
+
+TEST_CASE("Elves tap order: the sink's own payment still PRESERVES ATTACKERS after a set-up cast")
+{
+    // One Forest more: the Forest pays the Mystic (lands below the band), then the Brigade's 5 is the Archdruid (4)
+    // and ONE Llanowar -- the other stays untapped to attack. The inherited order (selector off) taps both Llanowars.
+    const GameState s = ETapSetupBoard(1);
+    for (int on = 0; on <= 1; ++on)
+    {
+        ETapArm arm(on);
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+        const TurnSolver::Plan* p = EMysticThenBrigade(plans, 1);
+        REQUIRE(p != nullptr);
+        GameState roll, real;
+        EBoth(s, *p, roll, real);
+        for (const GameState* g : { &roll, &real })
+        {
+            const int untapped_llanowars = (EN(*g, 11)->tapped ? 0 : 1) + (EN(*g, 12)->tapped ? 0 : 1);
+            MESSAGE("selector=" << on << " archdruid=" << EN(*g, 10)->tapped << " untapped llanowars="
+                                << untapped_llanowars);
+            if (on == 1) { CHECK(EN(*g, 10)->tapped); CHECK(untapped_llanowars == 1); }
+        }
+    }
 }

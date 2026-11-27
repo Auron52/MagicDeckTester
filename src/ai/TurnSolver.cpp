@@ -81,11 +81,9 @@
 // THE KICK-COUNT CAP (multikicker / squad, CollectActions): the opponent's STARTING life -- 20, 30 in Two-Headed Giant
 // -- a lethal count, never a deck constant. USER 2026-11-27: "I think Kick counts should be capped at lethal size of
 // 20", then on 2HG: "Yeah, we may want to scale it up for 2HG arguably." Clamped to the synthesized faces
-// (kMaxMultikick). MTG_ELVES_R2=0 (TEMPORARY A/B selector, delete after the A/B) restores the flat 20.
+// (kMaxMultikick).
 int MultikickCountCap()
 {
-    static const bool s_r2 = EnvOn("MTG_ELVES_R2", true);
-    if (!heurarm::Flag(heurarm::ELVES_R2, s_r2)) { return std::min(20, kMaxMultikick); }
     return std::max(1, std::min(gamesetup::StartingLife(), kMaxMultikick));
 }
 
@@ -70371,7 +70369,28 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         }
         if (a.kind == Action::Kind::CastFromHand
             && (a.kick_count > 0 || (d->params.reveal_x_put_permanents && a.chosen_x > 0)))
-        { t.casts_scaled_sink = true; }
+        {
+            t.casts_scaled_sink = true;
+            // Where the sink sits (MTG_ELVES_TAP_ORDER only): its printed name and the copies in hand now.
+            if (ElvesTapOrderOn())
+            {
+                const std::string& nm = d->params.kicked_base_name.empty() ? d->card.m_name.str()
+                                                                           : d->params.kicked_base_name;
+                int k = 0;
+                while (k < t.scaled_sink_count && *t.scaled_sink_name[k] != nm) { ++k; }
+                if (k == t.scaled_sink_count && k < PlanTraits::kMaxScaledSinks)
+                {
+                    const CardDefinition* base = d->params.kicked_base_name.empty()
+                        ? d : CardDatabase::Instance().Lookup(nm);
+                    int copies = 0;
+                    for (const Card& c : state.players[static_cast<std::size_t>(active)].hand)
+                    { if (c.m_name.str() == nm) { ++copies; } }
+                    t.scaled_sink_name[k]  = base != nullptr ? &base->card.m_name.str() : nullptr;
+                    t.scaled_sink_hand0[k] = copies;
+                    if (t.scaled_sink_name[k] != nullptr) { ++t.scaled_sink_count; }
+                }
+            }
+        }
         if (d->card.IsCreature())
         {
             for (int s = 0; s < n_scalers && !t.casts_scaler_food; ++s)

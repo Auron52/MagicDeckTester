@@ -210,6 +210,16 @@ inline bool DoublerAfterExaltedOn()
     return heurarm::Flag(heurarm::DOUBLER_AFTER_EXALTED, env);
 }
 
+// MTG_ELVES_TAP_ORDER (TEMPORARY A/B selector, DEFAULT OFF -- the USER decides): ElvesProvider::ManaSourceRank's
+// what-the-payment-preserves order. Read by the rank (DecisionProviders.cpp) and by TurnSolver::ComputePlanTraits,
+// which records where in the plan the scaled sink sits only when this is on (so the OFF arm's traits hash is the
+// pre-selector one, field for field; the round-3 A/B's band arm reproduced round 2's band digests).
+inline bool ElvesTapOrderOn()
+{
+    static const bool env = EnvOn("MTG_ELVES_TAP_ORDER");
+    return heurarm::Flag(heurarm::ELVES_TAP_ORDER, env);
+}
+
 // MTG_DOUBLER_COMBAT_PAY (Morph INT-16, 2026-11-13; a correctness fix, DEFAULT ON, =0 restores the approximate
 // plan-start probe) -- under MTG_DOUBLER_AFTER_EXALTED a run doubler is credited only when it was PAID in combat
 // style (GameState::dbl_cp). Read by the shared cast-payment hook, the resolution marker and

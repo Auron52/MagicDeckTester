@@ -76,6 +76,16 @@ std::uint64_t PlanTraitsContentHash(const PlanTraits& t)
     }
     mix(static_cast<std::uint64_t>(t.act_restr_elig_mana));
     mix(static_cast<std::uint64_t>(t.act_restr_inelig_mana));
+    // The scaled sinks' hand identities (MTG_ELVES_TAP_ORDER): mixed only when present.
+    if (t.scaled_sink_count > 0)
+    {
+        mix(static_cast<std::uint64_t>(t.scaled_sink_count) | 0x51C0ull << 8);
+        for (int i = 0; i < t.scaled_sink_count; ++i)
+        {
+            mix(t.scaled_sink_name[i] != nullptr ? std::hash<std::string>{}(*t.scaled_sink_name[i]) : 0x0CA5ull);
+            mix(static_cast<std::uint64_t>(t.scaled_sink_hand0[i]));
+        }
+    }
     // Prevent Damage deferral inputs: mixed only when present, so every other deck's hash is unchanged.
     if (t.pd_amp_count > 0 || t.pd_victim_count > 0 || t.pd_hazard_other)
     {

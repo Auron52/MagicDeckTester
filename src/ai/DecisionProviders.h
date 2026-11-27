@@ -3963,12 +3963,8 @@ struct ElvesHoldBackSource { int yield = 0; bool scaled = false; };
 std::vector<ElvesHoldBackSource> ElvesHoldBackSources(const GameState& s, bool is_pre_combat);
 int ElvesHoldBackMana(const std::vector<ElvesHoldBackSource>& src, int plan_elf_casts);
 // The mana holding back only the UNSCALED attack-capable dorks frees (Llanowar / Mystic: the entries with scaled =
-// false), the hold-back option "hold back normal dorks" of MTG_ELVES_HOLDBACK_MODE=three.
+// false). Read only by the chosen census (its `normal` category: top - h_normal).
 int ElvesHoldBackNormalMana(const std::vector<ElvesHoldBackSource>& src);
-// MTG_ELVES_HOLDBACK_MODE=three (heurarm MTG_ELVES_HOLDBACK_THREE): TEMPORARY selector, see ElvesScalingAdmit.
-bool ElvesHoldBackThreeOn();
-// MTG_ELVES_HOLDBACK_MODE=two (heurarm MTG_ELVES_HOLDBACK_TWO): TEMPORARY selector, see ElvesScalingAdmit.
-bool ElvesHoldBackTwoOn();
 // MTG_ELVES_CHOSEN_CENSUS=1 (DIAGNOSTIC ONLY): the executor's chosen main-phase plan, classified (see the .cpp).
 void ElvesChosenCensus(const GameState& s, const void* chosen_plan, bool is_pre_combat);   // a TurnSolver::Plan (PlanView's convention)
 class ElvesProvider : public SelesnyaLifegainProvider

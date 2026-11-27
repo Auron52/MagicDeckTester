@@ -218,3 +218,23 @@ counts are load-bearing, not budget noise.
    Priest / Archdruid when the plan casts Elf "scaler food").
 4. New: the chosen census reads a plan with two scaled sinks as `nosink`, so the attackers-mode counts are a slight
    undercount.
+
+## Round 3 follow-up (2026-11-27; full write-up in logs/elves/r3-notes.md)
+
+- **Fix:** PRESERVE ATTACKERS applies only from the scaled sink's OWN payment onward. The set-up casts before it keep
+  the scaling mana (`ElvesSinkReached`). Arm `bandtapfix` = band + MTG_ELVES_TAP_ORDER (fixed).
+- **A/B** (same seeds, 3,000 std + 3,000 2HG, d5 b20, one pooled batch; band and bandtap reproduced this round's
+  digests on all 12,000 games):
+
+  | fmt | arm | avg | net vs band (se) | faster / slower | units x band |
+  |---|---|---|---|---|---|
+  | std | bandtap    | 4.3173 | -0.0063 (0.0015) | 20 / 1 | 0.9676 |
+  | std | bandtapfix | 4.3170 | -0.0067 (0.0015) | 20 / 0 | 0.9689 |
+  | 2hg | bandtap    | 4.6090 | -0.0123 (0.0023) | 42 / 5 | 0.9682 |
+  | 2hg | bandtapfix | 4.6083 | -0.0130 (0.0021) | 39 / 0 | 0.9727 |
+
+- **d8 b0 bar:** bandtapfix has 0 slower games vs band, so nothing is owed and the bar is MET.
+- **The 5 unrecovered bandtap games** (std 2176; 2HG 75, 202, 428, 2162): bandtapfix replays band's game action for
+  action in all five. The lever flip attributes all five to the pre-sink tap order, the same mechanism as 2176.
+- **USER** kept the band ("Okay, that's fine. We'll leave it."). The three / two modes and MTG_ELVES_R2 are deleted
+  in the round-3 tree.

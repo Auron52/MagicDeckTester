@@ -91,6 +91,14 @@ struct PlanTraits
                                          // K > 0, an X-put spell with X > 0: Joraga Warcaller, Galadhrim
                                          // Brigade, Genesis Wave). Read only by ElvesProvider's
                                          // MTG_ELVES_TAP_ORDER rank (preserve attackers on a sink turn)
+    // WHERE IN THE PLAN THE SINK IS (MTG_ELVES_TAP_ORDER): the printed name of each scaled-sink cast and the copies
+    // of it in hand when the traits were built. A copy gone from hand = that sink has been cast, so the payments
+    // from then on are past the sink; the sink's OWN bill is recognised through the paying-spell scope. Only set
+    // when casts_scaled_sink; mixed into the hash only then (every other plan's hash is unchanged).
+    static constexpr int kMaxScaledSinks = 2;
+    const std::string* scaled_sink_name[kMaxScaledSinks] = {};
+    int  scaled_sink_hand0[kMaxScaledSinks]              = {};
+    int  scaled_sink_count                               = 0;
     bool attack_matters        = false;  // pre-combat main and an eligible attacker exists: a held
                                          // body converts to damage this turn
     int  mana_casts            = 0;      // plan casts that pay real mana (nonfree, ManaValue>0):
