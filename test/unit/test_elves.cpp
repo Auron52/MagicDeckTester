@@ -1089,7 +1089,7 @@ TEST_CASE("Leaf-Crowned Visionary beyond the horizon: an unpinned trigger pays o
     CHECK(EFire(s, ESpare(true, EG(0, 1))) == 1u);
     // An empty library: no draw to buy.
     {
-        GameState t = s; t.players[0].library.clear();
+        GameState t = s; while (!t.players[0].library.empty()) { (void)t.players[0].library.DrawTop(); }
         CHECK(EFire(t, ESpare(true)) == 0u);
     }
     // A searched pin is never overridden: pinned decline stays a decline.
