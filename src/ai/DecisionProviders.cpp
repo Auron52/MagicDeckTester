@@ -75672,14 +75672,51 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
     }
 }
 
+bool ElvesWaveXCapOn()
+{
+    static const bool s_env = EnvOn("MTG_ELVES_WAVE_XCAP", true);   // DEFAULT ON; =0 -> every affordable X
+    return heurarm::Flag(heurarm::ELVES_WAVE_XCAP, s_env);
+}
+
 std::vector<int> ElvesProvider::XCandidates(const GameState& s, const CardDefinition& def, int max_affordable) const
 {
     if (!def.params.reveal_x_put_permanents) { return SelesnyaLifegainProvider::XCandidates(s, def, max_affordable); }
     // Genesis Wave: every X, largest first (ORDER only). The engine bounds it by the turn's whole pool; the plan-list
     // rule keeps the X each plan's other casts leave. The same menu with the rule lifted (=0 / unpruned) is the
     // full range MTG_UNPRUNE=xspell gives every deck.
+    //
+    // THE CAP (MTG_ELVES_WAVE_XCAP, heurarm ELVES_WAVE_XCAP, DEFAULT ON; =0 -> every affordable X): the menu stops at
+    // X* = max(L, M), L = our library's size now, M = the largest mana value of a permanent card in it, and never
+    // below 1. A SOUND DOMINANCE FOLD, not a judgement. For every X >= X* the resolution is the same event
+    // (PerformGenesisWave): DrawN(X) reveals the whole library (the library at resolution is this one or a prefix-
+    // drawn copy of it -- nothing in this list adds a card to it -- so it is never longer than L), every revealed
+    // permanent passes the "mana value X or less" test (M <= X), and the put subset is GenesisWavePutPicks' "every
+    // legal reveal", which reads no X; the rest is milled. So Wave X > X* is the X* line with X - X* more generic mana
+    // paid for nothing: every source it taps the X* line may leave untapped (an attacker, or mana for what follows --
+    // Ezuri's combat converter, the Wave's put Shepherd / Clancaller, a hand card), and nothing reads a larger X:
+    // no card in this pool reads a spell's X or mana value, the cast's eval (the revealed permanents' EvalCard) is
+    // constant for X >= L, and the no-library case (L = 0: the Wave at any X does nothing) keeps X = 1. X* itself is
+    // always offered when affordable, so every removed X has its dominating sibling on the menu. The scaling rule's
+    // band (ElvesScalingAdmit) then counts down from the top that can matter.
+    // WHY: a memory bound. A dork-heavy board affords X far past the library: keep-rollout seed 11400714887500402950
+    // enumerated X 1..91 against a 16-card library at its T7 continuation (171,404 of 210,316 Wave rows above X*;
+    // the derivation peaked at 3.8 GB) and X 1..276 against an EMPTY library at T5 (177,072 rows, every one a no-op).
+    // Lifted with the scaling rule's own gates (MTG_UNPRUNED, MTG_UNPRUNE=xspell); never in human play (the Wave's
+    // human menu is built in CollectActions and never reaches here).
+    int cap = max_affordable;
+    if (ElvesWaveXCapOn() && !DecisionUnpruned(UnprunedGate::XSpell))
+    {
+        const Player& ap = s.players[static_cast<std::size_t>(s.active_player_index)];
+        int mv = 0;
+        for (const Card& c : ap.library)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->card.IsPermanentCard()) { mv = std::max(mv, d->card.m_mana_cost.ManaValue()); }
+        }
+        cap = std::min(cap, std::max({ 1, static_cast<int>(ap.library.size()), mv }));
+    }
     std::vector<int> xs;
-    for (int x = max_affordable; x >= 1; --x) { xs.push_back(x); }
+    for (int x = cap; x >= 1; --x) { xs.push_back(x); }
     return xs;
 }
 

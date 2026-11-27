@@ -3953,6 +3953,8 @@ public:
 // (heurarm ELVES_SCALING_PRUNE, default ON; =0 -> every count and split searched); MTG_UNPRUNED, and
 // MTG_UNPRUNE=replicate (the multikick count gate) or =xspell, lift it; human play never sees it.
 bool ElvesScalingPruneOn();
+// Genesis Wave's X menu capped at max(library, largest library permanent MV) -- see ElvesProvider::XCandidates.
+bool ElvesWaveXCapOn();
 // The rule itself, a free function so a unit test can drive it with an explicit phase.
 void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
                        const std::vector<DecisionProvider::PlanView>& plans, std::vector<char>& admit);
