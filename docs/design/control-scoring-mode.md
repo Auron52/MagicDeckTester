@@ -797,6 +797,16 @@ That would move every deck's ground truth, so it is not part of this design unle
 **Related control effects that take the same route:** life gain, damage prevention (fogs), and removal of an
 attacker mid-combat. Each one changes how much of the gauntlet deck's damage lands, which the replay measures.
 
+**Life gain as a control effect (USER 2026-11-27, verbatim):** "Lifegain itself naturally is another control aspect,
+though not a particularly strong one on its own." In the replay it is an effect like any other: life gained on
+round t raises the life the gauntlet deck has to get through, and the replay measures how far that pushes its kill.
+Expected size: gaining L life against a deck that deals about R damage a round buys at most about L / R rounds,
+and only in the games where it carries the kill past a round boundary. So it is small alone, and largest against
+slow chip damage or on top of other delays (a blocker, a removal spell), which is where the mapping's interaction
+terms matter. It also has a hard counter in the gauntlet: Screaming Nemesis's lockout, above. The suite's life-gain
+decks (Selesnya Lifegain, Critter Lifegain, Martyr Lifegain, Lifegain Heliod Combo) are goldfish decks today. If
+the USER ever wants their life gain credited, they are candidates to carry both modes.
+
 ## 6. What none of these designs fixes
 
 ### 6.1 The gauntlet is goldfish-fast
