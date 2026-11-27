@@ -3962,6 +3962,15 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
 struct ElvesHoldBackSource { int yield = 0; bool scaled = false; };
 std::vector<ElvesHoldBackSource> ElvesHoldBackSources(const GameState& s, bool is_pre_combat);
 int ElvesHoldBackMana(const std::vector<ElvesHoldBackSource>& src, int plan_elf_casts);
+// The mana holding back only the UNSCALED attack-capable dorks frees (Llanowar / Mystic: the entries with scaled =
+// false), the hold-back option "hold back normal dorks" of MTG_ELVES_HOLDBACK_MODE=three.
+int ElvesHoldBackNormalMana(const std::vector<ElvesHoldBackSource>& src);
+// MTG_ELVES_HOLDBACK_MODE=three (heurarm MTG_ELVES_HOLDBACK_THREE): TEMPORARY selector, see ElvesScalingAdmit.
+bool ElvesHoldBackThreeOn();
+// MTG_ELVES_HOLDBACK_MODE=two (heurarm MTG_ELVES_HOLDBACK_TWO): TEMPORARY selector, see ElvesScalingAdmit.
+bool ElvesHoldBackTwoOn();
+// MTG_ELVES_CHOSEN_CENSUS=1 (DIAGNOSTIC ONLY): the executor's chosen main-phase plan, classified (see the .cpp).
+void ElvesChosenCensus(const GameState& s, const void* chosen_plan, bool is_pre_combat);   // a TurnSolver::Plan (PlanView's convention)
 class ElvesProvider : public SelesnyaLifegainProvider
 {
 public:
@@ -3984,6 +3993,8 @@ public:
     // Wave X), so the rule's verdict on an axis variant is its verdict on the base: apply it before the fan too.
     // A memory bound (see the base hook); play-neutral by that argument and measured digest-identical.
     bool PlanListFilterBeforeAxes(const GameState&) const override { return true; }
+    // MTG_ELVES_TAP_ORDER (TEMPORARY, default OFF): what a payment preserves -- attackers on a sink turn; see the .cpp.
+    int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
     // The USER's cleanup-discard buckets (2026-11-27: "a discard policy that just buckets mana and threats", amended:
     // "feel free to add more mana as long as we have 1-2 scaling threats"): DEAD first; with a scaling threat (a mana
     // sink) in hand keep the best 2 sinks and favour MANA over every other threat; with none keep up to 3 threats

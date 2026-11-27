@@ -87,6 +87,10 @@ struct PlanTraits
     bool casts_scaler_food     = false;  // plan casts a creature matching a board subtype-scaler's
                                          // subtype (Priest of Titania + Elves in the plan): the
                                          // scaler's burst GROWS if it taps after those casts
+    bool casts_scaled_sink     = false;  // plan casts a SCALED count sink (a multikicker / squad cast with
+                                         // K > 0, an X-put spell with X > 0: Joraga Warcaller, Galadhrim
+                                         // Brigade, Genesis Wave). Read only by ElvesProvider's
+                                         // MTG_ELVES_TAP_ORDER rank (preserve attackers on a sink turn)
     bool attack_matters        = false;  // pre-combat main and an eligible attacker exists: a held
                                          // body converts to damage this turn
     int  mana_casts            = 0;      // plan casts that pay real mana (nonfree, ManaValue>0):

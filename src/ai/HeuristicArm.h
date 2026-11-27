@@ -1160,6 +1160,10 @@ enum Slot : int
     CCO_RESERVE_JOINT,        // MTG_CCO_RESERVE_JOINT  the CCO line reserve's "the other creature-only lands cover the shortfall" test is JOINT (Hall's condition over the held colours): one tap makes one unit, so two Unclaimed Territories do not each cover both of Karrthus's {B} and {G} (Dragonstorm s30096797 T5: Desperate Ritual's generic took a Territory's {C}). DEFAULT ON; =0 -> the per-colour test, byte-identical
     LINE_NC_LEFT,             // MTG_LINE_NC_LEFT  the line-keep rung (LineReducerKeepHold) judges the rest of the line as creature casts only once the line has no NONCREATURE cast left to pay (both apply worlds count them down at the cast site), not only when this payment's mana value covers the line's whole noncreature bill: a colored_creature_only land then makes a colour for the rest (Dragonstorm s30129376 T4 {Ruby Medallion, Seething Song, Karrthus}: at Song's payment Karrthus read as a noncreature bill, unpayable either way, so Song's {1} drained the floating {B} instead of Sandstone Needle paying it). DEFAULT ON; =0 -> the mana-value test alone, byte-identical
     ELVES_BUCKET_DISCARD,     // MTG_ELVES_BUCKET_DISCARD  Elves: the USER's cleanup-discard buckets (2026-11-27: "a discard policy that just buckets mana and threats. (mana elves can go in the mana bucket)"; amended: "feel free to add more mana as long as we have 1-2 scaling threats"): DEAD (2nd legend / 2nd world enchantment of ours) first; MANA = lands + mana creatures; SCALING = the mana sinks (Wave, Warcaller, Brigade, Ezuri, Shepherd), the best 2 kept and every other threat shed before mana; with no sink, up to 3 threats kept ahead of the mana past the land floor + 2. ElvesProvider::CleanupDiscardCandidates. Default ON (USER rule); =0 -> the inherited SelesnyaLifegain buckets
+    ELVES_R2,                 // MTG_ELVES_R2  TEMPORARY A/B selector (Elves round 2, USER 2026-11-27; DELETE after the A/B): the kick-count cap is the opponent's STARTING life (20 / 30 in 2HG, was a flat 20); the cleanup discard prices Genesis Wave at X = 3 (mana value 6, was 3); the land floor applies at every land count (was < 4 lands). Default ON; =0 -> the pre-round-2 behaviour
+    ELVES_HOLDBACK_THREE,     // MTG_ELVES_HOLDBACK_THREE  TEMPORARY per-job twin of MTG_ELVES_HOLDBACK_MODE (=three / =band; USER 2026-11-27 Q1): the scaling hold-back admits only the three counts top, top - h_normal (the 1-mana attack-capable dorks held), top - h_all (every attack-capable dork held), not the whole band. LOSSY narrowing of the band; its default is the USER's. Default = the env mode (band)
+    ELVES_HOLDBACK_TWO,       // MTG_ELVES_HOLDBACK_TWO  TEMPORARY per-job twin of MTG_ELVES_HOLDBACK_MODE=two (USER 2026-11-27: "when using a scaling spell ... you usually would want to prioritize attackers or just pump all of the mana into the spell"): only top and top - h_normal survive. LOSSY narrowing of the band (and of three); a measurement instrument, default = the env mode (band). Wins over THREE when both are set
+    ELVES_TAP_ORDER,          // MTG_ELVES_TAP_ORDER  TEMPORARY A/B selector (USER 2026-11-27: "we should take control of the tap order a bit in the heuristic provider to make sure that we maintain whatever thing we want to maintain, whether that is the attackers or the scaling mana"): ElvesProvider::ManaSourceRank, on a pre-combat payment of a plan that casts a scaled sink, PRESERVES ATTACKERS (non-attacking dorks, then scaled dorks, then the attack-capable fixed dorks last); every other payment keeps the scaling-preserving order. Default OFF (the USER decides)
     COUNT
 };
 
@@ -2264,6 +2268,10 @@ inline const char* Name(int slot)
         "MTG_CCO_RESERVE_JOINT",
         "MTG_LINE_NC_LEFT",
         "MTG_ELVES_BUCKET_DISCARD",
+        "MTG_ELVES_R2",
+        "MTG_ELVES_HOLDBACK_THREE",
+        "MTG_ELVES_HOLDBACK_TWO",
+        "MTG_ELVES_TAP_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

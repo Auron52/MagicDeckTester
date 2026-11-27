@@ -39,7 +39,8 @@ std::uint64_t PlanTraitsContentHash(const PlanTraits& t)
         | (static_cast<std::uint64_t>(t.copy_magnet_live) << 2) | (static_cast<std::uint64_t>(t.bodies_are_multipliers) << 3)
         | (static_cast<std::uint64_t>(t.casts_scaler_food) << 4) | (static_cast<std::uint64_t>(t.attack_matters) << 5)
         | (static_cast<std::uint64_t>(t.restr_creature_up) << 6) | (static_cast<std::uint64_t>(t.restr_inelig_overflow) << 7)
-        | (static_cast<std::uint64_t>(t.mid_turn_casts) << 8) | (static_cast<std::uint64_t>(t.own_board_hazard) << 9));
+        | (static_cast<std::uint64_t>(t.mid_turn_casts) << 8) | (static_cast<std::uint64_t>(t.own_board_hazard) << 9)
+        | (static_cast<std::uint64_t>(t.casts_scaled_sink) << 10));
     mix(static_cast<std::uint64_t>(t.pump_target_card));
     mix(static_cast<std::uint64_t>(t.mana_casts));
     mix(static_cast<std::uint64_t>(t.cast_color_mask));

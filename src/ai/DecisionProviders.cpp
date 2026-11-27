@@ -75399,6 +75399,21 @@ bool BloodSunProvider::LandPlayOffered(const GameState& s, int controller, const
 //       attackers, and none was findable at d8 b0. A cap of two attackers still lost one game of a fresh 3,000 (four
 //       held attackers) and one of the first sample (three). PRUNED WHEN ATTACKING CANNOT MATTER: post-combat (the attack is over) and with no
 //       attack-capable mana creature -- then only the top survives.
+//   (3b) MTG_ELVES_HOLDBACK_MODE=three (TEMPORARY selector; heurarm MTG_ELVES_HOLDBACK_THREE per job; =band, the
+//       default, is (3) unchanged). USER 2026-11-27: "Hold all dorks back is okay, but not sufficient in my mind unless
+//       we have heuristically determined the right option in our situation. i.e. If just searching we should probably
+//       consider all, hold back normal dorks and hold back all dorks." Per class only THREE counts survive: the top
+//       (every dork tapped for the sink), top - h_normal (h_normal = ceil(mana of the UNSCALED attack-capable dorks /
+//       unit): Llanowar / Mystic held) and top - h_all (h_all = the band's h: every attack-capable dork held). A target
+//       <= 0 is the no-sink plan (Warcaller K = 0 / no Wave), which is not a row here and is never removed, so it
+//       admits no scaled count. A target no member hits exactly (a count the enumeration did not offer) admits the
+//       largest member below it (the nearest count that still leaves those dorks untapped). The band is a SUPERSET:
+//       it also keeps the in-between counts (one of two dorks held), so `three` is a further LOSSY narrowing; the
+//       USER owns its default and it ships OFF. The census counts the in-between rows in either mode (`inbetween`):
+//       the price of the branch the band keeps.
+//   (3c) MTG_ELVES_HOLDBACK_MODE=two (TEMPORARY; heurarm MTG_ELVES_HOLDBACK_TWO): only the top and top - h_normal.
+//       USER 2026-11-27: "when using a scaling spell, (Joraga, Galadhrim, Genesis Wave) you usually would want to
+//       prioritize attackers or just pump all of the mana into the spell." A measurement instrument, LOSSY, OFF.
 //   Untouched: every plan with no scaled sink (the idle pass is never in this list -- the hosts append it -- and a
 //   plan of non-scaling casts, or with Warcaller K = 0 beside them, is never removed).
 // The search still branches over every survivor; nothing here picks one.
@@ -75440,13 +75455,16 @@ ElvesSink ElvesSinkOf(const Action& a)
 // the plans they held, and the plans it removed as splits / below the band; one stderr line at exit.
 struct ElvesCensus
 {
-    std::atomic<long long> calls{0}, plans{0}, split{0}, band{0};
+    std::atomic<long long> calls{0}, plans{0}, split{0}, band{0}, between{0};
     ~ElvesCensus()
     {
         if (calls.load() == 0) { return; }
+        // inbetween: rows inside the band that are none of the three hold-back options (top, top - h_normal,
+        // top - h_all); KEPT under =band, part of dropped_band under =three.
         std::fprintf(stderr, "[elves-scaling-census] enumerations=%lld plans=%lld dropped_split=%lld dropped_band=%lld "
-                     "kept=%lld\n", calls.load(), plans.load(), split.load(), band.load(),
-                     plans.load() - split.load() - band.load());
+                     "kept=%lld inbetween=%lld mode=%s\n", calls.load(), plans.load(), split.load(), band.load(),
+                     plans.load() - split.load() - band.load(), between.load(),
+                     ElvesHoldBackTwoOn() ? "two" : ElvesHoldBackThreeOn() ? "three" : "band");
     }
 };
 ElvesCensus& ElvesCensusSink() { static ElvesCensus c; return c; }
@@ -75493,6 +75511,31 @@ std::vector<ElvesHoldBackSource> ElvesHoldBackSources(const GameState& s, bool i
     return out;
 }
 
+int ElvesHoldBackNormalMana(const std::vector<ElvesHoldBackSource>& src)
+{
+    int normal = 0;
+    for (const ElvesHoldBackSource& h : src) { if (!h.scaled) { normal += std::max(0, h.yield); } }
+    return normal;
+}
+
+// MTG_ELVES_HOLDBACK_MODE: 0 band (default), 3 three, 2 two; anything else aborts (a typo must not run the band).
+static int ElvesHoldBackEnvMode()
+{
+    static const int s_env = []
+    {
+        const char* e = std::getenv("MTG_ELVES_HOLDBACK_MODE");
+        if (e == nullptr || *e == '\0' || std::strcmp(e, "band") == 0) { return 0; }
+        if (std::strcmp(e, "three") == 0) { return 3; }
+        if (std::strcmp(e, "two") == 0) { return 2; }
+        std::fprintf(stderr, "MTG_ELVES_HOLDBACK_MODE=%s: expected band, three or two\n", e);
+        std::abort();
+    }();
+    return s_env;
+}
+bool ElvesHoldBackTwoOn() { return heurarm::Flag(heurarm::ELVES_HOLDBACK_TWO, ElvesHoldBackEnvMode() == 2); }
+bool ElvesHoldBackThreeOn()
+{ return !ElvesHoldBackTwoOn() && heurarm::Flag(heurarm::ELVES_HOLDBACK_THREE, ElvesHoldBackEnvMode() == 3); }
+
 int ElvesHoldBackMana(const std::vector<ElvesHoldBackSource>& src, int plan_elf_casts)
 {
     int all = 0;
@@ -75508,17 +75551,18 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
     // doubled the enumeration's peak, ~1.2 GB; elves-mem 2026-11-26.)
     struct Row { std::size_t i; std::string sink; int count; int unit; int elf_casts = 0; };
     std::vector<Row> rows;
-    long long n_split = 0, n_band = 0;
+    long long n_split = 0, n_band = 0, n_between = 0;
     struct Flush
     {
-        std::size_t n; long long& sp; long long& bd;
+        std::size_t n; long long& sp; long long& bd; long long& bw;
         ~Flush()
         {
             if (!ElvesCensusOn()) { return; }
             ElvesCensus& c = ElvesCensusSink();
             c.calls.fetch_add(1); c.plans.fetch_add(static_cast<long long>(n)); c.split.fetch_add(sp); c.band.fetch_add(bd);
+            c.between.fetch_add(bw);
         }
-    } flush{ plans.size(), n_split, n_band };
+    } flush{ plans.size(), n_split, n_band, n_between };
     for (std::size_t i = 0; i < plans.size(); ++i)
     {
         if (!admit[i] || plans[i].actions == nullptr) { continue; }
@@ -75565,6 +75609,9 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         out.bp_base        = -1;
     };
     const std::vector<ElvesHoldBackSource> held = ElvesHoldBackSources(s, is_pre_combat);
+    const int held_normal = ElvesHoldBackNormalMana(held);   // (3b) the unscaled dorks' mana
+    const bool two   = ElvesHoldBackTwoOn();     // (3c) top and top - h_normal only
+    const bool three = ElvesHoldBackThreeOn();
     const int trace_turn = ElvesTraceTurn();
     const bool trace = trace_turn > 0 && s.turn_number == trace_turn;
     if (trace)
@@ -75645,12 +75692,42 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         std::vector<int> top(static_cast<std::size_t>(ncls), 0);
         for (std::size_t a = 0; a < idx.size(); ++a)
         { top[static_cast<std::size_t>(cls[a])] = std::max(top[static_cast<std::size_t>(cls[a])], rows[idx[a]].count); }
+        // (3b) every member count of each class, for the nearest-below fallback of a target no member hits.
+        std::vector<std::vector<int>> counts(static_cast<std::size_t>(ncls));
+        for (std::size_t a = 0; a < idx.size(); ++a)
+        { counts[static_cast<std::size_t>(cls[a])].push_back(rows[idx[a]].count); }
+        // The count standing in for a target no member hits: the largest member below it (0 = none needed / none).
+        auto nearest_below = [&](int c, int target)
+        {
+            if (target <= 0) { return 0; }   // the no-sink plan: not a row, never removed
+            int below = 0;
+            for (int m : counts[static_cast<std::size_t>(c)])
+            {
+                if (m == target) { return 0; }   // an exact member realises it
+                if (m < target) { below = std::max(below, m); }
+            }
+            return below;
+        };
         for (std::size_t a = 0; a < idx.size(); ++a)
         {
             const Row& r = rows[idx[a]];
+            const int c = cls[a];
+            const int tp = top[static_cast<std::size_t>(c)];
             const int hm = ElvesHoldBackMana(held, r.elf_casts);   // the mana every held attacker frees
             const int h = (hm + r.unit - 1) / r.unit;   // (3) the hold-back band in count steps
-            const bool drop = r.count < top[static_cast<std::size_t>(cls[a])] - h;
+            const int hn = std::min(h, (held_normal + r.unit - 1) / r.unit);   // (3b) only the unscaled dorks held
+            const bool in_band = r.count >= tp - h;
+            auto realises = [&](int t)   // count r.count is hold-back target t (or its nearest-below stand-in)
+            {
+                if (t <= 0) { return false; }
+                if (r.count == t) { return true; }
+                const int nb = nearest_below(c, t);
+                return nb > 0 && r.count == nb;
+            };
+            const bool is_top = r.count == tp, is_normal = realises(tp - hn), is_all = realises(tp - h);
+            const bool is_option = is_top || is_normal || is_all;
+            if (in_band && !is_option) { ++n_between; }
+            const bool drop = two ? !(is_top || is_normal) : three ? !is_option : !in_band;
             if (drop) { admit[r.i] = 0; ++n_band; }
             if (trace)
             {
@@ -75662,12 +75739,100 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
                     if (e.count >= 0) { casts += "#" + std::to_string(e.count); }
                     casts += " ";
                 }
-                std::fprintf(stderr, "[elves-scal-trace]   cls=%d sink=%s count=%d top=%d h=%d %s | %s\n", cls[a],
-                             r.sink.c_str(), r.count, top[static_cast<std::size_t>(cls[a])], h, drop ? "DROP" : "keep",
-                             casts.c_str());
+                std::fprintf(stderr, "[elves-scal-trace]   cls=%d sink=%s count=%d top=%d h=%d hn=%d%s %s | %s\n", cls[a],
+                             r.sink.c_str(), r.count, tp, h, hn, (in_band && !is_option) ? " between" : "",
+                             drop ? "DROP" : "keep", casts.c_str());
             }
         }
     }
+}
+
+// MTG_ELVES_CHOSEN_CENSUS=1 -- DIAGNOSTIC ONLY (it re-enumerates the rule-lifted menu at the real state, which may warm
+// caches, so run it in its own batch, never inside an A/B arm). Called by the executor once per main phase, after the
+// plan is chosen and before anything executes. One stderr line per main phase of an Elves game:
+//   [elves-chosen] job seed T pre sink count top hn h cat fixed_atk scaled_atk sick_dorks land_mana cost
+// cat = top | normal (top - h_normal) | all (top - h_all) | between (inside the band, none of the three) | below |
+// nosink (no scaled sink in the plan). fixed_atk / scaled_atk: untapped attack-capable 1-mana / scaled dorks;
+// land_mana: untapped lands; cost: the plan's cast cost total (mana value). A payment where the tap ORDER matters is
+// pre=1, fixed_atk >= 1, scaled_atk >= 1 and cost > land_mana.
+void ElvesChosenCensus(const GameState& s, const void* chosen_plan, bool is_pre_combat)
+{
+    static const bool on = EnvOn("MTG_ELVES_CHOSEN_CENSUS");
+    if (!on || dynamic_cast<const ElvesProvider*>(&ResolveProvider(s)) == nullptr) { return; }
+    const TurnSolver::Plan& chosen = *static_cast<const TurnSolver::Plan*>(chosen_plan);
+    const int me = s.active_player_index;
+    int fixed_atk = 0, scaled_atk = 0, sick = 0, land_mana = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (p.card.IsLand()) { ++land_mana; continue; }
+        if (d == nullptr || d->tmpl != CardTemplate::ManaDork || !p.card.IsCreature()) { continue; }
+        if (!CanAttackFull(p, s.battlefield, me)) { ++sick; continue; }
+        (IsScaledManaDork(*d) ? scaled_atk : fixed_atk) += 1;
+    }
+    const int cost = LineCastCostTotal(chosen.actions).ManaValue();
+    std::string sink = "-";
+    int count = -1, at = -1, n_scaled = 0, unit = 1;
+    for (std::size_t k = 0; k < chosen.actions.size(); ++k)
+    {
+        const ElvesSink e = ElvesSinkOf(chosen.actions[k]);
+        if (e.count > 0) { ++n_scaled; at = static_cast<int>(k); count = e.count; unit = e.unit; }
+    }
+    int top = -1, h = -1, hn = -1;
+    const char* cat = "nosink";
+    if (n_scaled == 1)
+    {
+        sink = chosen.actions[static_cast<std::size_t>(at)].card_name.str();
+        auto canon = [](const TurnSolver::Plan& p)
+        {
+            TurnSolver::Plan out = p;
+            for (Action& a : out.actions) { if (ElvesSinkOf(a).count >= 0) { ElvesBlankSink(a); } }
+            out.value = 0; out.wins_this_turn = false; out.land_tie_key = -1; out.bp_base = -1;
+            return out;
+        };
+        const TurnSolver::Plan want = canon(chosen);
+        std::vector<TurnSolver::Plan> full;
+        {
+            const std::int8_t saved = heurarm::t_arm[heurarm::ELVES_SCALING_PRUNE];
+            heurarm::t_arm[heurarm::ELVES_SCALING_PRUNE] = 0;   // the rule-lifted menu: every count
+            full = TurnSolver::EnumerateMainPlansExhaustive(s, is_pre_combat, nullptr, nullptr);
+            heurarm::t_arm[heurarm::ELVES_SCALING_PRUNE] = saved;
+        }
+        std::vector<int> members;
+        for (const TurnSolver::Plan& p : full)
+        {
+            int ns = 0, c = -1;
+            for (const Action& a : p.actions) { const ElvesSink e = ElvesSinkOf(a); if (e.count > 0) { ++ns; c = e.count; } }
+            if (ns == 1 && canon(p) == want) { members.push_back(c); }
+        }
+        top = count;
+        for (int m : members) { top = std::max(top, m); }
+        int elf_casts = 0;
+        for (std::size_t k = 0; k < chosen.actions.size(); ++k)
+        {
+            const Action& a = chosen.actions[k];
+            if (static_cast<int>(k) == at || a.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name.str());
+            if (d != nullptr && d->card.IsCreature() && CardHasSubtype(d->card, "Elf")) { ++elf_casts; }
+        }
+        const std::vector<ElvesHoldBackSource> held = ElvesHoldBackSources(s, is_pre_combat);
+        h  = (ElvesHoldBackMana(held, elf_casts) + unit - 1) / unit;
+        hn = std::min(h, (ElvesHoldBackNormalMana(held) + unit - 1) / unit);
+        auto near = [&](int t)   // the count realising target t: t itself, else the largest member below it
+        {
+            if (t <= 0) { return -1; }
+            int below = 0;
+            for (int m : members) { if (m == t) { return t; } if (m < t) { below = std::max(below, m); } }
+            return below > 0 ? below : -1;
+        };
+        cat = count == top ? "top" : count == near(top - hn) ? "normal" : count == near(top - h) ? "all"
+            : count >= top - h ? "between" : "below";
+    }
+    std::fprintf(stderr, "[elves-chosen] %s %llu %d %d %s %d %d %d %d %s %d %d %d %d %d\n",
+                 heurarm::t_job_name ? heurarm::t_job_name : "-",
+                 static_cast<unsigned long long>(s.game_seed), s.turn_number, is_pre_combat ? 1 : 0, sink.c_str(),
+                 count, top, hn, h, cat, fixed_atk, scaled_atk, sick, land_mana, cost);
 }
 
 std::vector<int> ElvesProvider::XCandidates(const GameState& s, const CardDefinition& def, int max_affordable) const
@@ -75679,6 +75844,45 @@ std::vector<int> ElvesProvider::XCandidates(const GameState& s, const CardDefini
     std::vector<int> xs;
     for (int x = max_affordable; x >= 1; --x) { xs.push_back(x); }
     return xs;
+}
+
+// ---- ElvesProvider::ManaSourceRank -- WHAT THE PAYMENT PRESERVES (MTG_ELVES_TAP_ORDER, TEMPORARY, DEFAULT OFF) -------
+//
+// USER 2026-11-27: "technically on earlier turns when we are setting up, you usually want to use the scaling elf mana
+// last, to get more on board before you tap it. Then in late turns you want to work the other way around to leave
+// multiple attackers." ... "when using a scaling spell, (Joraga, Galadhrim, Genesis Wave) you usually would want to
+// prioritize attackers or just pump all of the mana into the spell." ... "we should take control of the tap order a
+// bit in the heuristic provider to make sure that we maintain whatever thing we want to maintain, whether that is the
+// attackers or the scaling mana." ... "ideally how we handle this would depend more on our board than the turn."
+// So the order is keyed on WHAT THE PLAN DOES, never on the turn number:
+//   PRESERVE ATTACKERS -- a pre-combat payment (PlanTraits::attack_matters) of a plan that casts a SCALED sink
+//     (PlanTraits::casts_scaled_sink: Warcaller / Brigade with K > 0, Genesis Wave): among the mana creatures, the
+//     ones that cannot attack this combat tap first (64), then the scaled dorks (65: one Priest tap pays what several
+//     Llanowars would), then the attack-capable fixed dorks LAST (66). Lands keep their ranks below the band. This is
+//     the order the hold-back option top - h_normal ("hold back normal dorks") assumes: the count the rest of the
+//     mana pays while the Llanowars / Mystics stay untapped. The ALL-IN count (the top) taps everything, so the
+//     order is immaterial there.
+//   PRESERVE SCALING MANA -- every other payment: the inherited order (a scaled dork taps after the Elves the plan
+//     casts, MTG_SCALER_PLAN_BIAS), unchanged.
+// Gaps (disclosed): the whole-turn prepay's hold/release ladder (TurnSolver::BatchPrepayMainCasts) is not driven by
+// this rank (at equal power it already releases the bigger producer -- the Priest -- first); the lethal projection's
+// payer model (ExecutorPayerOrder) does not set casts_scaled_sink; the Ezuri main-phase pump count is not a sink here.
+static bool ElvesTapOrderOn()
+{
+    static const bool e = EnvOn("MTG_ELVES_TAP_ORDER");   // TEMPORARY A/B selector, DEFAULT OFF (the USER decides)
+    return heurarm::Flag(heurarm::ELVES_TAP_ORDER, e);
+}
+
+int ElvesProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    const int r = SelesnyaLifegainProvider::ManaSourceRank(s, def);
+    if (def.tmpl != CardTemplate::ManaDork || !ElvesTapOrderOn()) { return r; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    if (pt == nullptr || !pt->attack_matters || !pt->casts_scaled_sink) { return r; }   // preserve scaling mana
+    const Permanent* p = g_rank_object;
+    if (p == nullptr || !p->card.IsCreature()) { return r; }
+    if (!CanAttackFull(*p, s.battlefield, s.active_player_index)) { return 64; }
+    return IsScaledManaDork(def) ? 65 : 66;   // preserve attackers: the fixed attack-capable dorks tap last
 }
 
 bool ElvesProvider::PlanListFilterLive(const GameState& s) const
@@ -75732,20 +75936,31 @@ void ElvesProvider::PlanListAdmitAt(const GameState& s, bool is_pre_combat, cons
 //   OTHER    every other spell (Elvish Clancaller, Leaf-Crowned Visionary, Immaculate Magistrate, Taunting Elf,
 //            Concordant Crossroads).
 // THREAT ORDER (worst first; the same order picks the best kept): a creature with no modelled ability first (Taunting
-// Elf); then the threat farthest from castable (mana value minus REACH = board mana + every mana card in hand, each 1);
+// Elf); then the threat farthest from castable (its COST minus REACH = board mana + every mana card in hand, each 1);
 // then the value rank, lowest first (1 Crossroads, 2 Magistrate / Shepherd, 3 the lords incl. Warcaller / Brigade,
 // 4 Ezuri / Genesis Wave); ties: the later hand copy first.
+// THE COST a threat is judged by is its mana value, except an X-put spell (reveal_x_put_permanents: Genesis Wave),
+// priced at X = 3: mana value 3 + 3 = 6. USER 2026-11-27: "Genesis Wave is technically MV 3, but realistically needs to
+// be cast for 6 mana or preferably even more to be good. It shouldn't be counted as a cheap spell in the discard
+// heuristic." (ElvesDiscardCost; the only cost read in this heuristic.)
 // MANA ORDER (shed first): a land making no green (Wirewood Lodge) < a creature-only land (Cavern of Souls) < Forest
 // < a flat mana Elf (Llanowar = Mystic: "a mix of producer and attacker", kept over a surplus land) < a scaled one
-// (Priest, Archdruid, Marwyn). LAND FLOOR: while we have fewer than 4 lands on the battlefield, the best land in hand
-// is the last mana card shed. Ties: the later hand copy first.
+// (Priest, Archdruid, Marwyn). LAND FLOOR, at every land count: the best land in hand is the last mana card shed, so a
+// land drop next turn survives the cleanup whenever any mana card does. USER 2026-11-27: "Mana Elves should indeed be
+// kept above spare lands. We ideally do want to play a land next turn, though, so keeping one is nice if we can manage
+// it." (It used to apply only below 4 lands on the battlefield.) The SPARE lands (every land but that one) still go
+// before the mana Elves. Ties: the later hand copy first.
 // SHED ORDER:
-//   WITH a SCALING threat in hand: DEAD > the spare threats (Taunting-type bodies, then the 3rd+ scaling threats, then
-//     the OTHER threats, each in the threat order) > MANA (no cap: "feel free to add more mana") > the <= 2 kept
-//     scaling threats (best / nearest kept longest).
+//   WITH a SCALING threat in hand: DEAD > the spare threats > MANA (no cap: "feel free to add more mana") > the <= 2
+//     kept scaling threats (best / nearest kept longest). The spare threats, in shed order: the plain bodies with no
+//     modelled ability (Taunting Elf), then the 3rd+ scaling threats, then the OTHER threats, each in the threat
+//     order. So with 3+ sinks in hand, which is shed first: a plain body like Taunting Elf or the 3rd sink? Taunting
+//     Elf first ("Taunting Elf's ability does nothing in goldfish").
 //   WITH NONE ("we need more threats"): DEAD > OTHER threats past the best 3 > MANA past the floor land + the next 2
 //     mana cards > the best 3 threats > those 2 mana cards > the floor land. (Reading: "the land floor + 2 mana cards"
-//     is additive -- the floor land, when it applies, plus two more.)
+//     is additive -- the floor land, when one is in hand, plus two more.)
+// MTG_ELVES_R2=0 (TEMPORARY A/B selector, delete after the A/B) restores the round-1 Wave cost (3) and the < 4 lands
+// floor.
 // Below 7 cards the order is only a completion (cleanup never sheds that far); the hand limit is 7 (no card in this
 // list changes it). Prefix-stable for every shed a cleanup makes: shedding a threat never moves REACH, and mana is
 // only shed once every threat that could move has gone (MTG_DISCARD_SHED_VERIFY=1 checks it). Every non-staged hand
@@ -75770,6 +75985,20 @@ static int ElvesThreatValue(const CardDefinition& d)
     if (!p.tap_target_counters_per_subtype.empty() || p.team_base_pt_power > 0) { return 2; } // Magistrate, Shepherd
     if (p.grants_haste)                                      { return 1; }                   // Concordant Crossroads
     return 0;                                                                                // Taunting Elf
+}
+
+// The cost the discard heuristic judges a threat by (see the block above): the mana value, except an X-put spell
+// (Genesis Wave), priced at X = 3 (USER 2026-11-27: "realistically needs to be cast for 6 mana or preferably even more").
+static bool ElvesR2On()
+{
+    static const bool e = EnvOn("MTG_ELVES_R2", true);   // TEMPORARY A/B selector, DEFAULT ON; delete after the A/B
+    return heurarm::Flag(heurarm::ELVES_R2, e);
+}
+static int ElvesDiscardCost(const CardDefinition& d)
+{
+    const int mv = d.card.m_mana_cost.ManaValue();
+    if (d.params.reveal_x_put_permanents && ElvesR2On()) { return mv + 3 * std::max(1, d.card.m_mana_cost.x_pips); }
+    return mv;
 }
 
 // A SCALING threat: a mana sink that turns surplus mana into damage.
@@ -75849,7 +76078,7 @@ std::vector<int> ElvesProvider::CleanupDiscardCandidates(
         const bool sc = d != nullptr && ElvesScalingThreat(*d);
         cls[at(i)] = sc ? C_SCALE : C_OTHER;
         (sc ? scaling : other).push_back(i);
-        mv[at(i)]   = d ? d->card.m_mana_cost.ManaValue() : 0;
+        mv[at(i)]   = d ? ElvesDiscardCost(*d) : 0;
         rank[at(i)] = d ? ElvesThreatValue(*d) : 0;
     }
     const int reach = board_mana + static_cast<int>(mana.size());
@@ -75868,7 +76097,8 @@ std::vector<int> ElvesProvider::CleanupDiscardCandidates(
     std::sort(other.begin(), other.end(), worse);
     std::sort(mana.begin(), mana.end(), [&](int a, int b)
     { return rank[at(a)] != rank[at(b)] ? rank[at(a)] < rank[at(b)] : a > b; });
-    if (board_lands < 4)   // LAND FLOOR: the best land in hand is the last mana card shed
+    const bool land_floor = ElvesR2On() || board_lands < 4;   // MTG_ELVES_R2=0: the round-1 floor (< 4 lands only)
+    if (land_floor)   // LAND FLOOR: the best land in hand is the last mana card shed
     {
         for (int k = static_cast<int>(mana.size()) - 1; k >= 0; --k)
         {
@@ -75908,7 +76138,7 @@ std::vector<int> ElvesProvider::CleanupDiscardCandidates(
     {
         // "we need more threats": the best 3 other threats rank ahead of the mana past the floor land + 2 mana cards.
         const std::size_t keep_t = std::min<std::size_t>(3, other.size());
-        const std::size_t floor_n = (board_lands < 4 && !mana.empty() && land[at(mana.back())]) ? 1 : 0;
+        const std::size_t floor_n = (land_floor && !mana.empty() && land[at(mana.back())]) ? 1 : 0;
         const std::size_t keep_m = std::min(mana.size(), floor_n + 2);
         put_all(other, 0, other.size() - keep_t);
         put_all(mana, 0, mana.size() - keep_m);

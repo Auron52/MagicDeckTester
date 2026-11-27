@@ -78,6 +78,17 @@
 #include <unordered_set>
 #include <utility>
 
+// THE KICK-COUNT CAP (multikicker / squad, CollectActions): the opponent's STARTING life -- 20, 30 in Two-Headed Giant
+// -- a lethal count, never a deck constant. USER 2026-11-27: "I think Kick counts should be capped at lethal size of
+// 20", then on 2HG: "Yeah, we may want to scale it up for 2HG arguably." Clamped to the synthesized faces
+// (kMaxMultikick). MTG_ELVES_R2=0 (TEMPORARY A/B selector, delete after the A/B) restores the flat 20.
+int MultikickCountCap()
+{
+    static const bool s_r2 = EnvOn("MTG_ELVES_R2", true);
+    if (!heurarm::Flag(heurarm::ELVES_R2, s_r2)) { return std::min(20, kMaxMultikick); }
+    return std::max(1, std::min(gamesetup::StartingLife(), kMaxMultikick));
+}
+
 // When true, SolveWithLookahead prints per-pass per-candidate win turn estimates
 // for top-level T1 pre-combat decisions.  Set via TurnSolver::SetTraceSolve().
 static bool s_trace_solve = false;
@@ -47072,7 +47083,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
             }
             int kmax = rep_mv > 0 ? std::max(0, (pool - base.ManaValue()) / rep_mv) : 0;
-            kmax = std::min(kmax, kMaxMultikick);
+            kmax = std::min(kmax, MultikickCountCap());
             std::vector<int> ks;
             // The UnprunedGate mask is full (64 gates, static-asserted), so the kick-count fan shares the
             // REPLICATE gate -- the same shape (a count of an additional cost paid at cast):
@@ -70358,6 +70369,9 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
             for (int ci = 0; ci < 5; ++ci)
             { if (d->card.HasColor(static_cast<Color>(ci))) { t.cast_color_mask |= (1 << ci); } }
         }
+        if (a.kind == Action::Kind::CastFromHand
+            && (a.kick_count > 0 || (d->params.reveal_x_put_permanents && a.chosen_x > 0)))
+        { t.casts_scaled_sink = true; }
         if (d->card.IsCreature())
         {
             for (int s = 0; s < n_scalers && !t.casts_scaler_food; ++s)

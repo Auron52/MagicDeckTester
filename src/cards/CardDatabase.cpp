@@ -787,9 +787,9 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         // MULTIKICKER / SQUAD (CR 702.33c / 702.157 -- Joraga Warcaller, Galadhrim Brigade): the kicker face
         // trick above, ONCE PER KICK COUNT. "<name> (Kicked xK)" costs printed + K x the repeat cost (an
         // ADDITIONAL cost, CR 601.2b) and carries kick_times = K; everything else is a full copy, exactly as
-        // for the single kicker. The faces bound the axis at kMaxMultikick kicks -- far past any pool a
-        // goldfish turn reaches (Warcaller at 20 kicks costs 41 mana), and an affordable count above it is
-        // the one disclosed limit of the model (CollectActions also clamps there).
+        // for the single kicker. The faces bound the axis at kMaxMultikick kicks (the largest starting life of any
+        // format); CollectActions caps the offered count lower, at the opponent's starting life (a lethal count:
+        // Warcaller at 20 kicks costs 41 mana, at 30 61).
         {
             const std::optional<ManaCost>& rep = def.params.multikicker_cost.has_value()
                 ? def.params.multikicker_cost : def.params.squad_cost;
