@@ -697,7 +697,8 @@ blockers, which is part of why the USER finds Parallax Wave followed by Opalesce
    everything" sends a 1/1 into a 4/4 wall every turn, which over-credits the blocker. Options: (a) keep attack-all,
    as an upper bound only; (b) a provider rule that holds back an attacker that would die to a block without
    killing or dealing damage; (c) search over attack subsets. Option (c) is a new search capability, and it is
-   the one real 1v1 needs anyway.
+   the one real 1v1 needs anyway. USER ruling (Q10): heuristics for the obvious attacks plus search for the at-risk ones;
+   see section 9.
 4. **Mapping keys** gain creature effects (power, toughness, the keywords that matter in combat, entry round,
    and leaving play). Blockers interact (two walls are not two times one wall), so this falls under the
    interaction terms of section 7.5 levels 2-3, not the pure sum.
@@ -1173,6 +1174,33 @@ which over-credits blockers; (b) a provider rule that holds back an attacker tha
 nothing; (c) a searched choice of attackers, a new search capability that real 1v1 also needs. Default: (b) for
 the first build, with (a) reported beside it as the upper bound, and (c) when 1v1 work starts. Reason: (b) is
 small and removes the worst over-credit, and (c) is most of a 1v1 attack search.
+
+*USER answer (2026-11-27), verbatim:* "Good point on the attacking, though. That is where things get a lot trickier.
+We would want some heuristics and some search. Typically if only a little damage would get through and you would
+lose creatures you would hold back until your board is larger or you have evasion or creature combat is more
+favourable." -> Neither (a), (b) nor (c) alone: a provider decides the obvious attacks and the search branches on
+the rest.
+* **Why the obvious part is large in the replay.** Our creatures never attack the gauntlet deck in the replay
+  (our damage lives in our own game, W). So a gauntlet creature held back has no defensive value. Holding back
+  only avoids losing it.
+* **Provider (sound prunes):**
+  * A creature that cannot die in this combat attacks. That covers evasion no untapped blocker can meet, and
+    no blocker able to kill it (counting deathtouch and first strike). The existing tap-ability exception still
+    applies (a mana creature or a tap ability can be worth more untapped).
+  * Interchangeable attackers (same power, toughness and combat keywords) are folded, so "send 2 of the 4 1/1s"
+    is one option, not six.
+* **Search (the less obvious part):** which of the creatures that COULD die in this combat attack. The hold-back
+  the USER describes ("until your board is larger or you have evasion or creature combat is more favourable")
+  comes out of the search, not a rule: depth counts rounds and the gauntlet deck's objective is its kill turn,
+  so waiting a turn for a lethal alpha strike is found whenever it kills sooner. The branching is the subsets of
+  at-risk attackers after the folds, which is small on most boards. "Attack with none of them" is always one
+  option.
+* **Our blocks inside the attacker's lookahead.** The clairvoyant block choice tries each block by replaying the
+  game, which is far too costly at every node of the attacker's search. Inside its lookahead the attacker
+  therefore predicts our blocks with the non-clairvoyant block rule (section 5.6). The replay itself then uses
+  the scored block choice. That mismatch is stated, not hidden. This is the opponent's behaviour as seen from
+  the attacker's search, not a greedy pick for the searching side.
+* Attack-all stays as a reported upper bound on the blocker's value.
 
 **Q11 (2026-11-27). Blocking in goldfish.** Should the new block step also let the passive opponent's spawned
 creatures block our attackers in ordinary goldfish games? Default: no, control-mode replays only. Reason: it
