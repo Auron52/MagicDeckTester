@@ -743,6 +743,17 @@ blockers, which is part of why the USER finds Parallax Wave followed by Opalesce
        reflected damage is as small as it can be, when removing the reflector (its Q8 trouble value) is worth
        that hit. A bigger blocker only adds reflected damage. An indestructible reflector (Stuffy Doll) can only
        be soaked, never killed.
+     * **Screaming Nemesis also stops our life gain (USER 2026-11-27, verbatim):** "Hmm... Although Nemesis does
+       indeed bring up the question of whether we need the lifegain in our control deck. If we do, allowing the
+       'no lifegain' to kick in could cost us." A player dealt damage by its trigger can't gain life for the rest
+       of the game, so a block (or our own sweeper or burn hitting it) can switch off every later life-gain effect
+       of ours. Our life gain is an effect in the replayed schedule (see "Related control effects" below), so:
+       * the replay applies the lockout and credits nothing for life gain after it. The clairvoyant scored block
+         therefore sees the full cost, and blocks Nemesis only when that is still worth it;
+       * the non-clairvoyant rule adds the lockout to the price of dealing damage to Nemesis: the delay the
+         mapping credits to the life gain our deck would still cast this game. A deck with no life gain pays
+         nothing and blocks Nemesis on damage alone. A life-gain control deck mostly lets it through or soaks it
+         with a 0-power blocker, which deals no damage and so triggers nothing.
 3. **The attacker's choice against blockers** (the gauntlet deck). This is the messy part. "Attack with
    everything" sends a 1/1 into a 4/4 wall every turn, which over-credits the blocker. Options: (a) keep attack-all,
    as an upper bound only; (b) a provider rule that holds back an attacker that would die to a block without
