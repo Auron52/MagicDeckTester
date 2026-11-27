@@ -75819,14 +75819,14 @@ void ElvesChosenCensus(const GameState& s, const void* chosen_plan, bool is_pre_
         const std::vector<ElvesHoldBackSource> held = ElvesHoldBackSources(s, is_pre_combat);
         h  = (ElvesHoldBackMana(held, elf_casts) + unit - 1) / unit;
         hn = std::min(h, (ElvesHoldBackNormalMana(held) + unit - 1) / unit);
-        auto near = [&](int t)   // the count realising target t: t itself, else the largest member below it
+        auto stand_in = [&](int t)   // the count realising target t: t itself, else the largest member below it
         {
             if (t <= 0) { return -1; }
             int below = 0;
             for (int m : members) { if (m == t) { return t; } if (m < t) { below = std::max(below, m); } }
             return below > 0 ? below : -1;
         };
-        cat = count == top ? "top" : count == near(top - hn) ? "normal" : count == near(top - h) ? "all"
+        cat = count == top ? "top" : count == stand_in(top - hn) ? "normal" : count == stand_in(top - h) ? "all"
             : count >= top - h ? "between" : "below";
     }
     std::fprintf(stderr, "[elves-chosen] %s %llu %d %d %s %d %d %d %d %s %d %d %d %d %d\n",

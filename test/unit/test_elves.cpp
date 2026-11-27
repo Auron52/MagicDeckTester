@@ -1236,7 +1236,9 @@ std::vector<std::array<bool, 3>> ETapAfter(const GameState& s, int k)
     const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
     const TurnSolver::Plan* p = EFind(plans, [k](const TurnSolver::Plan& q)
     {
-        return ECountCasts(q) == 1 && IsCast(q.actions[0], "Galadhrim Brigade") && q.actions[0].kick_count == k;
+        if (ECountCasts(q) != 1) { return false; }
+        for (const Action& a : q.actions) { if (IsCast(a, "Galadhrim Brigade") && a.kick_count == k) { return true; } }
+        return false;
     });
     REQUIRE(p != nullptr);
     GameState roll, real;
