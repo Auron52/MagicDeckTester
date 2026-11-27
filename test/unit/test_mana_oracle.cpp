@@ -13,6 +13,7 @@
 #include "ai/TurnSolver.h"
 #include "ai/ManaPayment.h"
 #include "cards/CardDatabase.h"
+#include "core/EnvFlags.h"            // EnvPut -- portable setenv (MSVC has only _putenv_s)
 #include "core/GameLogger.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -1890,9 +1891,17 @@ struct OracleEnvPin
         const char* e = std::getenv(n);
         had = e != nullptr;
         if (had) { saved = e; }
-        setenv(n, value, 1);
+        EnvPut(n, value, /*overwrite=*/true);
     }
-    ~OracleEnvPin() { if (had) { setenv(name, saved.c_str(), 1); } else { unsetenv(name); } }
+    ~OracleEnvPin()
+    {
+        if (had) { EnvPut(name, saved.c_str(), /*overwrite=*/true); return; }
+#ifdef _WIN32
+        _putenv_s(name, "");   // MSVC: an empty value removes the variable (there is no unsetenv)
+#else
+        unsetenv(name);
+#endif
+    }
 };
 // Treasure Hunt's T3 shape (s30100161, gate gi 100000-119999): three untapped Islands, two Treasure Hunts and two
 // Islands in hand with Land's Edge, the drop open, a nonland on top. The pre-land pool (3) cannot pay both {1}{U}s, so
