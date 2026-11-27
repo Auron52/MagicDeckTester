@@ -112,6 +112,17 @@ The same-run suite cost gate measured Zombies and Hinata together on this
 game (`zombies2hg_regression_d5_b20`), versus Hinata's 29,846.877 core-ms:
 Zombies is 0.15x the pinned yardstick and passes the 3x admission limit.
 
+The mandatory horizon tie-break screen ran 400, then 1,600, then 6,400
+paired games at play settings (depth 5, budget 20). The largest sample changed
+one game: leaf grading lost one turn, with zero improved games, an observed
+0.000156 turn/game difference. The script reports `NO SIGN AT THIS SAMPLE`
+because just one game bound. Its suggested decisive extension is roughly 321
+blocks of 200 games per arm, which is disproportionate on this host. The one
+case (seed 2600191, game index 1) reproduced as turn 6 without the tie-break
+and turn 7 with it at budget 20; with the tie-break at unlimited budget it won
+turn 6. The faster line is recoverable and no structural branch was removed.
+Keep the default tie-break on pending stronger evidence.
+
 External Codex-play seeds 54001-54017 found no illegal or missing playable
 plans and no wrong state deltas. They exercised Gravecrawler's graveyard cast
 after Culling, tapped entries, Cemetery Reaper's graveyard exile and token,
