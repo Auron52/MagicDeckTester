@@ -1402,6 +1402,18 @@ deck:
     screen report so the USER can correct it.
   * **In such a screen the control-scored result decides,** with 1v1 joining when it exists. The goldfish result is
     still reported beside it, because it shows what the card costs the deck's own clock.
+* **A non-control swap: goldfish decides, the other modes sanity-check (USER 2026-11-27, verbatim):** "Regarding the
+  open question, the control modes are probably more accurate, but also clearly more expensive. Goldfishing on the
+  other hand allows us to run a lot of games which is very helpful when we are looking at cards that are just
+  about winning faster. We would probably use Goldfishing with the others as sanity checks for such changes. Then
+  do more focused effort on the other modes when a control card is involved." So, in a deck with more than one
+  mode:
+  * **No control card in the swap:** the goldfish screen, at its usual large sample, gives the verdict. The deck's
+    other modes run a smaller sample as a sanity check. A sanity check that points the other way, beyond its own
+    noise, is reported to the USER rather than overriding the verdict.
+  * **A control card in the swap:** the control-scored mode (and 1v1 later) gets the focused effort and decides,
+    as above. Goldfish is reported beside it.
+  * The screen report states which case it applied and why, from the card classification.
 
 **Q9. Is the per-pair form of section 4.1 what you mean by "<win turn - average control impact>"?** The design
 scores each (control game, gauntlet game) pair as `min over prefixes k of max(T_k, W - D_k)` and only then
