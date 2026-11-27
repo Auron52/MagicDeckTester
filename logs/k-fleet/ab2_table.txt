@@ -1,0 +1,14 @@
+
+### K fleet: K=1 vs today (O1 vs O0)
+
+| row | n | net | faster / slower | d turn | t | mean turn base | mean turn new | units | cpu |
+|---|---|---|---|---|---|---|---|---|---|
+| mazesend | 3000 | -59 | 64 / 5 | -0.0197 | -7.16 | 5.5227 | 5.5030 | x0.763 | x0.907 |
+| mazesend2hg | 1500 | -28 | 30 / 2 | -0.0187 | -4.99 | 5.3353 | 5.3167 | x0.746 | x0.890 |
+| gods | 3000 | -9 | 11 / 2 | -0.0053 | -2.67 | 5.5570 | 5.5517 | x0.988 | x0.997 |
+| gods2hg | 1500 | -1 | 5 / 4 | -0.0013 | -0.39 | 5.6733 | 5.6720 | x0.984 | x0.994 |
+| mill | 3000 | +10 | 5 / 15 | +0.0033 | +2.24 | 4.9943 | 4.9977 | x0.930 | x0.888 |
+| mill2hg | 1500 | +1 | 0 / 1 | +0.0007 | +1.00 | 4.7993 | 4.8000 | x0.934 | x0.894 |
+
+slower games: 29 (written to /workspaces/MagicDeckTester/build/scratch/k-fleet/ab2/slower.json)
+  O1vO0: 29
