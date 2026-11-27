@@ -13414,6 +13414,9 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     const DecisionProvider& prov = ResolveProvider(state);
     const bool sac_ritual_line = SacRitualOrderDomain(cands, ord);
     const bool fleshbag_reducer_line = FleshbagReducerOrderDomain(state, cands, ord);
+    // Culling can consume Fleshbag's pinned victim first. Fleshbag then sacrifices a different
+    // body, possibly a reducer, so its ETB must be resolved in every sacrifice-ritual line.
+    const bool fleshbag_mana_line = fleshbag_reducer_line || sac_ritual_line;
     // Warm per-thread scratch board, same contract as SubsetPayableWithFilters' (see PayScratch):
     // this probe is the same shape -- a full GameState copy on entry, thrown away on return.
     PayScratch _pay_scratch(state);
@@ -13876,7 +13879,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         const bool joins_for_mana = (def.params.mana_rock && !def.card.IsCreature()
                                      && !def.params.lens_imprint_land)
                                  || (sac_ritual_line && def.card.IsCreature())
-                                 || (fleshbag_reducer_line && def.params.etb_each_player_sacrifice_creature)
+                                 || (fleshbag_mana_line && def.params.etb_each_player_sacrifice_creature)
                                  || def.params.hinata_cost_reducer
                                  || !def.params.reduces_spell_subtype.empty()
                                  || def.params.chooses_creature_type
@@ -13929,7 +13932,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             if (def.params.land_tap_bonus > 0 && def.params.etb_choose_color)   // Gauntlet's colour
             { perm.chosen_color = static_cast<int8_t>(LandTapCastColor(cp, a)); }
             cp.battlefield.push_back(perm);
-            if (fleshbag_reducer_line && def.params.etb_each_player_sacrifice_creature)
+            if (fleshbag_mana_line && def.params.etb_each_player_sacrifice_creature)
             { ResolveEachPlayerSacrificeCreatureEtb(cp, cp.active_player_index, perm.card.m_number, a.chosen_x); }
         }
         // ETB TREASURE (Corsair Captain; MTG_ETB_TREASURE_SPEND): the enter trigger's Treasure --
