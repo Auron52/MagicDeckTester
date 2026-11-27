@@ -16275,6 +16275,14 @@ static bool AttackLordCastEnabled()
     static const bool env_on = EnvOn("MTG_ATTACK_LORD_CAST", false);
     return heurarm::Flag(heurarm::ATTACK_LORD_CAST, env_on);
 }
+// MTG_LORDCAST_HAND -- TEMPORARY selector (2026-11-27 lordcast re-test; delete or adopt with the USER's call on
+// MTG_ATTACK_LORD_CAST): the walk takes each cast card out of the scratch hand, so Ilharg's attack-put projection
+// cannot put a card the plan already cast. =1 on.
+static bool LordCastHandEnabled()
+{
+    static const bool env_on = EnvOn("MTG_LORDCAST_HAND", false);
+    return heurarm::Flag(heurarm::LORDCAST_HAND_TMP, env_on);
+}
 static bool AttackAuraHostTapEnabled()
 {
     static const bool env_on = EnvOn("MTG_ATTACK_AURA_HOST_TAP", true);   // DEFAULT ON; =0 host counted
@@ -16564,6 +16572,12 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
         // permanent it makes is the printed card `d`.
         const CardDefinition* face = KickedFaceOr(d, a.kicked, a.kick_count);
         const int kick_k = face->params.kick_times;
+        if (a.kind == Action::Kind::CastFromHand && LordCastHandEnabled())
+        {
+            std::vector<Card>& hand = t.players[static_cast<std::size_t>(active)].hand;
+            for (auto it = hand.begin(); it != hand.end(); ++it)
+            { if (it->m_name == d->card.m_name) { hand.erase(it); break; } }
+        }
         // The STORM count, in lockstep with both apply worlds (apply_one / CastSpellFromHand ++ it at
         // each cast, before resolution): without it a walked Weather the Storm saw the PRE-plan count
         // and projected one instance where the plan's own earlier casts had made copies. Read only by

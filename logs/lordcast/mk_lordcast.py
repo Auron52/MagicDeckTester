@@ -9,9 +9,13 @@ Shape follows the 2026-11-22 lpab A/B (seed 1810000; 19 lord decks x 4000 search
 Arms: off (flag false), on (flag true), null (flag false, a second copy; first NULL_* games only) -- the null
 arm bounds the in-process cross-game noise. Pairing: chunk seed = BASE + gi0, game_index = gi0.
 usage: mk_lordcast.py <out.json> [key ...]"""
-import json, re, sys
+import json, os, re, sys
 sys.path.insert(0, "logs/lordcast")
-BASE = 7340000
+BASE = int(os.environ.get("BASE", 7340000))
+# ARMS="name:lord:hand,..." (hand = MTG_LORDCAST_HAND); default the original off/on (+null) run.
+ARMS = [(a, b == "1", h == "1") for a, b, h in (x.split(":") for x in os.environ.get("ARMS", "off:0:0,on:1:0").split(","))]
+PLAY_KEYS = os.environ.get("PLAY_KEYS")   # comma list: play rows only for these keys (d0 for every key)
+WITH_NULL = os.environ.get("NULL", "1") == "1"
 N_D0, N_PLAY, N_2HG = 50000, 4000, 1000
 NULL_D0, NULL_PLAY = 10000, 500
 CHUNK_D0 = 1000
@@ -37,15 +41,16 @@ def emit(key, shape, n, chunk, extra, weight, null_n):
     base = key[:-3] if key.endswith("2hg") else key
     for gi0 in range(0, n, chunk):
         g = min(chunk, n - gi0)
-        arms = [("off", False), ("on", True)] + ([("null", False)] if gi0 < null_n else [])
-        for arm, on in arms:
+        arms = list(ARMS) + ([("null", False, False)] if WITH_NULL and gi0 < null_n else [])
+        for arm, on, hand in arms:
             j = {"name": f"{key}|{shape}|{arm}|{gi0}", "deck": FILE[base], "profile": PROF[base], "games": g,
-                 "seed": BASE + gi0, "game_index": gi0, "flags": {"MTG_ATTACK_LORD_CAST": on}, "weight": weight}
+                 "seed": BASE + gi0, "game_index": gi0, "flags": dict({"MTG_ATTACK_LORD_CAST": on}, **({"MTG_LORDCAST_HAND": hand} if len(ARMS[0]) and os.environ.get("ARMS") else {})), "weight": weight}
             j.update(extra)
             jobs.append(j)
 for key in keys:
     cpg = cost.get(key, {}).get("cost_per_game_ms", 500.0)
     emit(key, "d0", N_D0, CHUNK_D0, {"depth": 0, "budget_ms": 0, "ignore_play_profile": True}, 0, NULL_D0)
+    if PLAY_KEYS is not None and key not in PLAY_KEYS.split(","): continue
     b = play_budget(key)
     if b is None: sys.exit(f"{key}: no play row")
     n = PLAY_N.get(key, N_PLAY)
