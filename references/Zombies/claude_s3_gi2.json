@@ -1,0 +1,260 @@
+{
+  "seed": 3, "game_index": 2, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "opponent_land_entry": 1, "free_turns": 1, "opponent_spawn_land": 1, "opponent_bounce_opening": 1, "opponent_shuffle_ordinal": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 32, "name": "Lord of the Undead" }, { "num": 8, "name": "Dark Ritual" }, { "num": 22, "name": "Gravecrawler" }, { "num": 35, "name": "Swamp" }, { "num": 26, "name": "Gray Merchant of Asphodel" }, { "num": 57, "name": "Undead Warchief" }, { "num": 17, "name": "Dread Wanderer" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 10, "cast_order": ["**", "land=Swamp", "cast=Gravecrawler"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Undead Warchief" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 8, "name": "Dark Ritual", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }, { "num": 17, "name": "Dread Wanderer", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Gravecrawler", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gray Merchant of Asphodel", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lord of the Undead", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: Dark Ritual, Dread Wanderer, Gravecrawler", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Dread Wanderer", "Gravecrawler"], "cast_order_canonical": ["Dark Ritual", "Dread Wanderer", "Gravecrawler"], "actions": [{ "card": "Dark Ritual" }, { "card": "Dread Wanderer" }, { "card": "Gravecrawler" }] },
+    { "index": 1, "summary": "land=Swamp; cast: Dark Ritual, Gravecrawler, Dread Wanderer", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Gravecrawler", "Dread Wanderer"], "cast_order_canonical": ["Dark Ritual", "Gravecrawler", "Dread Wanderer"], "actions": [{ "card": "Dark Ritual" }, { "card": "Gravecrawler" }, { "card": "Dread Wanderer" }] },
+    { "index": 2, "summary": "land=Swamp; cast: Dread Wanderer, Dark Ritual, Gravecrawler", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Dark Ritual", "Gravecrawler"], "casts": ["Dread Wanderer", "Dark Ritual", "Gravecrawler"], "cast_order_canonical": ["Dread Wanderer", "Dark Ritual", "Gravecrawler"], "actions": [{ "card": "Dread Wanderer" }, { "card": "Dark Ritual" }, { "card": "Gravecrawler" }] },
+    { "index": 3, "summary": "land=Swamp; cast: Gravecrawler, Dark Ritual, Dread Wanderer", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Dark Ritual", "Dread Wanderer"], "casts": ["Gravecrawler", "Dark Ritual", "Dread Wanderer"], "cast_order_canonical": ["Gravecrawler", "Dark Ritual", "Dread Wanderer"], "actions": [{ "card": "Gravecrawler" }, { "card": "Dark Ritual" }, { "card": "Dread Wanderer" }] },
+    { "index": 4, "summary": "land=Swamp; cast: Dark Ritual, Lord of the Undead", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Lord of the Undead"], "cast_order_canonical": ["Dark Ritual", "Lord of the Undead"], "actions": [{ "card": "Dark Ritual" }, { "card": "Lord of the Undead" }] },
+    { "index": 5, "summary": "land=Swamp; cast: Lord of the Undead, Dark Ritual", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Lord of the Undead"], "casts": ["Lord of the Undead", "Dark Ritual"], "cast_order_canonical": ["Lord of the Undead", "Dark Ritual"], "actions": [{ "card": "Lord of the Undead" }, { "card": "Dark Ritual" }] },
+    { "index": 6, "summary": "land=Swamp; cast: Dark Ritual, Gravecrawler", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Gravecrawler"], "cast_order_canonical": ["Dark Ritual", "Gravecrawler"], "actions": [{ "card": "Dark Ritual" }, { "card": "Gravecrawler" }] },
+    { "index": 7, "summary": "land=Swamp; cast: Gravecrawler, Dark Ritual", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Dark Ritual"], "casts": ["Gravecrawler", "Dark Ritual"], "cast_order_canonical": ["Gravecrawler", "Dark Ritual"], "actions": [{ "card": "Gravecrawler" }, { "card": "Dark Ritual" }] },
+    { "index": 8, "summary": "land=Swamp; cast: Dark Ritual, Dread Wanderer", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Dread Wanderer"], "cast_order_canonical": ["Dark Ritual", "Dread Wanderer"], "actions": [{ "card": "Dark Ritual" }, { "card": "Dread Wanderer" }] },
+    { "index": 9, "summary": "land=Swamp; cast: Dread Wanderer, Dark Ritual", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Dark Ritual"], "casts": ["Dread Wanderer", "Dark Ritual"], "cast_order_canonical": ["Dread Wanderer", "Dark Ritual"], "actions": [{ "card": "Dread Wanderer" }, { "card": "Dark Ritual" }] },
+    { "index": 10, "summary": "land=Swamp; cast: Gravecrawler", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Gravecrawler"], "actions": [{ "card": "Gravecrawler" }] },
+    { "index": 11, "summary": "land=Swamp; cast: Dread Wanderer", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dread Wanderer"], "actions": [{ "card": "Dread Wanderer" }] },
+    { "index": 12, "summary": "land=Swamp; cast: Dark Ritual", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual"], "actions": [{ "card": "Dark Ritual" }] },
+    { "index": 13, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gravecrawler", "idx": 3, "num": 22, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Swamp", "idx": 2, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 8, "name": "Dark Ritual", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }, { "num": 17, "name": "Dread Wanderer", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gray Merchant of Asphodel", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lord of the Undead", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gravecrawler", "idx": 3, "num": 22, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Swamp", "idx": 2, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 8, "name": "Dark Ritual", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }, { "num": 17, "name": "Dread Wanderer", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gray Merchant of Asphodel", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lord of the Undead", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 14, "cast_order": ["**", "land=Swamp", "cast=Dark Ritual", "cast=Undead Warchief"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Swamp" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Brushland" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gravecrawler", "idx": 4, "num": 22, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Swamp", "idx": 3, "num": 35, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 8, "name": "Dark Ritual", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }, { "num": 17, "name": "Dread Wanderer", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gray Merchant of Asphodel", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lord of the Undead", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: Dark Ritual, Dread Wanderer, Lord of the Undead", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Dread Wanderer", "Lord of the Undead"], "cast_order_canonical": ["Dark Ritual", "Dread Wanderer", "Lord of the Undead"], "actions": [{ "card": "Dark Ritual" }, { "card": "Dread Wanderer" }, { "card": "Lord of the Undead" }] },
+    { "index": 1, "summary": "land=Swamp; cast: Dark Ritual, Lord of the Undead, Dread Wanderer", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Lord of the Undead", "Dread Wanderer"], "cast_order_canonical": ["Dark Ritual", "Lord of the Undead", "Dread Wanderer"], "actions": [{ "card": "Dark Ritual" }, { "card": "Lord of the Undead" }, { "card": "Dread Wanderer" }] },
+    { "index": 2, "summary": "land=Swamp; cast: Dread Wanderer, Lord of the Undead, Dark Ritual", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Lord of the Undead"], "casts": ["Dread Wanderer", "Lord of the Undead", "Dark Ritual"], "cast_order_canonical": ["Dread Wanderer", "Lord of the Undead", "Dark Ritual"], "actions": [{ "card": "Dread Wanderer" }, { "card": "Lord of the Undead" }, { "card": "Dark Ritual" }] },
+    { "index": 3, "summary": "land=Swamp; cast: Lord of the Undead, Dark Ritual, Dread Wanderer", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Lord of the Undead"], "casts": ["Lord of the Undead", "Dark Ritual", "Dread Wanderer"], "cast_order_canonical": ["Lord of the Undead", "Dark Ritual", "Dread Wanderer"], "actions": [{ "card": "Lord of the Undead" }, { "card": "Dark Ritual" }, { "card": "Dread Wanderer" }] },
+    { "index": 4, "summary": "land=Swamp; cast: Dark Ritual, Lord of the Undead", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Lord of the Undead"], "cast_order_canonical": ["Dark Ritual", "Lord of the Undead"], "actions": [{ "card": "Dark Ritual" }, { "card": "Lord of the Undead" }] },
+    { "index": 5, "summary": "land=Swamp; cast: Lord of the Undead, Dark Ritual", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Lord of the Undead"], "casts": ["Lord of the Undead", "Dark Ritual"], "cast_order_canonical": ["Lord of the Undead", "Dark Ritual"], "actions": [{ "card": "Lord of the Undead" }, { "card": "Dark Ritual" }] },
+    { "index": 6, "summary": "land=Swamp; cast: Dark Ritual, Dread Wanderer", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Dread Wanderer"], "cast_order_canonical": ["Dark Ritual", "Dread Wanderer"], "actions": [{ "card": "Dark Ritual" }, { "card": "Dread Wanderer" }] },
+    { "index": 7, "summary": "land=Swamp; cast: Dread Wanderer, Dark Ritual", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dread Wanderer", "Dark Ritual"], "cast_order_canonical": ["Dread Wanderer", "Dark Ritual"], "actions": [{ "card": "Dread Wanderer" }, { "card": "Dark Ritual" }] },
+    { "index": 8, "summary": "land=none; cast: Dark Ritual, Lord of the Undead", "declared_order_payability": "not_verified", "land": null, "casts": ["Dark Ritual", "Lord of the Undead"], "cast_order_canonical": ["Dark Ritual", "Lord of the Undead"], "actions": [{ "card": "Dark Ritual" }, { "card": "Lord of the Undead" }] },
+    { "index": 9, "summary": "land=none; cast: Lord of the Undead, Dark Ritual", "declared_order_payability": "known_drops", "land": null, "drops": ["Lord of the Undead"], "casts": ["Lord of the Undead", "Dark Ritual"], "cast_order_canonical": ["Lord of the Undead", "Dark Ritual"], "actions": [{ "card": "Lord of the Undead" }, { "card": "Dark Ritual" }] },
+    { "index": 10, "summary": "land=none; cast: Dark Ritual, Dread Wanderer", "declared_order_payability": "not_verified", "land": null, "casts": ["Dark Ritual", "Dread Wanderer"], "cast_order_canonical": ["Dark Ritual", "Dread Wanderer"], "actions": [{ "card": "Dark Ritual" }, { "card": "Dread Wanderer" }] },
+    { "index": 11, "summary": "land=none; cast: Dread Wanderer, Dark Ritual", "declared_order_payability": "known_drops", "land": null, "drops": ["Dark Ritual"], "casts": ["Dread Wanderer", "Dark Ritual"], "cast_order_canonical": ["Dread Wanderer", "Dark Ritual"], "actions": [{ "card": "Dread Wanderer" }, { "card": "Dark Ritual" }] },
+    { "index": 12, "summary": "land=Swamp; cast: Dread Wanderer", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dread Wanderer"], "actions": [{ "card": "Dread Wanderer" }] },
+    { "index": 13, "summary": "land=none; cast: Dread Wanderer", "declared_order_payability": "not_verified", "land": null, "casts": ["Dread Wanderer"], "actions": [{ "card": "Dread Wanderer" }] },
+    { "index": 14, "summary": "land=Swamp; cast: Dark Ritual, Undead Warchief", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual", "Undead Warchief"], "cast_order_canonical": ["Dark Ritual", "Undead Warchief"], "actions": [{ "card": "Dark Ritual" }, { "card": "Undead Warchief" }] },
+    { "index": 15, "summary": "land=Swamp; cast: Undead Warchief, Dark Ritual", "declared_order_payability": "known_drops", "land": "Swamp", "drops": ["Undead Warchief"], "casts": ["Undead Warchief", "Dark Ritual"], "cast_order_canonical": ["Undead Warchief", "Dark Ritual"], "actions": [{ "card": "Undead Warchief" }, { "card": "Dark Ritual" }] },
+    { "index": 16, "summary": "land=Swamp; cast: Dark Ritual", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Dark Ritual"], "actions": [{ "card": "Dark Ritual" }] },
+    { "index": 17, "summary": "land=none; cast: Dark Ritual", "declared_order_payability": "not_verified", "land": null, "casts": ["Dark Ritual"], "actions": [{ "card": "Dark Ritual" }] },
+    { "index": 18, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gravecrawler", "idx": 4, "num": 22, "is_land": false, "power": 4, "toughness": 2 }, { "name": "Swamp", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 7, "num": 36, "tapped": true, "is_land": true }, { "name": "Undead Warchief", "idx": 8, "num": 57, "sick": true, "is_land": false, "power": 3, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 17, "name": "Dread Wanderer", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gray Merchant of Asphodel", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lord of the Undead", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Dark Ritual"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Gravecrawler (4) — 4 to opponent (20→16)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gravecrawler", "idx": 4, "num": 22, "tapped": true, "is_land": false, "power": 4, "toughness": 2 }, { "name": "Swamp", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 7, "num": 36, "tapped": true, "is_land": true }, { "name": "Undead Warchief", "idx": 8, "num": 57, "sick": true, "is_land": false, "power": 3, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 17, "name": "Dread Wanderer", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gray Merchant of Asphodel", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lord of the Undead", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Dark Ritual"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Lord of the Undead" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gravecrawler", "idx": 4, "num": 22, "is_land": false, "power": 4, "toughness": 2 }, { "name": "Swamp", "idx": 3, "num": 35, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 7, "num": 36, "is_land": true, "taps": "B" }, { "name": "Undead Warchief", "idx": 8, "num": 57, "is_land": false, "power": 3, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 17, "name": "Dread Wanderer", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gray Merchant of Asphodel", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lord of the Undead", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Lord of the Undead", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Dark Ritual"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lord of the Undead", "declared_order_payability": "not_verified", "land": null, "casts": ["Lord of the Undead"], "actions": [{ "card": "Lord of the Undead" }] },
+    { "index": 1, "summary": "land=none; cast: Dread Wanderer", "declared_order_payability": "not_verified", "land": null, "casts": ["Dread Wanderer"], "actions": [{ "card": "Dread Wanderer" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gravecrawler", "idx": 4, "num": 22, "is_land": false, "power": 5, "toughness": 3 }, { "name": "Lord of the Undead", "idx": 11, "num": 32, "sick": true, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Swamp", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 7, "num": 36, "tapped": true, "is_land": true }, { "name": "Undead Warchief", "idx": 8, "num": 57, "is_land": false, "power": 4, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 17, "name": "Dread Wanderer", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gray Merchant of Asphodel", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Lord of the Undead", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Dark Ritual"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Gravecrawler (5), Undead Warchief (4) — 9 to opponent (16→7)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gravecrawler", "idx": 4, "num": 22, "tapped": true, "is_land": false, "power": 5, "toughness": 3 }, { "name": "Lord of the Undead", "idx": 11, "num": 32, "sick": true, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Swamp", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 7, "num": 36, "tapped": true, "is_land": true }, { "name": "Undead Warchief", "idx": 8, "num": 57, "tapped": true, "is_land": false, "power": 4, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 17, "name": "Dread Wanderer", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gray Merchant of Asphodel", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Lord of the Undead", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Dark Ritual"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Lord of the Accursed" }],
+  "events": [{ "turn": 3, "kind": "land", "text": "opponent plays Razorverge Thicket" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gravecrawler", "idx": 5, "num": 22, "is_land": false, "power": 5, "toughness": 3 }, { "name": "Lord of the Undead", "idx": 12, "num": 32, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Swamp", "idx": 4, "num": 35, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 8, "num": 36, "is_land": true, "taps": "B" }, { "name": "Undead Warchief", "idx": 9, "num": 57, "is_land": false, "power": 4, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 17, "name": "Dread Wanderer", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gray Merchant of Asphodel", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Lord of the Accursed", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Lord of the Undead", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Dark Ritual"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Dread Wanderer", "declared_order_payability": "not_verified", "land": null, "casts": ["Dread Wanderer"], "actions": [{ "card": "Dread Wanderer" }] },
+    { "index": 1, "summary": "land=none; cast: Lord of the Undead", "declared_order_payability": "not_verified", "land": null, "casts": ["Lord of the Undead"], "actions": [{ "card": "Lord of the Undead" }] },
+    { "index": 2, "summary": "land=none; cast: Lord of the Accursed", "declared_order_payability": "not_verified", "land": null, "casts": ["Lord of the Accursed"], "actions": [{ "card": "Lord of the Accursed" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gravecrawler", "idx": 5, "num": 22, "is_land": false, "power": 6, "toughness": 4 }, { "name": "Lord of the Accursed", "idx": 13, "num": 28, "sick": true, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Lord of the Undead", "idx": 12, "num": 32, "is_land": false, "power": 5, "toughness": 4 }, { "name": "Swamp", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 8, "num": 36, "tapped": true, "is_land": true }, { "name": "Undead Warchief", "idx": 9, "num": 57, "is_land": false, "power": 5, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 17, "name": "Dread Wanderer", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gray Merchant of Asphodel", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Lord of the Undead", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Undead Warchief", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Dark Ritual"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Gravecrawler (6), Undead Warchief (5), Lord of the Undead (5) — 16 to opponent (7→-9)" }
+  ]
+}
