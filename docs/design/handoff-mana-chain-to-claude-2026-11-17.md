@@ -309,6 +309,14 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 
 **12:27 UTC 11-26 (pre-compaction checkpoint):** I am HEAD of the push queue since 11:49; land-1126b validation running under `push_queue.py hold` (task bawqjsga8; log build/scratch/land-1126b/validate.log; markers UNIT.DONE (passed), TIERS.DONE). Rebased onto 9e566000b (no src change). Smoke+regression --both started ~12:18 after I killed the TH agent's gate2 (it had taken the box lock; agent told to relaunch behind TIERS.DONE). AFTER TIERS: `bash test/classify_turn_later.sh smoke` + `regression` (lane, 2 slots), then `bash test/regression.sh --both "--accept-with-regressions=<note>"`, `python3 test/check_gt_logs.py`, check_references_safe, commit GT, `push_queue.py land`. Expected moves: Maze's End rows (scoped price), maybe units-only on Elementals/Martyr/Morph; everything else byte-identical. DRAGONS agent DONE: wip/dragons-ogap 8b1dd8706 (fix) 1f7924d3c 639e947fa (report): ORACLE-GAP 3,747 -> 0, oracle-off byte-identical -> ride the NEXT landing (src-gated; recheck its 3 env unit failures). Dragons engine follow-ups (play changes): Gruul Turf {R}-float APPLY-DROP x262; dead Haven self-pay rebuy branch (sound collapse); 10 continuation rebuy drops. AGENTS RUNNING: TH APPLY-DROP (wip/th-apply, scratch build/scratch/th-apply), Dragonstorm APPLY-DROP (wip/ds-apply, scratch build/scratch/ds-apply). Then: Maze Summit 2HG g292, Cyclone d6, Hinata gi548/gi33, prepay step 5. USER questions open: K fleet-wide (kverify clean -> recommend yes); SG50+K on Creature Giving/Antilife/Dragonstorm; Creature Giving beam drop.
 
+**01:05 UTC 11-27:** DS agent 3 handed off at 266K (wip/ds-apply2 eae78830d + report 027e411d8;
+logs/ds-apply2/handoff.md). (a) root-caused: the greedy's CCO line reserve (MTG_CCO_RESERVE_OTHER) judges "the other
+Territory covers it" per colour, so two Territories each count the other for both {B} and {G}; lever
+MTG_CCO_RESERVE_JOINT (joint coverage, only adds holds), s30096797 2 -> 0, unit on/off passes. (c) MTG_LEFTOVER_SWAP_EXACT
+does not fix s30129376 (the {B} is lost at Ruby Medallion's payment, earlier than Song's). Spawned DS agent 4 (Opus)
+from the handoff: decide/fix-or-delete (c), units, mini-gate, pooled gate, all-deck A/B base 5220000, d8 b0 replays.
+Gate filler claude_gate_1127 (chain pid 829089) in PGO setup after yielding; waiter bklceh4mo on its DONE.
+
 **00:12 UTC 11-27:** Spawned DS agent 3 (Opus) on Dragonstorm handoff-1 items 4a (two Unclaimed Territories) + 4c
 (exact swap shortage via LumpAwareBillPayable): worktree .claude/worktrees/ds-apply2, branch wip/ds-apply2, scratch
 build/scratch/ds-apply2, handoff/report logs/ds-apply2/. Box: gate_1127 holds the box lock as a yielding filler; agent
