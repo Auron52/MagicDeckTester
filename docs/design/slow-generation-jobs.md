@@ -317,3 +317,7 @@ when this validates. Melira Pod's paused value leaf stays paused until then (sta
   - Box busy: the elves-mem2 Task A build holds heavy.lock; a d8 b0 informational lane job runs beside it.
   - The tap-order fix measured a clean win and is being flipped default ON (wip/elves-r2). It is a play change, so the paused journal will NOT resume: the restart is fresh, and the resume gate renames the old journal aside. Copies `*.oom-20261127T1005` are kept.
   - Restart once mem2 (+fold) and r2 are integrated, validated and landed.
+- 2026-11-27 14:47 UTC status check (Elves mullgen, session e3bd4e46): still PAUSED on memory.
+  - The lazy fix 6ab2cfe77 is validated, but the worst Wave rollout still peaks at 3.8 GB. The fold was lossy and parked.
+  - The mem4 agent (wip/elves-mem4) has a massif breakdown and a dominated-X cap (X* = max(library, max MV)) in validation.
+  - The box was underused (load 7, 15 GB free), so the coordinator launched the lordcast round-3 A/B on heavy.lock (~20 min; DONE marker build/scratch/elves-lordcast/DONE3).
