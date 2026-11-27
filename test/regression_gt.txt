@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 009cb2e1d  date 2026-11-27
+# Regression ground truth -- commit 88272e82f  date 2026-11-27
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
@@ -24,10 +24,10 @@ worldfire_smoke_d0_s1001=7.5160/4c7e195d631df06e
 worldfire_smoke_d3_s1001=4.6000/48ab046b96c46521
 worldfire_smoke_d5_s1001=4.2500/4bf25a5384c7e12f
 worldfire2hg_smoke_d5_s1001=4.3000/d25de4d9b71c4c6c
-elves_smoke_d0_s1001=4.8850/b4e2b9f277dee43f
+elves_smoke_d0_s1001=4.8650/96bc9c4075bebdea
 elves_smoke_d3_s1001=4.7000/a38973e59439ca6a
-elves_smoke_d5_s1001=4.4500/e70cf3c39b636e93
-elves2hg_smoke_d5_s1001=4.7000/322cf90e4dc8bc80
+elves_smoke_d5_s1001=4.4500/9cace0f7cbbda31f
+elves2hg_smoke_d5_s1001=4.7000/d89f73ab893fb518
 mill_smoke_d0_s1001=6.1200/398fc11e7602c763
 mill_smoke_d3_s1001=4.8000/c97ac4a6805a7c6c
 mill_smoke_d5_s1001=4.6000/1b45ef7ca83aae45
@@ -285,13 +285,13 @@ worldfire_regression_d3_s2002=4.4000/081d355c612385e5
 worldfire_regression_d5_s2002=4.2833/891bf27832d49fbd
 worldfire_regression_d5_s3003=4.1667/3d363c38a1492ddc
 worldfire2hg_regression_d5_s2002=4.4000/c16d81b09cb8c5d6
-elves_regression_d0_s2002=4.8780/98737981d4943770
-elves_regression_d3_s2002=4.3333/ae26cef14ed8d334
-elves_regression_d5_s2002=4.3833/715e2187d20cbbb1
-elves_regression_d5_s3003=4.3833/dca701cdc5e93905
-elves2hg_regression_d5_s2002=4.8000/0f1fb54f5bfa853f
-elves_regression_d3_s30081=4.3000/d50a9fb95f198caf
-elves_regression_d5_s30081=4.3000/bc68ae5b7b968a16
+elves_regression_d0_s2002=4.8580/64d3b5bf9fc70535
+elves_regression_d3_s2002=4.3333/63e769996b290c06
+elves_regression_d5_s2002=4.3833/6e3a51edc6963468
+elves_regression_d5_s3003=4.3500/929de37b3370fe85
+elves2hg_regression_d5_s2002=4.8000/f87e68451755c77d
+elves_regression_d3_s30081=4.3000/5513076c17ccfe5b
+elves_regression_d5_s30081=4.3000/3653ed5bcae3ab52
 worldfire_regression_d3_s30401=4.0000/3510abc9db8567d5
 worldfire_regression_d5_s30401=4.0000/3510abc9db8567d5
 mazesend_regression_d3_s30121=5.0000/e2dafed5a9ca8ba6
