@@ -527,3 +527,38 @@ bhw3gvbdn). Next: confirm the pull, check_references_safe, restart the viewer FR
 worldfire viewer pid 384685 once its tree has no uncommitted refs), give the USER the URL, commit + push every new
 references/Elves file at once. Relaunch mullgen (checkpoint 8 command) only once the USER is done with references
 and any misplays they reveal are fixed.
+
+## Coordinator checkpoint 10 (2026-11-27 ~05:20 UTC, pre-compaction) -- RESUME HERE
+
+* LANDED 90903dfb9 (viewer kick-count dialog + `multikick_max` engine field; Elves overnight GT resize; ledger 7-9). CI
+  45937052063 watch = harness task b4ecim311. Primary checkout at 90903dfb9, Release rebuilt 04:11 (has multikick_max);
+  viewer running from the PRIMARY (task bf3j5j2uk, logs/elves-viewer.log); a page reload gets the dialog.
+* USER references: references/Elves/claude_s{1..4}_gi{0..3}.json all pushed (last 1155c6596). ref_bench elves: human 4.75,
+  search 4.25, 0/4 short. Watcher: `bash build/scratch/refcommit.sh` (commits+pushes, then waits; re-arm after each fire).
+  The 01:20 viewer backup failure was 9p ENOMEM under 5 concurrent builds; every build now goes through heavy.lock.
+* USER rulings 2026-11-27 (verbatim): discard -- "We should have a discard policy that just buckets mana and threats. (mana
+  elves can go in the mana bucket) It doesn't need to be complicated." + "We want a lot of mana in this deck, so we can
+  feel free to add more mana as long as we have 1-2 scaling threats to take advantage of it. If not, I suppose we need
+  more threats. Even small mana-producing elves can be useful here as a mix of producer and attacker."; hold-all --
+  "Why would we want to hold back all of our mana dorks? ... maybe we should use a heuristic to be smarter about this? I
+  suspect the benefit you are finding are in some specific situations?"; lord cast -- "I suppose we could try it."; "I
+  think Kick counts should be capped at lethal size of 20. Leaf crowned-visionary should probably not decline the draw
+  automatically even beyond the search horizon" + "If you don't have anything else to use the mana for it should draw.";
+  viewer -- "It's probably better just to pop up a dialog." (done); Maze -- "If you run out of work to do on elves here
+  maybe try to run the mulligan profile for Maze's End with K=20?"
+* Branches (all wip, pushed by agents; integrate + validate + land as ONE Elves play batch):
+  - wip/elves-disc2 657a68cf6 + 7b7f9b1e7: USER discard rule DONE, default ON, units 4321, A/B 0/1600 moved.
+  - wip/elves-tweaks a08f4165f + fad30d94b: kick cap 20 + Visionary playout pay-when-spare; agent running smoke then
+    A/B (temporary selector MTG_PLAYOUT_PAY_DRAW to delete).
+  - wip/elves-scal2: smarter hold-back (lump points / sink-aware) vs holdall; round 1 done, round 2 (15k jobs) queued;
+    agent at ~240K (handoff due). USER decision on the band after it reports.
+  - wip/elves-lordcast c82aa6cff: MTG_ATTACK_LORD_CAST still FAILS (Boars d0 +151; Elves play +6 / 2HG +1, gi663
+    unrecoverable at d8 b0); round 2 (hand fix + verify arms) running ~04:40 -> ~06:40 UTC; default stays OFF (USER).
+* Maze's End K=20 mullgen prepared: worktree .claude/worktrees/maze-gen2 (wip/maze-gen2 = origin + the 3 USER bucket
+  commits cb335d1f8/0965fdd9d/502c2ac4c). Start when the Elves heavy runs are done:
+  `cd .claude/worktrees/maze-gen2 && MTG_RSS_CAP_GB=20 flock /workspaces/MagicDeckTester/build/heavy.lock bash scripts/mullgen.sh run "decks/Maze's End"`
+  (harness-tracked, run_in_background); confirm discovery K=20; heartbeat in 10 min; append slow-generation-jobs.md.
+* Elves mulligan profile: still paused (USER's hold-back decision + the play batch must land first).
+* Pre-existing defect seen: test/viewer_client_check.js "no silent revert" fails 3 checks on origin too (replay drift
+  to a tutor_etb decision) -- not yet assigned.
+* Cron b3381ea5 (2-hourly, session-only) armed.
