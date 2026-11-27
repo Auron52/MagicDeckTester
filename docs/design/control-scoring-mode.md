@@ -712,11 +712,17 @@ blockers, which is part of why the USER finds Parallax Wave followed by Opalesce
    Giving, Hinata, Stuffy etc. where the creatures are a liability."
    * **Against most gauntlet decks, hold the chump.** Their attackers grow, so a chump blocker is worth more later,
      on the lethal turn or against a bigger threat. That is the default of the rule above.
-   * **Against decks that punish us for having creatures, spend them.** Creature Giving, Hinata and Stuffy Doll all
-     run Forbidden Orchard. Creature Giving also gives us tokens (Hunted Phantasm, Varchild's War-Riders) and
-     drains 2 life per creature of ours that dies (Massacre Wurm). Stuffy Doll's Chain Reaction grows with the
-     number of creatures, and its reflectors pass the damage on. Against these, a body on our side is a liability,
-     so trading or chumping it away early costs nothing or gains. Those gifted creatures are on OUR side in the
+   * **Against decks that use our creatures, spend them.** Creature Giving, Hinata and Stuffy Doll all run
+     Forbidden Orchard, and each uses the creatures on our side (USER 2026-11-27, verbatim: "In Hinata it provides
+     targets, in Stuffy it reduces the cost of Blasphemous act an in Creature giving it makes Massacre Wurm do more
+     life loss."):
+     * **Hinata:** our creatures are targets for its spells, and Hinata, Dawn-Crowned makes each extra target
+       cheaper.
+     * **Stuffy Doll:** each creature on the battlefield makes Blasphemous Act cost 1 less.
+     * **Creature Giving:** each of our creatures that dies to Massacre Wurm costs us 2 life. It also hands us
+       tokens itself (Hunted Phantasm, Varchild's War-Riders).
+     Against these, a body on our side is a liability, so trading or chumping it away early costs nothing or
+     gains. Those gifted creatures are on OUR side in the
      replay: today the passive opponent receives them.
    * **Priced by measurement, not by a deck list.** The clairvoyant scored block sees the drain or the bigger
      Chain Reaction in the replay. The non-clairvoyant rule uses a per-gauntlet-deck BODY VALUE, measured offline
