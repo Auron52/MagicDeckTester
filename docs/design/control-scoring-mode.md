@@ -1403,7 +1403,9 @@ deck:
   * **In such a screen only the control-scored mode runs,** with 1v1 joining when it exists. Goldfish is not run at
     all (USER 2026-11-27, verbatim): "Realistically we don't need the goldfish for the control card tests because we
     know it will be totally unreliable." The card's cost to the deck's own clock is already inside the control
-    score, through W.
+    score, through W. The compute goldfish would have used goes to a larger control-mode (and later 1v1) sample
+    instead (USER 2026-11-27, verbatim: "So we would rather put its compute toward giving the other modes a larger
+    sample.").
 * **A non-control swap: goldfish decides, the other modes sanity-check (USER 2026-11-27, verbatim):** "Regarding the
   open question, the control modes are probably more accurate, but also clearly more expensive. Goldfishing on the
   other hand allows us to run a lot of games which is very helpful when we are looking at cards that are just
