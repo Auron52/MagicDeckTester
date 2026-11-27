@@ -779,7 +779,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.cast_trigger_target_choice >= 0
         || p.combat_transform_choice >= 0
         || p.militia_pride_pay_choice >= 0
-        || p.mihail_pay_choice.IsPinned() || !p.prophets_sac_choice.empty()
+        || p.mihail_pay_choice.IsPinned() || p.mihail_pay_choice.PaySpare() || !p.prophets_sac_choice.empty()
         || dmgrx::HasCombatPins(p.reflect_targets)
         || p.militia_pride_pay_choice >= 0 || p.attack_put_choice != -1 || p.legend_keep_turn != 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;

@@ -788,7 +788,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         // trick above, ONCE PER KICK COUNT. "<name> (Kicked xK)" costs printed + K x the repeat cost (an
         // ADDITIONAL cost, CR 601.2b) and carries kick_times = K; everything else is a full copy, exactly as
         // for the single kicker. The faces bound the axis at kMaxMultikick kicks -- far past any pool a
-        // goldfish turn reaches (Warcaller at 16 kicks costs 33 mana), and an affordable count above it is
+        // goldfish turn reaches (Warcaller at 20 kicks costs 41 mana), and an affordable count above it is
         // the one disclosed limit of the model (CollectActions also clamps there).
         {
             const std::optional<ManaCost>& rep = def.params.multikicker_cost.has_value()

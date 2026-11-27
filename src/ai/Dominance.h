@@ -1159,7 +1159,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0x1A61000000ull + static_cast<std::uint64_t>(s.scripted_combat_transform)); }
     if (s.scripted_militia_pride_pay >= 0)
     { fold(0x1A62000000ull + static_cast<std::uint64_t>(s.scripted_militia_pride_pay)); }
-    if (s.scripted_mihail_pay_choice.IsPinned())
+    if (s.scripted_mihail_pay_choice.IsPinned() || s.scripted_mihail_pay_choice.PaySpare())
     {
         fold(0x1A63000000ull);
         s.scripted_mihail_pay_choice.FoldValues(fold);

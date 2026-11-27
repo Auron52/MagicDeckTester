@@ -43,7 +43,7 @@ integrator's Shepherd / tests / viewer / gates commit (see `git log`).
 
 | card | tier | template + params | engine | viewer |
 |---|---|---|---|---|
-| Joraga Warcaller | 3 | vanilla_creature; `multikicker_cost {1}{G}`, `multikick_enter_counters`, lord `power/tough_bonus 1` + `lord_per_own_plus_counter`, `lord_excludes_self` | the DB synthesizes "<name> (Kicked xK)" faces K = 1..16 (printed + K x {1}{G}, `kick_times`); `Action::kick_count` / `CastRiders::kick_count` swap the face in both cast sites (`KickedFaceFor`); K counters in the as-enters window of BOTH enter sites; `ComputeLordBonus` multiplies the lord bonus by the counters on the Warcaller, read live | A: K = main_phase plan variants + GUI K cycling |
+| Joraga Warcaller | 3 | vanilla_creature; `multikicker_cost {1}{G}`, `multikick_enter_counters`, lord `power/tough_bonus 1` + `lord_per_own_plus_counter`, `lord_excludes_self` | the DB synthesizes "<name> (Kicked xK)" faces K = 1..20 (printed + K x {1}{G}, `kick_times`); `Action::kick_count` / `CastRiders::kick_count` swap the face in both cast sites (`KickedFaceFor`); K counters in the as-enters window of BOTH enter sites; `ComputeLordBonus` multiplies the lord bonus by the counters on the Warcaller, read live | A: K = main_phase plan variants + GUI K cycling |
 | Galadhrim Brigade | 3 | lord_effect; `squad_cost {1}{G}` | the same faces; `ResolveSquadCopies` (both enter sites) makes K token copies of the printed card through the universal enter cascade, each a lord; a copy makes no copies (the squad payment is not copiable, CR 707.2) | A: K = plan variants |
 | Immaculate Magistrate | 2 | vanilla_creature; `tap_target_pump_cost ""` ({T} only), `tap_target_counters_per_subtype Elf` | the TapTargetPump route with an N-counters payload (`PutPlusCounters`, N = Elves we control at resolution, itself included) | A: board-click `target` at activation |
 | Allosaurus Shepherd | 2 | vanilla_creature; `team_base_pt_cost {4}{G}{G}`, `team_base_pt_power/tough 5`, `team_base_pt_subtype Elf` | NEW `PermAbilityMode::TeamBasePT` (no {T}, single emission), `ResolveTeamBasePT`: layer 7b set on every Elf creature we control at resolution, carried as an until-EOT delta (5 - base) in `temp_power/tough_bonus`, marked by the new `Permanent::temp_base_set` bit (reset at every cleanup site, folded wherever `unearthed` is) | A: main_phase activation (`act=`) |
@@ -85,16 +85,21 @@ shared trigger pinned both ways, a non-Elf spell does not trigger, both plan var
 the world rule; Clancaller's name filter (no other find offered) and the put. Full suite 3957/3957.
 
 Known gaps / items to raise:
-* Multikick / squad faces stop at 16 kicks (Warcaller x16 = 33 mana). A model bound.
-* Visionary unpinned = decline (Mihail's semantics): the horizon playout and the d0 runner never pay, so
-  leaves undervalue Visionary. A Stage 5 quality item.
+* Multikick / squad faces stop at 20 kicks (Warcaller x20 = 41 mana; USER 2026-11-27: "I think Kick counts should be
+  capped at lethal size of 20"; was 16). A model bound, flat in both formats (2HG's 30 life is not separately bounded).
+* Visionary beyond the horizon (USER 2026-11-27: "Leaf crowned-visionary should probably not decline the draw
+  automatically even beyond the search horizon", "If you don't have anything else to use the mana for it should
+  draw."): a greedy plan (horizon playout / d0 runner) carries `MihailPayChoices::pay_spare`, and an unpinned trigger
+  pays when the {G} is spare -- the rest of the line's casts (`g_line_unpaid_cost`), the plan's activations, and before
+  combat the combat pump count (Ezuri) all stay payable (`PayDrawPlayoutSpare`). Searched turns still branch both ways
+  (unpinned = decline there). Was: never pay beyond the horizon.
 * Magistrate's AUTONOMOUS target set is the board the plan starts from: a creature cast earlier in the same
   plan cannot be the target in that main (the human picks on the live board, so the viewer is not affected).
   The same holds for Kessig Wolf Run and the Merfolk tap-target pumps. A completeness gap to raise with the
   USER: it is a missing line, not a pruned one.
 * Visionary + Mihail in one list: the Visionary fan is skipped (one shared ordinal stream). No list runs both.
 * World-rule simultaneous-entry tie not modelled (inert: Genesis Wave's put set is a choice).
-* Search-cost watch for Stage 5: the multikick fan (up to 16 variants per Warcaller / Brigade in hand), the
+* Search-cost watch for Stage 5: the multikick fan (up to 20 variants per Warcaller / Brigade in hand), the
   Visionary fan (1 + sum s_j per plan), Magistrate targets (identity-folded own creatures). The USER-directed
   scaling-sink restriction (ruling 2) is the ElvesProvider agent's, not done here; the deck still routes to
   SelesnyaLifegainProvider (pinned in `test_pirates_provider.cpp`).
@@ -443,7 +448,7 @@ push_queue join/land, CI watch. 2-hourly status cron 61a8eb73 (session-only).
 
 ## Stage 6 -- report (2026-11-26, landed 3f91b7d4a on phase-1-2-deck-analyzer)
 
-1. **Cards implemented:** Joraga Warcaller (T3, multikicker faces K 1..16, per-counter lord), Galadhrim Brigade
+1. **Cards implemented:** Joraga Warcaller (T3, multikicker faces K 1..20, per-counter lord), Galadhrim Brigade
    (T3, squad token copies, each a lord), Immaculate Magistrate (T2, N-counter tap-target pump), Allosaurus Shepherd
    (T2, layer-7b team base 5/5, new `TeamBasePT` mode), Elvish Clancaller (T2, lord + named TapTutorPut), Leaf-Crowned
    Visionary (T2, optional {G} draw on Elf cast), Marwyn (T2, power-scaled dork + enter counters), Taunting Elf (T1,
@@ -470,8 +475,8 @@ push_queue join/land, CI watch. 2-hourly status cron 61a8eb73 (session-only).
 | plan-dedup signature keys every {X} cast's X (`#XV<x>`) | engine (5ff9de56a; the Elves-only `PlanSignatureKeysWaveX` opt-in deleted) | completeness | every deck; A/B d5 b20: selesnyav2 / 2HG 2,000 games each net +0.0000, 0 slower; landfall byte-identical; +0.1% units |
 | filter-before-axes (memory) | `PlanListFilterBeforeAxes` (landed 5194cedda) | identity | play byte-identical; only bounds memory |
 | inherited SelesnyaLifegain hooks incl. its USER-settled discard buckets | base class | inherited | Elves' own draft moved 0/800 games; real cleanup discards ~1 per 400 games |
-| multikick / squad faces capped at K=16 | card DB | model bound | 33 mana for a Warcaller x16; never reached in measured games |
-| Visionary unpinned = decline beyond the horizon | Mihail semantics | playout policy | leaves undervalue Visionary slightly; searched turns branch both ways |
+| multikick / squad faces capped at K=20 (USER 2026-11-27, lethal size; was 16) | card DB | model bound | 41 mana for a Warcaller x20 |
+| Visionary unpinned beyond the horizon = pay when the {G} is spare (USER 2026-11-27; was decline) | `PayDrawPlayoutSpare` | playout policy | spare = the rest of the phase's line + plan activations + pre-combat pump count stay payable; a later phase's spends are not reserved; searched turns branch both ways |
 | World-rule simultaneous-entry tie | engine | inert | Genesis Wave's put set is a choice |
 | Cavern of Souls "choose a type" = any creature | card | exact here | every creature in the list is an Elf |
 | viewer: no auto-resolved choice; Marwyn's tap is the mana-payment exemption | 2c-ter / 5h | -- | viewer-ready |

@@ -5885,7 +5885,10 @@ inline int FetchHintBasicTypeBit(const std::string& t)
 // A fully resolved card definition: base Card data plus template + parameters.
 // MULTIKICKER / SQUAD faces (CardParams::multikicker_cost / squad_cost): the DB synthesizes one face per kick
 // count 1..kMaxMultikick. ONE naming function, used by the synthesis and by every lookup.
-inline constexpr int kMaxMultikick = 16;
+// 20 = a lethal count in a 20-life goldfish (USER 2026-11-27: "I think Kick counts should be capped at lethal size of
+// 20"); a flat bound in both formats (2HG's 30 team life is not separately bounded). Was 16. Every reader is sized off
+// this constant (Action::kick_count is int8_t; the plan walk's squad token numbers stride by it).
+inline constexpr int kMaxMultikick = 20;
 inline std::string MultikickFaceName(const std::string& base, int k)
 { return base + " (Kicked x" + std::to_string(k) + ")"; }
 inline bool HasRepeatKicker(const CardParams& p)

@@ -32712,7 +32712,7 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x1A610000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.combat_transform_choice + 2))); }
     if (p.militia_pride_pay_choice != -1)
     { fold(0x1A620000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.militia_pride_pay_choice + 2))); }
-    if (p.mihail_pay_choice.IsPinned())
+    if (p.mihail_pay_choice.IsPinned() || p.mihail_pay_choice.PaySpare())
     { fold(0x1A630000ull); p.mihail_pay_choice.FoldValues(fold); }
     if (p.attack_put_choice != -1)
     { fold(0x1A660000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.attack_put_choice + 3))); }
@@ -34128,7 +34128,7 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
                           p.combat_landfall_target_choice, p.combat_crack_choice, p.lackey_choice,
                           p.saga_target_choice, p.saga_ch1_choice, p.sweep_choice, p.le_fire_choice };
     for (int x : extra) { h = Mix(h, static_cast<std::uint64_t>(x + 7)); }
-    if (p.mihail_pay_choice.IsPinned())
+    if (p.mihail_pay_choice.IsPinned() || p.mihail_pay_choice.PaySpare())
     { h = Mix(h, 0x1A630000ull); p.mihail_pay_choice.FoldValues([&](std::uint64_t v) { h = Mix(h, v); }); }
     if (p.early_ondemand_crack >= 0)
     { h = Mix(h, 0xEA4CCA11ull + static_cast<std::uint64_t>(p.early_ondemand_crack)); }
@@ -65895,8 +65895,52 @@ static bool SubsetHasUncastHasteRider(const std::vector<Action>& cands, const st
     return false;
 }
 
+// THE BEYOND-HORIZON PAY-DRAW POLICY (USER 2026-11-27, Elves: "Leaf crowned-visionary should probably not decline the
+// draw automatically even beyond the search horizon", "If you don't have anything else to use the mana for it should
+// draw."). A greedy plan -- only ever built behind a GreedyPermit, i.e. a horizon playout turn or the depth-0 runner,
+// never a node with search depth left -- carries MihailPayChoices::PaySpare(), so its UNPINNED cast_subtype_pay_draw_cost
+// triggers pay when the mana is spare (PayDrawPlayoutSpare, SpellEffects.h) instead of declining. Inside the search
+// window nothing changes: the trigger stays the searched pin (AppendSubdecisionAxes' pay variants beside the unpinned
+// decline). Marked only when a pay-draw source is ours on the battlefield or cast by the plan, so every other deck's
+// plan (and every key that folds the choice) is byte-identical. The reserve is what the plan spends OUTSIDE its casts
+// (activations: Ezuri's pump count, Clancaller, Allosaurus Shepherd, Wirewood Lodge), which the line hold
+// (g_line_unpaid_cost, casts only) does not carry; a whole-plan sum, so an activation the line has already paid is
+// still reserved -- it can only decline more. MTG_PLAYOUT_PAY_DRAW=0 (TEMPORARY A/B selector) -> the old decline.
+static void MarkPlayoutPayDraw(const GameState& state, bool is_pre_combat, TurnSolver::Plan& p)
+{
+    static const bool s_env = EnvOn("MTG_PLAYOUT_PAY_DRAW", true);   // DEFAULT ON; =0 -> decline beyond the horizon
+    if (!heurarm::Flag(heurarm::PLAYOUT_PAY_DRAW, s_env)) { return; }
+    if (p.mihail_pay_choice.IsPinned() || HumanPlayActive()) { return; }
+    auto is_pay_draw = [](const CardDefinition* d)
+    { return d != nullptr && d->params.cast_subtype_pay_draw_cost.has_value() && !d->params.cast_trigger_subtype.empty(); };
+    bool live = false;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != state.active_player_index) { continue; }
+        if (is_pay_draw(CardDatabase::Instance().LookupCached(q.card))) { live = true; break; }
+    }
+    if (!live)
+    {
+        for (const Action& a : p.actions)
+        {
+            if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard)
+                && is_pay_draw(ActionCastDef(a)))
+            { live = true; break; }
+        }
+    }
+    if (!live) { return; }
+    ManaCost reserve;
+    for (const Action& a : p.actions) { AddManaCost(reserve, a.cost); }
+    SubManaCost(reserve, LineCastCostTotal(p.actions));
+    p.mihail_pay_choice.SetPaySpare(is_pre_combat, reserve);
+}
+
 TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
-{ return SolveCrackFirst(state, is_pre_combat, permit, 0); }
+{
+    Plan p = SolveCrackFirst(state, is_pre_combat, permit, 0);
+    MarkPlayoutPayDraw(state, is_pre_combat, p);
+    return p;
+}
 
 TurnSolver::Plan TurnSolver::SolveCrackFirst(const GameState& state, bool is_pre_combat, const GreedyPermit& permit,
                                              int floor_num)
@@ -112547,7 +112591,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             mix(0x8EF1EC71ull);
             for (int v : state.scripted_combat_reflect) { mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(v) + 0x40000000LL)); }
         }
-        if (state.scripted_mihail_pay_choice.IsPinned() || state.scripted_mihail_trigger_ordinal > 0)
+        if (state.scripted_mihail_pay_choice.IsPinned() || state.scripted_mihail_pay_choice.PaySpare() || state.scripted_mihail_trigger_ordinal > 0)
         {
             mix(0x1A63000000ull);
             state.scripted_mihail_pay_choice.FoldValues(mix);
@@ -117404,7 +117448,7 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
             { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 32) << 40)
                          ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(cpins[i]))); }
         }
-        if (state.scripted_mihail_pay_choice.IsPinned() || state.scripted_mihail_trigger_ordinal > 0)
+        if (state.scripted_mihail_pay_choice.IsPinned() || state.scripted_mihail_pay_choice.PaySpare() || state.scripted_mihail_trigger_ordinal > 0)
         {
             Fold(k, 0x1A63000000ull);
             state.scripted_mihail_pay_choice.FoldValues([&](std::uint64_t v) { Fold(k, v); });
