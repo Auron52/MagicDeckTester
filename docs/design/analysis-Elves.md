@@ -746,3 +746,25 @@ Open USER decision: the tap-order default (after the fixed version's numbers).
   - the A/B logs/lordcast/run_ab3.sh (fresh seeds 7700000) stays HELD until after the Elves mullgen; the lever stays default OFF per the USER.
 - **Optional follow-up from r3:** in 4 games the old bandtap is faster than bandtapfix (std 449; 2HG 786/1226/2371). They are unrecoverable at d8 b0 because the set-up tap order is a fixed rule. Idea: a board-based exception for set-up casts.
 - **Surfaced to the USER (mem3):** with Ezuri on board, would you ever cast a scaling spell for less to keep land mana for Ezuri's pump (5 per +3/+3)? The band keeps those counts for now (the sound choice).
+
+### Checkpoint 16 (2026-11-27 ~15:15 UTC)
+- **Wave X cap f28d2045b ADOPTED** (wip/elves-mem4, MTG_ELVES_WAVE_XCAP default ON, clean win):
+  - the cap: X* = max(1, library size, max permanent MV in library); larger X is the X* line plus wasted mana;
+  - A/B 3k+3k d5 b20: net 0, 0 slower, 13 digests changed, units 1.000x;
+  - worst rollout 3.81 → 1.62 GB;
+  - side effect to tell the USER: the hold-back band now counts down from X*, so it admits some lower X it used to drop.
+- **mem5 agent:** the two play-identical savings (in-place list filter, lazy pay-draw fan on the BP path) and the 32-thread 28-rollout replay under 20 GB.
+- **Lordcast round 3 A/B** (fresh seeds 7700000):
+
+  | cell | net | faster/slower | cost |
+  |---|---|---|---|
+  | d0 Elves | -3615 | 3649/37 | 1.11x |
+  | d0 Boars | -220 | 236/17 | |
+  | d0 Goblins | -294 | 271/5 | |
+  | play Elves | +6 | 1/7 | 1.08x |
+  | play Elves 2HG | +5 | 0/5 | |
+  | play Boars | +1 | | |
+  | play Goblins | +1 | | |
+
+  - Not a clean win; the lever stays OFF.
+  - An agent is running d8 b0 on the 14 searched slower games and root-causing them.
