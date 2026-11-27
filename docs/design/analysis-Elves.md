@@ -500,3 +500,19 @@ the put continuation's cost is real new mana / creatures, which no sound fold ma
 listed in docs/design/bpput-inert-land-fold.md each need their own proof). Next: combined build -> units -> smoke
 (0 changed expected), push_queue join/land, CI watch. Both agents are finished. USER decisions open: unchanged
 from checkpoint 6.
+
+## Coordinator checkpoint 8 (2026-11-27 ~01:10 UTC) -- RESUME HERE
+
+LANDED a35c0ccc0 (batch 3: Wave-X dedup for every deck + inert-land fold; units 4314/4314, smoke 251/251 0 changed;
+CI 45916568355 watched; batch 2 CI 45907751071 success). All agents finished.
+Mulligan profile STARTED (the hold-all scaling decision is still the USER's; the table is fitted to the USER's
+current rule, which stands until answered -- an artifact fitted to an older engine is fine per the USER ruling).
+Feasibility: discovery K=17 (only Llanowar Elves + Elvish Mystic merge; no bucket ruling = K as discovered),
+~245K hands. 0e62f43e8: overnight rows ENTRY->FULL (d3 s4004 75, d5 4x425; Landfall's shape) accepted --deck=elves
+with the profile absent (only the 5 resized keys moved; 0 overlapping games changed).
+Running: `flock heavy.lock bash scripts/mullgen.sh run decks/Elves` (complete), log
+build/scratch/elves-int/mullgen.log, harness task bbtiwovyl; status `bash scripts/mullgen.sh status decks/Elves`.
+Then: on VALIDATION PASSED commit the keep table (.keepmodel.exhaustive.profile.json.gz + .raw.json.gz +
+profile.json gen settings), re-run Elves smoke/regression/overnight rows with the table (keep_adoption_attribution),
+accept --deck=elves,elves2hg per tier, check_gt_logs, push_queue join/land, CI watch. Status cron 0ff5efb4
+(replaces 61a8eb73).
