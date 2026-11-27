@@ -788,3 +788,13 @@ Open USER decision: the tap-order default (after the fixed version's numbers).
 
   - Owed: d8 b0 on goblins2hg gi677; cut the D/E verification cpu (apply+combat on a copy).
   - Then surface the default to the USER (the USER said leave OFF for now).
+
+### Checkpoint 18 (2026-11-27 ~17:15 UTC)
+- **LANDED 36e9ce5b2** (tap order default ON, Wave X cap, lazy fan, in-place filter, Elves GT accepted). CI watch 46035761931 is running.
+- **Elves mullgen RESTARTED fresh** (play changed): build/scratch/elves-int/mullgen4.sh, status mullgen4.status, log mullgen4.log. The old journals are copied as *.prerestart-20261127T1645. 2-hourly cron b8f23d50.
+- **32-thread replay** of the 28 crashing Wave rollouts: 33 s wall, peak RSS 9.6 GB (before: >16 GB within 16 s).
+- **Lordcast** (wip/elves-lordcast 2890b8039):
+  - gi677 recovers at d8 b0;
+  - the play-identical scratch-board rewrite of AttackTapLoss gives 0/18,700 digest changes; single-thread overhead 5.5% → 3.7% (Elves p20);
+  - the temporary selectors are deleted and MTG_LORDCAST_HAND is folded in;
+  - round 5 logs/lordcast/run_ab5.sh (BASE 8100000) is HELD until the mullgen finishes; then surface the default to the USER.
