@@ -757,6 +757,26 @@ inline bool LineNcLeftOn()
     return heurarm::Flag(heurarm::LINE_NC_LEFT, env_on);
 }
 
+// MTG_ONDEMAND_LUMP_KEEP_OWED (DEFAULT ON; =0 restores the lump crack ladder without it byte for byte) -- when the
+// on-demand payer (TapForCostShared, ManaPayment.cpp) cracks a lump (Lotus Bloom: three mana of one colour) for a bill
+// the board cannot pay without it, the crack is made in the first colour of its order that pays, and the float drain
+// may spend every unit of it on the bill's generic, though the rest of the applying line owes a colour only the lump
+// makes and another untapped source could pay that part. With the lever, when the plain payment STRANDS the rest of the
+// line, the bill is paid again with the lump cracked in a colour x the rest owes and the owed x units SET ASIDE (CR
+// 601.2h: the player chooses which mana pays), so the other sources pay the rest and x floats on; the first such payment
+// that leaves the rest payable replaces the plain one. Both are judged exactly (LumpAwareBillPayable: every crack of the
+// lumps left, the paying ritual's float, and the ten of an Apex of Power cast from hand in each colour the rest has a
+// pip of).
+// Dragonstorm s30120119 T6 {Desperate Ritual, Seething Song, Apex of Power, Irencrag Feat, Dragonlord Kolaghan}: Apex's
+// {6}{R}{R}{R} over six floating {R} cracked the Bloom for {B} and spent all three on the generic while a Mountain stayed
+// untapped, and Kolaghan's {B} had no source; the kept payment taps the Mountain and floats one {B}. A payment choice in
+// the shared payer (executor and rollout together), at every budget.
+inline bool OnDemandLumpKeepOwedOn()
+{
+    static const bool env_on = EnvOn("MTG_ONDEMAND_LUMP_KEEP_OWED", true);
+    return heurarm::Flag(heurarm::ONDEMAND_LUMP_KEEP_OWED, env_on);
+}
+
 // MTG_ONDEMAND_VISIBLE_LUMP_EXACT (DEFAULT ON; =0 restores the colour comparison alone byte for byte) -- Dragonstorm's
 // visible-closer lump rule (MTG_ONDEMAND_VISIBLE_LUMP, the on-demand payer in ManaPayment.cpp) cracks a Lotus Bloom
 // early, for a colour a later cast owes, when the early crack's board "gains" a colour over the ordinary payment's.
