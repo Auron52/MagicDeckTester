@@ -1266,7 +1266,8 @@ What this needs:
   later `goldfish: false` deck get exactly one keep table, the scored one, under the same `.control.` file name, so
   that nothing can mistake it for a goldfish table. Its route: control-mode suite rows first (the deck-in-suite-
   before-artifacts rule, applied to the control-mode tier), then `mullgen` in its control mode. The goldfish route
-  keeps refusing the deck.
+  keeps refusing the deck. Existing goldfish decks that opt into the control mode get a scored table too, beside their goldfish one (USER
+  2026-11-27, verbatim: "And even some of the existing decks will get the same.").
 * **Existing decks with control cards** may get a scored table "going forward". Such a deck carries both
   `goldfish: true` and `control_score: true`, and needs control-mode suite rows first, by the same rule that puts
   a deck in the suite before its artifacts. `mullgen.sh` today refuses a `goldfish: false` deck. A scored-table
