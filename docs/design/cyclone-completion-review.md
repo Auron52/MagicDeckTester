@@ -172,7 +172,10 @@ PB adoption is conditionally authorized only if d3 and d5 each have paired net
 lost lines after limited-information classification, and performance improves.
 The live Phase C contrast changes only PB, with NOM2 false. Other policy choices
 remain user-owned, including KEEP amendments, curve checking, leaf fidelity,
-NOM2, nested exhaust, cast/cycle order and payment-split settings.
+nested exhaust, cast/cycle order and payment-split settings. (NOM2 was in this
+list; the USER adopted it DEFAULT ON for every eligible deck on 2026-11-27: *"If
+it is a fully safe optimization, which it seems like it is, let's just turn it
+on and see how it does."* The Cyclone-only provider opt-in is deleted.)
 
 The completed live contrast is -0.0675 turns at d3 (400 games, SE 0.03256,
 60 faster/40 slower) and +0.005 at d5 (200 games, SE 0.03978, 23 faster/25

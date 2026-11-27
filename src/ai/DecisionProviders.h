@@ -4727,7 +4727,6 @@ public:
                "whether 'this turn' is the turn or the ROUND (the USER's rounds win-turn metric: an extra "
                "turn untaps and attacks before the opponent's next turn)." }; }
     const char* Name() const override { return "Cyclone"; }
-    bool LeafKillOnlyNoM2OptIn() const override { return true; }
 
     // ---- Phase 3 (2026-10-27): the searched cycle, Cyclone's free cast, Remand ------------------------
     // THE SEARCHED CYCLE. Every distinct cycler in hand whose life half is payable is a seed the search
