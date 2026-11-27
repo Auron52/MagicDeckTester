@@ -215,11 +215,11 @@ bruna_regression_d3_s2002	10729
 bruna_regression_d3_s3003	71288
 bruna_regression_d3_s30221	4986
 bruna_regression_d5_s2002	14877
-bruna_regression_d5_s3003	14645
+bruna_regression_d5_s3003	14646
 bruna_regression_d5_s30221	1836
 bruna_smoke_d0_s1001	1
 bruna_smoke_d3_s1001	13330
-bruna_smoke_d5_s1001	17064
+bruna_smoke_d5_s1001	17063
 burn2hg_smoke_d3_s1001	11885
 burn2hg_smoke_d5_s1001	21112
 burn_overnight_d0_s10010	1
@@ -424,7 +424,7 @@ dragonstorm_regression_d0_s2002	1
 dragonstorm_regression_d3_s2002	1657
 dragonstorm_regression_d3_s3003	2778
 dragonstorm_regression_d3_s30201	1704
-dragonstorm_regression_d5_s2002	1504
+dragonstorm_regression_d5_s2002	1505
 dragonstorm_regression_d5_s3003	1773
 dragonstorm_regression_d5_s30201	545
 dragonstorm_smoke_d0_s1001	1
@@ -457,7 +457,7 @@ edf_smoke_d0_s1001	1
 edf_smoke_d3_s1001	7603
 edf_smoke_d5_s1001	12701
 elementals2hg_smoke_d3_s1001	13040
-elementals2hg_smoke_d5_s1001	71816
+elementals2hg_smoke_d5_s1001	71815
 elementals_overnight_d0_s10010	1
 elementals_overnight_d0_s4004	1
 elementals_overnight_d0_s6006	1
@@ -480,7 +480,7 @@ elementals_regression_d5_s2002	22806
 elementals_regression_d5_s30001	24975
 elementals_regression_d5_s3003	19173
 elementals_smoke_d0_s1001	1
-elementals_smoke_d3_s1001	15764
+elementals_smoke_d3_s1001	15765
 elementals_smoke_d5_s1001	24260
 elves2hg_regression_d5_s2002	8596
 elves2hg_smoke_d5_s1001	5755
@@ -743,8 +743,8 @@ hinata_regression_d5_s2002	62613
 hinata_regression_d5_s30001	355251
 hinata_regression_d5_s3003	75325
 hinata_smoke_d0_s1001	1
-hinata_smoke_d3_s1001	66145
-hinata_smoke_d5_s1001	87941
+hinata_smoke_d3_s1001	66146
+hinata_smoke_d5_s1001	87935
 hydras2hg_overnight_d5_s4004	28289
 hydras2hg_regression_d5_s2002	24167
 hydras2hg_smoke_d5_s1001	33045
@@ -1126,7 +1126,7 @@ mirrorwing_regression_d3_s30001	5145
 mirrorwing_regression_d3_s3003	4290
 mirrorwing_regression_d5_s2002	4531
 mirrorwing_regression_d5_s30001	3682
-mirrorwing_regression_d5_s3003	3902
+mirrorwing_regression_d5_s3003	3903
 mirrorwing_smoke_d0_s1001	1
 mirrorwing_smoke_d3_s1001	3614
 mirrorwing_smoke_d5_s1001	3350
