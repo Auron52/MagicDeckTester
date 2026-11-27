@@ -930,6 +930,17 @@ the deck's raw goldfish W, and no calibration shift is applied. Reason: the gaun
 goldfish-fast (section 6.1), so a cross-mode comparison needs a calibration that only real 1v1 games (or C with
 the aggro decks' own interaction) can supply.
 
+*USER answer (2026-11-26/27), verbatim:* "I don't understand this question. My idea is to compare each gauntlet deck
+without any control vs that gauntlet deck fighting through the control and use the average win-turn difference."
+-> That comparison is exactly how the delay `D` is measured: each gauntlet deck's kill turn with no control,
+against the same game played through the control effects. It enters the score through section 4.1 (floor and
+min per pair, averaged per gauntlet deck, then over decks). What Q1 was asking is whether a control deck's E
+can be set beside an aggro deck's goldfish W. By the derivation in section 4.2 it can: E is the goldfish turn
+that wins the same races against the same gauntlet, so both are turns on one scale, and no calibration shift
+is applied. The caveat is stated in reports, not corrected: neither number sees the gauntlet decks interact
+(they do not attack the aggro deck's blockers or counter the control deck's spells) or adapt (section 6).
+Every control-mode report shows E beside the deck's raw goldfish W. Q1 is closed.
+
 **Q2. Which gauntlet, weighted how?** Default: about 10 of the cheapest suite decks that span the archetypes
 (burn, white weenie, elf ramp, big-mana ramp, a combo deck, a tribal midrange deck), equally weighted, all with
 `goldfish: true`. It would widen to every `goldfish: true` deck at d3 b10 once the cost is known. Reason: cost
@@ -955,7 +966,7 @@ the score, with (b) reported beside it in the stage-1 table as the upper bound. 
 under-credits a competent control player. Stage 4 (co-simulation) replaces all three with a searched choice on
 the real board. The same question applies to counters, where the probe shows it matters MORE than the number of
 counters cast (section 8.3). Default for (a) there: the first spell of the round whose mana value is at least the
-gauntlet deck's own median nonland mana value, rather than the first spell of all.
+gauntlet deck's own median nonland mana value, rather than the first spell of all. (Superseded for counters by the USER's Q8 answer: a rising trouble threshold.)
 
 *USER answer (2026-11-26), verbatim:* "The goal is to hit the highest value card the opponent has when we cast it.
 That is a little tricky to determine. It also is somewhat clairvoyant for anything cast on the opponents' turn
@@ -1042,12 +1053,30 @@ What this needs:
 lock needing both heads (as the free-turn rule does). Reason: it doubles the replay cost and none of the probe's
 questions need it.
 
+*USER answer (2026-11-26/27), verbatim:* "Yeah, let's leave this out-of-scope." -> 2HG is out of scope for the control
+mode.
+
 **Q8. Which decks should follow Enchanted Evening into the mode?** You named counterspell, discard, sweeper,
 land-destruction and mixed control decks. Default: Enchanted Evening first (its cards are implemented). Then the
 first list you supply of a counterspell deck, because a counter's value depends most on WHICH spell it takes
 (section 8.3: countering only spells of mana value >= 3 moves Stompy's value from 0.81 to 1.39 rounds and Burn's
 from 0.67 to 0.08), so counters are the family designs A and D handle worst and the first that needs design C.
 Reason: only you know which of your lists matter.
+
+*USER answer (2026-11-26/27), verbatim:* "That makes sense. If we want the clairvoyant answer which spell is countered
+should be the most troublesome. The non-clairvoyant answer would be to attempt to hit the most troublesome
+spells with counters. Early this means you would hit almost anything, but later you might have to let something
+less serious pass to save mana or counters for a bigger threat." -> Order: Enchanted Evening first, then the
+first counterspell list the USER supplies. Counter targeting, both variants:
+* **Clairvoyant (the scored answer, as in Q3):** counter the spell whose countering delays that gauntlet deck
+  most, found by replaying each candidate.
+* **Non-clairvoyant (the reported variant):** a threat threshold. Each gauntlet deck's spells get an offline
+  "trouble" value: the average delay from countering that card, measured over the deck's games, which is an
+  average and so knows nothing about the current game's draws. A counter is cast on a spell whose trouble value
+  is at least the threshold. The threshold starts at zero (early, counter almost anything) and rises as the game
+  goes on and as counters and mana run short, so a lesser spell is let through to keep a counter for a bigger
+  threat. The threshold schedule is fitted offline per control deck, not hand-set. It replaces the earlier
+  draft rule (the first spell at or above the gauntlet deck's median mana value).
 
 **Q9. Is the per-pair form of section 4.1 what you mean by "<win turn - average control impact>"?** The design
 scores each (control game, gauntlet game) pair as `min over prefixes k of max(T_k, W - D_k)` and only then
