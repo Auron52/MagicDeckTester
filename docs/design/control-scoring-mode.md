@@ -177,8 +177,10 @@ turn and the leftmost land from hand each turn. It never casts a nonland. Screw/
 opening hand.
 
 What it gives: in a control deck's own game, the opponent's hand and library are already the actual cards of a
-real gauntlet deck, in the order that deck's own goldfish game with the same shuffle would draw them. That
-pairing is the key to the sequence-replay design (section 5.4). A discard effect in the control game names a
+real gauntlet deck. **Correction (2026-11-27, cm-score):** they are NOT drawn in the order that deck's own
+goldfish game would draw them: the passive opponent is shuffled differently and never mulligans. So the pairing
+of section 5.4 cannot reuse `pool[seed % 50]` as-is; `docs/design/control-mode-stage2-report.md` specifies an
+explicit pairing instead. That pairing is the key to the sequence-replay design (section 5.4). A discard effect in the control game names a
 real card, and the same card can be removed from the paired gauntlet game. Hand and library effects already
 have real targets.
 What it lacks: the opponent's board. It never casts anything, so removal, sweepers, counters and Parallax Wave
@@ -289,6 +291,11 @@ Count rounds, with us acting first in a round. g kills us on its turn `K` if und
   happens if we are still alive then (`K >= T_k`). So the race is won iff, for some prefix k, we survive to
   `T_k` and the disruption that prefix causes is enough: `K >= T_k` and `K + D_k >= W`. That is
   `K >= max(T_k, W - D_k)`.
+  **Note (2026-11-27, cm-score):** "alive at `T_k`" is stated against the UNDISRUPTED kill K. The earlier
+  prefix's delay also keeps us alive longer, so the exact condition is `K + D_{k-1} >= T_k` (the "chain" form).
+  The chain form is never higher than this prefix form and equals it for a lone effect, so the turn-5 floor holds
+  in both. On section 4.3a it gives 3.0 / 4.35 instead of 3.5 / 4.65. Which form to use is open question S1 in
+  `docs/design/control-mode-stage2-report.md`; `scripts/control_score.py` computes both.
 * So the control game wins exactly the races a goldfish deck killing on round
   `min_k max(T_k, W - D_k)` would win. That number is `E(g)`.
 
@@ -410,7 +417,8 @@ nothing (`D = 0`).
 | order | A | B | score |
 |---|---|---|---|
 | per pair, then average | max(4, 10 - inf) = 4 | min(10, max(4, 10)) = 10 | **7.0** |
-| average D first, then floor (D capped at the 12-round horizon: mean D = 6) | | | max(4, 10 - 6) = **6.0** |
+| average D first, then floor (D capped at 8 rounds: mean D = 4) | | | max(4, 10 - 4) = **6.0** |
+| average D first, then floor (D capped at the 12-round horizon: mean D = 6) | | | max(4, 10 - 6) = **4.0** |
 | average D first, uncapped | | | **4.0** |
 
 Averaging first credits the lock against A as half a lock against B. It also makes the result depend on an
