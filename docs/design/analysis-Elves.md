@@ -798,3 +798,15 @@ Open USER decision: the tap-order default (after the fixed version's numbers).
   - the play-identical scratch-board rewrite of AttackTapLoss gives 0/18,700 digest changes; single-thread overhead 5.5% → 3.7% (Elves p20);
   - the temporary selectors are deleted and MTG_LORDCAST_HAND is folded in;
   - round 5 logs/lordcast/run_ab5.sh (BASE 8100000) is HELD until the mullgen finishes; then surface the default to the USER.
+
+### Checkpoint 19 (2026-11-27 ~18:45 UTC)
+- **The Elves mullgen restart ABORTED at 18:04** on MTG_RSS_CAP_GB=20; the journal is safe.
+  - Culprit: one rollout, size5 draw r=5 seed=13064056893581132306 (Wave, Taunting Elf, Priest, Marwyn, Forest), which peaks at 14.0 GB ALONE in 41 s.
+  - The mem6 agent (wip/elves-mem6, from 36e9ce5b2) is finding and fixing it soundly.
+  - The mullgen resumes once that fix lands (play-identical → the journal resumes).
+- **Lordcast round 5** (fresh seeds 8100000, wip/elves-lordcast 2890b8039, report logs/lordcast/ab5.report.txt):
+  - play: Elves -4 (4/0, cpu 1.20x), Elves 2HG 0 (cpu 1.28x), Boars 0/0, Goblins 0/0 (cpu ~1.0x);
+  - d0: Elves -3624, Boars -214, Goblins -304;
+  - **no slower searched game in any cell.**
+  - **USER DECISION surfaced:** on for all lord decks / on except Elves (cpu) / off.
+  - Recommendation: on for Boars+Goblins now; Elves after a cost cut. The other 19 lord decks need an A/B first.
