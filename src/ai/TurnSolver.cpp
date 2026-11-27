@@ -16278,6 +16278,14 @@ static bool AttackLordCastEnabled()
 // MTG_LORDCAST_HAND -- TEMPORARY selector (2026-11-27 lordcast re-test; delete or adopt with the USER's call on
 // MTG_ATTACK_LORD_CAST): the walk takes each cast card out of the scratch hand, so Ilharg's attack-put projection
 // cannot put a card the plan already cast. =1 on.
+// MTG_LORDCAST_AMEND_DIAG -- TEMPORARY DIAGNOSTIC (2026-11-27, attribution of the round-2 searched recoveries; delete
+// before the round-3 A/B binary is built): bitmask of the MTG_ATTACK_LORD_CAST amendments left armed, A=1 B=2 C=4 D=8,
+// default 15 (all). Read only under the lever, so the off arm is unaffected.
+static int LordCastAmendDiag()
+{
+    static const int v = EnvInt("MTG_LORDCAST_AMEND_DIAG", 15);
+    return v;
+}
 static bool LordCastHandEnabled()
 {
     static const bool env_on = EnvOn("MTG_LORDCAST_HAND", false);
@@ -16592,7 +16600,7 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
         // battlefield (or kept earlier in this walk) is not kept again -- the legend rule leaves ONE copy, so its static
         // pump counts once. Without this the walk read Raggadragga's +2/+2 twice on three mana dorks (17 read, 11
         // dealt) and played the second copy as a "lethal" line. Lever-only, so the off arm is byte-identical.
-        if (keep_lord && board_lord && d->card.HasSupertype(Supertype::Legendary))
+        if (keep_lord && board_lord && (LordCastAmendDiag() & 4) && d->card.HasSupertype(Supertype::Legendary))
         {
             for (const Permanent& q : t.battlefield)
             {
@@ -16764,7 +16772,7 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
     // exactly the input that hold read, so the frozen "hold" dropped the lord's pump on it (16 read, 19 dealt, the
     // T4 kill missed). A creature the intent HELD whose lord bonus the kept lords raise is re-asked on the walk's
     // board (wants = 2); every other verdict stays the pre-plan one, so point 10's hold-context protection stands.
-    if (board_lord && t_attack_intent != nullptr)
+    if (board_lord && (LordCastAmendDiag() & 1) && t_attack_intent != nullptr)
     {
         AttackIntent re = *t_attack_intent;
         bool changed = false;
@@ -17216,7 +17224,7 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
     // more often, since nothing lifts it); inert without a live outlet (state.deck_has_sac_mana_outlet).
     int fodder_eat = 0;
     SacPayOutlet fodder_outlet;
-    if (need_exact && ctx.board_lord && !ctx.cand_walk.empty())
+    if (need_exact && ctx.board_lord && (LordCastAmendDiag() & 2) && !ctx.cand_walk.empty())
     {
         bool lord_in_sel = false;
         for (int j : sel) { if (ctx.cand_walk[static_cast<std::size_t>(j)] & kWalkLord) { lord_in_sel = true; break; } }
@@ -64768,31 +64776,8 @@ struct Dumper
 };
 inline Dumper g_dumper;
 }
-static bool LethalCutKillIsReal(const GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
-                                bool land_played, int pending_atk, const char* site);
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
 {
-    // DIAG (TEMPORARY, 2026-11-27 lordcast gi663; print-only, default 0 = off): MTG_LORDCAST_SOLVE_DIAG_TURN=<turn>
-    // prints every pre-combat Solve (the playout / horizon policy) on that turn: the board's own hand size, the plan
-    // it returns, its projected wins flag and the applied plan + combat verdict.
-    {
-        static const int s_sd = EnvInt("MTG_LORDCAST_SOLVE_DIAG_TURN", 0);
-        static thread_local bool t_in = false;
-        if (s_sd > 0 && !t_in && state.turn_number == s_sd && is_pre_combat)
-        {
-            t_in = true;
-            Plan p = Solve(state, is_pre_combat, permit);
-            std::string sum, hand;
-            for (const Action& a : p.actions) { sum += a.card_name.str() + ","; }
-            for (const Card& c : state.ActivePlayer().hand) { hand += c.m_name.str() + ","; }
-            const bool real = LethalCutKillIsReal(state, p, is_pre_combat, /*land_played=*/false, 0, "solvediag");
-            std::fprintf(stderr, "[solvediag] T%d opp=%d wins=%d real=%d land=%s p=%s hand=[%s]\n", state.turn_number,
-                         state.Opponent().life, p.wins_this_turn ? 1 : 0, real ? 1 : 0, p.land_to_play.c_str(),
-                         sum.c_str(), hand.c_str());
-            t_in = false;
-            return p;
-        }
-    }
     routetape::Suspend _rts;   // a solve inside a route link's apply is not the link's own resolution
     // THE TRIPWIRE ran when the caller built `permit` (GreedyPermit's constructor checks both the
     // claimed depth and the innermost search frame -- see greedywindow in TurnSolver.h). There is
@@ -68009,15 +67994,46 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
                           << " eval=" << total_eval << " rank=" << rank_value << "\n";
             }
         }
-        bool better;
-        if (best.wins_this_turn != wins)   { better = wins; }                    // winning dominates
-        else if (wins && route_win_j >= 0
-                 && verified_win != std::binary_search(best_sel.begin(), best_sel.end(), route_win_j))
-        { better = verified_win; }                                               // a VERIFIED win dominates a projected one
-        else if (rank_value != best.value) { better = rank_value > best.value; } // then higher (learned) value
-        else if (sel_wide || (!best_sel.empty() && best_sel.back() >= 32))   // either mask aliases
-        { better = CanonSubsetMaskLess(sel, best_sel, best_mask); }
-        else                               { better = mask < best_mask; }        // tie -> smallest mask
+        auto beats_best = [&](bool w) -> bool
+        {
+            if (best.wins_this_turn != w)   { return w; }                         // winning dominates
+            if (w && route_win_j >= 0
+                && verified_win != std::binary_search(best_sel.begin(), best_sel.end(), route_win_j))
+            { return verified_win; }                                              // a VERIFIED win dominates a projected one
+            if (rank_value != best.value) { return rank_value > best.value; }    // then higher (learned) value
+            if (sel_wide || (!best_sel.empty() && best_sel.back() >= 32))        // either mask aliases
+            { return CanonSubsetMaskLess(sel, best_sel, best_mask); }
+            return mask < best_mask;                                              // tie -> smallest mask
+        };
+        bool better = beats_best(wins);
+        // MTG_ATTACK_LORD_CAST amendment D (2026-11-27, Elves d0: 36 of 39 sampled slower games). The lever credits a
+        // kept lord's pump to every attacker the projection believes still swings, so each error in WHICH creatures
+        // the payment taps -- the executor's source order (Elvish Archdruid / Priest of Titania tapped while a Forest
+        // stays open), Wirewood Lodge's untap of an attacking dork counted as non-attacker supply (gi13999: supply 10,
+        // 5 of it "non-attacker" from 2 Forests + a {C} Lodge), colour -- is multiplied by the lord count, and a read
+        // that crosses lethal DOMINATES every non-winning subset above ("winning dominates"), whatever its eval. So a
+        // lord-credited win is admitted only when it is REAL: the subset is applied on a copy and its combat simulated
+        // (LethalCutKillIsReal, the board-lethal cut's verifier), and only when it would otherwise replace `best`
+        // (one apply per candidate winner, not per subset). A refused subset competes on value, exactly as the off
+        // arm scores it. Lever-only: the off arm is byte-identical.
+        if (better && wins && !verified_win && is_pre_combat && atk_tap_ctx.board_lord
+            && (LordCastAmendDiag() & 8) && !atk_tap_ctx.cand_walk.empty())
+        {
+            bool lord_in_sel = false;
+            for (int j : sel)
+            { if (atk_tap_ctx.cand_walk[static_cast<std::size_t>(j)] & kWalkLord) { lord_in_sel = true; break; } }
+            if (lord_in_sel)
+            {
+                Plan probe;
+                for (int j : sel) { probe.actions.push_back(j == fill_j ? fill_action : cands[static_cast<std::size_t>(j)]); }
+                ApplyCantripFirstOrder(state, probe.actions);   // as materialize_best orders it
+                if (!LethalCutKillIsReal(state, probe, is_pre_combat, /*land_played=*/false, projected_atk, "lordcast"))
+                {
+                    wins = false;
+                    better = beats_best(false);
+                }
+            }
+        }
         if (!better) { return; }
         // The deferred land-Aura payer (MTG_SOLVE_AURA_PAYER_DEFER): asked only now, of a subset that
         // would REPLACE the best. Same verdict, same subset, same order as the eager form -- see
@@ -124583,7 +124599,7 @@ static void FswDeclinedTrace(const GameState& state, int depth, const TurnSolver
     if (!s_fsw || state.turn_number != s_fsw_turn) { return; }
     std::string sum, cont, hand;
     if (p.land_decided) { sum += "land=" + p.land_to_play + ";"; }
-    for (const Action& a : p.actions) { sum += a.card_name; sum += ","; }
+    for (const Action& a : p.actions) { sum += a.card_name; if (a.kicked) { sum += "#x" + std::to_string(static_cast<int>(a.kick_count)); } sum += ","; }
     for (const Action& a : bp) { cont += "k" + std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name + ","; }
     for (const Card& c : s3.ActivePlayer().hand) { hand += c.m_name.str(); hand += ","; }
     std::fprintf(stderr, "[fsw-skip] T%d d%d oppL=%d p=%s %s bp=%d@%d cont=[%s] after=%d tail=%d best=%d hand=[%s]\n",
@@ -127640,6 +127656,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 for (const Action& a : p.actions)
                 {
                     sum += a.card_name;
+                    if (a.kicked) { sum += "#x" + std::to_string(static_cast<int>(a.kick_count)); }   // multikick / squad count
                     if (a.soulfire_own_targets > 0)
                     { sum += "#V" + std::to_string(a.soulfire_own_targets); }
                     if (!a.tutor_target.empty()) { sum += ">" + a.tutor_target; }
@@ -127936,7 +127953,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     {
                         std::string sum, cont, node;
                         if (v.land_decided) { sum += "land=" + v.land_to_play + ";"; }
-                        for (const Action& a : v.actions) { sum += a.card_name; sum += ","; }
+                        for (const Action& a : v.actions) { sum += a.card_name; if (a.kicked) { sum += "#x" + std::to_string(static_cast<int>(a.kick_count)); } sum += ","; }
                         for (const Action& a : bp)
                         { cont += "k" + std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name + ","; }
                         for (const Permanent& q : state.battlefield)
@@ -134596,46 +134613,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     }
     // Candidates are sorted highest-value first, so the first winning plan
     // (if any) is also the highest-value winning plan.
-    // MTG_LORDCAST_VERIFY (TEMPORARY selector, 2026-11-27 lordcast re-test): the projection behind wins_this_turn
-    // is optimistic, and this return reports the node won THIS turn at any budget. Under the selector a projected
-    // winner is taken only when the applied plan + combat really kills; a refused one falls through.
-    static const bool s_lc_verify_env = EnvOn("MTG_LORDCAST_VERIFY", false);
-    const bool lc_verify = heurarm::Flag(heurarm::LORDCAST_VERIFY_TMP, s_lc_verify_env);
-    // DIAG (TEMPORARY, 2026-11-27 lordcast gi663; print-only, default 0 = off): MTG_LORDCAST_DIAG_TURN=<turn> lists,
-    // at every pre-combat SolveWithLookahead node on that turn, the projected winners and every candidate casting
-    // MTG_LORDCAST_DIAG_CARD (default "Joraga Warcaller"), with the applied plan + combat verdict.
-    {
-        static const int s_lcd = EnvInt("MTG_LORDCAST_DIAG_TURN", 0);
-        if (s_lcd > 0 && state.turn_number == s_lcd && is_pre_combat)
-        {
-            static const std::string s_lcd_card = []{ const char* e = std::getenv("MTG_LORDCAST_DIAG_CARD");
-                                                      return std::string(e && *e ? e : "Joraga Warcaller"); }();
-            int nwin = 0;
-            for (const Plan& p : candidates) { if (p.wins_this_turn) { ++nwin; } }
-            std::fprintf(stderr, "[lcdiag] T%d d%d opp=%d ncand=%zu nwin=%d\n", state.turn_number, depth,
-                         state.Opponent().life, candidates.size(), nwin);
-            for (const Plan& p : candidates)
-            {
-                bool has = false;
-                std::string sum;
-                for (const Action& a : p.actions)
-                {
-                    sum += a.card_name.str() + ",";
-                    if (a.card_name.str().find(s_lcd_card) != std::string::npos) { has = true; }
-                }
-                if (!has && !p.wins_this_turn) { continue; }
-                const bool real = LethalCutKillIsReal(state, p, is_pre_combat, /*land_played=*/false, 0, "lcdiag");
-                std::fprintf(stderr, "[lcdiag]   wins=%d real=%d v=%d land=%s p=%s\n", p.wins_this_turn ? 1 : 0,
-                             real ? 1 : 0, static_cast<int>(p.value), p.land_to_play.c_str(), sum.c_str());
-            }
-        }
-    }
     for (const Plan& p : candidates)
     {
-        if (!p.wins_this_turn) { continue; }
-        if (lc_verify && !LethalCutKillIsReal(state, p, is_pre_combat, /*land_played=*/false, 0, "lookahead"))
-        { continue; }
-        report(state.turn_number, depth - 1); return p;
+        if (p.wins_this_turn) { report(state.turn_number, depth - 1); return p; }
     }
 
     // ---- THE SEARCH QUERIES THE COMBO OFF RULE (see EdfComboOffShortcut above) -----------------
