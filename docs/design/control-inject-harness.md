@@ -357,3 +357,59 @@ All on the build of commit `84e204640` plus the spawn fix (section 10), Release,
   2> <dir>/batch.err`, then `python3 scripts/control_inject_probe.py report <dir> <dir>/batch.err`.
 * reproduce one game: `"seed": BASE + gi, "game_index": gi, "games": 1` (both, or the game differs), plus
   `--game-trace-dir <dir>` for its turn-by-turn trace.
+
+### Drivers (stage 1, 2026-11-27): `scripts/control_gauntlet.py`
+
+Tests: `python3 test/control_gauntlet_test.py` (parsers, baseline table, planner, delay / clairvoyant / interaction
+math, skip check, report end to end; synthetic data, no engine).
+
+* **Gauntlet** = every `test/regression_cases.sh` deck whose modes marker is not `goldfish: false` (65 on
+  2026-11-27), each at its SHIPPED play setting: the regression tier's depth-5 row, emitted like the harness's d5
+  rows (no `depth` key, so the profile's `value_play` block picks the depth; `budget_ms` = the row's budget).
+* **Seeds:** `seed = 8100001 + gi`, `game_index = gi` (stage-2 report section 4: held out from every tier and from
+  the probe's 7900001). A deck's seed set is a prefix `gi = 0..n-1`, so a table at n = 20 extends to 40 (the
+  stage-2 parity split) by adding `gi = 20..39` only.
+* `baseline make <dir> [--games 20] [--games-for k=N,..] [--max-wall-hours H --threads T]`: ONE manifest,
+  `<key>__base` per deck (`ctrl_record`, `max_turns 15`, LPT weight = projected cost) plus `<key>__plain` twins
+  for the `--identity` decks. The base job carries the CENSUS, five index-999 no-op effects every round
+  (`destroy:1-15:land:999;destroy:1-15:creature:999;discard:1-15:card:999;tap:1-15:land:999;tap:1-15:creature:999`):
+  a no-op changes nothing (`applied: 0`, no re-plan) and logs each round's candidate lists, which the clairvoyant
+  sweep needs to size itself in the same pooled batch. **Verified inert:** 5 decks x 60 games, base (census +
+  record) vs plain, 300 / 300 per-game digests identical.
+* `baseline ingest <dir> [--out logs/control-mode/baseline]` -> `<key>.json` (`ctrl-baseline-v1`: per game `k`
+  (null = unwon by 15), `wt`, `digest`, `otp`, `kill`, `alt`, `dmg[]` per round, `spells[]` per round, the census
+  `cands{}` and `features[]` per round) and `summary.txt`. Stamp = invalidation keys: `decklist_sha256`, every
+  play-read sibling artifact's sha256 (profile, value, keep table, buckets, ...; `.raw.json.gz` excluded),
+  `src_tree` (+ `src_dirty`), `harness`, `seed_base`, `n`, `max_turns`, the depth actually played (`[play]` line),
+  `budget_ms`, `play_digest` (the job digest). `baseline check` lists stale decks; `table make` refuses a stale one.
+* `plan --what baseline|table [--games N] [--threads T] [--baseline-dir D]`: core-hours. Per-game cost = the
+  baseline's measured cpu when it exists, else `test/suite_cost.json` (worst shape, upper bound; `--estimate`
+  scales it by `test/job_cost.tsv` units). The table's game count is exact from the baseline (screening and
+  sweep sizes included); disrupted games are priced at 1.3x (`--arm-factor`).
+* `table make <dir> --baseline-dir D [--decks ..] [--games N] [--rounds 2-5] [--life-screen]`: per deck and round
+  t: fixed-policy singles `land` (destroy land 0), `crt` (destroy creature big), `sweep`, `ctr` / `ctrhand` /
+  `ctrtop` (the first spell of mana value >= 1, the probe's policy = the Q8 threshold at zero), `disc` (nonland
+  big), `tax` (`tax:t-15:1`), `tapland` (land 0), `tapcrt` (creature big), `life3`, `life5`, `xu`
+  (`exile_until` creature big, `ret = t + 2`), `xuall` (all creatures, `ret = t + 2`), `skip`; the CLAIRVOYANT
+  sweep (Q3 / Q8) for land, crt, the three counters, disc, tapland, tapcrt: one job per candidate index, run only
+  on the games that have that index (hand cards deduped by name; counter candidates from the base round's
+  spells); and 20 joint stacking arms (section 8's plus mixed pairs). Screening: a game won before round t is not
+  run (delay 0 exactly); `--life-screen` also zeroes the section 5.6 provable-zero life games. One job per arm,
+  `skip_games` for the gaps, `seed = BASE + first gi`.
+* `report <dir> [--out f] [--json f] [--rows f]`: S[e,t,g] fixed and clairvoyant with se, hit rate, unwon at 15,
+  the interaction and increment terms (8.2), the analytic skip check, life gain split by deck class (creature
+  share of nonland cards: < 0.40 burn, >= 0.55 creature; combo when most kills are not through life) with the
+  race-flip share P(K < w <= K + D) at w = 4..8, the life-screen validation, and `--rows` = one JSON row per
+  (deck, arm, game) with the delay and the `features` at application (the design-E training rows).
+* Delay convention: `delay = K' - K`, unwon arm = 16 (`control_score.delay(..., censored="bound")`), an unwon base
+  game = 0.
+
+**Runs (2026-11-27, small-job lane, 2 threads):** baseline `build/scratch/control-mode/baseline1` -> tables in
+`logs/control-mode/baseline/` (65 decks, 20 games; the five probe decks 60), 0.26 core-hours, ~8 min wall,
+nothing dropped. Pilot `build/scratch/control-mode/pilot1` (five probe decks x 60 games, rounds 2-5, every kind,
+clairvoyant + joint, no life screen) -> `logs/control-mode/pilot-report.txt`.
+
+**Projected full table** (`logs/control-mode/plan-full-table-20.txt`): 65 decks x 20 games, rounds 2-5 =
+206,590 games, **55 core-hours = 2.3 h at 24 threads** (54 with the life screen); about 2x that at 40 games.
+Worldfire is 43 of the 55 core-hours' first 0.8 (32,240 games: its counter sweeps over many spells a round),
+then Beasts 26 core-ks and Hinata 16 core-ks.
