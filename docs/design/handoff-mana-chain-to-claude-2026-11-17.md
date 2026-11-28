@@ -296,6 +296,18 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**20:05 UTC 11-28** -- RE-GATE claude-queue-20261128a DONE 19:53 (identity byte-identical): creature_burn CLEAN (93,000);
+1_drop_burn 16394 -> 396 (APPLY-DROP 227, ORDER 169: Devil/Needle Drop/Lavamancer, triage #9); treasure_hunt 1644 -> 81;
+shadowborn 80 -> 50; worldfire 1151 / 26,000 games (rate ~ unchanged; triage #4 ritual drain is real). Record ed0663385 on
+wip/gate-1128 -> rides the next landing. BS agent 2 DONE (51bafedac: perf -> continuation derivation BpDeriveContinuationList
+chain is the cost; thread-CPU backstop makes CAPPED-DECISION load-dependent) -> BS agent 3 launched (memo_dc comparison,
+continuation-derivation memo, g51 table, deterministic unit backstop). FILLER 2 LAUNCHED: claude-queue-20261128b, 22
+stale-clean decks x 5000 games (not zombies / elves: other sessions'), chain PID 3345826,
+build/scratch/claude_gate_1128b/{status,gate.log,DONE}, worktree gate-1128. NEXT LANDING (land-1201): gate records (1128a,
+1128b), BS leftover fold 633af33b2 (+ agent 3 cuts if ready), Beasts fix (after CPU cut; GT), DS round 5 (after CPU cut; GT).
+Next fix candidates: Worldfire ritual drain (#4), 1 Drop Burn Devil order (#9), Stuffy Doll (#5), Creature Giving Crop
+Rotation (#6).
+
 **17:45 UTC 11-28** -- CI 46160277039 (8e4653481) GREEN. BS oracle agent 2 DONE (281K; wip/bs-oracle 633af33b2 fold +
 0fb7d56d4 report2/handoff2 + ddba79b4c). MTG_ORACLE_LEFTOVER_FOLD (default ON, oracle-only): mechanism C (g531: 98.4% of
 23.0M leftover splits repeated a recorded result). BS 20 games CPU 2,920 -> 1,807 s (0.62x vs the memo), flags + every
