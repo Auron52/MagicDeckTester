@@ -28,7 +28,7 @@ truncated, so their event counts are lower bounds:
 - **0**: no play value.
 
 These are code-and-board judgements. The single-game repros are listed per cluster. Section 4 says which ones ran.
-**No fix was A/B-measured here.**
+**IMPACT IS UNMEASURED FOR EVERY CLUSTER.** No repro ran: the small-job lane never admitted the job before wrap-up (see the appendix). No fix was A/B-measured either. Every impact grade below is a judgement from code reading and the flagged boards.
 
 **Something to know first.** Several fixes landed after the gate's commit, so its counts overstate the HEAD tree:
 - Oracle-only reclassification (`eb39bc311`): `MTG_ORACLE_EG_PROVIDER_PRUNE`, `MTG_ORACLE_DROP_WON`,
@@ -439,4 +439,4 @@ in priority order and writes `<tag>.{out,err,logs}` plus `progress.txt` and `DON
 | ds-enum.gate | gate | `MTG_DBG_MULTI`, the Apex gate, s30159563 T6 |
 | dr-bolt.post / ang-drop.post | post-gate | whether Dragons s30239577 T5 / Angels s30241585 T3 still flag |
 
-Results are below if the job ran before this file was committed. Otherwise read them from the scratch directory.
+STATUS at wrap-up (11:55 UTC): still queued, no repro has run. The job stays queued. When it runs, its outputs land in the scratch directory. `logs/gate1127-triage/handoff.md` says how to fold them in.
