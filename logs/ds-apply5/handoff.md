@@ -26,7 +26,7 @@ bill pip colour, but Dragonstorm only enumerates a RED Apex (TurnSolver Apex col
 so that judge is optimistic for Dragonstorm (it called s30129223's stranding payment fine). Only THIS lever was changed;
 fixing the shared judge would move round-3/4 play and needs its own A/B.
 
-## Measurements (all done except CPU + units)
+## Measurements (all done)
 1. Event repros (30 events, oracle on the event turn, `logs/ds-apply5/evrun.sh`): with `MTG_VISIBLE_CLOSER_KEEP=0` all 30
    game logs equal the base (origin) binary's. Need-later Karrthus flags OFF 126 -> ON 63 (final lever, on3;
    `logs/ds-apply5/repro_off_on3.txt`); first version 92, red-only witness 66, + dominance 63. Win turns: s30101776 T7->T6,
@@ -48,29 +48,41 @@ fixing the shared judge would move round-3/4 play and needs its own A/B.
    lane at 32 threads; `logs/ds-apply5/ab_report.txt`): net 0 on every shape except dragonstormplay -1 (ONE game faster,
    gi 1147 seed 5411147 T6 -> T5); 0 slower games anywhere. Units: Dragonstorm -0.47% / 2HG +0.04%, Mirrorwing -0.01%,
    Niv -0.01%, all else 0. No d8 b0 replays needed (no slower game).
-   Verdict so far: passes the adoption bar (net <= 0 on every deck, no slower game, gate better) -> keep DEFAULT ON,
-   pending CPU and units.
+   Verdict: passes the adoption bar (net <= 0 on every deck, no slower game, gate better) -> keep DEFAULT ON; the CPU
+   overhead below must still be cut.
 
-## Running jobs (both in the small lane, 2 slots)
-- build5: PID 2793076 (waiter shell), `./build.sh release -- --target mtg` then `--target mtg-test` (final src, debug
-  removed); log `$S/build5.log`, marker `$S/build5.DONE` (0 = ok). Slow: box was full; ~2-3 h.
-- CPU chain: PID 2846460 waits on build5.DONE, copies the binaries to `$S/bin_final/`, then runs
-  `$S/cpu/ins.sh` (perf stat -e instructions:u, --threads 2): ds_off / ds_on (Dragonstorm 200 games, $S/cpu/ds_*.json)
-  and nd_off / nd_on (64 other decks x 25 games, $S/cpu/nd_*.json); results appended to `$S/cpu/ins_all.txt`, marker
-  `$S/cpu/ins.DONE`. Bonus identity check: the ds_on/ds_off batch.out digests (`$S/cpu/ins_ds_*.out`) must equal the A/B
-  arms' o0..o175 dragonstormplay jobs in `$S/ab_out/batch.out` (bin_final vs bin_l5c; removed code was inert).
-- Nothing in the big lane (chain_big.sh DONE; claude_box.lock released).
+4. Final binary ($S/bin_final, src 513976445 = debug/audit removed): play-identical to the A/B binary bin_l5c (the CPU
+   batches' 144 jobs -- DS 8 + 64 decks x 1, both arms -- have the same digests as the A/B's at 32 threads).
+5. Units (`logs/ds-apply5/units.txt`): 4351 / 4351 PASS (scripts/unit_par.sh, 8 shards, 2 cores), the 4 new
+   `Dragonstorm visible closer: ...` cases included.
+6. CPU (`logs/ds-apply5/cpu_ins.txt`, perf stat -e instructions:u, --threads 2, bin_final, lever pinned in the manifest):
+   ```
+   Dragonstorm play, 200 games (gi 0-199, seed 5410000+)   off 181.586 G   on 182.023 G   +0.24%
+   64 other decks x 25 games (A/B o0 blocks)              off 5323.058 G  on 5330.314 G  +0.136%
+   ```
+   The other decks' +0.136% is pure overhead (their play and units are identical in the A/B, except Mirrorwing / Niv
+   units -0.01%), and the USER rule is "cut CPU". NOT YET CUT.
+
+## Running jobs
+None. Big lane released (chain_big.sh DONE); lane jobs all finished.
 
 ## Remaining, in order
-1. When build5.DONE = 0: full units with this worktree's `scripts/unit_par.sh` on `$S/bin_final/mtg-test` (or
-   build/Release/mtg-test) in the lane (`box_lane.sh --slots 2`); the line-keep cases must all pass (4 new:
-   `Dragonstorm visible closer: ...`). If a new case fails, fix the TEST board (counters/hand) first -- the lever's repro
-   evidence is the game logs -- and re-run.
-2. CPU: read `$S/cpu/ins_all.txt`; report on/off for DS and the 64 other decks (method: logs/ds-apply4/cpu_cut.txt). If DS
-   cost is material, cut it with exact changes (the pre-check already skips boards that cannot pay the closer).
-3. Docs: Round 5 section at the end of docs/design/dragonstorm-apply-drop-2026-11-26.md (style of Round 4: census,
+1. CPU CUT (exact changes only; re-verify with the same ins.sh manifests $S/cpu/{ds,nd}_{off,on}.json and digest
+   identity vs $S/ab_out/batch.out). Where the cost likely is, cheapest first: the gate runs at every outermost
+   autonomous payment with g_line_opens_unseen && hold == cost; then the closer loop calls EffectiveSpellCost per
+   candidate; then the exact pre-check `witness(state)` = LumpAwareBillPayable (a board copy per lump combo + the
+   backtracker) runs on every such payment that has a closer, even in decks with no lump / creature-only land. Exact
+   cuts to try: (a) a necessary-condition producibility filter before the witness: for each closer colour c, floating
+   c + ritual c + any untapped permanent that can make c (EffectiveProduces, a lump from CollectOnDemandCracks, a
+   colored_creature_only land) -- none -> return -1 (same monotonicity argument as the pre-check); (b) skip the gate
+   when there are no alternatives possible at all (no closer-colour float, no CCO land, no lump) BEFORE the witness --
+   alts.empty() is already a return -1, just move it ahead of the pre-check (exact: with no alternative the plain
+   payment stands either way); (c) compute EffectiveSpellCost only for creatures that pass the colour test (already so)
+   and avoid the std::vector `others`. (b) is free and probably most of the non-DS cost. Measure each.
+2. Docs: Round 5 section at the end of docs/design/dragonstorm-apply-drop-2026-11-26.md (style of Round 4: census,
    mechanisms D/T, the lever, the three refinements, repro table, gate table, A/B, CPU, units, the exactness limit, the
    judge-optimism finding, the residual shapes); `logs/ds-apply5/report.md` (git add -f).
+3. If src changed for the CPU cut: rebuild (lane, 2 slots, cap 4; mtg + mtg-test), units again, identity (digests) again.
 4. Final commit message WITHOUT "WIP"; `python3 scripts/check_references_safe.py`; push wip/ds-apply5 only.
 
 Residual need-later Karrthus shapes (not fixed, for the write-up): lines that END with a creature rather than an opener

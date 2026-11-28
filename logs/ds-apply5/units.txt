@@ -1,0 +1,3 @@
+box_lane: 15:52 running on 2 slot(s), MTG_RSS_CAP_GB=6: bash scripts/unit_par.sh /workspaces/MagicDeckTester/build/scratch/ds-apply5/bin_final/mtg-test 2
+[unit_par] 4351 / 4351 test cases in 8 shards on 2 cores; PASS
+rc=0
