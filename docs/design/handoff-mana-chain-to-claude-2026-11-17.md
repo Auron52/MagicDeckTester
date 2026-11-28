@@ -296,6 +296,14 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**06:15 UTC 11-28** -- gate_1127 RESTRUCTURED (coordinator's own filler). Blood Sun's oracle arm costs 1,236,715
+core-ms/game (sizing; 70x its 17.7 s play): its 4,633 single-game jobs would have run ~60 h before the other 7 decks
+started (494/6662 jobs in 7 h). Stopped the chain (old pid 829089; ~28 in-flight Blood Sun games lost), backed up the plan
+to build/scratch/claude_gate_1127/run.json.bak-0610, set blood_sun games 5000 -> 827 (the contiguous finished prefix, 875
+done in all) in land-1128 logs/mana_clean/claude-queue-20261127a/run.json, relaunched chain.sh (NEW PID 2497574). Remaining:
+hydras, stuffy_doll, sea_creatures, shadowborn_apostle, mill, dragonstorm, creature_burn (+ off arm). NEW FIX ITEM: Blood Sun
+oracle cost (CAPPED-DECISION storms, 20 min/game) -- spawn an agent when a lane slot frees (DS round 5 holds 2).
+
 **04:30 UTC 11-28** -- DS round 5 agent 1 handed off (280K; wip/ds-apply5 23b13dd8c WIP, logs/ds-apply5/handoff.md).
 Census: Karrthus need-later 274 flags / 30 events on the round-4 gate -> 169 / 19 on origin; 5 lose a turn (s30092745,
 s30095186, s30101776, s30113323, s30129223). Mechanism: the Apex payment (last cast of the named line) spends Karrthus's
