@@ -1,0 +1,60 @@
+{
+ "jobs": [
+  {
+   "name": "blood_sun__g5",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000005,
+   "game_index": 5
+  },
+  {
+   "name": "blood_sun__g51",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000051,
+   "game_index": 51
+  },
+  {
+   "name": "blood_sun__g91",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000091,
+   "game_index": 91
+  },
+  {
+   "name": "blood_sun__g170",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000170,
+   "game_index": 170
+  },
+  {
+   "name": "blood_sun__g233",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000233,
+   "game_index": 233
+  },
+  {
+   "name": "blood_sun__g300",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000300,
+   "game_index": 300
+  },
+  {
+   "name": "blood_sun__g531",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000531,
+   "game_index": 531
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "jobs": [
+  {
+   "name": "blood_sun__g46",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000046,
+   "game_index": 46
+  }
+ ]
+}

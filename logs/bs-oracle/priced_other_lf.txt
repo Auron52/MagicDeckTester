@@ -1,0 +1,2 @@
+qA {'prevent_damage': 20231, 'dragonstorm': 4425} kinds {'enum': 1420, 'plans': 232, 'odo': 58, 'apply': 4491, 'pay': 7191, 'simkey': 10058, 'plan_emit': 857}
+qB {'prevent_damage': 20142, 'dragonstorm': 4442} kinds {'enum': 1420, 'plans': 232, 'odo': 58, 'apply': 4491, 'pay': 6983, 'simkey': 10198, 'plan_emit': 857}
