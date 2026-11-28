@@ -9547,29 +9547,66 @@ static bool ReducerOrderDomainOn()
     return s_on;
 }
 
+static bool IsSpellReducerDef(const CardDefinition& d)
+{
+    return !d.params.reduces_spell_subtype.empty() || !d.params.reduces_spell_color.empty()
+        || (d.params.chooses_creature_type && d.params.reduces_spell_subtype_amount > 0);
+}
+
+// `order` is the cast sequence the walk / apply takes (the rank order). The domain needs an INVERSION: a cast placed
+// BEFORE a reducer that would discount it. With every reducer already ahead of what it discounts, the given order is
+// the reducer-first order this domain exists to price, so the domain adds nothing (Hydras' Gargos, Giants' Stinkdrinker,
+// Goblin Warchief: rank 8, ahead of the creatures at 10 -- their walks are unchanged). The pair test is the flat gate's
+// own credit for that one reducer (CountSameTurnReducers on {reducer}, SameTurnReducerDiscountFor; a reducer never
+// discounts itself).
 static bool SpellReducerOrderDomain(const GameState& state, const std::vector<Action>& acts,
                                     const std::vector<int>& order)
 {
     if (order.size() < 2 || !ReducerOrderDomainOn()) { return false; }
-    bool any = false;
-    for (int j : order)
+    for (std::size_t i = 1; i < order.size(); ++i)
     {
-        const Action& a = acts[static_cast<std::size_t>(j)];
-        const CardDefinition* d = a.def;
-        if (a.kind != Action::Kind::CastFromHand || d == nullptr) { continue; }
-        if (!d->params.reduces_spell_subtype.empty() || !d->params.reduces_spell_color.empty()
-            || (d->params.chooses_creature_type && d->params.reduces_spell_subtype_amount > 0))
-        { any = true; break; }
-    }
-    if (!any) { return false; }
-    const SameTurnReducerCounts rc = CountSameTurnReducers(state, acts, order);
-    if (!rc.Any()) { return false; }
-    for (int j : order)
-    {
-        if (acts[static_cast<std::size_t>(j)].kind != Action::Kind::CastFromHand) { continue; }
-        if (SameTurnReducerDiscountFor(state, rc, acts, j) > 0) { return true; }
+        const Action& r = acts[static_cast<std::size_t>(order[i])];
+        if (r.kind != Action::Kind::CastFromHand || r.def == nullptr || !IsSpellReducerDef(*r.def)) { continue; }
+        const std::vector<int> one{ order[i] };
+        const SameTurnReducerCounts rc = CountSameTurnReducers(state, acts, one);
+        if (!rc.Any()) { continue; }
+        for (std::size_t k = 0; k < i; ++k)
+        {
+            if (acts[static_cast<std::size_t>(order[k])].kind != Action::Kind::CastFromHand) { continue; }
+            if (SameTurnReducerDiscountFor(state, rc, acts, order[k]) > 0) { return true; }
+        }
     }
     return false;
+}
+
+// The same test for an UNORDERED subset (the exec-feas rescue's `sel`): its casts in the walk's rank order
+// (SubsetPayableSequentialImpl's sort, by CastOrderRank), only when the subset holds a reducer cast at all.
+static bool SpellReducerOrderDomainSel(const GameState& state, const std::vector<Action>& cands,
+                                       const std::vector<int>& sel)
+{
+    if (sel.size() < 2 || !ReducerOrderDomainOn()) { return false; }
+    bool any = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::CastFromHand && a.def != nullptr && IsSpellReducerDef(*a.def)) { any = true; break; }
+    }
+    if (!any) { return false; }
+    std::vector<int> ord;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::CastFromHand && a.def != nullptr) { ord.push_back(j); }
+    }
+    const DecisionProvider& prov = ResolveProvider(state);
+    std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
+    {
+        const int rx = prov.CastOrderActionRank(state, cands[x], prov.CastOrderRank(state, *cands[x].def));
+        const int ry = prov.CastOrderActionRank(state, cands[y], prov.CastOrderRank(state, *cands[y].def));
+        if (rx != ry) { return rx < ry; }
+        return CastOrderNameTieLess(state, cands[x], cands[y]);
+    });
+    return SpellReducerOrderDomain(state, cands, ord);
 }
 
 // ---- Same-turn COLOURED-pip reducer credit (Ragemonger) ----------------------------------------
@@ -92514,7 +92551,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             const bool pending_put_reducer = EtbPutReducerOrderDomain(state, cands, sel);
             const bool pending_lord_reducer = BeastsLordReducerOrderDomain(state, cands, sel);
             // MTG_REDUCER_ORDER_DOMAIN: a same-subset spell reducer beside a cast it discounts (Urza's Incubator).
-            const bool pending_spell_reducer = SpellReducerOrderDomain(state, cands, sel);
+            const bool pending_spell_reducer = SpellReducerOrderDomainSel(state, cands, sel);
             bool pending_enter_haste = false;
             if (pending_enter_haste_bound > 0)
             {
