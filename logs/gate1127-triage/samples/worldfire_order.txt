@@ -1,0 +1,10 @@
+s30023148 gi1 T4 m1 plan={no land + cast:Ponder + cast:Brainstorm + cast:Overmaster} | engine dropped [cast Overmaster]; the order Overmaster > Brainstorm > Ponder pays every action with pay1[Sandstone Needle#38:R] ; pay2[Saprazzan Skerry#42:U Steam Vents#54:R] ; pay3[(float only)] ; pay4[Steam Vents#56:U] | board=[Steam Vents#54, Sandstone Needle#38, Saprazzan Skerry#42] hand=[Ponder, Worldfire, Personal Tutor, Brainstorm, Mercadian Bazaar, Overmaster] float=- life=17
+
+s30023440 gi48 T4 m1 plan={land=Flooded Strand + cast:Brainstorm + cast:Mystical Tutor} | engine dropped [cast Seething Song]; the order Mystical Tutor > Brainstorm pays every action with pay1[Island#9:U] ; pay2[Saprazzan Skerry#42:U] | board=[Steam Vents#54, Saprazzan Skerry#42, Mercadian Bazaar#20] hand=[Seething Song, Mystical Tutor, Flooded Strand, Rift Bolt, Brainstorm] float=- life=18
+
+s30023480 gi39 T2 m1 plan={land=Mercadian Bazaar + cast:Brainstorm + cast:Mystical Tutor} | engine dropped [cast Mystical Tutor]; the order Mystical Tutor > Brainstorm pays every action with pay1[Saprazzan Skerry#42:U] ; pay2[(float only)] | board=[Saprazzan Skerry#42] hand=[Sandstone Needle, Seething Song, Mystical Tutor, Mercadian Bazaar, Lotus Bloom, Brainstorm, Seething Song] float=- life=20
+
+s30024331 gi8 T4 m1 plan={no land + cast:Preordain + cast:Ponder + suspend:Rift Bolt} | engine dropped [cast Personal Tutor]; the order Ponder > Preordain > suspend:Rift Bolt pays every action with pay1[Mercadian Bazaar#20:R] ; pay2[Lotus Bloom#14:U] ; pay3[(float only)] ; pay4[Island#9:U] ; pay5[(float only)] ; pay6[(float only)] ; pay7[(float only)] | board=[Mercadian Bazaar#20, Lotus Bloom#14(new)] hand=[Personal Tutor, Seething Song, Irencrag Feat, Worldfire, Rift Bolt, Overmaster, Preordain, Ponder] float=- life=20
+
+s30024476 gi6 T3 m1 plan={land=Scalding Tarn + cast:Brainstorm + cast:Preordain} | engine dropped [cast Preordain]; the order Preordain > Brainstorm pays every action with pay1[Island#9:U] ; pay2[Steam Vents#55:U] | board=[Steam Vents#55, Sandstone Needle#39] hand=[Worldfire, Irencrag Feat, Rift Bolt, Brainstorm, Scalding Tarn, Preordain] float=- life=18
+

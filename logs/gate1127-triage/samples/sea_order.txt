@@ -1,0 +1,10 @@
+s30046625 gi20 T2 m2 plan={land=Windswept Heath + cast:Utopia Sprawl(x2)@14 + cast:Utopia Sprawl(x2)@14 + cast:Wild Growth@14} | engine dropped [cast Wild Growth]; the order Wild Growth > Utopia Sprawl > Utopia Sprawl pays every action with pay1[Breeding Pool#1:G] ; pay2[Hedge Maze#14:G] ; pay3[(float only)] | board=[Hedge Maze#14] hand=[Overgrowth, Spawning Kraken, Utopia Sprawl, Utopia Sprawl, Wild Growth, Windswept Heath] float=- life=20
+
+s30046804 gi92 T2 m2 plan={land=Misty Rainforest + cast:Overgrowth@17 + cast:Sol Ring} | engine dropped [cast Overgrowth]; the order Sol Ring > Overgrowth pays every action with pay1[Breeding Pool#4:G Island#17:U] ; pay2[Sol Ring#36:C] | board=[Island#17] hand=[Trench Gorger, Summon: Leviathan, Misty Rainforest, Overgrowth, Sol Ring] float=- life=20
+
+s30046885 gi66 T2 m2 plan={land=Forest + cast:Utopia Sprawl(x2)@14 + cast:Wild Growth@14 + cast:Wild Growth@14} | engine dropped [cast Wild Growth]; the order Wild Growth > Utopia Sprawl > Wild Growth pays every action with pay1[Forest#10:G] ; pay2[Hedge Maze#14:G] ; pay3[(float only)] | board=[Hedge Maze#14] hand=[Utopia Sprawl, Wild Growth, Wild Growth, Island, Worn Powerstone, Forest] float=- life=20
+
+s30046649 gi44 T2 m2 plan={land=Forest + cast:Utopia Sprawl(x2)@1 + cast:Wild Growth@1 + cast:Wild Growth@1} | engine dropped [cast Wild Growth]; the order Wild Growth > Utopia Sprawl > Wild Growth pays every action with pay1[Forest#9:G] ; pay2[Breeding Pool#1:G] ; pay3[(float only)] | board=[Breeding Pool#1, Sol Ring#36] hand=[Overgrowth, Trench Gorger, Utopia Sprawl, Forest, Wild Growth, Hedge Maze, Wild Growth] float=- life=17
+
+s30048003 gi7 T2 m2 plan={land=Forest + cast:Utopia Sprawl(x2)@9 + cast:Wild Growth@9 + cast:Wild Growth@9} | engine dropped [cast Wild Growth]; the order Wild Growth > Utopia Sprawl > Wild Growth pays every action with pay1[Forest#10:G] ; pay2[Forest#9:G] ; pay3[(float only)] | board=[Forest#9, Sol Ring#36] hand=[Utopia Sprawl, Wild Growth, Forest, Serpent of Yawning Depths, Spawning Kraken, Wild Growth, Worn Powerstone] float=- life=20
+
