@@ -138,11 +138,39 @@ The standard error is in brackets.
    stage 3.
 6. **A round-3 counter (+1.04) beats a round-3 land destruction (+0.89)**, and a round-2 tax (+1.18) is about as
    good as a round-2 land destruction (+1.09). Life gain is small everywhere (+0.1 to +0.4).
-7. **The analytic skip check is 4310/4383 (98.3%)**, below the pilot's 999/1000. The 73 exceptions sit in a few
-   decks, mainly Cyclone, Maze's End, Gods, Hinata and Prevent Damage. Some show a delay of 0 (base kill equals
-   the skipped kill, as in Maze's End, Anti-Lifegain and Burn). This is probably an instant-speed win on the
-   opponent's turn, which skipping our turn does not delay. Others show +2, where the game took a different
-   path. **Not yet root-caused;** the next step is to check this before the table is used for scoring.
+7. **The analytic skip check was 4310/4383 (98.3%) in this table, and is 4324/4383 (98.65%) after the
+   harness fix.** (The 999/1000 quoted earlier is the harness validation probe, d3 b10 on five decks. The pilot
+   TABLE scored 927/929 on the same five decks, and its two exceptions, Burn gi12 skip2/3, recur here. The gap
+   is deck coverage, not a change of binary.) Root-caused 2026-11-28 (harness doc section 9). The 73
+   exceptions had three causes:
+   * **A harness defect, now fixed.** Heuristics read the round (`turn_number`) as a development clock:
+     `ExpectedAttacks` in the greedy chooser, and 30 provider rules ("ramp ranks high through turn 2", Gods'
+     Magus before turn 4, the Grave-Troll admission). A skip advances the round but not the board, so the arm
+     played the same position as a later-round one. Cyclone gi0 is an example: the fit pass's rollouts said
+     6 against 8, and the root played Cascade Bluffs, not Myriad Landscape. These sites now read
+     `OwnRound(state)` = `turn_number - ctrl_skipped_turns`, which IS `turn_number` in every game without a skip.
+     That keeps the change byte-identical outside the skip arms: smoke 255/255 with play-changed 0, and the
+     fresh baseline 560/560 per-game digests equal to the stored one. **16 exceptions are gone** (Cyclone 0, 13
+     and 14, Gods 5 and 16, Hinata 17 and 19 in every arm, Landfall skip2, Merfolk Turns 10, Shadowborn 4). The
+     non-skip arms of this table are unchanged by construction. Only the skip column moves, and the numbers
+     above it are the re-run.
+   * **The passive opponent's own turns (38, tagged `opp-turn`).** This is correct play. Its turns keep their
+     per-round schedule while the skip moves our development a turn later against it. A fetch or shock costs
+     it life (Burn gi12), and Seraph Sanctuary gains it life (Sea gi0). Tainted Remedy turns that gain into the
+     last point (Anti-Lifegain gi0). Burgeoning on its land drop gives a Maze's End win on its turn (Maze's End
+     gi0 and gi19), and its draws help a mill kill (Mill gi13). The report tags these from the new record
+     fields (`kill_on_opp_turn`, `rounds[].opp_turn_life`).
+   * **Budgeted search variance (21, tagged `other`).** This is a property of the search, not a harness
+     defect. Most is cross-decision reuse within a game: the base's turn-2 search reuses its turn-1 subtrees,
+     which a skip makes unusable (Gods 12 and skip4 16, Prevent Damage 11, Landfall 10, Hydras 5; each is
+     exact +1 under `MTG_P17_ISOLATE=1`). The rest is a b20 search missing a line. Gods gi13: the base passes with
+     Magus castable on rounds 4-6, and at b80 and b320 the pair is exact, base 8 and skip 9. Two of the 21
+     appeared with the fix (Hinata skip3 gi18, Merfolk Turns skip3 gi1). Morph gi17 is Blistering Firecat's
+     end-step sacrifice in the opponent's extra turn, which the life screen cannot see, so it is tagged
+     `other`.
+   So **every remaining exception is correct play or search variance; none is a rules or harness error.**
+   Per-deck lists: `logs/control-mode/skipcheck-report.{txt,json}` (`skip`) and
+   `skipcheck-exceptions.json` (all 59, each with its tag).
 8. **Games unwon at round 15 are rare.** In any one arm, at most a few of the 65 decks have even one such game (the
    `u` counts in the hit-rate section). The most is land 2+3+4 with 8 decks, followed by the joint counter arms
    and the joint discard arms. So the S2 lock-credit rule moves the score only a little at these strengths.

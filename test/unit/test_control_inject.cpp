@@ -4,6 +4,7 @@
 // and the `skip` round (an opponent's extra turn: TurnSeq does not advance, the goldfisher neither untaps nor draws,
 // the opponent still takes its turn).
 #include <doctest/doctest.h>
+#include "core/OwnRound.h"
 
 #include "ai/AIEngine.h"
 #include "ai/ManaPayment.h"
@@ -367,6 +368,7 @@ TEST_CASE("ctrl_inject: skip -- the round advances, TurnSeq does not; no untap, 
     CHECK(s.turn_number == 3);
     CHECK(static_cast<int>(s.ctrl_skipped_turns) == 1);
     CHECK(s.TurnSeq() == seq0);
+    CHECK(OwnRound(s) == 2);   // the heuristics' clock: the round advanced, the goldfisher's own round did not
     CHECK(s.battlefield[static_cast<std::size_t>(CiFind(s, 1))].tapped);   // no untap step
     CHECK(s.players[0].hand.size() == hand0);                              // no draw step
     CHECK(s.players[0].library.size() == lib0);
@@ -378,6 +380,7 @@ TEST_CASE("ctrl_inject: skip -- the round advances, TurnSeq does not; no untap, 
     next.AdvanceTurnCounter();
     CHECK(next.turn_number == 4);
     CHECK(next.TurnSeq() == seq0 + 1);
+    CHECK(OwnRound(next) == 3);   // its next turn is valued as the unskipped game's round 3
     CHECK(sc.expiry_turn >= next.TurnSeq());   // the staged card is still playable on the goldfisher's NEXT turn
 
     // Control arm: the same turn unarmed untaps, draws and advances TurnSeq.
@@ -390,5 +393,51 @@ TEST_CASE("ctrl_inject: skip -- the round advances, TurnSeq does not; no untap, 
     CHECK(u.turn_number == 3);
     CHECK(u.TurnSeq() == useq0 + 1);
     CHECK(u.ctrl_skipped_turns == 0);
+    CHECK(OwnRound(u) == u.turn_number);   // no skip: the heuristics' clock IS the round (byte-identical)
     CHECK(u.players[0].library.size() == ulib0 - 1);
+}
+
+TEST_CASE("ctrl_inject: the record sees the opponent's own turns -- their life change and a kill there")
+{
+    // Mogis, God of Slaughter deals 2 at each opponent upkeep (no creature to sacrifice): the passive opponent's
+    // own turn moves its life, which the analytic skip check must read as an opponent-turn effect, not a search
+    // difference. A skipped round is all opponent turn.
+    AIEngine ai(MulliganProfile::DefaultProfile(), 0, 0);
+    GameEngine engine(ai);
+    {
+        GameState s = CiFresh(2);
+        s.on_the_play = true;
+        s.deck_has_turn_gods = true;
+        s.dmg_events_armed = true;   // the damage-event deck gate a real Gods game arms
+        CiPerm(s, "Mogis, God of Slaughter", 5);
+        const int life0 = s.players[1].life;
+        CiArm arm("skip:3", s, /*record=*/true);
+        MtgTestSeam::GeRunTurn(engine, s);
+        CHECK(s.players[1].life == life0 - 2);
+        CHECK(ctrlinject::OppTurnLife(3) == -2);
+        CHECK_FALSE(ctrlinject::KillOnOppTurn());
+    }
+    {
+        GameState s = CiFresh(2);
+        s.on_the_play = true;
+        s.deck_has_turn_gods = true;
+        s.dmg_events_armed = true;   // the damage-event deck gate a real Gods game arms
+        CiPerm(s, "Mogis, God of Slaughter", 5);
+        s.players[1].life = 2;
+        CiArm arm("skip:3", s, /*record=*/true);
+        MtgTestSeam::GeRunTurn(engine, s);
+        CHECK(s.players[1].life <= 0);
+        CHECK(ctrlinject::KillOnOppTurn());   // the opponent lost during its own turn of round 3
+    }
+    {
+        // Recording alone (no effect) sees it too: the baseline's regular opponent turn.
+        GameState s = CiFresh(2);
+        s.on_the_play = true;
+        s.deck_has_turn_gods = true;
+        s.dmg_events_armed = true;   // the damage-event deck gate a real Gods game arms
+        CiPerm(s, "Mogis, God of Slaughter", 5);
+        CiArm arm("", s, /*record=*/true);
+        MtgTestSeam::GeRunTurn(engine, s);
+        CHECK(ctrlinject::OppTurnLife(3) == -2);
+    }
 }

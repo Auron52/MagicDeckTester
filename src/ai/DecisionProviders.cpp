@@ -3,6 +3,7 @@
 #include <limits>
 #include <optional>
 #include <map>
+#include "../core/OwnRound.h"
 #include "HeuristicArm.h"
 #include "ValueArm.h"
 #include "ManaOracle.h"
@@ -1327,7 +1328,7 @@ void MerfolkTurnsProvider::TapTargetPumpSamePlanTargets(const GameState& state, 
 bool KithkinProvider::ArchetypeCardValue(const GameState& state, const CardDefinition& def,
                                          int dmg_unit, int& out) const
 {
-    if (def.card.m_name != "Aether Vial" || state.turn_number != 1) { return false; }
+    if (def.card.m_name != "Aether Vial" || OwnRound(state) != 1) { return false; }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index == state.active_player_index && p.card.m_name == "Aether Vial")
@@ -5482,7 +5483,7 @@ bool LandfallProvider::ComboCardValue(const GameState& s, const CardDefinition& 
                                       int dmg_unit, int& out) const
 {
     (void)dmg_unit;
-    if (!TurnSolver::InD0Runner() || s.turn_number < 7) { return false; }
+    if (!TurnSolver::InD0Runner() || OwnRound(s) < 7) { return false; }
     const std::string& name = def.card.m_name.str();
     if (name != "Avenger of Zendikar" && name != "Phylath, World Sculptor"
         && name != "Omnath, Locus of Rage") { return false; }
@@ -8116,7 +8117,7 @@ bool GenericProvider::ArchetypeCardValue(const GameState&, const CardDefinition&
 bool ExtraTurnsProvider::PreferIdleTappedFirstOpeningLand(const GameState& s) const
 {
     static const bool on = EnvOn("MTG_ET_T1_TAPPED_FIRST", true); // =0 restores ordinary land order
-    return on && s.turn_number == 1;
+    return on && OwnRound(s) == 1;
 }
 
 // "Target player takes an extra turn after this one" (Time Warp, Walk the Aeons: extra_turns_on_resolve +
@@ -8276,7 +8277,7 @@ bool ExtraTurnsProvider::ExtraTurnChainFinisherPlanAllowed(const GameState& s,
 
 bool ExtraTurnsProvider::ExtraTurnPreferMyriadNow(const GameState& s) const
 {
-    if (!EnvOn("MTG_ET_T3_MYRIAD_PREFER", true) || s.turn_number != 3
+    if (!EnvOn("MTG_ET_T3_MYRIAD_PREFER", true) || OwnRound(s) != 3
         || s.pending_extra_turns > 0) { return false; }
     bool emrakul_held = false;
     for (const Card& card : s.ActivePlayer().hand)
@@ -8308,7 +8309,7 @@ bool ExtraTurnsProvider::ArchetypeCardValue(const GameState& s, const CardDefini
     // still advancing the next turn's mana. The draw artifacts cannot replace
     // that mana before the first five- and seven-mana breakpoints.
     static const bool early_ramp = EnvOn("MTG_ET_EARLY_RAMP_VALUE", true);
-    if (early_ramp && def.card.m_name.str() == "Mind Stone" && s.turn_number <= 3
+    if (early_ramp && def.card.m_name.str() == "Mind Stone" && OwnRound(s) <= 3
         && s.pending_extra_turns <= 0)
     {
         out = 12 * dmg_unit;
@@ -8360,7 +8361,7 @@ bool ExtraTurnsProvider::ArchetypeCardValue(const GameState& s, const CardDefini
         int value = engines < 2 ? (def.params.mine_extra_draw ? 8 : 6)
                         : engines < 3 ? (def.params.mine_extra_draw ? 4 : 2)
                         : mines == 0 && def.params.mine_extra_draw ? 4 : -2;
-        if (early_ramp && s.turn_number == 3 && s.pending_extra_turns <= 0)
+        if (early_ramp && OwnRound(s) == 3 && s.pending_extra_turns <= 0)
         {
             for (const Permanent& p : s.battlefield)
             {
@@ -10916,7 +10917,7 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d != nullptr && (d->card.IsLand() || d->params.mana_rock)) { mana_bf += std::max(1, d->params.produces_amount); }
     }
-    const bool filter_ok = s.turn_number >= 4 || mana_bf >= 3;
+    const bool filter_ok = OwnRound(s) >= 4 || mana_bf >= 3;
     // LAND TIMING (MTG_GALADRIEL_LAND_TIMING, default ON -- the USER's rule; 24 held-out seeds x 1000:
     // -0.0055 t (t -4.4) non-clairvoyant, -0.0033 t (t -3.7) clairvoyant, same cost): read here because it changes how a filter
     // counts -- USER 2026-10-18 "it only fills one colour", so under the arm a filter covers nothing in
@@ -16184,7 +16185,7 @@ std::vector<int> KnightsCurveShed(const GameState& s, const std::vector<std::str
 
     // ---- 3. the Vial: kept only as a turn-1 engine, and only the first copy -------------------
     int kept_vial = -1;
-    if (s.turn_number <= 1 && vial_charge < 0)
+    if (OwnRound(s) <= 1 && vial_charge < 0)
     { for (int i = 0; i < n; ++i) { if (cls[i] == C_VIAL) { kept_vial = i; break; } } }
 
     // ---- 4. mana: the land target, its fixer clause, and the keep order -----------------------
@@ -16702,7 +16703,7 @@ std::vector<int> VialProvider::CleanupDiscardCandidates(
 
     // ---- 4. the Vial ------------------------------------------------------------------------------
     int kept_vial = -1;
-    if (generic_src && s.turn_number <= 1 && vial_charge < 0)
+    if (generic_src && OwnRound(s) <= 1 && vial_charge < 0)
     { for (int i = 0; i < n; ++i) { if (cls[i] == C_VIAL) { kept_vial = i; break; } } }
 
     // ---- 5. the land ladder: coloured slots, the hard target, the soft 4th ----------------------
@@ -17226,7 +17227,7 @@ std::vector<int> SoldiersProvider::CleanupDiscardCandidates(
     });
     constexpr int kThreatFloor = 2;
     const int threat_over = std::max(0, static_cast<int>(threats.size()) - kThreatFloor);
-    const bool vial_early = s.turn_number <= 3;
+    const bool vial_early = OwnRound(s) <= 3;
 
     std::vector<int> shed;
     shed.reserve(static_cast<std::size_t>(n));
@@ -17673,7 +17674,7 @@ static bool BurnIsSelfTaxingCreature(const CardDefinition* d)
 static bool BurnSingleEidolonNeeded(const GameState& s, bool only_copy)
 {
     constexpr int kCreatureQuota = 2;
-    if (s.turn_number > 3) { return false; }
+    if (OwnRound(s) > 3) { return false; }
     const int me = s.active_player_index;
     int board_creatures = 0;
     for (const Permanent& perm : s.battlefield)
@@ -18007,7 +18008,7 @@ std::string GoblinsProvider::ForcedEarlyLandName(const GameState& s, int control
         const char* e = std::getenv("MTG_FORCED_EARLY_LAND_TURNS");
         return (e && *e) ? std::atoi(e) : 1;
     }();
-    if (s.turn_number > s_early_turns) { return {}; }
+    if (OwnRound(s) > s_early_turns) { return {}; }
     for (const Card& c : s.players[controller].hand)
     {
         if (c.m_name == "Mountain") { return "Mountain"; }
@@ -19349,7 +19350,7 @@ int HinataProvider::SituationalCardRank(const GameState& s, const Card& card) co
     auto ramp_rank = [&]() -> int
     {
         if (sources >= source_target) { return kRankDigPastLand; }   // enough mana already
-        return (s.turn_number <= 2) ? kRankEarlyRamp : kRankRamp;    // short: high early, normal later
+        return (OwnRound(s) <= 2) ? kRankEarlyRamp : kRankRamp;    // short: high early, normal later
     };
 
     // --- the lynchpin / a needed land outrank everything else ---
@@ -20859,7 +20860,7 @@ std::vector<int> DragonstormProvider::CleanupDiscardCandidates(
     if (land_need > 0) { k1 = first_free(lands); if (k1 >= 0) { take(k1); --land_need; } }
     // K2 Lotus Bloom, end of turn 1 only ("from end of turn 2 on it can be dropped": suspended T3 ->
     // usable T6), net of board (agent reading (e)).
-    if (s.turn_number <= 1 && blooms_out == 0) { const int i = first_free(blooms); if (i >= 0) { take(i); } }
+    if (OwnRound(s) <= 1 && blooms_out == 0) { const int i = first_free(blooms); if (i >= 0) { take(i); } }
     // K3 the protected payoff: Dragonstorm, else Apex -- named LAST in the shed order (reading (b)).
     const int prot = !storms.empty() ? storms.front() : (!apexes.empty() ? apexes.front() : -1);
     if (prot >= 0) { keep[static_cast<std::size_t>(prot)] = 1; }
@@ -21803,7 +21804,7 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
         if (p.upkeep_adds_charge && !d->card.IsCreature())
         {
             // Only the turn-1 hand Vial is an engine candidate; any other hand Vial is surplus mana.
-            if (vials_seen == 0 && s.turn_number <= 1) { engines.push_back(i); }
+            if (vials_seen == 0 && OwnRound(s) <= 1) { engines.push_back(i); }
             else                                       { vials.push_back(i); }
             ++vials_seen;
             continue;
@@ -21858,7 +21859,7 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
         if (d == nullptr || !is_goblin_creature(d->card) || is_lackey(d->params)) { continue; }
         if (eff_cost(d) > mana_next_turn) { expensive_in_hand = true; break; }
     }
-    const bool lackey_surplus = s.turn_number >= kLateTurn && !expensive_in_hand;
+    const bool lackey_surplus = OwnRound(s) >= kLateTurn && !expensive_in_hand;
     std::stable_sort(engines.begin(), engines.end(), [&](int a, int b)
     { return engine_rank(defs[static_cast<std::size_t>(a)]) < engine_rank(defs[static_cast<std::size_t>(b)]); });
     std::vector<int> engine_keep;   // the engine position: the one slot, plus every kept hand Lackey
@@ -21927,7 +21928,7 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
     const int mult_keep = std::min(mult_cap, static_cast<int>(mults.size()));
 
     // ---- 5. multiplier keep order ---------------------------------------------------------------
-    const bool early = s.turn_number <= 2;   // Piledriver over the 2-mana lord through turn 2
+    const bool early = OwnRound(s) <= 2;   // Piledriver over the 2-mana lord through turn 2
     auto mult_key = [&](int i) -> int
     {
         const CardParams& p = defs[static_cast<std::size_t>(i)]->params;
@@ -24712,7 +24713,7 @@ std::vector<int> FiveColourProvider::CleanupDiscardShedOrder(
     {
         int kept_lands = 0;
         for (int i : keep) { for (const HandMana& h : mana) { if (h.idx == i && h.land) { ++kept_lands; } } }
-        const int drops = s.turn_number <= 3 ? 2 : 1;
+        const int drops = OwnRound(s) <= 3 ? 2 : 1;
         for (const HandMana& h : mana)
         {
             if (kept_lands >= drops) { break; }
@@ -26371,7 +26372,7 @@ static std::vector<int> VampBucketShedOrder(const GameState& s, bool activation_
     // pump shed a Pit Fighter that the same turn's Vial would have put for free.
     bool hand_vial = false;
     for (int i = 0; i < n; ++i) { if (cls[static_cast<std::size_t>(i)] == C_VIAL) { hand_vial = true; break; } }
-    const bool vial_early = s.turn_number <= 2 && board_vials == 0;
+    const bool vial_early = OwnRound(s) <= 2 && board_vials == 0;
     const bool hand_vial_live = hand_vial && (activation_mode || vial_early);
     for (int i = 0; i < n; ++i)
     {
@@ -26692,7 +26693,7 @@ bool SpiritsProvider::ComboCardValue(const GameState& s, const CardDefinition& d
     {
         if (p.controller_index == me && p.card.IsCreature() && CardHasSubtype(p.card, "Spirit")) { ++others; }
     }
-    const int attacks = std::max(1, std::min(6 - s.turn_number + 1, 5));   // TurnSolver's ExpectedAttacks
+    const int attacks = std::max(1, std::min(6 - OwnRound(s) + 1, 5));   // TurnSolver's ExpectedAttacks
     const int own_pb  = ComputeLordBonus(def.card, s, me).first;
     const int own     = std::max(0, def.card.m_power.value_or(0) + own_pb) * (attacks - 1);
     out = (own + pp.power_bonus * others * attacks) * dmg_unit;
@@ -27923,7 +27924,7 @@ bool GodsProvider::CollectedActionAllowed(const GameState& s, const Action& a, b
     // {B}{G} to exile one for a 1/1 Snake is too slow in its eight-turn goldfish;
     // keep the full legal choice in human play and the unpruned audit.
     if (pharika_skip && a.kind == Action::Kind::PharikaExile) { return false; }
-    if (no_hardcast && s.turn_number <= 8 && a.kind == Action::Kind::CastFromHand && a.def != nullptr
+    if (no_hardcast && OwnRound(s) <= 8 && a.kind == Action::Kind::CastFromHand && a.def != nullptr
         && CardHasSubtype(a.def->card, "God"))
     { return false; }
     if (no_dredger_cast && a.kind == Action::Kind::CastFromHand)
@@ -27941,7 +27942,7 @@ bool GodsProvider::CollectedActionAllowed(const GameState& s, const Action& a, b
             // backup line. It cannot normally attack until the next turn, so
             // admit a cast once its counters could win in one or two attacks
             // within the eight-turn goldfish horizon.
-            const int attacks_left = std::max(1, std::min(2, 8 - s.turn_number));
+            const int attacks_left = std::max(1, std::min(2, 8 - OwnRound(s)));
             const int opponent_life = s.players[1 - s.active_player_index].life;
             if (grave_creatures * attacks_left < opponent_life)
             { return false; }
@@ -28044,7 +28045,7 @@ bool GodsProvider::ComboCardValue(const GameState& s, const CardDefinition& def,
                                   int dmg_unit, int& out) const
 {
     static const int magus_value = EnvInt("MTG_GODS_MAGUS_VALUE", 5); // =0 restores generic valuation
-    if (magus_value <= 0 || s.turn_number > 3 || def.card.m_name != "Magus of the Bazaar")
+    if (magus_value <= 0 || OwnRound(s) > 3 || def.card.m_name != "Magus of the Bazaar")
     { return false; }
     for (const Permanent& p : s.battlefield)
     {
@@ -30322,7 +30323,7 @@ std::vector<int> MerfolkProvider::CleanupDiscardShedOrder(
         if (sources >= source_target) { break; }
         if (!taken[static_cast<std::size_t>(i)]) { take(i); ++sources; }
     }
-    if (s.turn_number == 1 && s.phase == Phase::Ending && !board_vial
+    if (OwnRound(s) == 1 && s.phase == Phase::Ending && !board_vial
         && sources < source_target && !vials.empty())
     { take(vials.front()); ++sources; }
     for (int i : lords) { take(i); }
@@ -37356,7 +37357,7 @@ std::vector<int> PiratesProvider::CleanupDiscardCandidates(
         // Metallic Mimic: below Dire Fleet Captain (USER 2026-09-27: "Metallic Mimic should be dropped
         // below Dire Fleet captain unless we are turn 1") -- its counter only pays off across the
         // Pirates cast AFTER it, which is most of the game only when it lands on turn 2.
-        if (p.other_chosen_subtype_enters_counters > 0)  { return s.turn_number <= 1 ? 92 : 85; }
+        if (p.other_chosen_subtype_enters_counters > 0)  { return OwnRound(s) <= 1 ? 92 : 85; }
         if (p.attack_pump_power_per_other_matching > 0)  { return 86; }
         if (p.own_creature_enters_opp_life_loss > 0 || p.tutor_to_top) { return 82; }
         if (c.HasKeyword(Keyword::Flying)
@@ -37553,7 +37554,7 @@ std::vector<int> PiratesProvider::CleanupDiscardCandidates(
     // are in bad shape on the land front? (if we are mana-starved otherwise keeping it would be an
     // option)". Mana-starved = the board plus every land in hand cannot reach the land target.
     const bool mana_starved = board_lands + static_cast<int>(lands.size()) < kLandTarget;
-    if (board_vials == 0 && (s.turn_number <= 1 || mana_starved) && !vials.empty()) { take(vials.front()); }
+    if (board_vials == 0 && (OwnRound(s) <= 1 || mana_starved) && !vials.empty()) { take(vials.front()); }
     for (int i : threats) { if (in_plan[static_cast<std::size_t>(i)]) { take(i); } }  // best first
 
     // ---- shed order ----------------------------------------------------------------------------
@@ -40175,7 +40176,7 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
             // pretty slow if you don't drop it early." -- "Naturally, if we are really short on mana it might still be
             // worth keeping just because it eventually builds up." So after our early turns it is the LAST land (the
             // first shed), unless T* is far.
-            if (l.storage && !far && s.turn_number > WfBazaarEarlyTurns()) { o = -20; }
+            if (l.storage && !far && OwnRound(s) > WfBazaarEarlyTurns()) { o = -20; }
             return o;
         };
         const std::vector<int> la = ordered(is(kWfLand), [&](int a, int b) { return adj_order(a) > adj_order(b); });
@@ -42104,9 +42105,9 @@ bool CycloneProvider::PlanMoveOrderFront(const GameState& s, const std::vector<A
     (void)projected_lethal;
     if (!CyclonePonderFirstT1On()) { return false; }
     const int last_turn = CyclonePonderFirstT2On() ? 2 : 1;
-    if (s.turn_number > last_turn) { return false; }
+    if (OwnRound(s) > last_turn) { return false; }
     bool want_putback = false;
-    if (s.turn_number == 2 && CyclonePonderFirstT2HandOn())
+    if (OwnRound(s) == 2 && CyclonePonderFirstT2HandOn())
     {
         const int me = s.active_player_index;
         CantripReadiness r;
@@ -42690,7 +42691,7 @@ bool CycloneProvider::CantripPlanOf(const GameState& s, int controller, const Ca
             // Eldrazi second (a non-Eldrazi or a second Eldrazi on top) is offered REVERSED instead -- the gi179 / gi92
             // isolation tests of the T1 put-back order (ledger). Later turns are the plain PB_PLANS fan in both arms.
             static const int s_t1_order = []{ const char* e = std::getenv("MTG_DIAG_PB_T1_ORDER"); return (e && *e) ? std::atoi(e) : 0; }();
-            if (s_t1_order == 2 && s.turn_number == 1 && nj == 2 && v.n_removed == 2)
+            if (s_t1_order == 2 && OwnRound(s) == 1 && nj == 2 && v.n_removed == 2)
             {
                 const CardDefinition* top_d = CardDatabase::Instance().LookupCached(pl.hand[static_cast<std::size_t>(junk[0])]);
                 const CardDefinition* sec_d = CardDatabase::Instance().LookupCached(pl.hand[static_cast<std::size_t>(junk[1])]);
@@ -64163,13 +64164,13 @@ bool EldraziFlickerProvider::ComboCardValue(const GameState& s, const CardDefini
     // moving n and watching the result. Value-carrying, so it keeps EnvInt; never set it in a
     // measurement run.
     static const int s_from_turn = EnvInt("MTG_EDF_VAL_FROM_TURN", 0);
-    if (s_from_turn > 0 && s.turn_number < s_from_turn) { return false; }
+    if (s_from_turn > 0 && OwnRound(s) < s_from_turn) { return false; }
 
     if (ramp && def.params.is_land_aura && def.params.land_aura_extra_mana > 0)
     {
         // EvalCard::ExpectedAttacks, kept in lockstep by this comment: +1 includes the current turn,
         // clamped to [1,5] against the same assumed 6-turn game length.
-        const int remaining = std::max(1, std::min(6 - s.turn_number + 1, 5));
+        const int remaining = std::max(1, std::min(6 - OwnRound(s) + 1, 5));
         out = def.params.land_aura_extra_mana * remaining * dmg_unit;
         return true;
     }

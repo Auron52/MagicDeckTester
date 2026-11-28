@@ -351,6 +351,17 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         opponentdeck::EndOfTurnCleanup(state);
         DayNightTurnBoundary(state);
     };
+    // ...and the CONTROL-EFFECT INJECTION's record of it (ctrl_record's opp_turn_life / kill_on_opp_turn; record
+    // only, inert unless the job set ctrl_inject / ctrl_record): what the opponent's own turn did to its life, and
+    // whether it lost there. Both call sites below go through this.
+    auto opponent_turn_recorded = [&]()
+    {
+        const bool rec = ctrlinject::Armed() && !m_ai.InRolloutForCtrlInject();
+        const int  life0 = rec ? state.Opponent().life : 0;
+        const bool lost0 = rec && OpponentHasLost(state);
+        opponent_turn();
+        if (rec) { ctrlinject::OnOpponentTurn(state, life0, lost0); }
+    };
     // MTG_FREE_TURN_REACH_AUDIT: the opponent's hand as OUR turn starts (empty unless the audit is on; no behaviour).
     std::vector<int> reach_hand_at_start;
     bool ctrl_skipped = false;   // a control-injection `skip` took this round's goldfisher turn
@@ -466,7 +477,7 @@ ctrl_skipped_round:
     while (state.NextExtraTurnIsOpponent() && !state.opponent_decked)
     {
         state.ConsumeOpponentExtraTurn();
-        opponent_turn();
+        opponent_turn_recorded();
     }
     // FREE TURNS (MTG_FREE_TURNS; core/FreeTurns.h): the opponent's regular turn ended -- if it ended LOCKED,
     // our next turn keeps the round (pending_free_turn, consumed by AdvanceTurnCounter). Lockstep twin:
@@ -475,7 +486,7 @@ ctrl_skipped_round:
     if (!state.NextExtraTurnIsOurs() && !state.opponent_decked)
     {
         const int reach_audit = freeturn::ReachAuditBefore(state);   // MTG_FREE_TURN_REACH_AUDIT (no behaviour)
-        opponent_turn();
+        opponent_turn_recorded();
         freeturn::NoteOpponentTurnEnd(state);
         freeturn::ReachAuditAfter(state, reach_audit);
     }

@@ -111,6 +111,13 @@ def test_baseline_table():
           "census: candidate lists per round, counter candidates from rounds[].spells", g0["cands"])
     check(ident == {"burn": (1, 2)}, "identity twin: one of two games differs -> reported, not hidden", ident)
     check(cg.summary_baseline(t)["mean_k"] == (3 + 16) / 2, "summary: unwon scored 16 in the mean kill round")
+    check(g0["opp_turn_kill"] is None and g0["opp_turn_life"] is None,
+          "baseline game: a record without the opponent-turn fields leaves them None (untagged)", g0)
+    r = cg.game_record(0, 8100001, (3, "d"), {"kill": "life", "kill_on_opp_turn": True,
+                                              "rounds": [{"dmg": 1, "opp_turn_life": -1}, {"dmg": 20, "opp_turn_life": 0}]},
+                       {})
+    check(r["opp_turn_kill"] is True and r["opp_turn_life"] == [-1, 0],
+          "baseline game: the opponent-turn fields are carried into the table", r)
     return t
 
 
@@ -179,6 +186,28 @@ def test_math(t):
     check(skip == (2, 2, []), "skip check: +1 for a game killing on the round, unwon stays unwon", skip)
     skip = cg.skip_check(t, 3, {0: (3, "x")})
     check(skip[0] == 0 and skip[2] == [(0, 3, 3)], "skip check: an exception is listed")
+    # skip_explain: what the passive opponent's own turns did, in the direction of the miss.
+    rec = lambda kill=False, lives=(0, 0, 0), k="life": {"kill": k, "kill_on_opp_turn": kill,
+                                                          "rounds": [{"r": i + 1, "opp_turn_life": x}
+                                                                     for i, x in enumerate(lives)]}
+    ex = cg.skip_explain(t, 3, {0: (3, "x")}, {0: rec(kill=True)})
+    check(ex["opp_turn"] == [(0, 3, 3)] and not ex["other"],
+          "skip explain: a kill on the opponent's turn accounts for a 0-round delay (Maze's End off Burgeoning)", ex)
+    ex = cg.skip_explain(t, 3, {0: (3, "x")}, {0: rec(lives=(-1, -1, 0))})
+    check(ex["opp_turn"] == [(0, 3, 3)], "skip explain: its own life payments (fetch / shock) account for early", ex)
+    ex = cg.skip_explain(t, 3, {0: (3, "x")}, {0: rec(k="decked")})
+    check(ex["opp_turn"] == [(0, 3, 3)], "skip explain: its own extra draw accounts for an early mill kill", ex)
+    ex = cg.skip_explain(t, 3, {0: (5, "x")}, {0: rec(lives=(0, 1, 0))})
+    check(ex["opp_turn"] == [(0, 3, 5)], "skip explain: a life GAIN on its turn accounts for late (Seraph Sanctuary)", ex)
+    ex = cg.skip_explain(t, 3, {0: (5, "x")}, {0: rec(lives=(-1, 0, 0))})
+    check(ex["other"] == [(0, 3, 5)] and not ex["opp_turn"],
+          "skip explain: an effect in the WRONG direction explains nothing (a loss cannot make the arm late)", ex)
+    ex = cg.skip_explain(t, 3, {0: (5, "x")}, {0: rec()})
+    check(ex["other"] == [(0, 3, 5)], "skip explain: no opponent-turn effect -> other (a search difference)", ex)
+    ex = cg.skip_explain(t, 3, {0: (5, "x")}, {})
+    check(ex["untagged"] == [(0, 3, 5)], "skip explain: a run without the record fields stays untagged", ex)
+    ex = cg.skip_explain(t, 3, {0: (4, "x")}, {0: rec(kill=True)})
+    check(not any(ex.values()), "skip explain: an exact game is not an exception", ex)
     check(cg.race_flip(t, {0: 2.0, 1: 0.0}, 4) == 1.0 and cg.race_flip(t, {0: 0.0}, 4) == 0.0
           and cg.race_flip(t, {0: 2.0}, 6) == 0.0, "race flip: K < w <= K + D over games that kill")
 
@@ -203,9 +232,15 @@ def test_report_end_to_end(t):
           "report: fixed delay mean and hit rate", d["fixed"]["land3"])
     check(close(d["clair"]["land3"]["mean"], 0.5), "report: clairvoyant >= fixed (fixed folded into the max)")
     check(rep["skip"]["burn"]["skip3"]["exact"] == 2, "report: skip check")
+    sk = [a for a in arms if a["kind"] == "skip"][0]
+    j = cg.arm_job("burn", t, sk, {"deck": "d", "profile": "p"})
+    check(j.get("ctrl_record") is True, "arm job: a skip arm records its games (the skip check's opp-turn read)", j)
+    lj = cg.arm_job("burn", t, [a for a in arms if a["kind"] == "land"][0], {"deck": "d", "profile": "p"})
+    check("ctrl_record" not in lj, "arm job: other arms do not record", lj)
     check(rows and rows[0]["features"] == {} and rows[0]["arm"] == "land3", "report: state-feature rows")
     txt = cg.format_report(rep, meta)
     check("S[e,t,g]" in txt and "land3" in txt and "probe5" in txt, "report: formats")
+    check("all decks: exact" in txt and "opp-turn 0, other 0" in txt, "report: the skip check's totals line")
     check(rep["life"]["burn"]["class"] in ("burn", "mixed", "creature", "combo"), "report: deck class assigned")
 
 

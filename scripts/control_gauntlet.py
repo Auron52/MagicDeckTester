@@ -322,7 +322,12 @@ def game_record(gi, seed_base, wins, ctrl_game, census):
            "alt": (ctrl_game or {}).get("kill") == "alt",
            "start_life": (ctrl_game or {}).get("start_life", 20),
            "dmg": [x.get("dmg") for x in rounds], "spells": [x.get("spells") or [] for x in rounds],
-           "poison": [x.get("poison", 0) for x in rounds]}
+           "poison": [x.get("poison", 0) for x in rounds],
+           # The passive opponent's own turns (a record from a binary that has them; None before): did it lose
+           # during one, and its net life change during them per round (harness doc section 6).
+           "opp_turn_kill": (ctrl_game or {}).get("kill_on_opp_turn"),
+           "opp_turn_life": [x.get("opp_turn_life") for x in rounds] if any("opp_turn_life" in x for x in rounds)
+                            else None}
     nr = len(rounds)
     for c, _ in CENSUS:
         per = cen.get(c, {})
@@ -512,6 +517,8 @@ def arm_job(key, table, arm, entry):
     j = {"name": "%s__%s" % (key, arm["arm"]), "deck": entry["deck"], "profile": entry["profile"],
          "games": hi - lo + 1, "seed": table["stamp"]["seed_base"] + lo, "game_index": lo,
          "budget_ms": table["stamp"]["budget_ms"], "max_turns": HORIZON, "ctrl_inject": arm["spec"]}
+    if arm.get("kind") == "skip":
+        j["ctrl_record"] = True      # record only (no play change): the skip check reads the opponent's own turns
     if skip:
         j["skip_games"] = skip
     return j
@@ -586,6 +593,61 @@ def skip_check(table, t, wins):
         else:
             bad.append((g["gi"], bk, ak))
     return ok, tot, bad
+
+
+def opp_turn_signal(rec):
+    """One game's [ctrl-game] record (or baseline game) -> (lost_on_opp_turn, opp_lost_life, opp_gained_life,
+    decked), or None when the record predates the opponent-turn fields."""
+    if rec is None:
+        return None
+    kill_flag = rec.get("kill_on_opp_turn", rec.get("opp_turn_kill"))
+    if "rounds" in rec:
+        lives = [x.get("opp_turn_life") for x in rec["rounds"]] if any("opp_turn_life" in x for x in rec["rounds"]) \
+            else None
+    else:
+        lives = rec.get("opp_turn_life")
+    if kill_flag is None and lives is None:
+        return None
+    lives = [x for x in (lives or []) if x is not None]
+    return (bool(kill_flag), any(x < 0 for x in lives), any(x > 0 for x in lives), rec.get("kill") == "decked")
+
+
+def skip_explain(table, t, wins, arm_games):
+    """Sort the analytic skip check's exceptions (skip_check) by what can account for them.
+
+    A skip is an opponent's extra turn, and the passive opponent's own turns are real game: it plays lands from a
+    real list (a fetch or shock costs it life, Seraph Sanctuary gains it one, our Tainted Remedy turns that gain into
+    a loss), our cards act on its turn (Mogis's upkeep damage, Burgeoning on its land drop, a Maze's End win there),
+    and it draws (a mill kill). Skipping our turn moves our development one turn later against that per-round
+    schedule, so the kill can come a round early (the opponent's turns did some of the work) or a round late (it
+    gained life in a round the base game never reached). Those are correct play, not a harness or search defect.
+
+    -> {"opp_turn": [(gi, base_k, arm_k)], "other": [...], "untagged": [...]}:
+      opp_turn  an opponent-turn effect in the direction of the miss is on record: arm EARLIER than base + 1 with
+                the opponent losing life on its own turns, losing during one, or being decked (its own draws); arm
+                LATER with the opponent gaining life on its own turns, or the BASE game won on an opponent's turn.
+                A screen, not a proof: the effect was present and can account for the miss.
+      other     no such effect on record: the budgeted search took a different line (harness doc section 9).
+      untagged  no record carries the opponent-turn fields (a run from before they existed)."""
+    out = {"opp_turn": [], "other": [], "untagged": []}
+    _, _, bad = skip_check(table, t, wins)
+    base = {g["gi"]: g for g in table["games"]}
+    for gi, bk, ak in bad:
+        arm_sig = opp_turn_signal((arm_games or {}).get(gi))
+        base_sig = opp_turn_signal(base.get(gi))
+        if arm_sig is None and base_sig is None:
+            out["untagged"].append((gi, bk, ak))
+            continue
+        want = None if bk is None or bk + 1 > HORIZON else bk + 1
+        later = ak is None or (want is not None and ak > want)
+        a = arm_sig or (False, False, False, False)
+        b = base_sig or (False, False, False, False)
+        if later:
+            hit = a[2] or b[2] or b[0]
+        else:
+            hit = a[0] or a[1] or a[3] or b[1]
+        out["opp_turn" if hit else "other"].append((gi, bk, ak))
+    return out
 
 
 def deck_class(entry, table=None, cards=None, root=ROOT):
@@ -889,8 +951,8 @@ def _fmt(c, w=6):
     return ("%+.2f" % m).rjust(w) + (("(%.2f)" % se) if se is not None else "(  - )")
 
 
-def build_report(meta, tables, wins, injects):
-    """-> the report dict (also what --json writes)."""
+def build_report(meta, tables, wins, injects, games=None):
+    """-> the report dict (also what --json writes). `games` = {job: {gi: [ctrl-game] record}} (the skip arms')."""
     rep = {"decks": {}, "mean": {}, "interactions": {}, "skip": {}, "life": {}, "hit": {}}
     rows = []
     for k, arms in meta["arms"].items():
@@ -936,8 +998,12 @@ def build_report(meta, tables, wins, injects):
         rep["skip"][k] = {}
         for arm in arms:
             if arm["kind"] == "skip":
-                ok, tot, bad = skip_check(t, arm["t"], wins.get("%s__%s" % (k, arm["arm"]), {}))
-                rep["skip"][k][arm["arm"]] = {"exact": ok, "total": tot, "exceptions": bad[:10]}
+                job = "%s__%s" % (k, arm["arm"])
+                ok, tot, bad = skip_check(t, arm["t"], wins.get(job, {}))
+                ex = skip_explain(t, arm["t"], wins.get(job, {}), (games or {}).get(job, {}))
+                rep["skip"][k][arm["arm"]] = {"exact": ok, "total": tot, "exceptions": bad[:10],
+                                              "opp_turn": len(ex["opp_turn"]), "other": ex["other"][:10],
+                                              "n_other": len(ex["other"]), "untagged": len(ex["untagged"])}
         cls, share = deck_class({"deck": t["deck_file"]}, t)
         rep["life"][k] = {"class": cls, "creature_share": share, "flip": {}}
         for a_ in delays:
@@ -996,11 +1062,27 @@ def format_report(rep, meta):
         L.append("%-30s" % lab + "".join(_fmt((c["mean"], c["se"])) if c else "-".rjust(14) for c in cells)
                  + "  " + _fmt(m) + (("  probe %+.2f" % PROBE_INTER5[lab]) if lab in PROBE_INTER5 else ""))
     L.append("")
-    L.append("analytic skip check (+1 for every game not won before the round; unwon stays unwon):")
+    L.append("analytic skip check (+1 for every game not won before the round; unwon stays unwon); an exception is "
+             "opp-turn when the passive opponent's own turns account for it (skip_explain), else other "
+             "(the search took a different line):")
+    tot = {"exact": 0, "total": 0, "opp_turn": 0, "other": 0, "untagged": 0}
     for k in decks:
-        L.append("  %-14s " % k + "  ".join("%s %d/%d%s" % (a, v["exact"], v["total"],
-                                                            (" exc " + str(v["exceptions"][:3])) if v["exceptions"] else "")
-                                           for a, v in sorted(rep["skip"][k].items())))
+        for v in rep["skip"][k].values():
+            for f in ("exact", "total", "opp_turn", "untagged"):
+                tot[f] += v.get(f, 0)
+            tot["other"] += v.get("n_other", 0)
+
+        def _cell(a, v):
+            c = "%s %d/%d" % (a, v["exact"], v["total"])
+            if v["exceptions"]:
+                c += " exc " + str(v["exceptions"][:3])
+                if v.get("untagged", 0) < v["total"] - v["exact"]:
+                    c += " (opp-turn %d, other %d%s)" % (v.get("opp_turn", 0), v.get("n_other", 0),
+                                                         (" " + str(v["other"][:3])) if v.get("other") else "")
+            return c
+        L.append("  %-14s " % k + "  ".join(_cell(a, v) for a, v in sorted(rep["skip"][k].items())))
+    L.append("  all decks: exact %d/%d; exceptions: opp-turn %d, other %d, untagged %d"
+             % (tot["exact"], tot["total"], tot["opp_turn"], tot["other"], tot["untagged"]))
     L.append("")
     L.append("life gain by deck class (USER 5.6): mean delay of life3 / life5 per round, then race-flip share "
              "P(K < w <= K + D) at w = 4..8")
@@ -1052,12 +1134,16 @@ def cmd_report(a):
         if fn.endswith(".wins"):
             wins[fn[:-5]] = read_wins(os.path.join(a.dir, fn))
     injects = defaultdict(list)
+    games = defaultdict(dict)
     with open(os.path.join(a.dir, "batch.err"), errors="replace") as f:
         for line in f:
             if line.startswith("[ctrl-inject] "):
                 r = json.loads(line[14:])
                 injects[r["job"].split("__")[0]].append(r)
-    rep, rows = build_report(meta, tables, wins, injects)
+            elif line.startswith("[ctrl-game] "):
+                r = json.loads(line[12:])
+                games[r["job"]][r["gi"]] = r
+    rep, rows = build_report(meta, tables, wins, injects, games)
     txt = format_report(rep, meta)
     if not meta.get("life_screen"):
         chk = life_screen_check(meta, tables, rep)

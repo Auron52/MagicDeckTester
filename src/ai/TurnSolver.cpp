@@ -1,4 +1,5 @@
 #include "../core/WorkCounters.h"
+#include "../core/OwnRound.h"
 #include "../core/Tier1Ledger.h"
 #include "HeuristicArm.h"
 #include "ProviderHeuristicRequired.h"
@@ -17810,10 +17811,13 @@ static bool EvalCastTokensOn()
 // Uses the current turn number against an assumed 6-turn average game length for
 // aggressive decks, so creatures placed early score higher than late-game drops.
 // Callers subtract 1 for non-haste creatures (they miss the current attack step).
+// The clock is the goldfisher's OWN round (core/OwnRound.h, == turn_number outside a control-injection skip):
+// a skipped turn advances the round but not the board, and the greedy chooser must value the shifted position as it
+// valued it a round earlier (the analytic skip check, docs/design/control-inject-harness.md section 5).
 static int ExpectedAttacks(const GameState& state)
 {
     // +1: include the current turn's attack step (haste creatures attack now).
-    int remaining = 6 - state.turn_number + 1;
+    int remaining = 6 - OwnRound(state) + 1;
     return std::max(1, std::min(remaining, 5));
 }
 
@@ -18277,7 +18281,7 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
             best = std::max(best, power * attacks * DMG);
         }
         if (best > 0) { return best; }
-        return std::max(3 * DMG / 4, ExpectedAttacks(state) * DMG - state.turn_number * 30);
+        return std::max(3 * DMG / 4, ExpectedAttacks(state) * DMG - OwnRound(state) * 30);
     }
 
     // "Create N tokens" as a SPELL's resolution (cast_creates_tokens -- Saproling Migration, Spore

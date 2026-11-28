@@ -90,6 +90,16 @@ bool OnAfterUntap(GameState& state);
 bool OnSpellResolving(GameState& state, const StackEntry& entry);
 // The end of a goldfisher turn (after the opponent's turn that follows it). `skipped` = the turn was skipped.
 void OnTurnEnd(const GameState& state, bool skipped);
+// One passive-opponent turn just ran (GameEngine's opponent_turn, the regular one and any opponent extra turn,
+// skipped rounds included). `life_before` / `lost_before` are the opponent's life and OpponentHasLost() as it
+// began. Record only (ctrl_record's `opp_turn_life` / `kill_on_opp_turn`): what the opponent's OWN turns did to the
+// race -- its lands' life payments and gains, our triggers on its turn (Mogis, Tainted Remedy, Burgeoning), a kill
+// there -- which the analytic skip check must not mistake for a search difference (harness doc section 6).
+void OnOpponentTurn(const GameState& state, int life_before, bool lost_before);
+// What OnOpponentTurn has recorded for the installed game (unit tests): the opponent's net life change during its
+// own turn(s) of `round`, and whether it lost during one of them.
+int  OppTurnLife(int round);
+bool KillOnOppTurn();
 // Is a benefit still to come that the goldfisher's search cannot see (an exiled card due back, a tax due to
 // end)? While it is, the executor must not end the game on the search's proven_no_win.
 bool BenefitPending(const GameState& state);

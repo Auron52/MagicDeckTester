@@ -189,6 +189,25 @@ than hexproof / shroud.
   upkeep happens), top-of-library intent (`top_stacked_turn`, TurnSeq-based), the same-turn stamps
   (m1_hand_turn and the rest: TurnSeq-based). Every one of them is keyed on TurnSeq or on a step that a
   skipped turn does not run.
+  **Heuristic clocks** (2026-11-28): a heuristic that reads the round as a development clock reads
+  `OwnRound(state)` (`src/core/OwnRound.h`: `turn_number - ctrl_skipped_turns`, which is `turn_number` in every
+  game without a skip, so the change is byte-identical there). Converted: `ExpectedAttacks` and the Vial term in
+  `TurnSolver.cpp`'s `EvalCard` (the greedy chooser: the playout beyond the horizon and the d0 runner of every
+  deck), its two provider copies, and every provider rule keyed on the turn ("a turn-1 Vial", "ramp ranks high
+  through turn 2", Gods' Magus before turn 4, Goblins' early / late turns, and the rest). Before that, a skip shifted
+  every such rule a round. Unskipped round 2 and skipped round 3 then played the same board differently. The
+  analytic skip check counted those as delays of 0 or +2 (Cyclone game 0: the depth-1 fit pass's rollouts said
+  round 6 against round 8, so the root played Cascade Bluffs, not Myriad Landscape). Everything that IS the round
+  stays on `turn_number`: the win turn, `max_turns`, the spawn and injection schedules, diagnostics.
+  **What a skip still legitimately changes** (the analytic check's exceptions, section 9): the passive
+  opponent's own turns keep their per-round schedule, and the skip moves the goldfisher's development one
+  turn later against it. Its lands cost or gain it life (a fetch or shock, Seraph Sanctuary, which our Tainted
+  Remedy turns into a loss). Our cards act on its turn: Mogis's upkeep damage, Burgeoning on its land drop
+  (a Maze's End win there), Blistering Firecat's "each end step" sacrifice in its extra turn. It draws, which
+  helps a mill kill. The base game may also end before a later opponent land is played. And the budgeted
+  search reuses an earlier decision's subtrees within a game (the game-line cache and its siblings,
+  `MTG_P17_ISOLATE` turns them off), which a skip makes unusable. So a skip can move the kill by 0 or +2 for a
+  reason that is correct play.
 * **counters**: the candidates are the goldfisher's SPELLS (never abilities, never the opponent's) that reach
   resolution through the executor's stack in that round, in resolution order; index i = the i-th of them
   (0-based), counting spells already countered. One counter effect takes at most one spell per round (`all`:
@@ -263,6 +282,8 @@ are measured BEFORE the untap step, so `untapped_lands` is what the previous tur
 | `start_life` | the control deck's life at the start (20; 30 is 2HG, out of scope) |
 | `life_gain` | the net life the `life` effects added over the game |
 | `skipped`, `free_turns` | rounds skipped by `skip`; the engine's free turns (MTG_FREE_TURNS) |
+| `kill_on_opp_turn` | the passive opponent lost during one of ITS OWN turns (a Maze's End win off Burgeoning on its land drop, Tainted Remedy turning its Sanctuary gain into the last point, Mogis at its upkeep) |
+| `rounds[].opp_turn_life` | the net change of its life during its own turn(s) of that round (its lands' life payments and gains, our triggers on its turn); a skipped round is all opponent turn. Read by the report's skip check (`skip_explain`) |
 | `rounds[]` | one entry per round reached, the state at the END of the round (after the opponent's turn; for the last round, the state when the game ended) |
 | `rounds[].dmg` | the DAMAGE CURVE: life the goldfisher has taken from the control deck by then, net of the `life` effects so far: `start_life + life_gain(so far) - life`. Poison and decking are separate columns |
 | `rounds[].spells` | its spells that reached resolution that round (the counter candidates of that round) |
@@ -330,6 +351,42 @@ All on the build of commit `84e204640` plus the spawn fix (section 10), Release,
   `skip:3-5` at `max_turns` 15 on Burn (100 games): 98 exactly +3; gi 12 and 62 are +2 because the passive
   opponent loses life on its own turns in those games (gi 62: 12 -> 11 -> 10 over the skipped rounds), so the
   goldfisher needs one turn fewer. That is correct: the opponent's turns keep happening.
+* **The skip check across the stage-1 table (2026-11-28)**: 65 decks at play settings, 20 games, skip2-5,
+  `max_turns` 15. The first table gave 4310 / 4383 exact. Root-causing the 73 exceptions found a HARNESS
+  DEFECT: heuristic round clocks (section 5 skip, "Heuristic clocks").
+  * **The fix:** `OwnRound` in `ExpectedAttacks`, the Vial term, the two provider copies and 30 provider
+    rules. The last of those is Gods' Golgari Grave-Troll admission (`8 - turn_number`), which the first
+    conversion pass missed.
+  * **The re-run of every skip arm** (`build/scratch/control-mode/skipcheck/rr2_skip`, one pooled batch, 4,383
+    games; report `logs/control-mode/skipcheck-report.{txt,json}`) gives **4324 / 4383 exact (98.65%)**.
+  * **16 exceptions are gone:** Cyclone 0, 13, 14; Gods 5, 16; Hinata 17, and 19 in all four arms; Landfall
+    skip2 10; Merfolk Turns 10; Shadowborn 4. **2 are new**, both search variance: Hinata skip3 gi 18 (5 -> 7)
+    and Merfolk Turns skip3 gi 1 (6 -> 8).
+  * **The 59 that remain are tagged by the report's `skip_explain`:**
+    * **opp-turn, 38.** The passive opponent's own turns account for the miss (record fields
+      `kill_on_opp_turn`, `rounds[].opp_turn_life`): Anti-Lifegain 0 (Tainted Remedy on its Sanctuary gain),
+      Burn, Mirrorwing and Red Elemental gi 12 (life it lost on its own turns; Burn's is its fetch), Sea 0 (Sanctuary), Maze's End 0, 2, 8, 14 and 19
+      (a Maze's End win on its turn), Mill 13 (its draws), and others.
+    * **other, 21.** Budgeted search variance: Cyclone 15 and 17, Gods 12, 13 and skip4 16, Hinata 11 and 18,
+      Hydras 5, Landfall skip3 10, Maze's End 5, Merfolk Turns 1, Morph 17, Prevent Damage 9 and 11, Worldfire
+      5 and 6.
+      * Most of it is cross-decision search reuse, which a skip breaks. They are exact +1 under
+        `MTG_P17_ISOLATE=1`: PD gi 11's base reuses its turn-1 search on turn 2, reaches depth 4 and verifies a
+        T5 kill, while isolated base and arm both reach depth 1 on 10,038 units.
+      * The rest is a b20 search missing a line. Gods gi 13 at b20 has the base pass with Magus castable on
+        rounds 4-6 (9 against the arm's 8); at b80 and b320 the pair is exact, 8 and 9.
+      * Morph gi 17 is Blistering Firecat's end-step sacrifice in the opponent's extra turn. That is an
+        opponent-turn effect the life screen cannot see, so it is tagged other.
+    * **untagged, 0.**
+    * The tags need the baseline's record fields. Against a baseline ingested before them, the four Maze's End
+      gi 19 misses (the base won on the opponent's turn) read as other, and the split is 34 / 25.
+  * **Byte identity outside the skip arms:** smoke 255 / 255 PASS, configs changed 0, play-changed 0 (searched
+    and d0), scenarios 678 / 678. A fresh baseline of the 28 decks with exceptions matches the stored one in
+    560 / 560 per-game digests. Unit suite 4343 / 4343.
+  * **Diagnostic variants** (`skipcheck/v_*`; `legacy_passive_opponent_lands`, `MTG_P17_ISOLATE`) separated the
+    mechanisms. With lands off and isolation, 12 of the 16 residual games became exact. The rest are Mill 13
+    and Morph 17 (correct play), Gods 13 (budget, above) and Anti-Lifegain skip5 0. That last one is an
+    artefact of the variant: with its lands off, the base wins on round 4, before the skip.
 * **Every kind ran in a real batch** (Burn and White Knights, 40 games each, with `ctrl_record`):
   `exile_until:3:creature:all:ret=5`, `tap:2-4:land:0`, `tax:2-4:1`, `life:3:5`, `counter_to_hand:3:mv>=1`,
   `counter_to_top:3:mv>=1`, `skip:3-4`, `discard:2:name=Lightning Bolt`, `bounce:3:creature:big`,

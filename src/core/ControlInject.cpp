@@ -34,6 +34,7 @@ struct RoundRec
     int                      opp_library = 0;
     int                      spells_cast = 0;       // GameState::spells_cast_this_turn at the end of the turn
     int                      life_gain   = 0;       // GameCtx::life_delta at that point (the `life` effects so far)
+    int                      opp_turn_life = 0;     // net change of the opponent's life during its own turn(s)
     std::vector<std::string> spells;               // the goldfisher's spells reaching resolution this round
 };
 
@@ -54,6 +55,7 @@ struct GameCtx
     int                            gi         = -1;
     int                            start_life = 0;
     int                            life_delta = 0;    // net change of the opponent's life by `life` effects
+    bool                           kill_on_opp_turn = false;   // the opponent lost during one of its own turns
     std::vector<RoundRec>          rounds;
     std::vector<PendingReturn>     returns;
     std::vector<std::vector<char>> hit;               // [effect][round]: applied (counters / tap) that round
@@ -999,6 +1001,21 @@ void OnTurnEnd(const GameState& state, bool skipped)
     rec.life_gain   = t_ctx.life_delta;
 }
 
+void OnOpponentTurn(const GameState& state, int life_before, bool lost_before)
+{
+    if (!t_armed) { return; }
+    Rec(state.turn_number).opp_turn_life += state.Opponent().life - life_before;
+    if (!lost_before && OpponentHasLost(state)) { t_ctx.kill_on_opp_turn = true; }
+}
+
+int OppTurnLife(int round)
+{
+    return (round >= 0 && round < static_cast<int>(t_ctx.rounds.size()))
+         ? t_ctx.rounds[static_cast<std::size_t>(round)].opp_turn_life : 0;
+}
+
+bool KillOnOppTurn() { return t_ctx.kill_on_opp_turn; }
+
 bool BenefitPending(const GameState& state)
 {
     if (!t_armed) { return false; }
@@ -1045,6 +1062,7 @@ void FinishGame(const GameState& state, int win_turn)
     j["life_gain"]    = t_ctx.life_delta;
     j["skipped"]      = static_cast<int>(state.ctrl_skipped_turns);
     j["free_turns"]   = static_cast<int>(state.free_turns_taken);
+    j["kill_on_opp_turn"] = t_ctx.kill_on_opp_turn;
     ojson rounds = ojson::array();
     for (int x = 1; x < static_cast<int>(t_ctx.rounds.size()); ++x)
     {
@@ -1060,6 +1078,7 @@ void FinishGame(const GameState& state, int win_turn)
         o["poison"]      = rr.poison;
         o["opp_library"] = rr.opp_library;
         o["spells_cast"] = rr.spells_cast;
+        o["opp_turn_life"] = rr.opp_turn_life;
         ojson names = ojson::array();
         for (const std::string& n : rr.spells) { names.push_back(n); }
         o["spells"]      = names;
