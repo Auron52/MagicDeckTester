@@ -296,6 +296,15 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**17:45 UTC 11-28** -- CI 46160277039 (8e4653481) GREEN. BS oracle agent 2 DONE (281K; wip/bs-oracle 633af33b2 fold +
+0fb7d56d4 report2/handoff2 + ddba79b4c). MTG_ORACLE_LEFTOVER_FOLD (default ON, oracle-only): mechanism C (g531: 98.4% of
+23.0M leftover splits repeated a recorded result). BS 20 games CPU 2,920 -> 1,807 s (0.62x vs the memo), flags + every
+oracle counter identical, play 20/20; DS+PD priced work -0.3%, 40/40; check mode 29.2M probes 0 mismatches; units 4349.
+-> RIDES the next landing. CAPPED-DECISION: 7/7 sampled gate games still capped; binding limit is now the 1,300 s
+thread-CPU backstop (unpriced work: muted cache recomputes?), g51 still priced-budget on payments (119M). Lane jobs pending:
+stage2 (memo_dc.DONE/stage2.DONE), perf531 (perf531.DONE); waiter brbn56yzb -> then BS agent 3 from logs/bs-oracle/handoff2.md.
+Re-gate claude-queue-20261128a running (filler; attempt 2: 1598 chunks / 336,304 games; waiter b5huewh5x).
+
 **16:45 UTC 11-28** -- DS ROUND 5 agent 2 DONE (274K; wip/ds-apply5 5f4bed2cd, logs/ds-apply5/handoff.md). MTG_VISIBLE_CLOSER_KEEP
 default ON (ten-red credit, pre-check, dominating closer). Gate 72k/arm: need-later Karrthus 169 -> 65, undeclared drops 175
 -> 74, turns -36 (33 jobs faster, 0 slower). A/B 130 shapes / 88,800 games seed 5410000: net 0 except DS standard -1 (faster),
