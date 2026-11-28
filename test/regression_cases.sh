@@ -1476,15 +1476,20 @@ OVERNIGHT_CASES=(
   "zombies       0  6006 2000  0"
   "zombies       0  8008 2000  0"
   "zombies       0 10010 2000  0"
-  "zombies       3  4004  125 10"
-  "zombies       5  4004  300 20"
-  "zombies       5  5005  300 20"
-  "zombies       5  6006  300 20"
-  "zombies       5  7007  300 20"
-  "zombies2hg    5  4004   75 20"
-  "zombies2hg    5  5005   75 20"
-  "zombies2hg    5  6006   75 20"
-  "zombies2hg    5  7007   75 20"
+  # Zombies full post-keep sample: prior per-game costs project <0.5x Hinata's
+  # overnight work for these rows, including the 2HG canaries.
+  "zombies       3  4004 1000 10"
+  "zombies       3  5005 1000 10"
+  "zombies       3  6006 1000 10"
+  "zombies       3  7007 1000 10"
+  "zombies       5  4004  500 20"
+  "zombies       5  5005  500 20"
+  "zombies       5  6006  500 20"
+  "zombies       5  7007  500 20"
+  "zombies2hg    5  4004  100 20"
+  "zombies2hg    5  5005  100 20"
+  "zombies2hg    5  6006  100 20"
+  "zombies2hg    5  7007  100 20"
   # mazesend: overnight ENTRY set before its keep table (2026-11-18; d0 4x2000, one d3 b10 sanity row, d5 4x300 b20
   # play rows). No mazesend2hg overnight rows: the deck reads no heads or starting life (see the SMOKE canary note).
   # Expand to the FULL set just before the keep table is adopted.
