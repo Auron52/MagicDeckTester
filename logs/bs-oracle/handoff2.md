@@ -33,7 +33,24 @@ The full write-up is in report2.md.
 
 ## Perf finding
 
-Pending at handoff: `S/perf531.sh` was still waiting for a lane slot (its lane wrapper had not been admitted). When `S/perf531.DONE` lands, read `S/p531lf.self.txt` (self time) and `S/p531lf.children.txt` (inclusive time), and compare them with the pre-fold flat profile in `S/s531_memo.perf`. Before the fold, the leaders were BuildSimKeyBase at 24%, memmove at 7.4% and ApplyPreTap at 3.8%. Expect the breakpoint derivation under muted recomputes to lead now.
+The perf run is `S/p531lf.*` (mtg.lf, g531 T4 m1, perf at 49 Hz with -g). Its call stacks are only partly resolved:
+the build has no frame pointers, and 24% of samples are [unknown].
+
+- **Self time:**
+  - BuildSimKeyBase fell from 24% (before the fold) to 7.3%.
+  - Then GameState copy 4.0%, Realize 3.0%, CollectActions 3.0%, memmove 2.9%, memcmp 2.8% and
+    CollectActivationKeys 2.5%.
+- **Inclusive time:** the breakpoint continuation derivation leads. BpEnumEntryFor (9.8%) calls
+  BpDeriveContinuationList (9.4%), which calls BpUnbranchedCanon / BpCanonFront (9.2%), which call
+  EnumeratePlansWithLand(Uncached) (9.2%), which calls CollectActions. ApplyPlan / ApplyPlanDirect add 7.0%.
+- So after the fold, payment tables no longer dominate this decision. Breakpoint plan enumeration plus applies do.
+  That enumeration is the kind of muted-recompute work that WALL-BP-CAP's comment names, and it is unpriced.
+- The next cut is in the oracle's repeated BpDeriveContinuationList calls on frontier boards: memoise per board, or
+  fold identical continuation derivations.
+- **The thread-CPU backstop is not deterministic.** This run reached 9.1 M applies and 913 priced s at WALL-BP-CAP.
+  lf_dc's run of the same decision stopped at 6.6 M applies and 726 priced s. The backstop reads thread CPU, which
+  moves with box load and with perf's overhead, so where the decision is cut, and so its CAPPED-DECISION count,
+  varies from run to run. Raise this with the parent: the gate's verdicts on these decisions depend on the box's load.
 
 ## Remaining, in order
 

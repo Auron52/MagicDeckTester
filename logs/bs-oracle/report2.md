@@ -115,7 +115,7 @@ verdicts on and off, plus the raw table compared option by option (stash, taps, 
 
 ## 4. Perf of the post-fold g531 decision
 
-Pending at the time of writing. See handoff2.md (`S/p531lf.self.txt`, `S/p531lf.children.txt`).
+After the fold, BuildSimKeyBase's self time is 7.3% (24% before). Inclusive time is led by the breakpoint continuation derivation (BpEnumEntryFor, BpDeriveContinuationList, BpCanonFront, EnumeratePlansWithLand: about 9-10% each, as one nested chain), with ApplyPlan at 7%. The CPU-time backstop is load-dependent: the perf run of the same decision cut at 9.1 M applies and 913 priced s, where lf_dc cut at 6.6 M and 726 priced s. Details are in handoff2.md.
 
 ## 5. What is next
 
