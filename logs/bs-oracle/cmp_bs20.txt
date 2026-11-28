@@ -1,0 +1,48 @@
+blood_sun__g0              = cpu    26723 ->    27346  
+blood_sun__g25             = cpu   155862 ->   155977  
+blood_sun__g44             = cpu    89081 ->    85974  
+blood_sun__g68             = cpu   181617 ->   188181  
+blood_sun__g86             = cpu   161404 ->   167991  
+blood_sun__g111            = cpu   319663 ->   324279  
+blood_sun__g145            = cpu   250112 ->   239723  
+blood_sun__g167            = cpu    46562 ->    41800  
+blood_sun__g176            = cpu   163000 ->    79316  
+blood_sun__g211            = cpu    45915 ->    42788  
+blood_sun__g238            = cpu   103225 ->   102861  
+blood_sun__g263            = cpu   123543 ->   118618  
+blood_sun__g281            = cpu   192770 ->   119039  
+blood_sun__g308            = cpu    38864 ->    38220  
+blood_sun__g331            = cpu    92072 ->    81775  
+blood_sun__g348            = cpu   109784 ->    88665  
+blood_sun__g373            = cpu   221543 ->   132358  
+blood_sun__g385            = cpu   755602 ->   728217  
+blood_sun__g389            = cpu   428716 ->    77380  
+blood_sun__g395            = cpu    99027 ->    79534  
+total cpu base_bs=3605085 memo_bs=2920042 ratio=0.810 digest_diffs=0
+flags base_bs {'DROP-COVERED': 174, 'DOMINATED-LAND': 297, 'CONTINUATION-DIFFERS': 12, 'CAPPED': 12, 'DOMINATED-LIFE': 8, 'ORACLE-GAP': 18, 'UNMODELED': 119}
+flags memo_bs {'DROP-COVERED': 174, 'DOMINATED-LAND': 297, 'CONTINUATION-DIFFERS': 12, 'CAPPED': 12, 'DOMINATED-LIFE': 8, 'ORACLE-GAP': 18, 'UNMODELED': 119}
+base_bs === MANA ORACLE: decisions=271 plans=5936 skipped=0 applies=11165596 frontiers=2680442 pruned=675945 options=13530553 engine_drops=186 gate_rejects=20460(checked 7903, skipped 12557) MISS=8 ORACLE-GAP=18 UNMODELED=119 CAPPED=12 ms=3347171 ===
+base_bs === MANA ORACLE classes: ORACLE-GAP=18 DOMINATED-LIFE=8 DOMINATED-LAND=297 CONTINUATION-DIFFERS=12 DROP-COVERED=174 UNMODELED=119 CAPPED=12 ===
+base_bs === MANA ORACLE enum-gap rejections: noop=0 hidden=0 host_blind=0 cont_land=0 provider=0 ===
+base_bs === MANA ORACLE hit-only cuts: 465593 unpayable-payment subtrees not built ===
+base_bs === MANA ORACLE chained feeds: 1396628 fed-tap reorders tried, 227566 paid ===
+base_bs === MANA ORACLE goal fold: 5750 plans, 1884 frontiers not expanded, 23 plans realised again in full, 0 checked ===
+base_bs === MANA ORACLE board memory: 8 searches capped by MTG_MANA_ORACLE_BOARD_MB, 1464797 pruned frontier boards and 0 hit-only outcome boards given back early ===
+base_bs === MANA ORACLE shared boards: 5183573 outcome boards held for 8485154 outcomes (3301581 shared); 0 share checks ===
+base_bs === MANA ORACLE capped-plan escalation: 705 retried, 693 finished ===
+base_bs === MANA ORACLE unmodeled: 17136 x floating pool too large to enumerate set-asides ===
+base_bs === MANA ORACLE unmodeled: 647 x payment enumeration capped ===
+base_bs === MANA ORACLE rollback census: lost=0 depth0=0 depth1=0 depth2=0 depth3+=0 inconsistent=0 capped=0 unfaithful=0 no-failed-payment=0 unmodeled=0 reorder=0 off-menu=0 need_in_plan=0 need_later=0 pay_rollback_rescued=0/0 ===
+memo_bs === MANA ORACLE pay-table memo: lookups=1025328 hits=417539 kept=99646 budget_full=109797 checked=0 mismatch=0 ===
+memo_bs === MANA ORACLE: decisions=271 plans=5936 skipped=0 applies=11165596 frontiers=2680442 pruned=675945 options=13530553 engine_drops=186 gate_rejects=20460(checked 7903, skipped 12557) MISS=8 ORACLE-GAP=18 UNMODELED=119 CAPPED=12 ms=2567016 ===
+memo_bs === MANA ORACLE classes: ORACLE-GAP=18 DOMINATED-LIFE=8 DOMINATED-LAND=297 CONTINUATION-DIFFERS=12 DROP-COVERED=174 UNMODELED=119 CAPPED=12 ===
+memo_bs === MANA ORACLE enum-gap rejections: noop=0 hidden=0 host_blind=0 cont_land=0 provider=0 ===
+memo_bs === MANA ORACLE hit-only cuts: 465593 unpayable-payment subtrees not built ===
+memo_bs === MANA ORACLE chained feeds: 1300456 fed-tap reorders tried, 202564 paid ===
+memo_bs === MANA ORACLE goal fold: 5750 plans, 1884 frontiers not expanded, 23 plans realised again in full, 0 checked ===
+memo_bs === MANA ORACLE board memory: 8 searches capped by MTG_MANA_ORACLE_BOARD_MB, 1464797 pruned frontier boards and 0 hit-only outcome boards given back early ===
+memo_bs === MANA ORACLE shared boards: 5183573 outcome boards held for 8485154 outcomes (3301581 shared); 0 share checks ===
+memo_bs === MANA ORACLE capped-plan escalation: 705 retried, 693 finished ===
+memo_bs === MANA ORACLE unmodeled: 17136 x floating pool too large to enumerate set-asides ===
+memo_bs === MANA ORACLE unmodeled: 647 x payment enumeration capped ===
+memo_bs === MANA ORACLE rollback census: lost=0 depth0=0 depth1=0 depth2=0 depth3+=0 inconsistent=0 capped=0 unfaithful=0 no-failed-payment=0 unmodeled=0 reorder=0 off-menu=0 need_in_plan=0 need_later=0 pay_rollback_rescued=0/0 ===
