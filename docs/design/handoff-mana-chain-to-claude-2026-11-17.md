@@ -296,6 +296,14 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**04:30 UTC 11-28** -- DS round 5 agent 1 handed off (280K; wip/ds-apply5 23b13dd8c WIP, logs/ds-apply5/handoff.md).
+Census: Karrthus need-later 274 flags / 30 events on the round-4 gate -> 169 / 19 on origin; 5 lose a turn (s30092745,
+s30095186, s30101776, s30113323, s30129223). Mechanism: the Apex payment (last cast of the named line) spends Karrthus's
+{B}{G} -- a floating Bloom {B} drained by Apex's generic, or Unclaimed Territory tapped for {C}. Fix MTG_VISIBLE_CLOSER_KEEP
+(not provably exact for unseen post-Apex lines -> a play change: gate + all-deck A/B). OFF gate arm pid 2255418 ->
+build/scratch/ds-apply5/gate_base/DONE (~12 h from 01:36). Agent 2 launched from the handoff (repros, units, ON arm, A/B,
+CPU). gate_1127 still running.
+
 **01:40 UTC 11-28** -- CI 46079583570 (524d7c303) GREEN. DS verdict memo (wip/ds-memo 1fe212575, logs/ds-memo/report.md):
 NOT WORTH IT -- final digest-keyed memo saves 0.059% DS user instructions vs origin (< 0.1% bar); BoardHash probe's repeat
 rates were inflated (it ignores storage counters / entered_this_turn etc.); exact-board variants cost +0.8-1.75%. Not
