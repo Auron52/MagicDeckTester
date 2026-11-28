@@ -75460,13 +75460,13 @@ struct ElvesCensus
     // MTG_ELVES_EZURI_COUNTS (counted whether or not the lever is on): ez_rows = band-dropped kick / squad rows with a
     // pump source and an attack-capable Elf; ez_cand = those at a count that maximises this turn's per-Elf bonus
     // (the pump-reserving count); ez_need = candidates the need-the-pump gate passes; ez_admit = re-admitted (on).
-    std::atomic<long long> ez_rows{0}, ez_cand{0}, ez_need{0}, ez_admit{0};
+    std::atomic<long long> kick_drop{0}, ez_rows{0}, ez_cand{0}, ez_need{0}, ez_admit{0};   // kick_drop: band-dropped kick / squad rows, pre-combat
     ~ElvesCensus()
     {
         if (calls.load() == 0) { return; }
         std::fprintf(stderr, "[elves-scaling-census] enumerations=%lld plans=%lld dropped_split=%lld dropped_band=%lld "
-                     "kept=%lld ez_rows=%lld ez_cand=%lld ez_need=%lld ez_admit=%lld\n", calls.load(), plans.load(),
-                     split.load(), band.load(), plans.load() - split.load() - band.load(), ez_rows.load(),
+                     "kept=%lld kick_drop=%lld ez_rows=%lld ez_cand=%lld ez_need=%lld ez_admit=%lld\n", calls.load(), plans.load(),
+                     split.load(), band.load(), plans.load() - split.load() - band.load(), kick_drop.load(), ez_rows.load(),
                      ez_cand.load(), ez_need.load(), ez_admit.load());
     }
 };
@@ -75739,11 +75739,20 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
                     can_win = ub >= ez_life;
                 }
                 if (can_win) { need = true; }
+                // MTG_ELVES_EZURI_TRACE=1 -- DIAGNOSTIC ONLY, never read by play: one stderr line per gated candidate.
+                static const bool s_ez_trace = EnvOn("MTG_ELVES_EZURI_TRACE");
+                if (s_ez_trace)
+                {
+                    std::fprintf(stderr, "[elves-ez] %s %llu T%d life=%d sink=%s top=%d h=%d i=%d f=%d K=%d j=%d "
+                                 "lb=%d need=%d atk=%zu\n", heurarm::t_job_name ? heurarm::t_job_name : "-",
+                                 static_cast<unsigned long long>(s.game_seed), s.turn_number, ez_life, r.sink.c_str(),
+                                 tp, h, i, f, best_k, best_j, std::max(lb_top, lb_held), can_win ? 1 : 0, ez_atk.size());
+                }
             }
         }
         return need;
     };
-    long long n_ez_rows = 0, n_ez_cand = 0, n_ez_need = 0, n_ez_admit = 0;
+    long long n_kick_drop = 0, n_ez_rows = 0, n_ez_cand = 0, n_ez_need = 0, n_ez_admit = 0;
     // (2) Bucket by a cheap key (land + the sorted cast/activation names and slots + the sink), then split each
     // bucket into exact classes with Plan::operator== on the blanked copies.
     std::unordered_map<std::string, std::vector<std::size_t>> buckets;
@@ -75823,6 +75832,7 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
             {
                 bool cand = false;
                 const bool need = ez_admits(r, tp, h, cand);
+                ++n_kick_drop;
                 if (ez_any_elf && (ez_cost > 0 || r.pump_cost > 0)) { ++n_ez_rows; }
                 if (cand) { ++n_ez_cand; }
                 if (need) { ++n_ez_need; }
@@ -75844,9 +75854,10 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
             }
         }
     }
-    if (ElvesCensusOn() && n_ez_rows + n_ez_cand > 0)
+    if (ElvesCensusOn() && n_kick_drop > 0)
     {
         ElvesCensus& c = ElvesCensusSink();
+        c.kick_drop.fetch_add(n_kick_drop);
         c.ez_rows.fetch_add(n_ez_rows); c.ez_cand.fetch_add(n_ez_cand);
         c.ez_need.fetch_add(n_ez_need); c.ez_admit.fetch_add(n_ez_admit);
     }
