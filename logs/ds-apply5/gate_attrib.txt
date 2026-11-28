@@ -1,0 +1,14 @@
+arm                          sl   games    turns       units   cpu_s ADdecl ADundc ADordr   ENUM CAPdec  KarNL   evD   evU
+base                         all  72000   313540   139442026   84610    134    175     13     25    231    169    17    21
+on                           all  72000   313504   139170048   84231    129     74     13     22    225     65    17    13
+base                         loo  18109    78943    33891483   21790     21     63      8      5      0     63     4     7
+on                           loo  18109    78928    33765120   20963     21     14      8      5      0     14     4     3
+
+base all ADundc Karrthus, Tyrant of Jund=169, ADdecl Dragonlord Kolaghan=66, ADdecl Karrthus, Tyrant of Jund=23, ADdecl Lathliss, Dragon Queen=14, ADdecl Dragonstorm=14, ADdecl Utvara Hellkite=12, ADdecl Scourge of Valkas=5, ADundc Dragonlord Kolaghan=4
+on all ADdecl Dragonlord Kolaghan=66, ADundc Karrthus, Tyrant of Jund=65, ADdecl Karrthus, Tyrant of Jund=19, ADdecl Lathliss, Dragon Queen=14, ADdecl Dragonstorm=14, ADdecl Utvara Hellkite=11, ADundc Dragonlord Kolaghan=7, ADdecl Scourge of Valkas=5
+base loo ADundc Karrthus, Tyrant of Jund=63, ADdecl Lathliss, Dragon Queen=14, ADdecl Dragonlord Kolaghan=5, ADdecl Karrthus, Tyrant of Jund=1, ADdecl Scourge of Valkas=1
+on loo ADdecl Lathliss, Dragon Queen=14, ADundc Karrthus, Tyrant of Jund=14, ADdecl Dragonlord Kolaghan=5, ADdecl Karrthus, Tyrant of Jund=1, ADdecl Scourge of Valkas=1
+
+CAPPED-DECISION (seed,turn) events: off 3 on 3; only-off 0 only-on 0; flags in shared events off 231 on 225
+  shared (30137529, 'T7') 98 -> 95
+  shared (30150364, 'T6') 93 -> 90
