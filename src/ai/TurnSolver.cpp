@@ -114243,6 +114243,7 @@ void TurnSolver::ClearPerGameCaches()
     FluctKeepPayableClearMemo();               // Fluctuator's keep-needed payability memo
     g_incinerator_pin_cursor = 0;              // advances unpinned on every Incinerator trigger (see BuildBreakpointKey)
     manaoracle::ClearRefineMemoPerGame();      // the mana oracle's payment-refine memo
+    ClearLineRestMemoPerGame();                // MTG_LINE_REST_MEMO: the rest-of-line verdict memo (ManaPayment.cpp)
     // The hybrid's per-game learned cost model (emulated ladder R/G, single-pass R, research R).
     HybridLearnedStateClear();
     // The payable-mana cache (SpellEffects.cpp): pure in design, but every key hole it has had was a

@@ -485,7 +485,10 @@ games: the 6,000 Dragonstorm A/B games both arms, 118 other-deck blocks, the off
 equal; not Worldfire, the one lump deck of the 45). What is left: the summed judge 0.34%, the two walks ~0.43%, board
 copies 0.18%. A verdict memo would remove most of it (73% of trials and 91% of walks repeat a key) but is not exact
 (the payment backtracker's mana cache is path dependent), so it is a play change with its own gate and A/B
-(`logs/ds-apply4/cpu_cut.txt`).
+(`logs/ds-apply4/cpu_cut.txt`). Measured on `wip/ds-memo` (2026-11-28, `logs/ds-memo/report.md`): **not worth it**. Exact-board verification
+costs more than the route (+0.81% to +1.75%); a payment-board digest key on the keep's verdict saves 0.15% against its
+own off arm but only 0.06% against the shipped binary (play-identical on 200 games, 0 verify mismatches); memoising the
+rest verdict buys nothing. Not landed.
 GT: the cut moves no play digest relative to 3bd740edd on Dragonstorm, but the levers themselves are a default-ON play
 change, so smoke / regression GT is accepted by the parent under the landing binary (not here).
 Still open in the cluster: s30133545 (decision #5 keep-floating {B}, probably a breakpoint continuation's payment,

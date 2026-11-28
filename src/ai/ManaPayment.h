@@ -594,6 +594,12 @@ std::uint64_t ManaCostDigest(const ManaCost& c);
 // board in equal contexts are the same payment -- the key manaoracle::RefinePayment's memo keeps.
 std::uint64_t PayContextDigest();
 
+// MTG_LINE_REST_MEMO (EngineFlags.h; ManaPayment.cpp): the owed float keep's verdict memo, emptied per game
+// (TurnSolver::ClearPerGameCaches). LineRestMemoCount(what): this thread's counts since the last clear -- 0 lookups,
+// 1 hits, 2 stores, 3 verify mismatches (tests).
+void ClearLineRestMemoPerGame();
+long long LineRestMemoCount(int what);
+
 // ---- COLOUR-EXACT SUBSET AFFORDABILITY (MTG_COLOR_EXACT) --------------------------------------
 //
 // The pool above is COLOUR-BLIND about its flexible sources: AddSourceToPool books every

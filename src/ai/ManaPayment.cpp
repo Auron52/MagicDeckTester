@@ -4,6 +4,7 @@
 // were already identical); comments were merged from both.
 #include "ManaPayment.h"
 #include "../core/WorkCounters.h"
+#include "PlanContext.h"          // MTG_LINE_REST_MEMO: CurrentPlanTraitsHash (the context word)
 #include "DecisionProviders.h"   // IdealOrderSuppressScope (the range's cost-efficient end)
 #include "EngineFlags.h"
 #include "PayLedger.h"            // MTG_PAY_ROLLBACK_AUDIT: the rollback's count-only instrument
@@ -29,6 +30,7 @@
 #include <map>       // the payable-order decider's per-shape candidate order (PoSortedCandidates)
 #include <optional>    // TapForCostShared's MTG_RAMP_FEED_ROUTE scope
 #include <type_traits> // derive the hybrid-assignment array size from ManaCost's pip capacity
+#include <unordered_map>   // MTG_LINE_REST_MEMO's table
 #include <unordered_set>   // PoAnyOrderPays' searched (set, walk state) pairs
 #include <vector>
 
@@ -14075,6 +14077,234 @@ static bool LineSeqRestPays(const GameState& board, int at)
     return LineSeqRestPaysOn(c.Board(), at);
 }
 
+// ---- MTG_LINE_REST_MEMO: the owed float keep's verdict, memoised per game (EngineFlags.h) -------------------------
+// The search pays the same bill from the same board over and over, and KeepOwedFloatPay's in-place route is
+// MTG_LINE_SEQ_REST's costliest part there (Dragonstorm, levers on vs off: +0.96% user instructions at play settings
+// after the two exact cuts; 69% of the route's entries repeat a key below). The route's VERDICT -- the plain payment
+// keeps the rest of the line (1), or the kept payment replaces it (2) -- is kept per game and per thread, and a
+// repeated entry makes that payment without the route's trial board, summed judge, walk and kept trial.
+// The key: the payment board digest (LrmPayDigest: every board field a payment, the walk or the judge reads; a library
+// by size), the bill, the rest's bill, the keep, `available`, the flags, and the context word (LrmCtx: PayContextDigest,
+// the plan traits, the line hold's other thread-locals, the line's casts from this one on, the paying card).
+// NOT provably exact, for two reasons: the key is a digest (an unlisted field, or a 64-bit collision, would serve a
+// wrong verdict), and TapForCostBacktrack's mana cache keys miss payer context (SpellEffects.cpp, McT2PayWord), so the
+// route's answer can depend on what an earlier solve stored, and a skipped route changes what that cache holds later.
+// So it is a play change, validated as one (MTG_LINE_REST_MEMO_VERIFY recomputes every hit). A stale KEPT verdict can
+// never fail a payment the route would make: when the kept payment fails, the route runs as on a miss.
+// Stores are refused inside a muted recompute (workctr::StoresAllowed: a muted solve stands in for a cache hit that
+// never ran, so an entry it left would make later work depend on plan-pool residency). The table is emptied per game
+// (TurnSolver::ClearPerGameCaches) and when it reaches kLrmMaxEntries, so what a game hits is a function of the game.
+// (Exact-board variants were measured and rejected: storing and comparing whole GameStates cost more than the route
+// -- KOF verdict +0.81%, with the rest verdict memoised as well +1.74% on Dragonstorm -- and memoising the rest
+// verdict on its own key bought nothing beside this one. logs/ds-memo/report.md.)
+namespace
+{
+constexpr std::size_t kLrmMaxEntries = 1 << 15;  // per thread: past it the table is emptied (a function of the game)
+constexpr std::size_t kLrmPerKey = 4;            // entries kept under one key hash (a collision of the hash only)
+struct LrmKey
+{
+    std::uint64_t h = 0, ctx = 0;
+    int at = -1, flags = 0;
+    ManaCost cost_a, cost_b;
+    ManaPool pool_a, pool_b;
+    bool operator==(const LrmKey&) const = default;
+};
+struct LrmSlot { LrmKey key; int verdict = 0; };
+struct LrmTable
+{
+    std::unordered_map<std::uint64_t, std::vector<LrmSlot>> map;   // key hash -> the entries under it
+    std::size_t entries = 0;
+    long long n[4] = {};                             // lookups, hits, stores, verify mismatches (this game)
+};
+thread_local LrmTable t_lrm;
+thread_local bool t_lrm_bypass = false;           // MTG_LINE_REST_MEMO_VERIFY's recompute: the route, memo off
+std::atomic<long long> g_lrm_tot[4];
+struct LrmReport
+{
+    ~LrmReport()
+    {
+        static const bool s_on = EnvOn("MTG_LINE_REST_MEMO_STATS");
+        if (!s_on) { return; }
+        std::fprintf(stderr, "[line-rest-memo] lookups=%lld hits=%lld stores=%lld verify_mismatch=%lld\n",
+                     g_lrm_tot[0].load(), g_lrm_tot[1].load(), g_lrm_tot[2].load(), g_lrm_tot[3].load());
+    }
+} g_lrm_report;
+bool LrmVerify() { static const bool v = EnvOn("MTG_LINE_REST_MEMO_VERIFY"); return v; }
+void LrmCount(int what)
+{
+    ++t_lrm.n[what];
+    static const bool s_on = EnvOn("MTG_LINE_REST_MEMO_STATS");
+    if (s_on) { g_lrm_tot[what].fetch_add(1, std::memory_order_relaxed); }
+}
+inline std::uint64_t LrmMix(std::uint64_t h, std::uint64_t v)
+{
+    h ^= v + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2);
+    return h * 0xBF58476D1CE4E5B9ULL;
+}
+std::uint64_t PoolFull(std::uint64_t h, const ManaPool& f)
+{
+    auto two = [](int x, int y)
+    { return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x)) << 32) | static_cast<std::uint32_t>(y); };
+    h = LrmMix(h, two(f.white, f.blue)); h = LrmMix(h, two(f.black, f.red)); h = LrmMix(h, two(f.green, f.colorless));
+    h = LrmMix(h, two(f.wild, f.wild_c)); h = LrmMix(h, two(f.wild_phantom, f.wild_conv));
+    return LrmMix(h, static_cast<std::uint32_t>(f.snow_units));
+}
+// THE PAYMENT BOARD DIGEST (MTG_LINE_REST_MEMO's key): every board field a payment, the walk or the judge can read --
+// each pool, every permanent's payment state (tapped, summoning, counters of every kind, the chosen colour and modes,
+// attachments, the pay marks), the hands (number, face, staged), the zones a cost reads (graveyard, exile, stack by
+// card), the players' per-turn counts -- folded field by field. A library is read by no payment: its size only.
+std::uint64_t LrmPayDigest(const GameState& b)
+{
+    auto two = [](int x, int y)
+    { return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x)) << 32) | static_cast<std::uint32_t>(y); };
+    std::uint64_t h = 0xB0A2D1ULL;
+    h = LrmMix(h, two(b.turn_number, b.active_player_index));
+    h = LrmMix(h, two(b.spells_cast_this_turn, b.mv_cast_this_turn));
+    h = LrmMix(h, two(b.casts_remaining_this_turn, b.free_casts_available));
+    h = LrmMix(h, two(static_cast<int>(b.phase), static_cast<int>(b.step)));
+    h = LrmMix(h, two(b.floating_haste_c, (b.floating_bigspell_pp != nullptr ? 1 : 0) | (b.opponent_lost_life_this_turn ? 2 : 0)));
+    h = PoolFull(h, b.floating_mana);
+    h = PoolFull(h, b.floating_creature_mana);
+    h = PoolFull(h, b.floating_bigspell_mana);
+    h = LrmMix(h, b.battlefield.size());
+    for (const Permanent& p : b.battlefield)
+    {
+        h = LrmMix(h, two(p.card.m_number, p.controller_index | (p.owner_index << 8)));
+        h = LrmMix(h, p.card.m_name_hash ^ (p.card.m_is_staged ? 0x5747ull : 0ull));
+        h = LrmMix(h, (p.tapped ? 1u : 0u) | (p.def_absent ? 2u : 0u) | (p.is_token ? 4u : 0u)
+                          | (p.entered_this_turn ? 8u : 0u) | (p.gained_control_this_turn ? 16u : 0u)
+                          | (p.is_animated ? 32u : 0u) | (p.temp_haste ? 64u : 0u) | (p.skip_next_untap ? 128u : 0u)
+                          | (p.etb_tap_pending ? 256u : 0u) | (p.pay_sac_eaten ? 512u : 0u)
+                          | (p.once_per_turn_used ? 1024u : 0u) | (p.cond_haste ? 2048u : 0u)
+                          | (static_cast<std::uint64_t>(p.mana_tap_mark) << 16) | (static_cast<std::uint64_t>(p.mana_flex) << 24)
+                          | (static_cast<std::uint64_t>(static_cast<std::uint8_t>(p.chosen_color)) << 32)
+                          | (static_cast<std::uint64_t>(p.garth_chosen_mask) << 40)
+                          | (static_cast<std::uint64_t>(p.chosen_subtype_id) << 48));
+        h = LrmMix(h, two(p.charge_counters, p.storage_counters));
+        h = LrmMix(h, two(p.oil_counters, p.time_counters));
+        h = LrmMix(h, two(p.verse_counters, p.lore_counters));
+        h = LrmMix(h, two(p.loyalty, p.ice_counters));
+        h = LrmMix(h, two(p.age_counters, p.spore_counters));
+        h = LrmMix(h, two(p.fade_counters, p.quest_counters));
+        h = LrmMix(h, two(p.hone_counters, p.damage));
+        h = LrmMix(h, two(p.equipped_to, p.aura_attached_to));
+        h = LrmMix(h, two(p.islandize_target, p.paired_with));
+        h = LrmMix(h, two(p.created_by_number, p.linked_exile_number));
+        h = LrmMix(h, p.counters.size());
+        for (const Counter& c : p.counters) { h = LrmMix(h, two(static_cast<int>(c.type), c.count)); }
+    }
+    h = LrmMix(h, b.stack.size());
+    for (const StackEntry& e : b.stack) { h = LrmMix(h, static_cast<std::uint32_t>(e.source.m_number)); }
+    h = LrmMix(h, b.exile.size());
+    for (const Card& c : b.exile) { h = LrmMix(h, two(c.m_number, c.m_is_staged ? 1 : 0)); }
+    for (const Player& pl : b.players)
+    {
+        h = LrmMix(h, two(pl.life, pl.energy_counters));
+        h = LrmMix(h, two(pl.poison_counters, pl.lands_played_this_turn));
+        h = LrmMix(h, two(pl.bonus_land_drops_this_turn, pl.cards_drawn_this_turn));
+        h = LrmMix(h, two(pl.life_gained_this_turn, pl.cards_cycled_or_discarded_this_turn));
+        h = LrmMix(h, two(static_cast<int>(pl.staged_cards.size()), static_cast<int>(pl.suspended_cards.size())));
+        h = LrmMix(h, two(static_cast<int>(pl.library.size()), static_cast<int>(pl.graveyard.size())));
+        for (const Card& c : pl.hand)
+        { h = LrmMix(h, two(c.m_number, c.m_is_staged ? 1 : 0)); h = LrmMix(h, c.m_name_hash); }
+        for (const Card& c : pl.graveyard) { h = LrmMix(h, static_cast<std::uint32_t>(c.m_number)); }
+    }
+    return h;
+}
+// The context word: every thread-local the route is known to read besides the board and the explicit arguments.
+// PayContextDigest is the payer's own list; the line hold's other fields (the reducer credit, the noncreature
+// count-down, the keep bound, ...), the paying card and the line's casts from acts[at] on (no payment reads an earlier
+// one) are added here, because the line-keep rungs and the walk read them and the digest does not fold them. An
+// interned name is folded by its pointer: equal pointers are equal names, so a lookup's outcome does not depend on the
+// address (only the hash value does), and nothing is evicted by hash order.
+std::uint64_t LrmCtx(int at)
+{
+    const LineSeq* const q = g_line_seq;
+    std::uint64_t h = LrmMix(0x11E5E57ULL, PayContextDigest());
+    h = LrmMix(h, CurrentPlanTraitsHash());
+    h = LrmMix(h, (g_line_hold_has_acts ? 1u : 0u) | (g_line_unseen_carried ? 2u : 0u)
+                      | (PayingCreatureAbility() ? 4u : 0u));
+    h = LrmMix(h, (static_cast<std::uint64_t>(static_cast<std::uint32_t>(g_line_reducer_credit)) << 32)
+                      | static_cast<std::uint32_t>(g_line_noncreature_mv));
+    h = LrmMix(h, (static_cast<std::uint64_t>(static_cast<std::uint32_t>(g_line_keep_bound)) << 32)
+                      | static_cast<std::uint32_t>(g_line_noncreature_left));
+    h = LrmMix(h, static_cast<std::uint32_t>(g_line_haste_takers));
+    if (const Card* pc = PayingSpellCard(); pc != nullptr)
+    {
+        h = LrmMix(h, pc->m_name_hash);
+        h = LrmMix(h, (static_cast<std::uint64_t>(static_cast<std::uint32_t>(pc->m_number)) << 1)
+                          | (pc->m_is_staged ? 1u : 0u));
+    }
+    else { h = LrmMix(h, 0x9C0); }
+    if (q != nullptr && at >= 0)
+    {
+        const std::vector<Action>& acts = *q->acts;
+        h = LrmMix(h, acts.size() - static_cast<std::size_t>(at));
+        for (std::size_t i = static_cast<std::size_t>(at); i < acts.size(); ++i)
+        {
+            const Action& a = acts[i];
+            h = LrmMix(h, static_cast<std::uint64_t>(a.kind));
+            h = LrmMix(h, reinterpret_cast<std::uintptr_t>(&a.card_name.str()));   // interned: equal pointer <=> equal name
+            h = LrmMix(h, a.def != nullptr ? a.def->card.m_name_hash : 0xDEFull);
+            h = LrmMix(h, ManaCostDigest(a.cost));
+            h = LrmMix(h, (static_cast<std::uint64_t>(static_cast<std::uint32_t>(a.chosen_x)) << 32)
+                              | static_cast<std::uint32_t>(a.splice_count));
+            {
+                const std::string& fc = a.chosen_float_color.str();   // a colour letter or empty: its bytes, exactly
+                std::uint64_t w = fc.size();
+                for (std::size_t c = 0; c < fc.size() && c < 7; ++c) { w |= static_cast<std::uint64_t>(static_cast<unsigned char>(fc[c])) << (8 * (c + 1)); }
+                h = LrmMix(h, fc.size() > 7 ? std::hash<std::string>{}(fc) : w);
+            }
+            h = LrmMix(h, (a.free_cast ? 1u : 0u) | (a.alt_cost ? 2u : 0u) | (a.kicked ? 4u : 0u) | (a.evoke ? 8u : 0u)
+                              | (a.emerge ? 16u : 0u) | (a.awaken ? 32u : 0u) | (a.bestow ? 64u : 0u)
+                              | (static_cast<std::uint64_t>(static_cast<std::uint8_t>(a.face_down)) << 8)
+                              | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(a.soulfire_own_targets)) << 16));
+        }
+    }
+    else { h = LrmMix(h, 0x5E0); }
+    return h;
+}
+std::uint64_t LrmKeyHash(const LrmKey& k)
+{
+    std::uint64_t x = LrmMix(k.h, k.ctx);
+    x = LrmMix(x, (static_cast<std::uint64_t>(static_cast<std::uint32_t>(k.at)) << 32) | static_cast<std::uint32_t>(k.flags));
+    x = LrmMix(x, ManaCostDigest(k.cost_a));
+    x = LrmMix(x, ManaCostDigest(k.cost_b));
+    x = PoolFull(x, k.pool_a);
+    return PoolFull(x, k.pool_b);
+}
+// The verdict stored under `k`, or -1.
+int LrmFind(const LrmKey& k, std::uint64_t kh)
+{
+    LrmCount(0);
+    const auto it = t_lrm.map.find(kh);
+    if (it == t_lrm.map.end()) { return -1; }
+    for (const LrmSlot& s : it->second) { if (s.key == k) { LrmCount(1); return s.verdict; } }
+    return -1;
+}
+void LrmStore(const LrmKey& k, std::uint64_t kh, int verdict)
+{
+    if (!workctr::StoresAllowed()) { return; }
+    if (t_lrm.entries >= kLrmMaxEntries) { t_lrm.map.clear(); t_lrm.entries = 0; }
+    std::vector<LrmSlot>& v = t_lrm.map[kh];
+    for (LrmSlot& e : v) { if (e.key == k) { e.verdict = verdict; return; } }   // a stale entry the route replaced
+    if (v.size() >= kLrmPerKey) { v.erase(v.begin()); --t_lrm.entries; }
+    v.push_back(LrmSlot{ k, verdict });
+    ++t_lrm.entries;
+    LrmCount(2);
+}
+} // namespace
+
+// Per game (TurnSolver::ClearPerGameCaches): what a game hits must not depend on which games ran before it on the
+// worker thread.
+void ClearLineRestMemoPerGame()
+{
+    t_lrm.map.clear();
+    t_lrm.entries = 0;
+    for (long long& x : t_lrm.n) { x = 0; }
+}
+long long LineRestMemoCount(int what) { return (what >= 0 && what < 4) ? t_lrm.n[what] : 0; }
+
 static thread_local int t_pilgrimage_pay_depth = 0;
 
 // MTG_UNSEEN_KEEP_SCARCE (reader: SpendFloatingTowardCost, SpellEffects.h). A colour qualifies when it floats, the
@@ -14210,6 +14440,95 @@ static void SwapLeftoverForLine(GameState& state, const ManaCost& cost_in, const
 // Returns -1 (not taken: the caller pays as before), else the kept payment's result.
 static thread_local bool t_keep_owed_float_busy = false;
 static int KeepOwedFloatPay(GameState& state, const ManaCost& cost_in, bool for_creature, ManaPool* available,
+                            bool honor_legacy_cco);
+// KeepOwedFloatPay's IN-PLACE route (nothing logged or hooked; see the comment at its call), and MTG_LINE_REST_MEMO in
+// front of it. Out of line, so the owed float keep's early exits -- taken by most outermost payments of a bound line --
+// keep their small frame.
+MTG_DB_NOINLINE static int KeepOwedFloatPayInPlace(GameState& state, const ManaCost& cost_in, bool for_creature,
+                                                   ManaPool* available, bool honor_legacy_cco, int at,
+                                                   const ManaCost& bill, const ManaPool& keep)
+{
+    auto pay = [&](GameState& b, ManaPool* av, const ManaPool* k) -> bool
+    {
+        t_keep_owed_float_busy = true;
+        ManaPool& fm = b.floating_mana;
+        if (k != nullptr)
+        {
+            fm.white -= k->white; fm.blue -= k->blue; fm.black -= k->black; fm.red -= k->red; fm.green -= k->green;
+        }
+        const bool ok = TapForCostShared(b, cost_in, for_creature, av, honor_legacy_cco);
+        if (k != nullptr) { b.floating_mana.AddPool(*k); }
+        t_keep_owed_float_busy = false;
+        return ok;
+    };
+    ManaPool trial_avail;
+    // MTG_LINE_REST_MEMO: the same entry again (the payment board digest, bill, keep, `available`, context) makes the
+    // payment the route below chose before, without its trial board, judge, walk and kept trial.
+    const bool memo = LineRestMemoOn() && !t_lrm_bypass;
+    LrmKey k;
+    std::uint64_t kh = 0;
+    if (memo)
+    {
+        k.h = LrmPayDigest(state);
+        k.ctx = LrmCtx(at);
+        k.at = at;
+        k.flags = (for_creature ? 1 : 0) | (honor_legacy_cco ? 2 : 0) | (available != nullptr ? 4 : 0);
+        k.cost_a = cost_in;
+        k.cost_b = bill;
+        k.pool_a = keep;
+        if (available != nullptr) { k.pool_b = *available; }
+        kh = LrmKeyHash(k);
+        if (const int v = LrmFind(k, kh); v >= 0)
+        {
+            if (LrmVerify())   // the route on copies (memo bypassed) against the stored payment on copies
+            {
+                GameState s2 = state, s3 = state;
+                ManaPool a2 = available != nullptr ? *available : ManaPool{};
+                ManaPool a3 = a2;
+                t_lrm_bypass = true;
+                const int r2 = KeepOwedFloatPay(s2, cost_in, for_creature, available != nullptr ? &a2 : nullptr,
+                                                honor_legacy_cco);
+                t_lrm_bypass = false;
+                const int r3 = pay(s3, available != nullptr ? &a3 : nullptr, v == 2 ? &keep : nullptr) ? 1 : 0;
+                if (r2 != r3 || !(s2 == s3) || !(a2 == a3)) { LrmCount(3); }
+            }
+            const ManaPool av0 = available != nullptr ? *available : ManaPool{};
+            if (pay(state, available, v == 2 ? &keep : nullptr)) { return 1; }
+            if (v == 1) { return 0; }                    // the plain payment fails, as the route's first step does
+            // A kept payment that fails is a stale verdict: a failed payment leaves the board as it was (and
+            // `available` is restored), so the route runs as on a miss and the payment it would make is made.
+            if (available != nullptr) { *available = av0; }
+        }
+    }
+    // The route. `verdict` records which payment it made (1 plain, 2 kept) for the memo.
+    int verdict = 1;
+    const int r = [&]() -> int
+    {
+        RampScratch trial_s(state);                          // the original board (pooled scratch)
+        GameState* const trial = &trial_s.Board();
+        if (available != nullptr) { trial_avail = *available; }
+        if (!pay(state, available, nullptr)) { return 0; }
+        // The float left pays the rest outright (each pip colour and the total): the judge's answer, without its
+        // copies.
+        const ManaPool& pf = state.floating_mana;
+        if (pf.white >= bill.white && pf.blue >= bill.blue && pf.black >= bill.black && pf.red >= bill.red
+            && pf.green >= bill.green && static_cast<int>(pf.Total()) >= bill.ManaValue()) { return 1; }
+        const ManaPool ritual = LineKeepRockFor(*trial).ritual;   // the board before the payment
+        if (LumpAwareBillPayableOpener(state, bill, ritual) || LineSeqRestPays(state, at)) { return 1; }
+        RampScratch kept_s(*trial);
+        GameState* const kept = &kept_s.Board();
+        ManaPool kept_avail = trial_avail;
+        if (!pay(*kept, available != nullptr ? &kept_avail : nullptr, &keep) || !LineSeqRestPaysOn(*kept, at))
+        { return 1; }
+        state = *trial;                                      // the kept payment replaces the plain one
+        if (available != nullptr) { *available = trial_avail; }
+        verdict = 2;
+        return pay(state, available, &keep) ? 1 : 0;
+    }();
+    if (memo) { LrmStore(k, kh, verdict); }
+    return r;
+}
+static int KeepOwedFloatPay(GameState& state, const ManaCost& cost_in, bool for_creature, ManaPool* available,
                             bool honor_legacy_cco)
 {
     if (cost_in.generic <= 0 || state.floating_mana.Total() == 0) { return -1; }
@@ -14272,7 +14591,6 @@ static int KeepOwedFloatPay(GameState& state, const ManaCost& cost_in, bool for_
         *kp[x] = std::min(rest_pips[x], std::max(0, fl[x] - pip[x]));
     }
     if (keep.Total() == 0) { return -1; }
-    const ManaPool ritual = LineKeepRockFor(state).ritual;
     auto pay = [&](GameState& b, ManaPool* av, const ManaPool* k) -> bool
     {
         t_keep_owed_float_busy = true;
@@ -14298,24 +14616,8 @@ static int KeepOwedFloatPay(GameState& state, const ManaCost& cost_in, bool for_
     bool pause_noop;
     { const RevealLogPause probe; pause_noop = probe.noop; }
     if (pause_noop)
-    {
-        RampScratch trial_s(state);                          // the original board (pooled scratch)
-        GameState* const trial = &trial_s.Board();
-        if (available != nullptr) { trial_avail = *available; }
-        if (!pay(state, available, nullptr)) { return 0; }
-        // The float left pays the rest outright (each pip colour and the total): the judge's answer, without its copies.
-        const ManaPool& pf = state.floating_mana;
-        if (pf.white >= bill.white && pf.blue >= bill.blue && pf.black >= bill.black && pf.red >= bill.red
-            && pf.green >= bill.green && static_cast<int>(pf.Total()) >= bill.ManaValue()) { return 1; }
-        if (LumpAwareBillPayableOpener(state, bill, ritual) || LineSeqRestPays(state, at)) { return 1; }
-        RampScratch kept_s(*trial);
-        GameState* const kept = &kept_s.Board();
-        ManaPool kept_avail = trial_avail;
-        if (!pay(*kept, available != nullptr ? &kept_avail : nullptr, &keep) || !LineSeqRestPaysOn(*kept, at)) { return 1; }
-        state = *trial;                                      // the kept payment replaces the plain one
-        if (available != nullptr) { *available = trial_avail; }
-        return pay(state, available, &keep) ? 1 : 0;
-    }
+    { return KeepOwedFloatPayInPlace(state, cost_in, for_creature, available, honor_legacy_cco, at, bill, keep); }
+    const ManaPool ritual = LineKeepRockFor(state).ritual;
     {
         const RevealLogPause quiet;
         const std::unique_ptr<GameState> trial = std::make_unique<GameState>(state);

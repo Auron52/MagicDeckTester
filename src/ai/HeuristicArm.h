@@ -1165,6 +1165,7 @@ enum Slot : int
     ELVES_TAP_ORDER,          // MTG_ELVES_TAP_ORDER  DEFAULT ON (adopted 2026-11-27; =0 hatch) (USER 2026-11-27: "we should take control of the tap order a bit in the heuristic provider to make sure that we maintain whatever thing we want to maintain, whether that is the attackers or the scaling mana"): ElvesProvider::ManaSourceRank, on a pre-combat payment of a plan that casts a scaled sink, FROM THE SINK'S OWN PAYMENT ONWARD (the set-up casts before it keep the scaling mana), PRESERVES ATTACKERS (non-attacking dorks, then scaled dorks, then the attack-capable fixed dorks last); every other payment keeps the scaling-preserving order. Default ON (better and cheaper in both formats, 0 slower games)
     LINE_SEQ_REST,            // MTG_LINE_SEQ_REST  the payer judges the rest of the applying line IN ORDER (LineSeqRestPays: each cast paid at its live cost on the board the casts before it leave, then its ritual float / Apex ten / artifact added), a witness beside the summed-hold judge: the lump keep-owed rung's judge, and the owed-float keep (a floating unit of a colour the rest owes and does not make is set aside when the plain drain strands the rest and the kept payment does not). Dragonstorm s30133545 T5 (two Apexes before Kolaghan), s30152803 T4 (the Bloom's {B} drained by a Song's generic). DEFAULT ON; =0 -> byte-identical
     UNSEEN_SCARCE_RITUAL_NET, // MTG_UNSEEN_SCARCE_RITUAL_NET  the unseen-keep-scarce drain (SpendFloatingTowardCost) nets the line's later pips by the output of the RITUAL being paid for before it computes a scarce colour's spare units, so a floating red the ritual's own float replaces pays the generic before the line's only {B}. Dragonstorm s30093026 T4 (a continuation's Seething Song spent Kolaghan's {B}). DEFAULT ON; =0 -> byte-identical
+    LINE_REST_MEMO,           // MTG_LINE_REST_MEMO  (CPU) the owed float keep's choice (KeepOwedFloatPay: the plain payment keeps the rest of the line, or the kept one replaces it) is memoised per game on the payment board digest, the bills, the keep, `available` and the payer's context (PayContextDigest, the plan traits, the line hold, the line's casts, the paying card); a repeated entry makes the chosen payment without the route's trial, judge and walks. Not provably exact (a digest key; the backtracker's mana cache keys miss payer context): a play change. DEFAULT ON; =0 -> the route on every entry, byte-identical
     COUNT
 };
 
@@ -2274,6 +2275,7 @@ inline const char* Name(int slot)
         "MTG_ELVES_TAP_ORDER",
         "MTG_LINE_SEQ_REST",
         "MTG_UNSEEN_SCARCE_RITUAL_NET",
+        "MTG_LINE_REST_MEMO",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

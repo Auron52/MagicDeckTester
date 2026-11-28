@@ -17,8 +17,11 @@
 //                                      owes and does not make is kept when the plain payment strands the rest.
 //   MTG_UNSEEN_SCARCE_RITUAL_NET    -- the unseen-keep-scarce drain counted the later red the paying ritual itself
 //                                      makes as owed by the float, so a generic unit came off the {B}.
+//   MTG_LINE_REST_MEMO              -- (CPU) the owed float keep's verdict memoised on the payment board digest and
+//                                      context: a repeated entry pays exactly as the recompute does.
 #include <doctest/doctest.h>
 
+#include "ai/BoardIdentity.h"
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
@@ -496,6 +499,95 @@ TEST_CASE("Dragonstorm line keep: s30152803 T4 -- the first Song taps both Mount
         ArmDlk as(heurarm::LINE_SEQ_REST, on);
         GameState s = s0;
         CHECK(PayLineSeqDlk(s, line, 1, pre) == on);
+    }
+}
+
+// MTG_LINE_REST_MEMO: the s30152803 entry repeated. The owed float keep's first entry on this board stores its verdict
+// (the kept payment: the plain one strands Kolaghan's {B}); the second, on an equal board in an equal context, makes
+// the same payment from the memo, and both leave exactly the board the recompute (memo off) leaves. A context that
+// differs (another lever's arm: PayContextDigest folds the arm) or a board that differs (one more Mountain tapped) is
+// not served; neither is a board that differs only in a field BoardHash does not read.
+TEST_CASE("Dragonstorm line keep: MTG_LINE_REST_MEMO -- a repeated owed-float entry pays exactly as the recompute")
+{
+    GameState s0 = BaseDlk(4);
+    PutDlk(s0, "Mountain", 33);
+    PutDlk(s0, "Mountain", 27);
+    PutDlk(s0, "Ruby Medallion", 43);
+    s0.floating_mana.black = 1;
+    for (const char* h : { "Seething Song", "Seething Song", "Dragonlord Kolaghan", "Irencrag Feat", "Dragonstorm" })
+    { s0.players[0].hand.push_back(CardDlk(h, 60 + static_cast<int>(s0.players[0].hand.size()))); }
+    GameState pre = BaseDlk(4);
+    const std::vector<Action> line = { CastDlk(pre, "Ruby Medallion"), CastDlk(pre, "Seething Song"),
+                                       CastDlk(pre, "Seething Song"), CastDlk(pre, "Dragonlord Kolaghan"),
+                                       CastDlk(pre, "Irencrag Feat"), CastDlk(pre, "Dragonstorm") };
+    ArmDlk seq(heurarm::LINE_SEQ_REST, true);
+    GameState off = s0;
+    {
+        ArmDlk m(heurarm::LINE_REST_MEMO, false);
+        ClearLineRestMemoPerGame();
+        REQUIRE(PayLineSeqDlk(off, line, 1, pre));
+        CHECK(LineRestMemoCount(0) == 0);   // memo off: never consulted
+    }
+    ArmDlk m(heurarm::LINE_REST_MEMO, true);
+    ClearLineRestMemoPerGame();
+    GameState a = s0;
+    REQUIRE(PayLineSeqDlk(a, line, 1, pre));
+    CHECK(LineRestMemoCount(1) == 0);
+    CHECK(LineRestMemoCount(2) >= 1);       // the first Song's entry stored its verdict
+    CHECK(boardid::BoardsEqual(a, off));
+    const long long hits0 = LineRestMemoCount(1);
+    GameState b = s0;
+    REQUIRE(PayLineSeqDlk(b, line, 1, pre));
+    CHECK(LineRestMemoCount(1) > hits0);    // served from the memo
+    CHECK(boardid::BoardsEqual(b, off));
+    CHECK(b.floating_mana.black == off.floating_mana.black);
+    // Another context: the arm of an unrelated lever moves PayContextDigest, so nothing is served.
+    {
+        const long long h1 = LineRestMemoCount(1);
+        ArmDlk other(heurarm::LINE_FLOAT_COVERED, false);   // -1 -> 0: the arm PayContextDigest folds moves
+        GameState c = s0;
+        const bool rc = PayLineSeqDlk(c, line, 1, pre);
+        CHECK(LineRestMemoCount(1) == h1);
+        GameState c_ref = s0;
+        {
+            ArmDlk mo(heurarm::LINE_REST_MEMO, false);
+            CHECK(PayLineSeqDlk(c_ref, line, 1, pre) == rc);
+        }
+        CHECK(boardid::BoardsEqual(c, c_ref));
+    }
+    // Another board: one Mountain tapped. Its first entry is not the stored one (a later entry may meet a board the
+    // first run left, which is a legitimate hit), and it pays as the recompute pays it.
+    {
+        GameState d0 = s0;
+        d0.battlefield[d0.battlefield.size() - 3].tapped = true;   // the first Mountain
+        GameState d = d0;
+        const bool rd = PayLineSeqDlk(d, line, 1, pre);
+        GameState d_ref = d0;
+        {
+            ArmDlk mo(heurarm::LINE_REST_MEMO, false);
+            CHECK(PayLineSeqDlk(d_ref, line, 1, pre) == rd);
+        }
+        CHECK(boardid::BoardsEqual(d, d_ref));
+    }
+    // A field BoardHash does not read (a tapped Mercadian Bazaar's storage counters) is in the payment board digest:
+    // the board with three counters is not served the verdict stored for the board with none.
+    {
+        GameState e0 = s0;
+        PutDlk(e0, "Mercadian Bazaar", 24).tapped = true;
+        GameState ea = e0;
+        REQUIRE(PayLineSeqDlk(ea, line, 1, pre));
+        GameState e1 = e0;
+        e1.battlefield.back().storage_counters = 3;
+        const long long h1 = LineRestMemoCount(1);
+        GameState eb = e1;
+        const bool rb = PayLineSeqDlk(eb, line, 1, pre);
+        CHECK(LineRestMemoCount(1) == h1);
+        GameState eb_ref = e1;
+        {
+            ArmDlk mo(heurarm::LINE_REST_MEMO, false);
+            CHECK(PayLineSeqDlk(eb_ref, line, 1, pre) == rb);
+        }
+        CHECK(boardid::BoardsEqual(eb, eb_ref));
     }
 }
 

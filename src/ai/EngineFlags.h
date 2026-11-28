@@ -828,6 +828,22 @@ inline bool LineSeqRestOn()
     return heurarm::Flag(heurarm::LINE_SEQ_REST, env_on);
 }
 
+// MTG_LINE_REST_MEMO (DEFAULT ON; =0 runs the owed float keep's route on every entry, byte-identical to before) -- CPU.
+// The owed float keep (KeepOwedFloatPay, ManaPayment.cpp: MTG_LINE_SEQ_REST) runs, on every in-place entry, a trial of
+// the plain payment, the summed judge, the ordered walk and a kept trial, to choose between the plain payment and the
+// kept one; the search repays the same bill from the same board over and over (Dragonstorm: 69% of the entries repeat
+// the key). With the lever the choice is memoised per game, keyed on the payment board digest (every board field a
+// payment, the walk or the judge reads), the bills, the keep, `available` and the payer's context (PayContextDigest,
+// the plan traits, the line hold, the line's casts, the paying card); a repeated entry makes the chosen payment
+// directly. NOT provably exact (a digest key; the backtracker's mana cache keys miss payer context, so a skipped route
+// changes what that cache holds later): a play change, validated as one. Diagnostics: MTG_LINE_REST_MEMO_VERIFY=1
+// recomputes every hit and counts mismatches, MTG_LINE_REST_MEMO_STATS=1 prints lookups / hits / stores at exit.
+inline bool LineRestMemoOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_REST_MEMO", true);
+    return heurarm::Flag(heurarm::LINE_REST_MEMO, env_on);
+}
+
 // MTG_ONDEMAND_VISIBLE_LUMP_EXACT (DEFAULT ON; =0 restores the colour comparison alone byte for byte) -- Dragonstorm's
 // visible-closer lump rule (MTG_ONDEMAND_VISIBLE_LUMP, the on-demand payer in ManaPayment.cpp) cracks a Lotus Bloom
 // early, for a colour a later cast owes, when the early crack's board "gains" a colour over the ordinary payment's.
