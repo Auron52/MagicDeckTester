@@ -296,6 +296,16 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**11:20 UTC 11-28** -- gate_1127 DONE 11:07 (rc=1 = issues; identity byte-identical). Record committed as 4d9d5e3ce on
+NEW landing worktree .claude/worktrees/land-1131 (wip/land-1131 off origin a21ea18e9; mana_clean.json diff applied over the
+Zombies records + report.md) -> rides the next landing. Clean: prevent_damage. Issues: beasts 31796 (all classes),
+1_drop_burn 16394 (ORACLE-GAP 15853), creature_giving 10489 (DOMINATED-CREATURE 9727, ENUM-GAP 501), TH 1644, worldfire 936,
+dragons 617, DS 537, mill 336 (ENUM-GAP, T2 Visions of Beyond + Surgical Extraction), stuffy 326, angels 288, sea 181,
+shadowborn 80, creature_burn 1427 (ORACLE-GAP), hydras 200723 (CAPPED-DECISION, only 7 decisions -> oracle cost), blood_sun
+335828 (capped; BS agent). TRIAGE agent launched (wip/gate1127-triage, logs/gate1127-triage/ranking.md; small lane only):
+events/clusters/mechanisms/impact + fix-agent briefs. Big lane offered to the DS round 5 agent (ON gate arm + A/B).
+NEXT: triage report -> spawn fix agents for the top clusters; DS round 5 + BS oracle -> land with land-1131.
+
 **07:30 UTC 11-28 (pre-compaction STATE)** -- RUNNING: (1) gate_1127 chain PID 2497574 (relaunched 06:11, Blood Sun capped
 at 827), big lane, live batch build/wt/land-1128/scratch/mana_clean/claude-queue-20261127a/on.15.out/.err, DONE marker
 build/scratch/claude_gate_1127/DONE (waiter br873vlo9, ~107 min cap: re-arm on cap). On DONE: commit test/mana_clean.json
