@@ -1,13 +1,3 @@
 {
- "entries": [
-  {
-   "branch": "wip/zombies-analysis-1126",
-   "head_since": "2026-11-28T07:15:57Z",
-   "heartbeat": "2026-11-28T10:41:11Z",
-   "host": "a7c2d36c718e",
-   "id": "a7c2d36c718e:wip/zombies-analysis-1126",
-   "joined": "2026-11-28T07:15:57Z",
-   "note": "Zombies exhaustive mulligan adoption and full overnight rebaseline"
-  }
- ]
+ "entries": []
 }
