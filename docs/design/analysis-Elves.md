@@ -227,8 +227,11 @@ opaque `plan` pointer for the group key. Nothing in generic enumeration changed.
   `HumanPlayActive()`), and the engine still offers the human every K and X.
 * **Lines it can miss:** two sinks scaled together (Warcaller x2 + Brigade x1, Wave + a kicked Warcaller); a
   count below the band that frees mana for something that is not a plan action -- Visionary's {G} draws (paid at
-  trigger time), Ezuri's combat pump from leftover mana (only the no-sink / K = 0 plan keeps "Ezuri fully
-  scaled"), a post-combat activation, Wirewood Lodge's untap; holding back a creature cast THIS turn with haste
+  trigger time), Ezuri's combat pump from leftover mana beyond the one count rule (4) re-admits (2026-11-28,
+  `MTG_ELVES_EZURI_COUNTS`, default ON: the kick / squad count that maximises this turn's per-Elf bonus with the
+  leftover on +3/+3 pumps, admitted only when a need-the-pump estimate says the band is short of lethal and the pump
+  line can reach it; play-neutral on 6,300 d5 b20 games (0 of 5,000 held-out games, seeds 8400000+, 4,000 std + 1,000 2HG, changed a digest, gated or ungated; cpu x0.999 / x0.996; apparatus `logs/elves-ezuri/`); scenario
+  `test/scenarios/elves_ezuri_k1_two_pumps.json`; the no-sink / K = 0 plan still keeps "Ezuri fully scaled"), a post-combat activation, Wirewood Lodge's untap; holding back a creature cast THIS turn with haste
   (not on the battlefield when the band is sized); a smaller Wave chosen to keep the other Waves in the library. The hold-back variants only help
   if the mana payer then leaves the attacker untapped (they at least leave the mana for Ezuri's combat pump).
 * **Measurement (2026-11-26, quick probe, NOT the adoption A/B):** ONE pooled `mtg --batch`, 30 blocks x 10 games

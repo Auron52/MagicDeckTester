@@ -75422,7 +75422,8 @@ bool BloodSunProvider::LandPlayOffered(const GameState& s, int controller, const
 // LINES IT CAN MISS (disclosed in docs/design/analysis-Elves.md "Provider heuristics"): two sinks scaled together
 // (Warcaller x2 + Brigade x1); a count below the hold-back band that leaves mana for something that is NOT a plan
 // action -- Leaf-Crowned Visionary's {G} draw triggers (paid at trigger time), Ezuri's combat pump from leftover
-// mana (the K = 0 / no-sink plan keeps "Ezuri fully scaled"), a next-main / post-combat activation, Wirewood Lodge's
+// mana beyond the count MTG_ELVES_EZURI_COUNTS re-admits (rule (4): the per-Elf-bonus-maximising kick / squad count
+// when a need-the-pump estimate says it matters; the K = 0 / no-sink plan keeps "Ezuri fully scaled"), a next-main / post-combat activation, Wirewood Lodge's
 // untap; holding back a creature cast THIS turn with haste (it is not on the battlefield when the band is sized);
 // and a fewer-count line whose value is the CARDS left in hand for a later turn (a smaller Wave that does not mill
 // the other Waves).
@@ -75493,14 +75494,8 @@ void ElvesBlankSink(Action& a)
 
 static bool ElvesEzuriCountsOn()
 {
-    static const bool s_env = EnvOn("MTG_ELVES_EZURI_COUNTS");   // DEFAULT OFF (experiment); =1 -> admit the pump counts
+    static const bool s_env = EnvOn("MTG_ELVES_EZURI_COUNTS", true);   // DEFAULT ON; =0 -> the band alone
     return heurarm::Flag(heurarm::ELVES_EZURI_COUNTS, s_env);
-}
-// DIAGNOSTIC A/B ARM (delete with the experiment): the pump counts without the need-the-pump gate. DEFAULT OFF.
-static bool ElvesEzuriUngatedOn()
-{
-    static const bool s_env = EnvOn("MTG_ELVES_EZURI_UNGATED");
-    return heurarm::Flag(heurarm::ELVES_EZURI_UNGATED, s_env);
 }
 
 bool ElvesScalingPruneOn()
@@ -75636,7 +75631,7 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         std::fprintf(stderr, "[elves-scal-trace] turn=%d pre=%d held=%zu plans=%zu bf: %s\n",
                      s.turn_number, is_pre_combat ? 1 : 0, held.size(), plans.size(), bf.c_str());
     }
-    // (4) EZURI'S PUMP (MTG_ELVES_EZURI_COUNTS, heurarm ELVES_EZURI_COUNTS, DEFAULT OFF -- an experiment). The USER,
+    // (4) EZURI'S PUMP (MTG_ELVES_EZURI_COUNTS, heurarm ELVES_EZURI_COUNTS, DEFAULT ON; =0 -> the band alone). The USER,
     // 2026-11-27: "With Joraga or Galadhrim you might find the mana more efficiently spent on an Ezuri pump if the
     // amount remaining is 5, since +3/+3 is more than the +2/+2 from the others." / "But that is all if we are to win
     // this turn." / "(since trample doesn't matter in goldfishing)" / "I guess theoretically +6/+6 from Ezuri would
@@ -75659,6 +75654,12 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
     // Read only pre-combat (the converter fires at combat) with a pump source ours (or cast by the plan) and an
     // attack-capable Elf. Genesis Wave rows are untouched (the USER: a Wave that flips Concordant Crossroads and then
     // needs the pump "should not be considered").
+    // MEASURED (2026-11-28, docs/design/analysis-Elves.md): play-neutral at d5 b20 -- 0 of 5,000 held-out games (4,000
+    // std + 1,000 2HG, seeds 8400000+) and 0 of 1,300 screen games changed a digest, gated or ungated (the ungated arm
+    // was deleted after). Candidates arise in ~0.7% of games (9 of 1,300), almost all inside searched T4 trajectories
+    // of games won that turn anyway. The line is real: logs/elves-ezuri/scn_k1_two_pumps.json (13 Forests, Ezuri + two
+    // Taunting Elves, Warcaller in hand, 23 life) wins T5 only through K=1 + two pumps, unfindable at any budget with
+    // the band alone (test/scenarios/elves_ezuri_k1_two_pumps.json).
     struct EzAtk { int pw = 0; int pw_ub = 0; bool elf = false; bool dork = false; };
     std::vector<EzAtk> ez_atk;
     int ez_cost = 0, ez_power = 0, ez_life = 0;
@@ -75711,7 +75712,6 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
             lb_held += a.pw + (a.elf ? std::max(0, tp - h) : 0);
         }
         const bool lethal_without = ez_life_ok && std::max(lb_top, lb_held) >= ez_life;
-        const bool ungated = ElvesEzuriUngatedOn();
         bool need = false;
         for (int i = 0; i <= std::min(h, tp); ++i)
         {
@@ -75728,7 +75728,6 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
                 }
                 if (best_k != r.count || best_j == 0) { continue; }
                 cand = true;
-                if (ungated) { need = true; continue; }
                 if (lethal_without) { continue; }
                 bool can_win = !ez_life_ok || ez_haste || r.haste_cast;
                 if (!can_win)
