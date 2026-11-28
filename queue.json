@@ -8,6 +8,13 @@
    "id": "839667a3a15d:wip/land-1131",
    "joined": "2026-11-28T14:22:29Z",
    "note": ""
+  },
+  {
+   "branch": "landing/zombies-1128",
+   "host": "a7c2d36c718e",
+   "id": "a7c2d36c718e:landing/zombies-1128",
+   "joined": "2026-11-28T15:10:20Z",
+   "note": "Zombies value-leaf adoption and standing gate"
   }
  ]
 }
