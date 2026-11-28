@@ -1,0 +1,127 @@
+30087571 T6 flags=4 plans=1 rb={'capped': 4} shape=apex1+terr+bloom
+      4 plan={land=Unclaimed Territory + cast:Apex of Power}
+    board=[Mercadian Bazaar#22, Sandstone Needle#47, Mercadian Bazaar#24, Mountain#28, Mountain#26, Lotus Bloom#19(new)] hand=[Utvara Hellkite, Apex of Power, Pyretic Ritual, Karrthus, Tyrant of Jund, Unclaimed Territory]
+30092745 T6 flags=7 plans=2 rb={'depth2': 5, 'depth1': 2} shape=apex1+terr+bloom
+      5 plan={land=Unclaimed Territory [ordered] + cast:Rite of Flame + cast:Pyretic Ritual + cast:Apex of Power}
+      2 plan={no land [ordered] + cast:Rite of Flame + cast:Pyretic Ritual + cast:Apex of Power}
+    board=[Sandstone Needle#49, Mountain#31, Mercadian Bazaar#24, Ruby Medallion#44, Lotus Bloom#21(new)] hand=[Rite of Flame, Apex of Power, Karrthus, Tyrant of Jund, Pyretic Ritual, Unclaimed Territory]
+30092798 T5 flags=11 plans=2 rb={'depth3': 11} shape=apex1+terr+bloom
+      6 plan={land=Mountain [ordered] + cast:Seething Song + cast:Apex of Power}
+      5 plan={no land [ordered] + cast:Seething Song + cast:Apex of Power}
+    board=[Dwarven Hold#14, Mountain#33, Unclaimed Territory#57, Lotus Bloom#19(new), Lotus Bloom#18(new)] hand=[Apex of Power, Seething Song, Karrthus, Tyrant of Jund, Mountain]
+30095186 T6 flags=14 plans=3 rb={'depth3': 14} shape=apex1+bloom
+      5 plan={no land [ordered] + cast:Rite of Flame + cast:Pyretic Ritual + cast:Apex of Power}
+      5 plan={no land [ordered] + cast:Rite of Flame + cast:Apex of Power}
+      4 plan={no land + cast:Apex of Power}
+    board=[Mercadian Bazaar#22, Sandstone Needle#46, Sandstone Needle#49, Lotus Bloom#19(new), Lotus Bloom#21(new)] hand=[Rite of Flame, Apex of Power, Karrthus, Tyrant of Jund, Pyretic Ritual, Desperate Ritual]
+30097325 T5 flags=3 plans=2 rb={'depth2': 2, 'depth3': 1} shape=apex0+terr+bloom
+      2 plan={no land [ordered] + cast:Desperate Ritual + cast:Seething Song + cast:Lathliss, Dragon Queen}
+      1 plan={no land + cast:Lathliss, Dragon Queen}
+    board=[Sandstone Needle#46, Unclaimed Territory#57, Ruby Medallion#43, Mountain#26, Mountain#27, Lotus Bloom#18(new)] hand=[Utvara Hellkite, Karrthus, Tyrant of Jund, Desperate Ritual, Lathliss, Dragon Queen, Seething Song]
+30101776 T6 flags=21 plans=4 rb={'capped': 9, 'depth3': 12} shape=apex2+terr+bloom
+      6 plan={land=Mercadian Bazaar [ordered] + cast:Pyretic Ritual + cast:Apex of Power + cast:Apex of Power}
+      5 plan={land=Mercadian Bazaar [ordered] + cast:Pyretic Ritual + cast:Apex of Power}
+      5 plan={no land [ordered] + cast:Pyretic Ritual + cast:Apex of Power + cast:Apex of Power}
+    board=[Mercadian Bazaar#23, Unclaimed Territory#58, Sandstone Needle#46, Dwarven Hold#14, Ruby Medallion#45, Lotus Bloom#20(new)] hand=[Apex of Power, Apex of Power, Pyretic Ritual, Karrthus, Tyrant of Jund, Mercadian Bazaar]
+30103104 T5 flags=4 plans=1 rb={'depth3': 4} shape=apex1+terr+bloom
+      4 plan={no land + cast:Apex of Power}
+    board=[Mercadian Bazaar#22, Sandstone Needle#46, Unclaimed Territory#57, Mountain#26, Scourge of Valkas#50, Lotus Bloom#18(new), Lotus Bloom#19(new)] hand=[Apex of Power, Karrthus, Tyrant of Jund]
+30106357 T5 flags=16 plans=3 rb={'unfaithful': 2, 'depth2': 5, 'depth3': 6, 'capped': 3} shape=apex2+bloom
+      6 plan={no land [ordered] + cast:Pyretic Ritual + cast:Desperate Ritual + cast:Apex of Power + cast:Apex of Power}
+      5 plan={no land [ordered] + cast:Pyretic Ritual + cast:Desperate Ritual + cast:Apex of Power}
+      5 plan={no land [ordered] + cast:Desperate Ritual + cast:Apex of Power}
+    board=[Sandstone Needle#49, Ruby Medallion#45, Sandstone Needle#46, Lotus Bloom#21(new), Lotus Bloom#19(new)] hand=[Apex of Power, Apex of Power, Desperate Ritual, Karrthus, Tyrant of Jund, Pyretic Ritual]
+30109352 T5 flags=14 plans=6 rb={'depth1': 6, 'depth2': 4, 'depth3': 4} shape=apex0+terr+bloom
+      4 plan={no land [ordered] + cast:Rite of Flame + cast:Rite of Flame + cast:Lathliss, Dragon Queen}
+      3 plan={no land [ordered] + cast:Rite of Flame + cast:Lathliss, Dragon Queen}
+      3 plan={no land + cast:Lathliss, Dragon Queen}
+    board=[Dwarven Hold#14, Unclaimed Territory#57, Ruby Medallion#43, Lotus Bloom#18(new), Lotus Bloom#19(new)] hand=[Karrthus, Tyrant of Jund, Rite of Flame, Apex of Power, Rite of Flame, Lathliss, Dragon Queen, Sandstone Needle]
+30109886 T5 flags=10 plans=2 rb={'capped': 10} shape=apex1+bloom
+      5 plan={no land [ordered] + cast:Rite of Flame + cast:Rite of Flame + cast:Pyretic Ritual + cast:Apex of Power}
+      5 plan={no land [ordered] + cast:Rite of Flame + cast:Rite of Flame + cast:Apex of Power}
+    board=[Sandstone Needle#46, Mercadian Bazaar#22, Mercadian Bazaar#23, Mercadian Bazaar#24, Lotus Bloom#18(new), Lotus Bloom#19(new)] hand=[Rite of Flame, Pyretic Ritual, Karrthus, Tyrant of Jund, Rite of Flame, Apex of Power]
+30111660 T6 flags=8 plans=2 rb={'depth3': 3, 'depth2': 5} shape=apex2+bloom
+      5 plan={land=Mountain [ordered] + cast:Seething Song + cast:Apex of Power}
+      3 plan={land=Mountain [ordered] + cast:Seething Song + cast:Apex of Power + cast:Apex of Power}
+    board=[Mercadian Bazaar#23, Lotus Bloom#19(new), Lotus Bloom#18(new)] hand=[Mountain, Utvara Hellkite, Seething Song, Mountain, Karrthus, Tyrant of Jund, Apex of Power, Apex of Power]
+30113323 T5 flags=5 plans=1 rb={'depth3': 5} shape=apex1+terr+bloom
+      5 plan={no land [ordered] + cast:Rite of Flame + cast:Rite of Flame + cast:Pyretic Ritual + cast:Apex of Power}
+    board=[Mercadian Bazaar#23, Mercadian Bazaar#24, Unclaimed Territory#58, Lotus Bloom#21(new)] hand=[Pyretic Ritual, Apex of Power, Rite of Flame, Seething Song, Rite of Flame, Karrthus, Tyrant of Jund]
+30118564 T4 flags=5 plans=1 rb={'depth3': 5} shape=apex1+bloom
+      5 plan={land=Mountain [ordered] + cast:Seething Song + cast:Apex of Power}
+    board=[Mercadian Bazaar#22, Sandstone Needle#46, Lotus Bloom#18(new), Lotus Bloom#19(new)] hand=[Seething Song, Karrthus, Tyrant of Jund, Seething Song, Scourge of Valkas, Apex of Power, Mountain]
+30126485 T5 flags=9 plans=3 rb={'depth1': 2, 'depth2': 6, 'depth3': 1} shape=apex0+bloom
+      3 plan={land=Mountain [ordered] + cast:Pyretic Ritual + cast:Lathliss, Dragon Queen}
+      3 plan={no land [ordered] + cast:Pyretic Ritual + cast:Lathliss, Dragon Queen}
+      3 plan={land=Mountain + cast:Lathliss, Dragon Queen}
+    board=[Mercadian Bazaar#22, Mercadian Bazaar#23, Ruby Medallion#43, Lotus Bloom#18(new), Lotus Bloom#19(new)] hand=[Apex of Power, Seething Song, Utvara Hellkite, Pyretic Ritual, Lathliss, Dragon Queen, Karrthus, Tyrant of Jund, Mountain]
+30129223 T4 flags=5 plans=1 rb={'depth3': 5} shape=apex1+bloom
+      5 plan={no land [ordered] + cast:Rite of Flame + cast:Seething Song + cast:Apex of Power}
+    board=[Dwarven Hold#14, Sandstone Needle#47, Mountain#29, Lotus Bloom#20(new), Lotus Bloom#18(new)] hand=[Apex of Power, Utvara Hellkite, Rite of Flame, Seething Song, Karrthus, Tyrant of Jund]
+30130693 T4 flags=4 plans=1 rb={'depth3': 4} shape=apex1+bloom
+      4 plan={no land + cast:Apex of Power}
+    board=[Mountain#26, Sandstone Needle#46, Mountain#27, Ruby Medallion#43, Lotus Bloom#18(new), Lotus Bloom#19(new), Lotus Bloom#20(new)] hand=[Apex of Power, Desperate Ritual, Karrthus, Tyrant of Jund]
+30133875 T4 flags=9 plans=2 rb={'depth3': 9} shape=apex1+terr+bloom
+      5 plan={land=Mountain [ordered] + cast:Desperate Ritual + cast:Desperate Ritual + cast:Apex of Power}
+      4 plan={no land [ordered] + cast:Desperate Ritual + cast:Desperate Ritual + cast:Apex of Power}
+    board=[Dwarven Hold#14, Sandstone Needle#49, Unclaimed Territory#57, Ruby Medallion#44, Lotus Bloom#21(new)] hand=[Mountain, Desperate Ritual, Apex of Power, Desperate Ritual, Karrthus, Tyrant of Jund]
+30134414 T5 flags=4 plans=1 rb={'capped': 4} shape=apex1+bloom
+      4 plan={no land + cast:Apex of Power}
+    board=[Sandstone Needle#46, Sandstone Needle#47, Mountain#26, Mountain#27, Lotus Bloom#18(new), Lotus Bloom#19(new), Lotus Bloom#20(new)] hand=[Pyretic Ritual, Apex of Power, Apex of Power, Karrthus, Tyrant of Jund]
+30141736 T6 flags=11 plans=3 rb={'depth3': 9, 'capped': 2} shape=apex1+bloom
+      5 plan={no land [ordered] + cast:Seething Song + cast:Apex of Power}
+      4 plan={no land + cast:Apex of Power}
+      2 plan={no land [ordered] + cast:Seething Song + cast:Seething Song + cast:Apex of Power + cast:Dragonlord Kolaghan}
+    board=[Mercadian Bazaar#24, Mountain#27, Sandstone Needle#47, Lotus Bloom#21(new), Lotus Bloom#20(new)] hand=[Apex of Power, Seething Song, Seething Song, Karrthus, Tyrant of Jund, Dragonlord Kolaghan]
+30142087 T4 flags=7 plans=2 rb={'depth3': 5, 'depth2': 2} shape=apex1+bloom
+      5 plan={no land [ordered] + cast:Pyretic Ritual + cast:Seething Song + cast:Apex of Power}
+      2 plan={no land [ordered] + cast:Pyretic Ritual + cast:Seething Song + cast:Apex of Power + cast:Dragonlord Kolaghan}
+    board=[Mountain#26, Mountain#27, Ruby Medallion#43, Mountain#28, Lotus Bloom#18(new), Lotus Bloom#19(new)] hand=[Apex of Power, Pyretic Ritual, Seething Song, Dragonlord Kolaghan, Karrthus, Tyrant of Jund]
+30142742 T5 flags=10 plans=4 rb={'depth3': 10} shape=apex0+terr+bloom
+      4 plan={no land [ordered] + cast:Seething Song + cast:Seething Song + cast:Lathliss, Dragon Queen}
+      3 plan={no land [ordered] + cast:Seething Song + cast:Lathliss, Dragon Queen}
+      2 plan={no land [ordered] + cast:Seething Song + cast:Seething Song + cast:Lathliss, Dragon Queen + suspend:Lotus Bloom}
+    board=[Mountain#26, Mercadian Bazaar#22, Unclaimed Territory#57, Ruby Medallion#43, Lotus Bloom#18(new)] hand=[Scourge of Valkas, Seething Song, Lathliss, Dragon Queen, Seething Song, Karrthus, Tyrant of Jund, Lotus Bloom]
+30142951 T4 flags=2 plans=1 rb={'depth2': 2} shape=apex0+terr+bloom
+      2 plan={no land [ordered] + cast:Rite of Flame + cast:Seething Song + cast:Lathliss, Dragon Queen}
+    board=[Sandstone Needle#46, Unclaimed Territory#57, Ruby Medallion#43, Mountain#26, Lotus Bloom#18(new)] hand=[Karrthus, Tyrant of Jund, Seething Song, Apex of Power, Apex of Power, Lathliss, Dragon Queen, Rite of Flame]
+30143919 T4 flags=3 plans=2 rb={'depth3': 3} shape=apex2+terr+bloom
+      2 plan={land=Mountain [ordered] + cast:Desperate Ritual + cast:Apex of Power + cast:Apex of Power}
+      1 plan={land=Mountain [ordered] + cast:Desperate Ritual + cast:Apex of Power + cast:Apex of Power + cast:Scourge of Valkas}
+    board=[Unclaimed Territory#57, Lotus Bloom#18(new), Lotus Bloom#19(new), Lotus Bloom#20(new)] hand=[Apex of Power, Apex of Power, Scourge of Valkas, Karrthus, Tyrant of Jund, Desperate Ritual, Mountain]
+30145787 T6 flags=38 plans=7 rb={'capped': 33, 'depth3': 5} shape=apex1+terr+bloom
+      6 plan={land=Mountain [ordered] + cast:Ruby Medallion + cast:Pyretic Ritual + cast:Apex of Power}
+      6 plan={land=Mountain [ordered] + cast:Pyretic Ritual + cast:Apex of Power}
+      6 plan={land=Mountain [ordered] + cast:Ruby Medallion + cast:Apex of Power}
+    board=[Dwarven Hold#14, Mercadian Bazaar#23, Unclaimed Territory#58, Mercadian Bazaar#24, Lotus Bloom#21(new), Lotus Bloom#18(new)] hand=[Apex of Power, Pyretic Ritual, Karrthus, Tyrant of Jund, Ruby Medallion, Mountain]
+30148496 T8 flags=5 plans=1 rb={'depth3': 5} shape=apex1+bloom
+      5 plan={no land [ordered] + cast:Pyretic Ritual + cast:Apex of Power}
+    board=[Mountain#26, Mercadian Bazaar#22, Lotus Bloom#18, Lotus Bloom#19(new)] hand=[Pyretic Ritual, Seething Song, Desperate Ritual, Apex of Power, Pyretic Ritual, Karrthus, Tyrant of Jund, Seething Song]
+30149431 T5 flags=9 plans=2 rb={'depth3': 5, 'capped': 4} shape=apex1+terr+bloom
+      5 plan={no land + cast:Apex of Power}
+      4 plan={no land [ordered] + cast:Rite of Flame + cast:Pyretic Ritual + cast:Desperate Ritual + cast:Apex of Power}
+    board=[Sandstone Needle#46, Sandstone Needle#47, Unclaimed Territory#57, Sandstone Needle#48, Lotus Bloom#18(new), Lotus Bloom#19(new)] hand=[Mountain, Rite of Flame, Desperate Ritual, Apex of Power, Pyretic Ritual, Karrthus, Tyrant of Jund]
+30152662 T5 flags=20 plans=4 rb={'depth1': 12, 'depth3': 8} shape=apex1+bloom
+      5 plan={no land [ordered] + cast:Seething Song + cast:Apex of Power + cast:Irencrag Feat}
+      5 plan={no land [ordered] + cast:Seething Song + cast:Apex of Power + cast:Irencrag Feat + suspend:Lotus Bloom}
+      5 plan={no land [ordered] + cast:Seething Song + cast:Apex of Power}
+    board=[Mercadian Bazaar#24, Dwarven Hold#14, Lotus Bloom#21(new), Lotus Bloom#18(new)] hand=[Apex of Power, Lotus Bloom, Irencrag Feat, Seething Song, Karrthus, Tyrant of Jund]
+30155815 T6 flags=9 plans=2 rb={'depth3': 9} shape=apex1+terr+bloom
+      5 plan={no land [ordered] + cast:Rite of Flame + cast:Apex of Power}
+      4 plan={no land + cast:Apex of Power}
+    board=[Mercadian Bazaar#23, Sandstone Needle#49, Ruby Medallion#43, Unclaimed Territory#58, Lotus Bloom#18(new), Lotus Bloom#19(new)] hand=[Seething Song, Apex of Power, Rite of Flame, Karrthus, Tyrant of Jund, Rite of Flame]
+30156266 T6 flags=3 plans=2 rb={'depth3': 3} shape=apex0+terr+bloom
+      2 plan={no land [ordered] + cast:Seething Song + cast:Seething Song + cast:Lathliss, Dragon Queen}
+      1 plan={no land [ordered] + cast:Seething Song + cast:Lathliss, Dragon Queen}
+    board=[Sandstone Needle#49, Unclaimed Territory#58, Ruby Medallion#43, Lotus Bloom#20(new)] hand=[Seething Song, Apex of Power, Utvara Hellkite, Lathliss, Dragon Queen, Karrthus, Tyrant of Jund, Seething Song]
+30157847 T5 flags=4 plans=2 rb={'depth3': 4} shape=apex1+terr+bloom
+      2 plan={no land [ordered] + cast:Rite of Flame + cast:Rite of Flame + cast:Apex of Power + cast:Irencrag Feat}
+      2 plan={no land [ordered] + cast:Rite of Flame + cast:Rite of Flame + cast:Apex of Power}
+    board=[Mercadian Bazaar#22, Sandstone Needle#47, Unclaimed Territory#58, Mountain#31, Lotus Bloom#19(new)] hand=[Rite of Flame, Apex of Power, Rite of Flame, Irencrag Feat, Karrthus, Tyrant of Jund]
+total flags 274 events 30
+  shape apex1+terr+bloom     events  10 flags  100
+  shape apex1+bloom          events  10 flags   85
+  shape apex0+terr+bloom     events   5 flags   32
+  shape apex2+terr+bloom     events   2 flags   24
+  shape apex2+bloom          events   2 flags   24
+  shape apex0+bloom          events   1 flags    9

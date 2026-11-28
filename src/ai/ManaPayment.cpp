@@ -14330,9 +14330,200 @@ static int KeepOwedFloatPay(GameState& state, const ManaCost& cost_in, bool for_
     return pay(state, available, &keep) ? 1 : 0;
 }
 
+// THE VISIBLE CLOSER PAST AN OPENER (MTG_VISIBLE_CLOSER_KEEP, EngineFlags.h). The payment of a breakpoint opener that
+// ends the named line (the hold is this cost and the line opens unseen: Apex of Power after its rituals) sees no later
+// demand in the hold, so the drain and the land ladder spend whatever pays. A creature in hand whose cost has a colour
+// this cost lacks is a visible later demand; when exactly one such card is in hand (the visible-closer lump rule's
+// "sole creature", MTG_ONDEMAND_VISIBLE_CONTRIB), the plain payment is judged against it EXACTLY
+// (LumpAwareBillPayableOpener: every crack of the lumps left, the complete backtracker, the opener's ten in a pip colour)
+// and, only when it strands the closer, a fixed list of alternative payments is tried; the first that pays this bill and
+// leaves the closer payable by the same judge (a witness) is made instead (CR 601.2h: the player chooses which mana pays):
+//   1. the floating units of the closer's colours (those this cost has no pip of) set aside for the payment;
+//   2. the untapped creature-only lands (Unclaimed Territory) held, with the same set-aside;
+//   3. each untapped lump (Lotus Bloom) cracked in each closer colour, its units of that colour set aside, without and
+//      then with the hold.
+// Returns -1 when the gate does not apply (the caller pays as before), else the payment's result. Dragonstorm need-later
+// Karrthus, Tyrant of Jund: s30095186 T6 / s30129223 T4 (Apex's {7}{R}{R}{R} drained the Bloom's floating {B} with red
+// left over), s30092745 T6 / s30113323 T5 / s30087571 T6 (Apex's generic took Unclaimed Territory's {C}, and Karrthus
+// had the Bloom for one of {B}{G} and nothing for the other).
+static thread_local bool t_visible_closer_busy = false;
+static int VisibleCloserKeepPay(GameState& state, const ManaCost& cost_in, bool for_creature, ManaPool* available,
+                                bool honor_legacy_cco)
+{
+    if (!g_line_opens_unseen || cost_in.generic <= 0) { return -1; }
+    const ManaCost& lu = g_line_unpaid_cost;
+    if (lu.ManaValue() <= 0 || lu.ManaValue() != cost_in.ManaValue() || lu.white != cost_in.white
+        || lu.blue != cost_in.blue || lu.black != cost_in.black || lu.red != cost_in.red || lu.green != cost_in.green)
+    { return -1; }
+    const int own[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+    const CardDefinition* closer = nullptr;
+    for (const Card& card : state.players[state.active_player_index].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
+        if (d == nullptr || !d->card.IsCreature()) { continue; }
+        const ManaCost& m = d->card.m_mana_cost;
+        const int pip[5] = { m.white, m.blue, m.black, m.red, m.green };
+        bool adds = false;
+        for (int c = 0; c < 5; ++c) { if (own[c] == 0 && pip[c] > 0) { adds = true; } }
+        if (!adds) { continue; }
+        if (closer != nullptr && closer != d) { return -1; }   // two closers compete: the continuation chooses
+        closer = d;
+    }
+    if (closer == nullptr) { return -1; }
+    const ManaCost bill = EffectiveSpellCost(*closer, state, 1);
+    const int bp[5] = { bill.white, bill.blue, bill.black, bill.red, bill.green };
+    int cmask = 0;   // the closer's colours this cost has no pip of
+    for (int c = 0; c < 5; ++c) { if (own[c] == 0 && bp[c] > 0) { cmask |= 1 << c; } }
+    if (cmask == 0) { return -1; }
+    const ManaPool ritual = LineKeepRockFor(state).ritual;
+    static const char* kCol[5] = { "W", "U", "B", "R", "G" };
+    static const bool s_trace = EnvOn("MTG_VISIBLE_CLOSER_TRACE");
+    // The alternatives, in order: {lump index (-1 none), crack colour, hold the creature-only lands}.
+    struct Alt { int lump; int col; bool hold; };
+    std::vector<OnDemandCrack> lands, lumps;
+    CollectOnDemandCracks(state, lands, lumps);
+    bool any_cco = false;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != state.active_player_index || q.tapped) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd != nullptr && qd->params.colored_creature_only && q.card.IsLand()) { any_cco = true; }
+    }
+    auto cco_hold_bits = [](const GameState& b) -> std::uint64_t
+    {
+        std::uint64_t h = 0;
+        for (const Permanent& q : b.battlefield)
+        {
+            if (q.controller_index != b.active_player_index || q.tapped) { continue; }
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd != nullptr && qd->params.colored_creature_only && q.card.IsLand())
+            { h |= SelfTapSourceHoldBit(b, q.card.m_number); }
+        }
+        return h;
+    };
+    // One payment on `b` (the original board or a copy of it): the alternative's crack, the closer's floating units of
+    // its colours set aside, the hold; then the payer (this gate skipped). `alt` null: the plain payment.
+    auto pay = [&](GameState& b, ManaPool* av, const Alt* alt) -> bool
+    {
+        ManaPool keep;
+        std::uint64_t hold = 0;
+        if (alt != nullptr)
+        {
+            if (alt->lump >= 0)
+            {
+                OnDemandCrack k = lumps[static_cast<std::size_t>(alt->lump)];
+                k.color = kCol[alt->col];
+                if (!ApplyOnDemandCrack(b, k)) { return false; }
+            }
+            const ManaPool& f = b.floating_mana;
+            const int fl[5] = { f.white, f.blue, f.black, f.red, f.green };
+            int* kp[5] = { &keep.white, &keep.blue, &keep.black, &keep.red, &keep.green };
+            for (int x = 0; x < 5; ++x) { if ((cmask >> x) & 1) { *kp[x] = std::min(bp[x], fl[x]); } }
+            if (alt->hold) { hold = cco_hold_bits(b); }
+        }
+        t_visible_closer_busy = true;
+        ManaPool& fm = b.floating_mana;
+        fm.white -= keep.white; fm.blue -= keep.blue; fm.black -= keep.black; fm.red -= keep.red; fm.green -= keep.green;
+        bool ok;
+        {
+            const dmgev::PayHoldScope h(dmgev::t_pay_hold | hold);
+            ok = TapForCostShared(b, cost_in, for_creature, av, honor_legacy_cco);
+        }
+        b.floating_mana.AddPool(keep);
+        t_visible_closer_busy = false;
+        return ok;
+    };
+    std::vector<Alt> alts;
+    {
+        const ManaPool& f = state.floating_mana;
+        const int fl[5] = { f.white, f.blue, f.black, f.red, f.green };
+        bool keeps = false;
+        for (int x = 0; x < 5; ++x) { if (((cmask >> x) & 1) && fl[x] > 0) { keeps = true; } }
+        if (keeps) { alts.push_back({ -1, -1, false }); }
+        if (any_cco) { alts.push_back({ -1, -1, true }); }
+        for (std::size_t li = 0; li < lumps.size(); ++li)
+        {
+            for (int x = 0; x < 5; ++x)
+            {
+                if (!((cmask >> x) & 1)) { continue; }
+                alts.push_back({ static_cast<int>(li), x, false });
+                if (any_cco) { alts.push_back({ static_cast<int>(li), x, true }); }
+            }
+        }
+    }
+    if (alts.empty()) { return -1; }
+    auto witness = [&](const GameState& b) -> bool
+    {
+        const ManaPool& pf = b.floating_mana;
+        if (pf.white >= bill.white && pf.blue >= bill.blue && pf.black >= bill.black && pf.red >= bill.red
+            && pf.green >= bill.green && static_cast<int>(pf.Total()) >= bill.ManaValue()) { return true; }
+        return LumpAwareBillPayableOpener(b, bill, ritual);
+    };
+    // The first alternative with a witness, judged on copies of `orig`; -1 when none.
+    auto find_alt = [&](const GameState& orig) -> int
+    {
+        RampScratch s(orig);
+        for (std::size_t i = 0; i < alts.size(); ++i)
+        {
+            if (i > 0) { s.Board() = orig; }
+            ManaPool av;
+            if (available != nullptr) { av = *available; }
+            if (pay(s.Board(), available != nullptr ? &av : nullptr, &alts[i]) && witness(s.Board()))
+            { return static_cast<int>(i); }
+        }
+        return -1;
+    };
+    auto note = [&](int i)
+    {
+        if (!s_trace) { return; }
+        const Alt& a = alts[static_cast<std::size_t>(i)];
+        std::fprintf(stderr, "[visible-closer] T%d closer=%s alt=%d lump=%d col=%d hold=%d\n", state.turn_number,
+                     closer->card.m_name.str().c_str(), i, a.lump, a.col, a.hold ? 1 : 0);
+    };
+    bool pause_noop;
+    { const RevealLogPause probe; pause_noop = probe.noop; }
+    if (pause_noop)
+    {
+        // IN PLACE (the KeepOwedFloatPay route): the plain payment is made once, on the real board; only the original is
+        // copied, to retry with an alternative when the plain payment strands the closer.
+        RampScratch orig_s(state);
+        GameState* const orig = &orig_s.Board();
+        ManaPool orig_avail;
+        if (available != nullptr) { orig_avail = *available; }
+        if (!pay(state, available, nullptr)) { return 0; }
+        if (witness(state)) { return 1; }
+        const int i = find_alt(*orig);
+        if (i < 0) { return 1; }
+        note(i);
+        state = *orig;                                       // the alternative replaces the plain payment
+        if (available != nullptr) { *available = orig_avail; }
+        return pay(state, available, &alts[static_cast<std::size_t>(i)]) ? 1 : 0;
+    }
+    int pick = -1;
+    {
+        const RevealLogPause quiet;
+        RampScratch trial(state);
+        ManaPool av;
+        if (available != nullptr) { av = *available; }
+        if (!pay(trial.Board(), available != nullptr ? &av : nullptr, nullptr)) { return -1; }
+        if (witness(trial.Board())) { return -1; }
+        pick = find_alt(state);
+    }
+    if (pick < 0) { return -1; }
+    note(pick);
+    return pay(state, available, &alts[static_cast<std::size_t>(pick)]) ? 1 : 0;
+}
+
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
 {
+    if (!t_visible_closer_busy && t_pilgrimage_pay_depth == 0 && t_pay_nest == 0 && !t_pay_refining
+        && !manaoracle::t_float_only && !(manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target)
+        && !HumanPlayActive() && VisibleCloserKeepOn())
+    {
+        const int r = VisibleCloserKeepPay(state, cost_in, for_creature, available, honor_legacy_cco);
+        if (r >= 0) { return r != 0; }
+    }
     if (!t_keep_owed_float_busy && t_pilgrimage_pay_depth == 0 && g_line_seq != nullptr && t_pay_nest == 0
         && !t_pay_refining && !manaoracle::t_float_only
         && !(manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target) && !HumanPlayActive())
@@ -14766,6 +14957,23 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         && !(manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target) && !HumanPlayActive()
         && LeftoverLineSwapOn())
     { SwapLeftoverForLine(state, cost_in, float_before, available); }
+    { // DS2-TEMP-DEBUG (remove before commit)
+        static const int s_dbg_turn = EnvInt("MTG_DS2_PAYDBG", 0);
+        if (s_dbg_turn > 0 && state.turn_number == s_dbg_turn && outer_pilgrimage_pay && t_pay_nest == 0)
+        {
+            const Card* pc = PayingSpellCard();
+            const ManaPool& f = state.floating_mana;
+            std::fprintf(stderr, "[ds2pay] %s paid=%d fc=%d cost g%d B%d R%d G%d lu g%d B%d R%d G%d nc=%d bound=%d unseen=%d hook=%d before B%d R%d G%d fl B%d R%d G%d C%d W%d ->",
+                         pc ? pc->m_name.str().c_str() : "-", paid ? 1 : 0, for_creature ? 1 : 0, cost_in.generic,
+                         cost_in.black, cost_in.red, cost_in.green, g_line_unpaid_cost.generic, g_line_unpaid_cost.black,
+                         g_line_unpaid_cost.red, g_line_unpaid_cost.green, g_line_noncreature_mv, g_line_keep_bound, g_line_opens_unseen ? 1 : 0,
+                         manaoracle::t_hook != nullptr ? 1 : 0, float_before.black, float_before.red, float_before.green,
+                         f.black, f.red, f.green, f.colorless, f.wild);
+            for (const Permanent& q : state.battlefield)
+            { if (q.controller_index == state.active_player_index) { std::fprintf(stderr, " %s#%d%s", q.card.m_name.str().c_str(), q.card.m_number, q.tapped ? "T" : ""); } }
+            std::fprintf(stderr, "\n");
+        }
+    }
     --t_pilgrimage_pay_depth;
     if (paid && outer_pilgrimage_pay)
     { ResolvePilgrimagePaymentTaps(state, pilgrimage_controller, pilgrimage_before); }

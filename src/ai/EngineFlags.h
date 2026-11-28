@@ -828,6 +828,27 @@ inline bool LineSeqRestOn()
     return heurarm::Flag(heurarm::LINE_SEQ_REST, env_on);
 }
 
+// MTG_VISIBLE_CLOSER_KEEP (DEFAULT ON; =0 restores the plain payment byte for byte) -- the payment of a breakpoint opener
+// that ENDS the named line (g_line_opens_unseen, and the line hold is this cost: Apex of Power at the end of {rituals,
+// Apex}). The line after the reveal is re-solved by the continuation, so every payer rule that reads the hold sees no
+// later demand; but a creature in HAND whose cost has a colour this cost lacks (Karrthus, Tyrant of Jund's {B}{G} beside
+// Apex's red) is a visible demand, and when it is the only such creature it is the closer the visible-closer lump rule
+// (MTG_ONDEMAND_VISIBLE_CONTRIB) already pays for. The plain payment is judged against it with the exact judge
+// (LumpAwareBillPayableOpener: every crack of the lumps left, the complete backtracker, the opener's ten in a pip
+// colour); only when it STRANDS the closer is a fixed list of alternative payments tried (the closer's floating
+// colours set aside; the untapped creature-only lands held; each lump cracked in each closer colour with its units set
+// aside, with and without the hold), and the first that pays this bill and leaves the closer payable (the same judge, a
+// witness) is made instead (CR 601.2h). It only replaces a payment that provably strands the closer by one that does
+// not. Dragonstorm need-later Karrthus: s30095186 T6 / s30129223 T4 (Apex's generic spent the Bloom's floating {B} with
+// red to spare), s30092745 T6 / s30113323 T5 / s30087571 T6 (Apex's generic took Unclaimed Territory's {C}; Karrthus
+// then had the Bloom for one of {B}{G} and nothing for the other). A payment choice in the shared payer (executor and
+// rollout together), at every budget.
+inline bool VisibleCloserKeepOn()
+{
+    static const bool env_on = EnvOn("MTG_VISIBLE_CLOSER_KEEP", true);
+    return heurarm::Flag(heurarm::VISIBLE_CLOSER_KEEP, env_on);
+}
+
 // MTG_ONDEMAND_VISIBLE_LUMP_EXACT (DEFAULT ON; =0 restores the colour comparison alone byte for byte) -- Dragonstorm's
 // visible-closer lump rule (MTG_ONDEMAND_VISIBLE_LUMP, the on-demand payer in ManaPayment.cpp) cracks a Lotus Bloom
 // early, for a colour a later cast owes, when the early crack's board "gains" a colour over the ordinary payment's.
