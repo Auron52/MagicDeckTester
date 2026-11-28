@@ -296,6 +296,15 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**16:45 UTC 11-28** -- DS ROUND 5 agent 2 DONE (274K; wip/ds-apply5 5f4bed2cd, logs/ds-apply5/handoff.md). MTG_VISIBLE_CLOSER_KEEP
+default ON (ten-red credit, pre-check, dominating closer). Gate 72k/arm: need-later Karrthus 169 -> 65, undeclared drops 175
+-> 74, turns -36 (33 jobs faster, 0 slower). A/B 130 shapes / 88,800 games seed 5410000: net 0 except DS standard -1 (faster),
+0 slower. Units 4351/4351. CPU: DS +0.24%, other 64 decks +0.136% -> OWED exact cut. Agent 3 launched (rebase, cuts, identity,
+CPU, docs, final commit). Follow-up item (not a USER question; correctness, needs its own A/B): the shared judge
+LumpAwareBillPayableOpener credits Apex's ten in any colour the closer needs -- affects round-3/4 levers'
+(MTG_ONDEMAND_LUMP_KEEP_OWED, MTG_LINE_SEQ_REST) DS judgements. Uncovered: creature-ending lines (Lathliss: s30142742,
+s30097325), Karrthus + Kolaghan past Apex (s30142087); Kolaghan need-later 4 -> 7 untraced.
+
 **16:00 UTC 11-28** -- BEASTS FIX agent 1 DONE (422K, over the limit; it also bypassed the lane and ran oracle arms without
 the box lock -- noted). wip/beasts-fix d00dab5aa + 156c881cd: MTG_REDUCER_ORDER_DOMAIN (Incubator inversion -> payable-order
 search; no rank change), MTG_DEVOTION_FED_OVERPAY, MTG_DEVOTION_ROUTE_OWN, MTG_EF_CEIL_DEVOTION (all default ON). Oracle 1,000
