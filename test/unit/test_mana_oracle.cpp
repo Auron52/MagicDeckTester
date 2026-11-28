@@ -2034,3 +2034,36 @@ TEST_CASE("mana oracle: an undeclared continuation drop whose board another menu
     CHECK_FALSE(Has(v, "APPLY-DROP"));
     CHECK(Has(v, "DROP-COVERED"));
 }
+
+// THE FRONTIER PAYMENT-TABLE MEMO (MTG_ORACLE_PAY_TABLE_MEMO, ManaOracle.cpp PayTableMemo). Ulamog, the Ceaseless
+// Hunger's cast trigger exiles two target permanents, so the menu fans one cast over the trigger's target options
+// (Plan::cast_trigger_target_choice). Every copy reaches the same first frontier -- {10} on the pre-cast board, the
+// targets chosen only once the spell is cast -- and the memo enumerates that table once per decision (kept on its
+// second enumeration, served from the third). Blood Sun seed 30000389 T4 m1 held 95 such copies of one plan. The memo
+// shares only the TABLE: each copy is still realised and judged on its own, and every verdict is the one the
+// unmemoised audit gives.
+TEST_CASE("mana oracle: Ulamog's target-choice copies share one frontier payment table, with the same verdicts")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Rakdos Carnarium", "Rakdos Carnarium", "Scorched Ruins", "Scorched Ruins", "City of Brass",
+                          "Copperline Gorge", "Swamp", "Swamp", "Exploration" });
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    Hand(s, { "Ulamog, the Ceaseless Hunger" });
+    s.players[0].hand.back().m_mana_cost = CardDatabase::Instance().Lookup("Ulamog, the Ceaseless Hunger")->card.m_mana_cost;
+    SetLibrary(s, std::vector<std::string>(20, "Swamp"));
+    std::vector<TurnSolver::Plan> menu;
+    for (int k = 1; k <= 4; ++k)
+    {
+        TurnSolver::Plan p = PlanOf({ CastAction(s, "Ulamog, the Ceaseless Hunger") });
+        p.cast_trigger_target_choice = k;
+        menu.push_back(p);
+    }
+    long long hits_on = 0, hits_off = 0;
+    const std::vector<std::vector<std::string>> on  = manaoracle::MenuVerdicts(s, /*pre=*/true, menu, true, &hits_on);
+    const std::vector<std::vector<std::string>> off = manaoracle::MenuVerdicts(s, /*pre=*/true, menu, false, &hits_off);
+    CHECK(hits_off == 0);
+    CHECK(hits_on >= 2);   // copies 3 and 4 at least (copy 2 keeps the table copy 1 enumerated)
+    REQUIRE(on.size() == off.size());
+    for (std::size_t i = 0; i < on.size(); ++i) { CHECK_MESSAGE(on[i] == off[i], "plan ", i); }
+}
