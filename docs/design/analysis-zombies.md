@@ -35,8 +35,23 @@ draws, and both recovered the prior win turn at four times their case budget.
 The accepted 8,000-game paired screen is the quality basis for the setting;
 these two small-sample slowdowns are budget churn. All 679 scenarios, 980
 strict viewer references, and two require-beat references passed, with zero
-viewer play drift or contract failures. The final integrated gate follows the
+viewer play drift or contract failures. The final integrated gate followed the
 push-queue head.
+
+The final gate rebased onto shared `8e4653481` (integrated source tree
+`a45c79657903a077ceeb20152d123e9cc9519495`) and used a freshly built
+Release binary. All 4,349 unit cases passed. Full smoke ran 255 jobs and 79,982
+games: 253 keys matched their ground truth exactly, while the two Zombies
+searched keys repeated the preflight digest-only changes. The four changed
+games kept the same win turn; d0 and 2HG were exact. Scoped regression ran
+seven jobs and 1,435 games. Its six changed games were the same four equal-score
+lines and two one-turn slowdowns as preflight. Both slower games recovered their
+prior turn at fourfold and sixteenfold budget on the integrated binary. All
+679 scenarios, 980 strict viewer references (zero drift or contract failures),
+and two require-beat references passed. Only Zombies and Zombies2HG smoke and
+regression ground truth were re-accepted, with the slower-game attribution in
+the ground-truth notes. No overnight rebaseline is required because the
+value-trust depth did not move.
 
 ## Exhaustive mulligan profile (2026-11-28)
 

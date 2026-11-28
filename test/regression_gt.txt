@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 08335012d  date 2026-11-28
+# Regression ground truth -- commit a909e82d0  date 2026-11-28
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
@@ -13,13 +13,15 @@
 # accepted-with-regressions (overnight, 2026-11-28): Zombies FULL profile adoption checkpoint measured before Elves integration on d3cb201e0 (src d705b7b89; now integrated src 1d1b7b162): profile-off baseline and profile-on 14,410-game run on identical rows; d3 4000 -0.1495t, d5 2000 -0.1280t, 2HG d5 400 -0.0550t, d0 8000 -0.1897t, work units 0.39-0.46x; per-game attribution reproduced both arms, one Zombies same-hand digest exception resolved by forcing lookahead bottoming, 2HG zero unexplained. Later Elves-only source changes were not in this checkpoint.
 # accepted-with-regressions (smoke, 2026-11-28): Zombies exhaustive mulligan profile adoption: four smoke rows match profile-on WIP run exactly; prior pre-profile GT intentionally superseded; per-game audit against profile-on logs 0 changed games; full integrated smoke 251 unchanged decks pass
 # accepted-with-regressions (regression, 2026-11-28): Zombies exhaustive mulligan profile adoption: all seven regression rows match profile-on WIP run exactly; pre-profile GT intentionally superseded; 2HG s2002 +0.0533t but full paired overnight 2HG -0.0550t over 400 games and prior per-game attribution; integrated audit vs profile-on logs 0 changed; 679 scenarios and 980 strict refs pass
+# accepted-with-regressions (smoke, 2026-11-28): Zombies value-search adoption from frozen 45df1f65f: leafless single-pass shape and d6/b20; 4 searched same-score line changes, 0 slower/faster, 2HG and d0 exact; full integrated smoke 253 other rows exact, paired 8000-game screen -0.00100 turns at 0.631x units for shape and -0.00012 turns at 0.987x units for setting
+# accepted-with-regressions (regression, 2026-11-28): Zombies value-search adoption from frozen 45df1f65f on integrated src a45c79657: 2 one-turn slower searched games (d3 s2002 gi20 and profile-depth s3003 gi58) recover old turn at 4x and 16x budget; 4 same-score line changes; d0 and 2HG exact; 679 scenarios, 980 strict refs zero drift, 2 require-beat pass; paired 8000-game screen supports leafless shape and d6/b20 setting
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (full sweep; host-dependent); seeds disjoint.
 
 # --- smoke ---
 zombies_smoke_d0_s1001=4.6040/ae0515b5c79a66c9
-zombies_smoke_d3_s1001=4.3400/11feeeb147ec622d
-zombies_smoke_d5_s1001=4.2900/8f006a2e3bd6a66a
+zombies_smoke_d3_s1001=4.3400/7ced5b959982aec1
+zombies_smoke_d5_s1001=4.2900/3b469b1654f2fd3c
 zombies2hg_smoke_d5_s1001=4.8400/e312ac101b7414d6
 mazesend_smoke_d0_s1001=6.7160/7a052adf70055959
 mazesend_smoke_d3_s1001=5.0000/485ceae25664e38d
@@ -277,9 +279,9 @@ merfolkturns2hg_smoke_d3_s1001=5.6000/328239bb41524a66
 zombies_regression_d3_s30281=4.0000/617916b09aa10b53
 zombies_regression_d5_s30281=4.0000/617916b09aa10b53
 zombies_regression_d0_s2002=4.6400/fda384e5373642b4
-zombies_regression_d3_s2002=4.3800/262193d381b95ae7
-zombies_regression_d5_s2002=4.3333/335cba1b54a837f2
-zombies_regression_d5_s3003=4.2200/5554171da18c7146
+zombies_regression_d3_s2002=4.4000/08f919bcf85011de
+zombies_regression_d5_s2002=4.3333/c6c0cfc256674733
+zombies_regression_d5_s3003=4.2267/a11298f0782c948a
 zombies2hg_regression_d5_s2002=5.0133/b11a272bf696aae8
 mazesend_regression_d0_s2002=6.7190/c086fa276a467f35
 mazesend_regression_d3_s2002=5.6000/d5da6afb7d28020a
