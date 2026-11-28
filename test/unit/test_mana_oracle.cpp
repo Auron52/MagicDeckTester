@@ -2034,3 +2034,53 @@ TEST_CASE("mana oracle: an undeclared continuation drop whose board another menu
     CHECK_FALSE(Has(v, "APPLY-DROP"));
     CHECK(Has(v, "DROP-COVERED"));
 }
+
+// ---- A CAST'S PINNED SACRIFICE IS THE PLAN'S OWN SOURCE (gate claude-queue-20261127a, triage row O1) -----------------
+// 1 Drop Burn s30000228 T3 (ORACLE-GAP x298 of a ~4,200-flag family over 1 Drop Burn and Creature Burn):
+// {land=Mountain + Fireblast + Lava Spike + ...}, Fireblast's alternative cost pinned to the two OLD Mountains
+// ("fireblast:<n1>,<n2>"). The engine taps the pinned pair for {R}{R} before they are sacrificed and keeps the new
+// Mountain up. The realiser's frontier prune read "the new Mountain taps" and "a pinned Mountain taps" as one resource
+// (a land's age is folded, AgeIsInert), kept the new one, and the engine's own outcome was never among the oracle's.
+// Realize now reads the pin into plan_srcs (InsertCostPinSources), as it reads sac_victim_id.
+namespace
+{
+Action FireblastAlt(const GameState& s, int m1, int m2)
+{
+    Action a = CastAction(s, "Fireblast");
+    a.cost          = ManaCost{};   // the alternative cost: no mana (TurnSolver's Fireblast menu entry)
+    a.tutor_target  = "fireblast:" + std::to_string(m1) + "," + std::to_string(m2);
+    a.direct_damage = 4;
+    return a;
+}
+} // namespace
+
+TEST_CASE("mana oracle: Fireblast's pinned Mountains pay before they are sacrificed, the new Mountain stays up")
+{
+    EnsureOracleCards();
+    static const OneDropBurnProvider prov;
+    GameState s = Board({ "Mountain", "Mountain" });   // #1, #2: the pinned pair
+    s.m_provider = &prov;
+    s.players[0].life = s.players[1].life = 20;
+    Hand(s, { "Mountain", "Fireblast", "Lava Spike", "Lightning Bolt" });   // the land drop is #100
+    SetLibrary(s, std::vector<std::string>(20, "Mountain"));
+    TurnSolver::Plan plan = PlanOf({ FireblastAlt(s, 1, 2), CastAction(s, "Lava Spike"), CastAction(s, "Lightning Bolt") });
+    plan.land_to_play = "Mountain";
+    {
+        // The premise: the engine realises the whole plan off the pinned pair, the new Mountain untapped.
+        GameState g = s;
+        TurnSolver::ApplyPlan(g, plan, /*is_pre_combat=*/true);
+        bool new_up = false, pinned_left = false;
+        for (const Permanent& p : g.battlefield)
+        {
+            if (p.card.m_number == 100) { new_up = !p.tapped; }
+            if (p.card.m_number == 1 || p.card.m_number == 2) { pinned_left = true; }
+        }
+        CHECK_FALSE(pinned_left);
+        CHECK(new_up);
+        CHECK(g.players[0].hand.empty());
+    }
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
+    const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, plan, { plan });
+    INFO("verdict: ", Joined(v));
+    CHECK_FALSE(Has(v, "ORACLE-GAP"));
+}

@@ -625,6 +625,7 @@ const char* KindText(Action::Kind k)
         case Action::Kind::AuraSwap: return "auraswap";
         case Action::Kind::ActivateUntap: return "untap";
         case Action::Kind::Unearth: return "unearth";
+        case Action::Kind::CompanionToHand: return "companion";
     }
     return "kind?";
 }
@@ -916,6 +917,34 @@ bool KeyedApart(const GameState& s, const Permanent& p)
     const std::ptrdiff_t i = &p - s.battlefield.data();
     return i >= 0 && static_cast<std::size_t>(i) < s.battlefield.size()
         && TurnSolver::IsTwinnedNumberedTapSource(s, static_cast<std::size_t>(i));
+}
+
+// The permanents a cast's PINNED sacrifice cost names by stable card number (tutor_target): Fireblast's alternative
+// cost "fireblast:<n1>,<n2>" (TurnSolver's FireblastPinOf, paid by SpellEffects' PayFireblastAlternative) and Walk the
+// Aeons' buyback "buyback:<n1>,<n2>,<n3>" (PayWalkBuyback). They are the plan's own sources exactly as a sac_victim_id
+// is: the pinned copy, not its twin, is the one the cost eats. 1 Drop Burn / Creature Burn gate claude-queue-20261127a
+// (~4,200 ORACLE-GAPs, 2,493+ of 200,000 games): {land=Mountain + Fireblast(pin #31,#32) + Lava Spike + Lavamancer}.
+// The engine taps the two pinned Mountains for {R}{R} before they are sacrificed and keeps the new Mountain up; the
+// frontier prune read "#33 (new) taps" and "#31 taps" as one resource (AgeIsInert folds a land's age), kept #33, and
+// the engine's own outcome was never reached. Keyed apart (t_plan_srcs), the pinned copies' taps are their own.
+void InsertCostPinSources(const Action& a, std::set<int>& out)
+{
+    if (a.kind != Action::Kind::CastFromHand) { return; }
+    const std::string& t = a.tutor_target.str();
+    std::size_t at = 0;
+    if (t.compare(0, 10, "fireblast:") == 0)    { at = 10; }
+    else if (t.compare(0, 8, "buyback:") == 0) { at = 8; }
+    else { return; }
+    const char* p = t.c_str() + at;
+    for (;;)
+    {
+        char* end = nullptr;
+        const long n = std::strtol(p, &end, 10);
+        if (end == p) { return; }
+        if (n > 0) { out.insert(static_cast<int>(n)); }
+        if (*end != ',') { return; }
+        p = end + 1;
+    }
 }
 
 // The resources. `with_float`: mid-plan (a frontier) the floating pools are resources; at the END of
@@ -4243,6 +4272,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
         // other copy and keeps the host up for the bonus (Bruna seed 30000319 gi319 T4, two Botanical Sanctums: the
         // fold let #13 stand for #12, and the engine's "#12 pays, #13 carries Wild Growth" was an ORACLE-GAP).
         if (a.enchant_target > 0 && OracleAuraHostApartOn()) { plan_srcs.insert(a.enchant_target); }
+        // ...and a cast's pinned sacrifice (Fireblast's two Mountains, Walk the Aeons' buyback Islands).
+        InsertCostPinSources(a, plan_srcs);
         if (a.kind != Action::Kind::CastFromHand) { plan_names.insert(a.card_name.str()); }
     }
     struct PlanSrcScope
@@ -6237,6 +6268,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             {
                 if (a.sac_source_id != 0) { srcs.insert(a.sac_source_id); }
                 if (a.sac_victim_id != 0) { srcs.insert(a.sac_victim_id); }
+                InsertCostPinSources(a, srcs);
                 if (a.kind != Action::Kind::CastFromHand) { names.insert(a.card_name.str()); }
             }
             for (const Permanent& p0 : root.battlefield)
