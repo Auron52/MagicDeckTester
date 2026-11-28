@@ -131,8 +131,14 @@ the existing GT note explicitly documents the prior T5-to-T7 budget-churn
 acceptance. The current T7 line is legal and keeps the committed score. The
 scoped regression baselines and per-game logs were accepted with a note;
 `check_gt_logs.py` found 409 consistent records with none stale or missing. The fresh
-5,000-game mana gate for the integrated source will run after landing so its
-PGO build does not hold the push-queue lease.
+5,000-game mana gate for the integrated source ran after landing, outside the
+push-queue lease. A PGO+LTO binary trained on 200 Zombies games stamped source
+`d705b7b89e01`. Its 5,000-game gate on games 5000-9999 passed clean: zero
+issues, `MISS=0`, `ORACLE-GAP=0`, `UNMODELED=0`, `CAPPED=0`, and byte-identical
+oracle-off play. The report is `logs/mana_clean/20261128-035757/report.md`; the
+gate record is `test/mana_clean.json`. The persistent primary play viewer was
+fast-forwarded to the landed commit, its Release engine refreshed, and HTTP
+health checked. Windows CI for the landing is still running.
 
 ## Coverage
 
