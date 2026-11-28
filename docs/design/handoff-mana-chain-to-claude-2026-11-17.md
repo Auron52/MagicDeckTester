@@ -296,6 +296,14 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**15:40 UTC 11-28** -- LANDED 8e4653481 (land-1131: gate_1127 record, BS pay-table memo, oracle pins). Validation: units
+4349/4349, smoke+regression 409/409 ALL PASS, audit 0 play changes, viewer 0 drift, check_gt_logs 1486 consistent, GT
+unchanged (no accept). CI 46160277039 watching (bmfwobjhv). Primary fast-forwarded. Lease passed to landing/zombies-1128.
+RE-GATE LAUNCHED (box filler, yields to any other lock holder): build/scratch/claude_gate_1128/chain.sh (chain PID 3092429),
+worktree .claude/worktrees/gate-1128 (wip/gate-1128 at 8e4653481), name claude-queue-20261128a, decks treasure_hunt worldfire
+shadowborn_apostle 1_drop_burn creature_burn (TH/WF/SB: post-80cb931 fixes; burn: Fireblast pin). DS waits for round 5.
+DONE marker build/scratch/claude_gate_1128/DONE. On DONE: commit test/mana_clean.json + report.md in the next landing.
+
 **14:25 UTC 11-28** -- LANDING land-1131 VALIDATING (lease head 14:22; hold task btsjdmfao; scratch
 build/scratch/land-1131/{hold.log,validate.sh,UNIT.DONE,TIERS.DONE}). Batch (all play byte-identical, oracle-only):
 4d9d5e3ce gate_1127 record; 828935ae0 + b28d348c3 + b171dd23b BS pay-table memo (units 4348/4348, check-mode 56,702 hits
