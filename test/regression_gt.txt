@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 0311a6c44  date 2026-11-27
+# Regression ground truth -- commit f0608f500  date 2026-11-28
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
@@ -8,14 +8,16 @@
 # accepted-with-regressions (overnight, 2026-11-27): elves overnight rows resized ENTRY->FULL (d3 s4004 25->75, d5 x4 300->425) before the keep-table adoption, profile absent; the overlapping games are unchanged (0 play-changed)
 # accepted-with-regressions (smoke, 2026-11-27): land-1130: DS round 4 MTG_LINE_SEQ_REST + MTG_UNSEEN_SCARCE_RITUAL_NET default ON (shared payer) + CPU cut 2 (exact) + TH oracle residuals (play-identical); 0 slower, 1 faster (hinata d0 gi), 3 same-score play changes (worldfire d5 gi36, elementals d0 gi22, bruna d0 gi819)
 # accepted-with-regressions (regression, 2026-11-27): land-1130: DS round 4 MTG_LINE_SEQ_REST + MTG_UNSEEN_SCARCE_RITUAL_NET default ON (shared payer) + CPU cut 2 (exact) + TH oracle residuals (play-identical); 0 slower, 1 faster (hinata d0 gi), 3 same-score play changes (worldfire d5 gi36, elementals d0 gi22, bruna d0 gi819)
+# accepted-with-regressions (smoke, 2026-11-28): Zombies payable-order update: one greedy game slowed by one turn, two improved by one turn; seven searched games changed line without changing win turn. Dragonstorm d0 same-loss line changed.
+# accepted-with-regressions (regression, 2026-11-28): Zombies payable-order update: searched games 3 one-turn faster, 0 slower, 19 same-score line changes across Zombies and Dragonstorm; d0 one slower and two faster. Dragonstorm d5 gi171 remains T7; saved local comparison binary predates the committed T7 GT (prior budget-churn acceptance documented in GT header).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (full sweep; host-dependent); seeds disjoint.
 
 # --- smoke ---
-zombies_smoke_d0_s1001=4.7780/985a3cc116ae0a71
-zombies_smoke_d3_s1001=4.4400/d1d84b321bd7e995
-zombies_smoke_d5_s1001=4.4500/34e15cd9105269aa
-zombies2hg_smoke_d5_s1001=4.9200/ca5e36f777224b81
+zombies_smoke_d0_s1001=4.7770/51b602d6072df118
+zombies_smoke_d3_s1001=4.4400/bb500485ffaf3a5a
+zombies_smoke_d5_s1001=4.4500/1a1ac68fc2b43328
+zombies2hg_smoke_d5_s1001=4.9200/a0978255e497614f
 mazesend_smoke_d0_s1001=6.7160/7a052adf70055959
 mazesend_smoke_d3_s1001=5.0000/485ceae25664e38d
 mazesend_smoke_d5_s1001=5.5833/f2f2f184c9ba0962
@@ -119,7 +121,7 @@ shadowborn_smoke_d0_s1001=7.3630/7ebe42ef473347e3
 shadowborn_smoke_d3_s1001=5.0800/82bf2ab90af86fac
 shadowborn_smoke_d5_s1001=4.8100/b389bb014500e4fd
 shadowborn2hg_smoke_d3_s1001=5.4800/99add028c3e97495
-dragonstorm_smoke_d0_s1001=4.9510/d8a1207814e065f9
+dragonstorm_smoke_d0_s1001=4.9510/758a124df0ef8cd6
 dragonstorm_smoke_d3_s1001=4.4600/b6105f6835c5810a
 dragonstorm_smoke_d5_s1001=4.4400/43848e936a7622e6
 auras_smoke_d0_s1001=4.3410/610f555c6bde1e0a
@@ -271,11 +273,11 @@ merfolkturns2hg_smoke_d3_s1001=5.6000/328239bb41524a66
 # --- regression ---
 zombies_regression_d3_s30281=4.4000/69681e79ecf3fd55
 zombies_regression_d5_s30281=4.4000/69681e79ecf3fd55
-zombies_regression_d0_s2002=4.8210/c8a6d3d33c80d1ba
+zombies_regression_d0_s2002=4.8200/0a5c7a003d95ae3b
 zombies_regression_d3_s2002=4.5000/ded0a5192a785940
-zombies_regression_d5_s2002=4.4267/451408149842cf03
-zombies_regression_d5_s3003=4.3733/8769df37b9f7293a
-zombies2hg_regression_d5_s2002=4.9600/ee86a8e11afba24f
+zombies_regression_d5_s2002=4.4200/9ca8b80fe30dd59a
+zombies_regression_d5_s3003=4.3600/261d0de0fc996afc
+zombies2hg_regression_d5_s2002=4.9600/239e37426c99604f
 mazesend_regression_d0_s2002=6.7190/c086fa276a467f35
 mazesend_regression_d3_s2002=5.6000/d5da6afb7d28020a
 mazesend_regression_d5_s2002=5.4674/f9ab44fab6862b70
@@ -495,9 +497,9 @@ shadowborn_regression_d3_s2002=4.7600/ee8e2b6a50c36876
 shadowborn_regression_d3_s3003=4.9067/d7f597ba379b69a4
 shadowborn_regression_d5_s2002=4.7533/b944a342837b2138
 shadowborn_regression_d5_s3003=4.7867/d8b91b8620d4f00c
-dragonstorm_regression_d0_s2002=4.9860/5cb2fd7ddfb87213
-dragonstorm_regression_d3_s2002=4.2100/1c7efc84c5c63785
-dragonstorm_regression_d5_s2002=4.2965/3aff5a33ea2f8083
+dragonstorm_regression_d0_s2002=4.9860/c6ca5bed52cad3a4
+dragonstorm_regression_d3_s2002=4.2100/d361b21099293fe5
+dragonstorm_regression_d5_s2002=4.2965/28f3d11b0603cc94
 dragonstorm_regression_d5_s3003=4.4118/b0507c15dce5088f
 auras_regression_d0_s2002=4.3300/55c7dcc0518c8e97
 auras_regression_d3_s2002=4.0057/d168162c4ea27db1

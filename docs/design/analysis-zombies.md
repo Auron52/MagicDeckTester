@@ -107,9 +107,32 @@ or shortfalls). The two former full-gate repros, seed 30004321/game 4321 at
 turn 3 and seed 30004488/game 4488 at turn 4, each reported `MISS=0`,
 `ORACLE-GAP=0`, `UNMODELED=0`, `CAPPED=0`. The integrated full Release unit
 suite passed 4,347/4,347 cases in 48 shards. Full smoke and scoped regression
-remain in progress before landing. The fresh 5,000-game mana gate for the
-integrated source will run after landing so its PGO build does not hold the
-push-queue lease.
+were rerun before landing. Full smoke finished 255 cases in 104m57s. Of its
+five changed keys, three searched Zombies keys kept exactly the same average
+win turns; seven individual searched games changed play lines without changing
+win turn. Each was traced against the saved baseline: hands and draws were
+identical, with alternative Culling, ritual, reducer, and creature ordering.
+Zombies depth 0 improved two games by one turn, slowed one by one turn, and
+changed two more lines at the same score (net average improvement 0.001 over
+1,000 games). The sole Dragonstorm difference was one depth-0 game with a
+changed ritual line and the same loss. The smoke baselines and per-game logs
+were accepted with an explanatory note; `check_gt_logs.py` found zero stale or
+missing logs. Scoped regression for Zombies and Dragonstorm finished its 13-job
+batch in 18m50s. Across the affected decks it found zero searched slowdowns,
+three one-turn searched improvements, and 19 searched same-score line changes.
+Depth 0 had one one-turn slowdown, two one-turn improvements, and four same-score
+line changes. The side checks passed 678 scenarios, 980 strict viewer references
+(zero play drift, shuffle dead, board divergence, enum gaps, mulligan drift, or
+contract failures), and both suboptimal require-beat references. The single
+Dragonstorm regression game 171 trace exceeded the audit's 90-second replay
+limit. A longer replay completed and matched the committed T7 outcome. The
+local saved comparison binary predates that GT acceptance and instead wins T5;
+the existing GT note explicitly documents the prior T5-to-T7 budget-churn
+acceptance. The current T7 line is legal and keeps the committed score. The
+scoped regression baselines and per-game logs were accepted with a note;
+`check_gt_logs.py` found 409 consistent records with none stale or missing. The fresh
+5,000-game mana gate for the integrated source will run after landing so its
+PGO build does not hold the push-queue lease.
 
 ## Coverage
 
