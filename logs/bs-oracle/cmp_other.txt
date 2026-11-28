@@ -1,0 +1,62 @@
+dragonstorm__g159000       = cpu     1406 ->     1209  
+dragonstorm__g159001       = cpu      174 ->      163  
+dragonstorm__g159002       = cpu      460 ->      328  
+dragonstorm__g159003       = cpu       34 ->       24  
+dragonstorm__g159004       = cpu       61 ->       50  
+dragonstorm__g159005       = cpu      160 ->      124  
+dragonstorm__g159006       = cpu       80 ->       80  
+dragonstorm__g159007       = cpu      102 ->       95  
+dragonstorm__g159008       = cpu      644 ->      553  
+dragonstorm__g159009       = cpu       97 ->       78  
+dragonstorm__g159010       = cpu       48 ->       50  
+dragonstorm__g159011       = cpu      189 ->      169  
+dragonstorm__g159012       = cpu     1566 ->     1274  
+dragonstorm__g159013       = cpu       51 ->       50  
+dragonstorm__g159014       = cpu       31 ->       31  
+dragonstorm__g159015       = cpu     1365 ->     1360  
+dragonstorm__g159016       = cpu      203 ->      188  
+dragonstorm__g159017       = cpu     1454 ->     1392  
+dragonstorm__g159018       = cpu      585 ->      522  
+dragonstorm__g159019       = cpu      438 ->      403  
+prevent_damage__g130000    = cpu    17303 ->    16288  
+prevent_damage__g130001    = cpu     4035 ->     3945  
+prevent_damage__g130002    = cpu      196 ->      185  
+prevent_damage__g130003    = cpu     3651 ->     3486  
+prevent_damage__g130004    = cpu      397 ->      365  
+prevent_damage__g130005    = cpu    14932 ->    12413  
+prevent_damage__g130006    = cpu      114 ->      107  
+prevent_damage__g130007    = cpu     4640 ->     4257  
+prevent_damage__g130008    = cpu     3073 ->     2605  
+prevent_damage__g130009    = cpu     7203 ->     6433  
+prevent_damage__g130010    = cpu     4348 ->     4459  
+prevent_damage__g130011    = cpu     7377 ->     6041  
+prevent_damage__g130012    = cpu      409 ->      382  
+prevent_damage__g130013    = cpu     6402 ->     5524  
+prevent_damage__g130014    = cpu     1084 ->     1098  
+prevent_damage__g130015    = cpu     1362 ->     1101  
+prevent_damage__g130016    = cpu      474 ->      403  
+prevent_damage__g130017    = cpu     4411 ->     3766  
+prevent_damage__g130018    = cpu     2981 ->     2278  
+prevent_damage__g130019    = cpu      629 ->      555  
+total cpu base_other=94169 memo_other=83834 ratio=0.890 digest_diffs=0
+flags base_other {'DOMINATED-LIFE': 133, 'DOMINATED-LAND': 120, 'PHANTOM': 39}
+flags memo_other {'DOMINATED-LIFE': 133, 'DOMINATED-LAND': 120, 'PHANTOM': 39}
+base_other === MANA ORACLE: decisions=367 plans=4727 skipped=0 applies=546335 frontiers=383983 pruned=112401 options=479472 engine_drops=39 gate_rejects=5742(checked 5742, skipped 0) MISS=133 ORACLE-GAP=0 UNMODELED=0 CAPPED=0 ms=54494 ===
+base_other === MANA ORACLE classes: PHANTOM=39 DOMINATED-LIFE=133 DOMINATED-LAND=120 ===
+base_other === MANA ORACLE enum-gap rejections: noop=8 hidden=0 host_blind=0 cont_land=0 provider=0 ===
+base_other === MANA ORACLE hit-only cuts: 155270 unpayable-payment subtrees not built ===
+base_other === MANA ORACLE board memory: 0 searches capped by MTG_MANA_ORACLE_BOARD_MB, 112401 pruned frontier boards and 0 hit-only outcome boards given back early ===
+base_other === MANA ORACLE shared boards: 79978 outcome boards held for 162270 outcomes (82292 shared); 0 share checks ===
+base_other === MANA ORACLE capped-plan escalation: 6 retried, 6 finished ===
+base_other === MANA ORACLE unmodeled: 270 x gate-rejected loop / combo variant (not driven) ===
+base_other === MANA ORACLE rollback census: lost=0 depth0=0 depth1=0 depth2=0 depth3+=0 inconsistent=0 capped=0 unfaithful=0 no-failed-payment=0 unmodeled=0 reorder=0 off-menu=0 need_in_plan=0 need_later=0 pay_rollback_rescued=0/0 ===
+memo_other === MANA ORACLE pay-table memo: lookups=271588 hits=111732 kept=51815 budget_full=5448 checked=0 mismatch=0 ===
+memo_other === MANA ORACLE: decisions=367 plans=4727 skipped=0 applies=546335 frontiers=383983 pruned=112401 options=479472 engine_drops=39 gate_rejects=5742(checked 5742, skipped 0) MISS=133 ORACLE-GAP=0 UNMODELED=0 CAPPED=0 ms=45072 ===
+memo_other === MANA ORACLE classes: PHANTOM=39 DOMINATED-LIFE=133 DOMINATED-LAND=120 ===
+memo_other === MANA ORACLE enum-gap rejections: noop=8 hidden=0 host_blind=0 cont_land=0 provider=0 ===
+memo_other === MANA ORACLE hit-only cuts: 155270 unpayable-payment subtrees not built ===
+memo_other === MANA ORACLE board memory: 0 searches capped by MTG_MANA_ORACLE_BOARD_MB, 112401 pruned frontier boards and 0 hit-only outcome boards given back early ===
+memo_other === MANA ORACLE shared boards: 79978 outcome boards held for 162270 outcomes (82292 shared); 0 share checks ===
+memo_other === MANA ORACLE capped-plan escalation: 6 retried, 6 finished ===
+memo_other === MANA ORACLE unmodeled: 270 x gate-rejected loop / combo variant (not driven) ===
+memo_other === MANA ORACLE rollback census: lost=0 depth0=0 depth1=0 depth2=0 depth3+=0 inconsistent=0 capped=0 unfaithful=0 no-failed-payment=0 unmodeled=0 reorder=0 off-menu=0 need_in_plan=0 need_later=0 pay_rollback_rescued=0/0 ===

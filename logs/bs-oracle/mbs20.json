@@ -1,0 +1,164 @@
+{
+ "jobs": [
+  {
+   "name": "blood_sun__g0",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000000,
+   "game_index": 0
+  },
+  {
+   "name": "blood_sun__g25",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000025,
+   "game_index": 25
+  },
+  {
+   "name": "blood_sun__g44",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000044,
+   "game_index": 44
+  },
+  {
+   "name": "blood_sun__g68",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000068,
+   "game_index": 68
+  },
+  {
+   "name": "blood_sun__g86",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000086,
+   "game_index": 86
+  },
+  {
+   "name": "blood_sun__g111",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000111,
+   "game_index": 111
+  },
+  {
+   "name": "blood_sun__g145",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000145,
+   "game_index": 145
+  },
+  {
+   "name": "blood_sun__g167",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000167,
+   "game_index": 167
+  },
+  {
+   "name": "blood_sun__g176",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000176,
+   "game_index": 176
+  },
+  {
+   "name": "blood_sun__g211",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000211,
+   "game_index": 211
+  },
+  {
+   "name": "blood_sun__g238",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000238,
+   "game_index": 238
+  },
+  {
+   "name": "blood_sun__g263",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000263,
+   "game_index": 263
+  },
+  {
+   "name": "blood_sun__g281",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000281,
+   "game_index": 281
+  },
+  {
+   "name": "blood_sun__g308",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000308,
+   "game_index": 308
+  },
+  {
+   "name": "blood_sun__g331",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000331,
+   "game_index": 331
+  },
+  {
+   "name": "blood_sun__g348",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000348,
+   "game_index": 348
+  },
+  {
+   "name": "blood_sun__g373",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000373,
+   "game_index": 373
+  },
+  {
+   "name": "blood_sun__g395",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000395,
+   "game_index": 395
+  },
+  {
+   "name": "blood_sun__g389",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000389,
+   "game_index": 389
+  },
+  {
+   "name": "blood_sun__g385",
+   "deck": "decks/Blood Sun/Blood Sun.cod",
+   "profile": "decks/Blood Sun/Blood Sun.profile.json",
+   "games": 1,
+   "seed": 30000385,
+   "game_index": 385
+  }
+ ]
+}

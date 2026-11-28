@@ -1,0 +1,324 @@
+{
+ "jobs": [
+  {
+   "name": "dragonstorm__g159000",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159000,
+   "game_index": 159000
+  },
+  {
+   "name": "dragonstorm__g159001",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159001,
+   "game_index": 159001
+  },
+  {
+   "name": "dragonstorm__g159002",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159002,
+   "game_index": 159002
+  },
+  {
+   "name": "dragonstorm__g159003",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159003,
+   "game_index": 159003
+  },
+  {
+   "name": "dragonstorm__g159004",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159004,
+   "game_index": 159004
+  },
+  {
+   "name": "dragonstorm__g159005",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159005,
+   "game_index": 159005
+  },
+  {
+   "name": "dragonstorm__g159006",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159006,
+   "game_index": 159006
+  },
+  {
+   "name": "dragonstorm__g159007",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159007,
+   "game_index": 159007
+  },
+  {
+   "name": "dragonstorm__g159008",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159008,
+   "game_index": 159008
+  },
+  {
+   "name": "dragonstorm__g159009",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159009,
+   "game_index": 159009
+  },
+  {
+   "name": "dragonstorm__g159010",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159010,
+   "game_index": 159010
+  },
+  {
+   "name": "dragonstorm__g159011",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159011,
+   "game_index": 159011
+  },
+  {
+   "name": "dragonstorm__g159012",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159012,
+   "game_index": 159012
+  },
+  {
+   "name": "dragonstorm__g159013",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159013,
+   "game_index": 159013
+  },
+  {
+   "name": "dragonstorm__g159014",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159014,
+   "game_index": 159014
+  },
+  {
+   "name": "dragonstorm__g159015",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159015,
+   "game_index": 159015
+  },
+  {
+   "name": "dragonstorm__g159016",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159016,
+   "game_index": 159016
+  },
+  {
+   "name": "dragonstorm__g159017",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159017,
+   "game_index": 159017
+  },
+  {
+   "name": "dragonstorm__g159018",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159018,
+   "game_index": 159018
+  },
+  {
+   "name": "dragonstorm__g159019",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 1,
+   "seed": 30159019,
+   "game_index": 159019
+  },
+  {
+   "name": "prevent_damage__g130000",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130000,
+   "game_index": 130000
+  },
+  {
+   "name": "prevent_damage__g130001",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130001,
+   "game_index": 130001
+  },
+  {
+   "name": "prevent_damage__g130002",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130002,
+   "game_index": 130002
+  },
+  {
+   "name": "prevent_damage__g130003",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130003,
+   "game_index": 130003
+  },
+  {
+   "name": "prevent_damage__g130004",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130004,
+   "game_index": 130004
+  },
+  {
+   "name": "prevent_damage__g130005",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130005,
+   "game_index": 130005
+  },
+  {
+   "name": "prevent_damage__g130006",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130006,
+   "game_index": 130006
+  },
+  {
+   "name": "prevent_damage__g130007",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130007,
+   "game_index": 130007
+  },
+  {
+   "name": "prevent_damage__g130008",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130008,
+   "game_index": 130008
+  },
+  {
+   "name": "prevent_damage__g130009",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130009,
+   "game_index": 130009
+  },
+  {
+   "name": "prevent_damage__g130010",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130010,
+   "game_index": 130010
+  },
+  {
+   "name": "prevent_damage__g130011",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130011,
+   "game_index": 130011
+  },
+  {
+   "name": "prevent_damage__g130012",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130012,
+   "game_index": 130012
+  },
+  {
+   "name": "prevent_damage__g130013",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130013,
+   "game_index": 130013
+  },
+  {
+   "name": "prevent_damage__g130014",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130014,
+   "game_index": 130014
+  },
+  {
+   "name": "prevent_damage__g130015",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130015,
+   "game_index": 130015
+  },
+  {
+   "name": "prevent_damage__g130016",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130016,
+   "game_index": 130016
+  },
+  {
+   "name": "prevent_damage__g130017",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130017,
+   "game_index": 130017
+  },
+  {
+   "name": "prevent_damage__g130018",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130018,
+   "game_index": 130018
+  },
+  {
+   "name": "prevent_damage__g130019",
+   "deck": "decks/Prevent Damage/Prevent Damage.cod",
+   "profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+   "games": 1,
+   "seed": 30130019,
+   "game_index": 130019
+  }
+ ]
+}
