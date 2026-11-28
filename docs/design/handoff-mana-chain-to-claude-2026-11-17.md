@@ -296,6 +296,15 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**14:25 UTC 11-28** -- LANDING land-1131 VALIDATING (lease head 14:22; hold task btsjdmfao; scratch
+build/scratch/land-1131/{hold.log,validate.sh,UNIT.DONE,TIERS.DONE}). Batch (all play byte-identical, oracle-only):
+4d9d5e3ce gate_1127 record; 828935ae0 + b28d348c3 + b171dd23b BS pay-table memo (units 4348/4348, check-mode 56,702 hits
+mismatch=0); 3a1ca6073 + 8e4653481 oracle pins (Fireblast/buyback pin into plan_srcs, ORACLE-GAP 743 -> 0 on 400 burn games,
+identity 400/400; unit conflict resolved by keeping both appended tests). Tiers queue on claude_box.lock behind the Beasts
+agent's A/B arm (asked it to gate its next big batch on TIERS.DONE). Expect GT unchanged. After tiers: check_gt_logs, land,
+CI watch, pull primary. Agents: BS agent 2 (wip/bs-oracle, g531 study -> mechanism B/C cut); beasts-fix (A/B running);
+DS round 5 agent 2 handed off (3bde37f43, logs/ds-apply5/handoff.md) -> fresh agent once it stops.
+
 **12:15 UTC 11-28** -- TRIAGE DONE (wip/gate1127-triage 47b1d4f16, logs/gate1127-triage/ranking.md + handoff.md; 274K,
 impacts NOT measured -- lane was full). 15 engine clusters + 6 oracle items. Top: Beasts Incubator rank-20 order (1,592+
 events / 9.3% games), Beasts Nykthos devotion (~500 games), Beasts Kaheera companion payment, Worldfire ritual-drain (re-gate
