@@ -296,6 +296,15 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**07:30 UTC 11-28 (pre-compaction STATE)** -- RUNNING: (1) gate_1127 chain PID 2497574 (relaunched 06:11, Blood Sun capped
+at 827), big lane, live batch build/wt/land-1128/scratch/mana_clean/claude-queue-20261127a/on.15.out/.err, DONE marker
+build/scratch/claude_gate_1127/DONE (waiter br873vlo9, ~107 min cap: re-arm on cap). On DONE: commit test/mana_clean.json
+from land-1128 in the next landing, rank clusters, spawn fix agents. (2) DS round 5 agent 2 (wip/ds-apply5; ~184K tokens;
+MTG_VISIBLE_CLOSER_KEEP repros/units/ON gate arm/A-B; OFF gate arm pid 2255418 -> build/scratch/ds-apply5/gate_base/DONE).
+Ask it to hand off past 250K; on finish land with GT (play change). (3) Blood Sun oracle-cost agent (wip/bs-oracle,
+logs/bs-oracle/; 70x oracle cost, CAPPED-DECISION) -> land when ready (play byte-identical). Cron 19356bb7 (2-hourly :17,
+session-only) replaced c1a6da15. Push queue empty; origin at 524d7c303 + others' landings; CI green. No open USER questions.
+
 **06:15 UTC 11-28** -- gate_1127 RESTRUCTURED (coordinator's own filler). Blood Sun's oracle arm costs 1,236,715
 core-ms/game (sizing; 70x its 17.7 s play): its 4,633 single-game jobs would have run ~60 h before the other 7 decks
 started (494/6662 jobs in 7 h). Stopped the chain (old pid 829089; ~28 in-flight Blood Sun games lost), backed up the plan
