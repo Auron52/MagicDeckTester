@@ -4114,6 +4114,137 @@ struct BoardPool
     }
 };
 
+// ---- THE FRONTIER PAYMENT-TABLE MEMO (MTG_ORACLE_PAY_TABLE_MEMO, DEFAULT ON; =0 every frontier enumerates its own) --
+// A frontier's option table (MinimalPayments) is a pure function of the frontier board, the bill and the payment
+// context the frontier carries -- plus the oracle's own scopes around it (the plan's keyed-apart sources, the twin /
+// Karoo keying, the opponent-life keying, the ENUM-GAP pass's no-sac-action route, the {C} cover fold) and `want`, the
+// lazy stop. Within ONE decision every one of those is either a field of the frontier or one of those scopes; the
+// engine's ambient state is the decision's own and does not move (the audit runs on copies, ObserverIsolationScope).
+// So two frontiers that agree on all of it get the same table, and the second need not enumerate it again.
+//
+// WHERE IT REPEATS. A menu fans one plan over choices that are made AFTER the payment: Blood Sun's Ulamog, the
+// Ceaseless Hunger is fanned over its cast trigger's two exile targets (Plan::cast_trigger_target_choice; identity-
+// folded multisets of our own permanents in goldfish), so {City of Brass + Ulamog} sat on the menu 95 times. Every
+// copy reaches the SAME first frontier -- {10} on the pre-cast board; the targets are chosen once the spell is cast --
+// and enumerated the same {10} table, a 131,072-probe table on a 20-land Blood Sun board (seed 30000389 T4 m1: 181
+// plans, 442,495 applies, 24 M verify payments and 24 M state keys, 156 priced s, almost all of it these copies). The
+// realisations still differ where the copies differ (what the trigger exiles), so each copy keeps its own audit and
+// verdict: only the table is shared, never an outcome.
+//
+// EXACT. A hit returns the options the table would have returned, in order, and appends the notes it would have
+// appended (the BuildSources / StashChoices / "payment enumeration capped" notes, which Realize's verdicts read). The
+// key holds the whole frontier board (complete equality, boardid::BoardsEqual), every field MinimalPayments or its
+// scopes read, and `want` itself, so a lazy-stopped table is served only to a request with the same stop. What a hit
+// does skip is the table's priced work (workctr kPay / kSimKey), which the decision budget reads -- so a decision that
+// spent its budget on copies can now reach plans it skipped (CAPPED-DECISION -> a verdict). Play is untouched: the
+// oracle never feeds play, and the memo lives inside AuditDecision's isolation scope.
+//
+// BOUNDED. A table is kept only on its key's SECOND enumeration (a once-seen hash set), so a decision's thousands of
+// one-off deep frontiers cost a 64-bit entry each, not a board; kept tables are capped at MTG_ORACLE_PAY_TABLE_MEMO_MB
+// (default 256) per decision thread, past which nothing more is kept (a miss enumerates, as before). The memo is
+// emptied when its decision ends, so what it holds is a function of the game alone.
+// MTG_ORACLE_PAY_TABLE_MEMO_CHECK=1 (diagnostic): every hit is enumerated again and compared; a difference prints
+// [pay-table-memo] MISMATCH and the fresh table is used.
+struct PayTableCtx
+{
+    ManaCost         cost;
+    bool             for_creature = false, creature_ability = false, batch = false, sac_fodder = false;
+    bool             has_spell = false, has_ability_src = false;
+    Card             spell, ability_src;
+    int              sac_victim = 0, line_surplus = 0;
+    std::size_t      want = 0;
+    bool             line_context = false, line_opens_unseen = false, line_has_acts = false;
+    ManaCost         line_unpaid;
+    int              spare_source = 0, spare_victim = 0, self_tap_src = 0;
+    std::int32_t     combat_hold = 0;
+    std::vector<int> plan_srcs;
+    bool             key_twin = false, key_karoo = false, no_sac_action = false, cover_c = false, gate_observe = false;
+    int              opp_keyed = 0;
+    bool operator==(const PayTableCtx&) const = default;
+};
+struct PayTableMemo
+{
+    struct Entry
+    {
+        GameState                st;
+        PayTableCtx              ctx;
+        std::vector<PayOption>   opts;
+        std::vector<std::string> notes;
+    };
+    std::unordered_map<std::uint64_t, std::vector<Entry>> kept;
+    std::unordered_set<std::uint64_t>                     once;
+    long long                                             bytes = 0;
+};
+thread_local PayTableMemo* t_pay_table_memo = nullptr;
+std::atomic<long long> g_ptm_lookups{0}, g_ptm_hits{0}, g_ptm_kept{0}, g_ptm_full{0}, g_ptm_checked{0}, g_ptm_bad{0};
+bool PayTableMemoOn()
+{
+    static const bool v = EnvOn("MTG_ORACLE_PAY_TABLE_MEMO", true);
+    return v;
+}
+long long PayTableMemoBudget()
+{
+    static const long long v = static_cast<long long>(std::max(0, EnvInt("MTG_ORACLE_PAY_TABLE_MEMO_MB", 256))) << 20;
+    return v;
+}
+// AuditDecision's scope: the decision's memo (MTG_ORACLE_PAY_TABLE_MEMO). A nested decision audit never happens
+// (AuditDecision returns under a hook), and AuditRoute's link audits run with no memo (PayTableMemoOff): a link is
+// audited inside its route's frame (EquipRouteLinkFrame), a payment context the key does not hold.
+struct PayTableMemoScope
+{
+    PayTableMemo  memo;
+    PayTableMemo* saved;
+    explicit PayTableMemoScope(bool on = PayTableMemoOn()) : saved(t_pay_table_memo) { t_pay_table_memo = on ? &memo : nullptr; }
+    ~PayTableMemoScope() { t_pay_table_memo = saved; }
+    PayTableMemoScope(const PayTableMemoScope&) = delete;
+    PayTableMemoScope& operator=(const PayTableMemoScope&) = delete;
+};
+struct PayTableMemoOff
+{
+    PayTableMemo* saved;
+    PayTableMemoOff() : saved(t_pay_table_memo) { t_pay_table_memo = nullptr; }
+    ~PayTableMemoOff() { t_pay_table_memo = saved; }
+    PayTableMemoOff(const PayTableMemoOff&) = delete;
+    PayTableMemoOff& operator=(const PayTableMemoOff&) = delete;
+};
+std::uint64_t PayTableCtxHash(const PayTableCtx& c)
+{
+    std::uint64_t h = RefineMix(0x9A7Eull, std::hash<std::string>{}(c.cost.ToString() + "|" + c.line_unpaid.ToString()));
+    h = RefineMix(h, (c.for_creature ? 1u : 0u) | (c.creature_ability ? 2u : 0u) | (c.batch ? 4u : 0u)
+                     | (c.sac_fodder ? 8u : 0u) | (c.has_spell ? 16u : 0u) | (c.has_ability_src ? 32u : 0u)
+                     | (c.line_context ? 64u : 0u) | (c.line_opens_unseen ? 128u : 0u) | (c.line_has_acts ? 256u : 0u)
+                     | (c.key_twin ? 512u : 0u) | (c.key_karoo ? 1024u : 0u) | (c.no_sac_action ? 2048u : 0u)
+                     | (c.cover_c ? 4096u : 0u) | (c.gate_observe ? 8192u : 0u));
+    h = RefineMix(h, static_cast<std::uint64_t>(c.want));
+    h = RefineMix(h, (static_cast<std::uint64_t>(static_cast<std::uint32_t>(c.sac_victim)) << 32)
+                     | static_cast<std::uint32_t>(c.line_surplus));
+    h = RefineMix(h, (static_cast<std::uint64_t>(static_cast<std::uint32_t>(c.spare_source)) << 32)
+                     | static_cast<std::uint32_t>(c.spare_victim));
+    h = RefineMix(h, (static_cast<std::uint64_t>(static_cast<std::uint32_t>(c.self_tap_src)) << 32)
+                     | static_cast<std::uint32_t>(c.combat_hold));
+    h = RefineMix(h, static_cast<std::uint32_t>(c.opp_keyed));
+    if (c.has_spell) { h = RefineMix(h, static_cast<std::uint32_t>(c.spell.m_number)); }
+    if (c.has_ability_src) { h = RefineMix(h, static_cast<std::uint32_t>(c.ability_src.m_number)); }
+    for (int n : c.plan_srcs) { h = RefineMix(h, static_cast<std::uint32_t>(n)); }
+    return h;
+}
+bool SamePayOption(const PayOption& a, const PayOption& b)
+{
+    return TapsText(a) == TapsText(b) && a.creature_route == b.creature_route && a.stash == b.stash
+        && a.stash_haste == b.stash_haste && a.fail == b.fail && a.engine == b.engine && a.batch_skip == b.batch_skip
+        && a.what == b.what;
+}
+struct PayTableMemoReport
+{
+    ~PayTableMemoReport()
+    {
+        if (Level() <= 0 || g_ptm_lookups.load() == 0) { return; }
+        std::fprintf(stderr, "=== MANA ORACLE pay-table memo: lookups=%lld hits=%lld kept=%lld budget_full=%lld checked=%lld "
+                             "mismatch=%lld ===\n", g_ptm_lookups.load(), g_ptm_hits.load(), g_ptm_kept.load(),
+                     g_ptm_full.load(), g_ptm_checked.load(), g_ptm_bad.load());
+    }
+} g_pay_table_memo_report;
+
 // Apply `plan` to a copy of `root` once per payment script, LAYERED by payment index: every script of
 // length k is applied, the frontier boards they reach are Pareto-pruned (same core, dominated
 // resources INCLUDING floating mana -> dropped; under goldfish monotonicity a board with every
@@ -4740,15 +4871,89 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             if (f.sac_spare_source != 0 || f.sac_spare_victim != 0)
             { _spare.emplace(f.sac_spare_source, f.sac_spare_victim); }
             const SelfTapSrcTableScope _self_src(f.self_tap_src);
+            const auto table = [&]
+            {
+                return MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability,
+                                       /*whole_float=*/f.batch,
+                                       f.has_spell ? &f.spell : nullptr, f.has_ability_src ? &f.ability_src : nullptr,
+                                       f.sac_victim, want, f.batch ? 0 : line_surplus,
+                                       /*sac_fodder=*/!t_no_fodder);   // the checks' table (OracleSacFodderOn)
+            };
+            // The frontier payment-table memo (PayTableMemo, above): the same table on the same frontier is
+            // enumerated once per decision.
+            const auto memo_table = [&]() -> std::vector<PayOption>
+            {
+                PayTableMemo* const m = t_pay_table_memo;
+                if (m == nullptr || t_hook != nullptr) { return table(); }
+                g_ptm_lookups.fetch_add(1, std::memory_order_relaxed);
+                PayTableCtx c;
+                c.cost = f.cost; c.for_creature = f.for_creature; c.creature_ability = f.creature_ability;
+                c.batch = f.batch; c.sac_fodder = !t_no_fodder;
+                c.has_spell = f.has_spell; if (f.has_spell) { c.spell = f.spell; }
+                c.has_ability_src = f.has_ability_src; if (f.has_ability_src) { c.ability_src = f.ability_src; }
+                c.sac_victim = f.sac_victim; c.line_surplus = f.batch ? 0 : line_surplus; c.want = want;
+                c.line_context = s_line_context;
+                if (s_line_context)
+                { c.line_unpaid = f.line_unpaid; c.line_opens_unseen = f.line_opens_unseen; c.line_has_acts = f.line_has_acts; }
+                c.spare_source = f.sac_spare_source; c.spare_victim = f.sac_spare_victim; c.self_tap_src = f.self_tap_src;
+                c.combat_hold = g_dbl_combat_held_attacker;
+                if (t_plan_srcs != nullptr) { c.plan_srcs.assign(t_plan_srcs->begin(), t_plan_srcs->end()); }
+                c.key_twin = t_key_twin_taps; c.key_karoo = t_key_karoo_lands; c.no_sac_action = t_no_sac_action;
+                c.cover_c = t_cover_c_fold; c.gate_observe = t_gate_observe; c.opp_keyed = t_opp_keyed;
+                const std::uint64_t h = RefineMix(boardid::BoardHash(f.st), PayTableCtxHash(c));
+                static const bool s_check = EnvOn("MTG_ORACLE_PAY_TABLE_MEMO_CHECK");
+                const auto it = m->kept.find(h);
+                if (it != m->kept.end())
+                {
+                    for (const PayTableMemo::Entry& e : it->second)
+                    {
+                        if (!(e.ctx == c) || !boardid::BoardsEqual(e.st, f.st)) { continue; }
+                        g_ptm_hits.fetch_add(1, std::memory_order_relaxed);
+                        if (s_check)
+                        {
+                            const std::size_t u0 = r.unmodeled.size();
+                            std::vector<PayOption> fresh = table();
+                            const std::vector<std::string> notes(r.unmodeled.begin() + static_cast<std::ptrdiff_t>(u0),
+                                                                 r.unmodeled.end());
+                            bool same = fresh.size() == e.opts.size() && notes == e.notes;
+                            for (std::size_t k = 0; same && k < fresh.size(); ++k) { same = SamePayOption(fresh[k], e.opts[k]); }
+                            g_ptm_checked.fetch_add(1, std::memory_order_relaxed);
+                            if (!same)
+                            {
+                                g_ptm_bad.fetch_add(1, std::memory_order_relaxed);
+                                std::lock_guard<std::mutex> lk(g_print_mu);
+                                std::fprintf(stderr, "[pay-table-memo] MISMATCH %s plan={%s} cost=%s: memo %zu options/%zu notes, "
+                                             "fresh %zu/%zu\n", Ctx(root, pre).c_str(), PlanText(plan).c_str(),
+                                             f.cost.ToString().c_str(), e.opts.size(), e.notes.size(), fresh.size(),
+                                             notes.size());
+                            }
+                            return fresh;
+                        }
+                        r.unmodeled.insert(r.unmodeled.end(), e.notes.begin(), e.notes.end());
+                        return e.opts;
+                    }
+                }
+                const std::size_t u0 = r.unmodeled.size();
+                std::vector<PayOption> opts_now = table();
+                if (m->once.insert(h).second) { return opts_now; }   // first enumeration of this key: remember the key only
+                const long long add = BoardBytes(f.st) + ScriptBytes(opts_now) + static_cast<long long>(sizeof(PayTableMemo::Entry));
+                if (m->bytes + add > PayTableMemoBudget())
+                { g_ptm_full.fetch_add(1, std::memory_order_relaxed); return opts_now; }
+                m->bytes += add;
+                g_ptm_kept.fetch_add(1, std::memory_order_relaxed);
+                PayTableMemo::Entry e;
+                e.st    = f.st;
+                e.ctx   = std::move(c);
+                e.opts  = opts_now;
+                e.notes.assign(r.unmodeled.begin() + static_cast<std::ptrdiff_t>(u0), r.unmodeled.end());
+                m->kept[h].push_back(std::move(e));
+                return opts_now;
+            };
             std::vector<PayOption> opts = f.tapchoice > 0
                 ? TapChoiceOptions(f.st, f.tc_elig, f.tapchoice, &r.unmodeled)
                 : f.tapahead > 0
                 ? TapAheadOptions(f.st, f.tapahead, f.lands_only, &r.unmodeled)
-                : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability,
-                                  /*whole_float=*/f.batch,
-                                  f.has_spell ? &f.spell : nullptr, f.has_ability_src ? &f.ability_src : nullptr,
-                                  f.sac_victim, want, f.batch ? 0 : line_surplus,
-                                  /*sac_fodder=*/!t_no_fodder);   // the checks' table (OracleSacFodderOn)
+                : memo_table();
             if (f.batch)
             {
                 PayOption skip;
@@ -5929,6 +6134,7 @@ void AuditRoute(const GameState& root, bool pre, const TurnSolver::Plan& plan, c
     static const std::vector<const EngineReal*>       kNoSibs;
     static const std::vector<const TurnSolver::Plan*> kNoSibPlans;
     const std::string* const saved_prefix = t_emit_prefix;
+    const PayTableMemoOff no_table_memo;   // a link's payments run inside its route frame (PayTableMemoScope)
     for (std::size_t i = 0; i < tape->links.size(); ++i)
     {
         const RouteLink& l = tape->links[i];
@@ -7085,6 +7291,41 @@ std::vector<std::string> PlanVerdict(const GameState& state, bool pre, const Tur
     return got;
 }
 
+std::vector<std::vector<std::string>> MenuVerdicts(const GameState& state, bool pre,
+                                                   const std::vector<TurnSolver::Plan>& menu, bool table_memo,
+                                                   long long* hits)
+{
+    RevealLogPause pause;
+    PayTableMemoScope memo(table_memo);
+    const long long h0 = g_ptm_hits.load();
+    std::vector<EngineReal> real;
+    real.reserve(menu.size());
+    for (const TurnSolver::Plan& p : menu) { real.push_back(EngineApply(state, pre, p)); }
+    std::vector<std::vector<std::string>> out;
+    const std::vector<EngineReal>* saved_menu = t_menu_real;
+    t_menu_real = &real;
+    std::vector<std::string>* saved = t_emit_capture;
+    for (std::size_t i = 0; i < menu.size(); ++i)
+    {
+        std::vector<const EngineReal*>       sibs;
+        std::vector<const TurnSolver::Plan*> sib_plans;
+        for (std::size_t j = 0; j < menu.size(); ++j)
+        {
+            if (!real[j].Full() || SiblingKey(menu[j]) != SiblingKey(menu[i])) { continue; }
+            sibs.push_back(&real[j]);
+            sib_plans.push_back(&menu[j]);
+        }
+        std::vector<std::string> got;
+        t_emit_capture = &got;
+        AuditPlan(state, pre, menu[i], real[i], sibs, sib_plans);
+        out.push_back(std::move(got));
+    }
+    t_emit_capture = saved;
+    t_menu_real = saved_menu;
+    if (hits != nullptr) { *hits = g_ptm_hits.load() - h0; }
+    return out;
+}
+
 long long GoalFoldedFrontiers() { return g_goal_folded.load(); }
 long long GoalFoldRedos() { return g_goal_fold_redo.load(); }
 
@@ -7305,6 +7546,7 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     // 30003487 gi3487 won T4 on / T5 off before it).
     TurnSolver::ObserverIsolationScope isolate;
     OppKeyScope opp_keyed(1);
+    PayTableMemoScope pay_table_memo;   // MTG_ORACLE_PAY_TABLE_MEMO: this decision's frontier tables
     struct DecBudgetScope
     {
         long long saved_n, saved_start, saved_lim;

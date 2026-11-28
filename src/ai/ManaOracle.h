@@ -453,6 +453,14 @@ namespace manaoracle
     std::vector<std::string> PlanVerdict(const GameState& state, bool pre, const TurnSolver::Plan& plan,
                                          const std::vector<TurnSolver::Plan>& menu);
 
+    // THE FRONTIER PAYMENT-TABLE MEMO (MTG_ORACLE_PAY_TABLE_MEMO), for the unit tests: every plan of `menu` audited
+    // as AuditDecision audits its menu (AuditPlan, each against its same-actions siblings), under ONE decision's table
+    // memo (`table_memo`) or none; the classes each plan emits, in menu order. `hits` (optional): the memo hits made.
+    // Quiet (nothing is counted or printed); copies only.
+    std::vector<std::vector<std::string>> MenuVerdicts(const GameState& state, bool pre,
+                                                       const std::vector<TurnSolver::Plan>& menu, bool table_memo,
+                                                       long long* hits = nullptr);
+
     // THE GOAL FOLD's running count (MTG_ORACLE_GOAL_FOLD, AuditPlan): frontiers not expanded so far in this process,
     // and plans whose folded realisation did not cover the engine's board (realised again in full). For the tests.
     long long GoalFoldedFrontiers();
