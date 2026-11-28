@@ -296,6 +296,20 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**12:15 UTC 11-28** -- TRIAGE DONE (wip/gate1127-triage 47b1d4f16, logs/gate1127-triage/ranking.md + handoff.md; 274K,
+impacts NOT measured -- lane was full). 15 engine clusters + 6 oracle items. Top: Beasts Incubator rank-20 order (1,592+
+events / 9.3% games), Beasts Nykthos devotion (~500 games), Beasts Kaheera companion payment, Worldfire ritual-drain (re-gate
+first), Stuffy Doll Act stranded by USER order, Creature Giving Crop Rotation; ORACLE O1 Fireblast / Walk the Aeons pin not
+read by Realize (2,610+ events, exact). Re-gate at HEAD before fixing: TH (eb39bc311 likely reclassifies), DS, Worldfire,
+Shadowborn. Triage's own repro job (lane pid 2805219) killed. SPAWNED: oracle-pins agent (wip/oracle-pins, O1 + O5, exact);
+beasts-fix agent (wip/beasts-fix, #1 Incubator order RESCUE -- no rank change, cast order is USER-owned -- + #2 Nykthos
+devotion; A/B; big lane after the DS agent). BS oracle agent 1 STOPPED at 404K (wip/bs-oracle 30efe9772 memo
+MTG_ORACLE_PAY_TABLE_MEMO default ON: BS oracle-on CPU 0.81x, flags + play identical on 60 games; handoff
+logs/bs-oracle/handoff.md); its units/chk/study531 lane jobs queued (waiter bmybf0hjp on build/scratch/bs-oracle/*.DONE) ->
+then a FRESH BS agent from the handoff (verify, then colour-lazy table for Mechanism C). Possible USER items once MEASURED (not
+yet questions): Stuffy Act-before-Chain fallback, 1 Drop Burn Devil order, Beasts Incubator rank. NEXT: land-1131 batch =
+gate record + BS memo + oracle pins + DS round 5 (GT) -> then re-gate TH/DS/Worldfire/Shadowborn at HEAD on fresh blocks.
+
 **11:20 UTC 11-28** -- gate_1127 DONE 11:07 (rc=1 = issues; identity byte-identical). Record committed as 4d9d5e3ce on
 NEW landing worktree .claude/worktrees/land-1131 (wip/land-1131 off origin a21ea18e9; mana_clean.json diff applied over the
 Zombies records + report.md) -> rides the next landing. Clean: prevent_damage. Issues: beasts 31796 (all classes),
