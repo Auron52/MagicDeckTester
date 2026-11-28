@@ -100,6 +100,17 @@ ordering arms cast the spells and that both exact-order settings find the
 nearest paying order. The rebuilt full unit suite passed 4,342/4,342 cases
 in 48 shards on 12 cores.
 
+After rebasing onto the Dragonstorm shared head `524d7c303`, source
+`d705b7b89e01`, the integrated Release binary again matched all ten Zombies
+references exactly (human and search both 4.400 turns, zero hand mismatches
+or shortfalls). The two former full-gate repros, seed 30004321/game 4321 at
+turn 3 and seed 30004488/game 4488 at turn 4, each reported `MISS=0`,
+`ORACLE-GAP=0`, `UNMODELED=0`, `CAPPED=0`. The integrated full Release unit
+suite passed 4,347/4,347 cases in 48 shards. Full smoke and scoped regression
+remain in progress before landing. The fresh 5,000-game mana gate for the
+integrated source will run after landing so its PGO build does not hold the
+push-queue lease.
+
 ## Coverage
 
 `python3 scripts/analyze_deck.py decks/Zombies/Zombies.cod --coverage-only`
