@@ -8,6 +8,42 @@ The original untracked copy is backed up under
 Rebased onto the pushed overnight checkpoint `ffee59231` after its landing gate
 passed; implementation work starts from this shared source.
 
+## Exhaustive mulligan profile (2026-11-28)
+
+All ten new Zombies play references matched search before generation and again
+with the profile active: both averaged 4.400 turns, with zero search shortfalls.
+The setting screen selected d1/b1 for generation (0.9993 ranking fidelity at
+0.214 times the d5/b20 play cost). Discovery found ten buckets. The four lords
+(Cemetery Reaper, Death Baron, Lord of the Accursed, Lord of the Undead) merge;
+Diregraf Ghoul and Dread Wanderer also merge. The `fast` R30 profile was
+generated with PGO+LTO on source tree `d705b7b89` and play digest
+`f7553aeb9f44e1c6`: 6,295 size-seven compositions and 11,022 bottoming
+cell-sides. The compressed raw table is retained for reproducibility.
+
+The keep A/B stopped after four paired 1,000-game seeds: exhaustive keep beat
+static by 0.2045 turns per game. Confounded bottoming mode 3 stopped after five
+paired seeds: table bottoming beat lookahead by 0.0424 turns. Scoped smoke and
+regression were accepted after every changed game was attributed to mulligan
+count, bottom choice, or bottomed-card order; their 980 strict viewer references
+had zero play drift or contract failures. All 678 scenarios and both require-beat
+references passed.
+
+The overnight entry rows were enlarged to a full 14,410-game Zombies and 2HG
+sample. The profile-off run was accepted first on source commit `d3cb201e0`,
+then the same rows were measured with the profile on. On 4,000 d3 games,
+average win turn improved 4.4253 to 4.2758 (-0.1495); on 2,000 d5 games,
+4.4010 to 4.2730 (-0.1280); on 400 2HG d5 games, 4.8825 to 4.8275
+(-0.0550). The 8,000 d0 games improved 4.7998 to 4.6101. Search work units
+fell to 0.39-0.46 times the profile-off runs.
+
+The overnight attribution reproduced both baselines on all rows. Of 14,010
+ordinary Zombies games, one same-hand, same-bottom game changed its play
+digest: d3 seed 7007 game 802. With the table still enabled, forcing lookahead
+bottoming (`MTG_EXHAUSTIVE_BOTTOM=0`) restores the old digest exactly
+(`b052d08c656ca5b1`), identifying lookahead method residue before turn one.
+The 400 2HG games had zero unexplained changes. The ground-truth notes record
+both the profile-off checkpoint and the adopted profile-on result.
+
 ## Integration handoff (2026-11-27)
 
 An earlier implementation and audited Zombies ground truth were pushed to
