@@ -75457,12 +75457,17 @@ ElvesSink ElvesSinkOf(const Action& a)
 struct ElvesCensus
 {
     std::atomic<long long> calls{0}, plans{0}, split{0}, band{0};
+    // MTG_ELVES_EZURI_COUNTS (counted whether or not the lever is on): ez_rows = band-dropped kick / squad rows with a
+    // pump source and an attack-capable Elf; ez_cand = those at a count that maximises this turn's per-Elf bonus
+    // (the pump-reserving count); ez_need = candidates the need-the-pump gate passes; ez_admit = re-admitted (on).
+    std::atomic<long long> ez_rows{0}, ez_cand{0}, ez_need{0}, ez_admit{0};
     ~ElvesCensus()
     {
         if (calls.load() == 0) { return; }
         std::fprintf(stderr, "[elves-scaling-census] enumerations=%lld plans=%lld dropped_split=%lld dropped_band=%lld "
-                     "kept=%lld\n", calls.load(), plans.load(), split.load(), band.load(),
-                     plans.load() - split.load() - band.load());
+                     "kept=%lld ez_rows=%lld ez_cand=%lld ez_need=%lld ez_admit=%lld\n", calls.load(), plans.load(),
+                     split.load(), band.load(), plans.load() - split.load() - band.load(), ez_rows.load(),
+                     ez_cand.load(), ez_need.load(), ez_admit.load());
     }
 };
 ElvesCensus& ElvesCensusSink() { static ElvesCensus c; return c; }
@@ -75485,6 +75490,18 @@ void ElvesBlankSink(Action& a)
     a.def        = nullptr;
 }
 }   // namespace
+
+static bool ElvesEzuriCountsOn()
+{
+    static const bool s_env = EnvOn("MTG_ELVES_EZURI_COUNTS");   // DEFAULT OFF (experiment); =1 -> admit the pump counts
+    return heurarm::Flag(heurarm::ELVES_EZURI_COUNTS, s_env);
+}
+// DIAGNOSTIC A/B ARM (delete with the experiment): the pump counts without the need-the-pump gate. DEFAULT OFF.
+static bool ElvesEzuriUngatedOn()
+{
+    static const bool s_env = EnvOn("MTG_ELVES_EZURI_UNGATED");
+    return heurarm::Flag(heurarm::ELVES_EZURI_UNGATED, s_env);
+}
 
 bool ElvesScalingPruneOn()
 {
@@ -75529,7 +75546,8 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
     // A row holds no copy of its plan: the blanked copy ("canon") is built on demand, and only each CLASS's first
     // member keeps one. (It used to be one full Plan copy per row -- on a 240,928-plan Elves continuation list that
     // doubled the enumeration's peak, ~1.2 GB; elves-mem 2026-11-26.)
-    struct Row { std::size_t i; std::string sink; int count; int unit; int elf_casts = 0; };
+    struct Row { std::size_t i; std::string sink; int count; int unit; int elf_casts = 0; bool kick = false;
+                 int pump_cost = 0; int pump_power = 0; bool haste_cast = false; };
     std::vector<Row> rows;
     long long n_split = 0, n_band = 0;
     struct Flush
@@ -75554,12 +75572,18 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         }
         if (scaled == 0) { continue; }                     // no scaled sink: untouched
         int elf_casts = 0;   // the plan's OTHER Elf creature casts: each grows a scaled dork's tap (an upper bound)
+        int pump_cost = 0, pump_power = 0;   // a team pump source (Ezuri) the plan casts: its activation's MV and power
+        bool haste_cast = false;             // the plan casts a haste-for-all permanent (Concordant Crossroads)
         for (std::size_t k = 0; k < plans[i].actions->size(); ++k)
         {
             const Action& a = (*plans[i].actions)[k];
             if (static_cast<int>(k) == at || a.kind != Action::Kind::CastFromHand) { continue; }
             const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name.str());
             if (d != nullptr && d->card.IsCreature() && CardHasSubtype(d->card, "Elf")) { ++elf_casts; }
+            if (d != nullptr && d->params.team_pump_cost.has_value() && d->params.team_pump_power > 0
+                && !d->params.team_pump_taps_source)
+            { pump_cost = std::max(1, d->params.team_pump_cost->ManaValue()); pump_power = d->params.team_pump_power; }
+            if (d != nullptr && d->params.grants_haste && d->params.affects_all_creatures) { haste_cast = true; }
         }
         if (scaled >= 2) { admit[i] = 0; ++n_split; continue; }   // (1) a split across two sinks
         if (plans[i].plan == nullptr) { continue; }        // no identity to group on: keep (safe direction)
@@ -75569,6 +75593,15 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         r.count = one.count;
         r.unit  = one.unit;
         r.elf_casts = elf_casts;
+        r.pump_cost  = pump_cost;
+        r.pump_power = pump_power;
+        r.haste_cast = haste_cast;
+        {
+            const Action& sa = (*plans[i].actions)[static_cast<std::size_t>(at)];
+            const CardDefinition* sd = sa.kind == Action::Kind::CastFromHand
+                                     ? CardDatabase::Instance().Lookup(sa.card_name.str()) : nullptr;
+            r.kick = sd != nullptr && HasRepeatKicker(sd->params);
+        }
         rows.push_back(std::move(r));
     }
     if (rows.empty()) { return; }
@@ -75603,6 +75636,114 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
         std::fprintf(stderr, "[elves-scal-trace] turn=%d pre=%d held=%zu plans=%zu bf: %s\n",
                      s.turn_number, is_pre_combat ? 1 : 0, held.size(), plans.size(), bf.c_str());
     }
+    // (4) EZURI'S PUMP (MTG_ELVES_EZURI_COUNTS, heurarm ELVES_EZURI_COUNTS, DEFAULT OFF -- an experiment). The USER,
+    // 2026-11-27: "With Joraga or Galadhrim you might find the mana more efficiently spent on an Ezuri pump if the
+    // amount remaining is 5, since +3/+3 is more than the +2/+2 from the others." / "But that is all if we are to win
+    // this turn." / "(since trample doesn't matter in goldfishing)" / "I guess theoretically +6/+6 from Ezuri would
+    // also beat +5/+5 from squad or Joraga ... perhaps making a heuristic that determines when we need the pump.
+    // (otherwise we don't take it)". The band drops every Warcaller / Brigade count below top - h, and the mana such a
+    // count frees has one more use than the band prices: Ezuri's {2}{G}{G}{G} team pump, which the combat converter
+    // (ApplyFirebreathing) spends from the sources that do not attack. A kick or squad copy is +1 per other Elf for 2
+    // mana; a pump is +3 per Elf for 5, so on THIS turn the pump is the denser sink and the count that maximises the
+    // per-Elf bonus is often below the band (two kicks + one pump = +5 beats four kicks = +4 from 9 mana). That count
+    // K* is re-admitted, per class, for each hold-back step i in [0, h] and each leftover f in [0, unit) the top may
+    // have left (R = (top - i) * unit + f mana: K* = argmax over K of K + 3 * floor((R - unit * K) / 5), the larger K on
+    // a tie, kept only when it spends at least one pump), and ONLY when the pump is needed to win this turn:
+    //   * NOT LETHAL WITHOUT IT: a lower bound of the band's attack (the attack-capable creatures' combat power now, each
+    //     Elf + top; or with every attack-capable dork held back and attacking, each Elf + top - h) is below the
+    //     opponent's life -- else a band line already kills and the pump line is no faster;
+    //   * LETHAL WITH IT: an upper bound of the K* attack (every attack-capable creature, each Elf + K* + 1 + 3j + one
+    //     per other Elf the plan casts, Shepherd's base 5/5 if ours) reaches the opponent's life (a haste-for-all
+    //     permanent on the board or in the plan lifts this side: the plan's own casts then attack too).
+    // A WIDENING of the band, never a pick: the search still branches over every admitted count, the top included.
+    // Read only pre-combat (the converter fires at combat) with a pump source ours (or cast by the plan) and an
+    // attack-capable Elf. Genesis Wave rows are untouched (the USER: a Wave that flips Concordant Crossroads and then
+    // needs the pump "should not be considered").
+    struct EzAtk { int pw = 0; int pw_ub = 0; bool elf = false; bool dork = false; };
+    std::vector<EzAtk> ez_atk;
+    int ez_cost = 0, ez_power = 0, ez_life = 0;
+    bool ez_haste = false, ez_any_elf = false, ez_life_ok = false;
+    const bool ez_on = ElvesEzuriCountsOn();
+    const bool ez_look = is_pre_combat && (ez_on || ElvesCensusOn() || trace);
+    if (ez_look)
+    {
+        const int me = s.active_player_index;
+        int shepherd_base = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            if (d->params.team_pump_cost.has_value() && d->params.team_pump_power > 0 && !d->params.team_pump_taps_source)
+            { ez_cost = std::max(1, d->params.team_pump_cost->ManaValue()); ez_power = d->params.team_pump_power; }
+            if (d->params.grants_haste && d->params.affects_all_creatures) { ez_haste = true; }
+            if (d->params.team_base_pt_cost.has_value()) { shepherd_base = std::max(shepherd_base, d->params.team_base_pt_power); }
+        }
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me || p.tapped || !p.card.IsCreature() || !CanAttackFull(p, s.battlefield, me))
+            { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            EzAtk a;
+            a.elf   = p.AnimatedAllTypes() || CardHasSubtype(p.card, "Elf");
+            a.dork  = d != nullptr && d->tmpl == CardTemplate::ManaDork;
+            a.pw    = std::max(0, CombatPowerOf(p, s));
+            a.pw_ub = a.pw + (a.elf && shepherd_base > 0 ? std::max(0, shepherd_base - p.card.m_power.value_or(0)) : 0);
+            ez_any_elf = ez_any_elf || a.elf;
+            ez_atk.push_back(a);
+        }
+        ez_life_ok = s.players.size() == 2;
+        if (ez_life_ok) { ez_life = s.players[static_cast<std::size_t>(1 - me)].life; }
+    }
+    // Is row r's (dropped) count a pump-reserving K* (cand), and does the need-the-pump gate pass (return)?
+    auto ez_admits = [&](const Row& r, int tp, int h, bool& cand) -> bool
+    {
+        cand = false;
+        if (!ez_look || !r.kick || !ez_any_elf || r.unit <= 0) { return false; }
+        const int P  = ez_cost > 0 ? ez_cost : r.pump_cost;
+        const int pw = ez_cost > 0 ? ez_power : r.pump_power;
+        if (P <= 0 || pw <= 0) { return false; }
+        // The band's no-pump attack, a lower bound (the plan's other casts only add lords).
+        int lb_top = 0, lb_held = 0;
+        for (const EzAtk& a : ez_atk)
+        {
+            if (!a.dork) { lb_top += a.pw + (a.elf ? tp : 0); }
+            lb_held += a.pw + (a.elf ? std::max(0, tp - h) : 0);
+        }
+        const bool lethal_without = ez_life_ok && std::max(lb_top, lb_held) >= ez_life;
+        const bool ungated = ElvesEzuriUngatedOn();
+        bool need = false;
+        for (int i = 0; i <= std::min(h, tp); ++i)
+        {
+            for (int f = 0; f < r.unit; ++f)
+            {
+                const int kmax = tp - i;
+                const int R = kmax * r.unit + f;
+                int best_k = 0, best_b = -1, best_j = 0;
+                for (int k = 0; k <= kmax; ++k)
+                {
+                    const int j = (R - r.unit * k) / P;
+                    const int b = k + pw * j;
+                    if (b >= best_b) { best_b = b; best_k = k; best_j = j; }
+                }
+                if (best_k != r.count || best_j == 0) { continue; }
+                cand = true;
+                if (ungated) { need = true; continue; }
+                if (lethal_without) { continue; }
+                bool can_win = !ez_life_ok || ez_haste || r.haste_cast;
+                if (!can_win)
+                {
+                    int ub = 0;
+                    for (const EzAtk& a : ez_atk)
+                    { ub += a.pw_ub + (a.elf ? best_k + 1 + pw * best_j + r.elf_casts : 0); }
+                    can_win = ub >= ez_life;
+                }
+                if (can_win) { need = true; }
+            }
+        }
+        return need;
+    };
+    long long n_ez_rows = 0, n_ez_cand = 0, n_ez_need = 0, n_ez_admit = 0;
     // (2) Bucket by a cheap key (land + the sorted cast/activation names and slots + the sink), then split each
     // bucket into exact classes with Plan::operator== on the blanked copies.
     std::unordered_map<std::string, std::vector<std::size_t>> buckets;
@@ -75677,7 +75818,16 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
             const int tp = top[static_cast<std::size_t>(c)];
             const int hm = ElvesHoldBackMana(held, r.elf_casts);   // the mana every held attacker frees
             const int h = (hm + r.unit - 1) / r.unit;   // (3) the hold-back band in count steps
-            const bool drop = r.count < tp - h;
+            bool drop = r.count < tp - h;
+            if (drop && ez_look && r.kick)
+            {
+                bool cand = false;
+                const bool need = ez_admits(r, tp, h, cand);
+                if (ez_any_elf && (ez_cost > 0 || r.pump_cost > 0)) { ++n_ez_rows; }
+                if (cand) { ++n_ez_cand; }
+                if (need) { ++n_ez_need; }
+                if (need && ez_on) { drop = false; ++n_ez_admit; }
+            }
             if (drop) { admit[r.i] = 0; ++n_band; }
             if (trace)
             {
@@ -75693,6 +75843,17 @@ void ElvesScalingAdmit(const GameState& s, bool is_pre_combat,
                              r.sink.c_str(), r.count, tp, h, drop ? "DROP" : "keep", casts.c_str());
             }
         }
+    }
+    if (ElvesCensusOn() && n_ez_rows + n_ez_cand > 0)
+    {
+        ElvesCensus& c = ElvesCensusSink();
+        c.ez_rows.fetch_add(n_ez_rows); c.ez_cand.fetch_add(n_ez_cand);
+        c.ez_need.fetch_add(n_ez_need); c.ez_admit.fetch_add(n_ez_admit);
+    }
+    if (trace && n_ez_cand > 0)
+    {
+        std::fprintf(stderr, "[elves-scal-trace]   ez: life=%d atk=%zu rows=%lld cand=%lld need=%lld admit=%lld\n", ez_life,
+                     ez_atk.size(), n_ez_rows, n_ez_cand, n_ez_need, n_ez_admit);
     }
 }
 
