@@ -1904,6 +1904,99 @@ thread_local int  t_trc_site = 0;
 // Island that feeds Bluffs now can pay Preordain AND float the {U} Curiosity needs. If the real
 // payment fails, the optimistic arithmetic was wrong (a yield it over-counted) and the search goes on
 // extending, so no minimal set hides behind an optimistic one.
+// ---- THE LEFTOVER FOLD (MTG_ORACLE_LEFTOVER_FOLD, DEFAULT ON; =0 every leftover is paid on its own) ---------------
+// WHERE THE TABLE'S WORK WENT. A tap set holding a multi-unit source is verified once per COLOUR assignment of its
+// faces (Lotus Field / Lotus Vale: three of one colour; City of Brass: one of any), and each paying assignment is then
+// paid again once per other LEFTOVER -- every way the units the bill does not need can be the ones left floating
+// (Verify's leftover split). Two assignments of the same taps share most of those leftovers: Lotus Field {B} and
+// Lotus Field {R} paying {10} beside the same other taps can both leave {B}{R} floating, and the board after the
+// payment is then the same board. The seen set dropped the second only AFTER it had copied the board, re-made the
+// taps, paid the bill and keyed the result. Blood Sun seed 30000531 T4 m1 (Fastbond, two Lotus Fields, two Cities of
+// Brass, four Scorched Ruins, 413 plans): 23.0 M of the decision's 24.3 M verify payments were leftover splits and
+// 98.4% of them a result already recorded; the decision spent its 1300 priced s with 406 plans unaudited, and 42% of
+// the gate's Blood Sun games had such a decision (CAPPED-DECISION).
+//
+// THE FOLD. Within one table (MinimalPaymentsImpl: one board, one bill, one context), a leftover probe of tap set P
+// leaving stash L (the set-aside plus the split's own units) pays the bill from P's post-tap pool less L and floats L
+// again. Its result board is P's post-tap board with (i) the payment's changes and (ii) the pools it ends with. The
+// fold keys a result by E -- the post-tap board's key with every floating pool emptied (TapFoldKey, so tapped twins
+// and the tap marks stay apart) -- and the pools it ends with. The first leftover probe of a tap set takes E off its
+// own scratch board; every real leftover probe records (E, its final pools) -> its result key. A later leftover probe
+// whose (E, L) is recorded is not made: had it paid, it would have recorded that same result again (a no-op on the
+// table), and had it failed, nothing at all. So the table returns the same options, in the same order, from the same
+// representatives; and the probe still counts toward the table's probe ceiling (PayEnum::cap), so a table that was
+// cut is cut at the same place.
+//
+// WHAT IT RESTS ON, AND HOW EACH PART IS CHECKED. (a) A float-only payment changes only the floating pools, so two
+// payments that end with the same pools from the same E leave the same board: a real probe whose (E, pools) is
+// already recorded under a different result key turns the fold off for the rest of the table (`conflicts`).
+// (b) A successful leftover payment spends every unit offered to it, so it ends with exactly L: a real probe that
+// ends otherwise turns the fold off for the table (`spills`). (c) Only plain pools take part: E is taken, and a result
+// recorded, only when every restricted pool, the haste {C}, the prepay {C}, the wild / snow units and the generic-pip
+// credit record (prepay_wild_true) are empty, so the predicted pools (L's six colours) are the whole pool state.
+// MTG_ORACLE_LEFTOVER_FOLD_CHECK=1 (diagnostic) makes every folded probe anyway, without recording it, and prints
+// [leftover-fold] MISMATCH for one that paid into a result other than the recorded one.
+// Audit-only: the fold runs inside the oracle's Realize table (LeftoverFoldScope) and never in the payer's own use of
+// MinimalPayments (the line-keep repair), so play and its priced work are untouched.
+struct LeftoverFold
+{
+    std::unordered_map<std::uint64_t, std::uint64_t> reg;   // (E, final pools) -> result key
+    bool dead = false;
+};
+thread_local bool t_lf_scope    = false;   // inside the oracle's Realize table
+thread_local int  t_lf_override = -1;      // the tests: 0 / 1 forces the fold off / on, any table; -1 = the flag
+std::atomic<long long> g_lf_folded{0}, g_lf_checked{0}, g_lf_bad{0}, g_lf_conflict{0}, g_lf_spill{0}, g_lf_tables{0};
+bool LeftoverFoldActive()
+{
+    static const bool v = EnvOn("MTG_ORACLE_LEFTOVER_FOLD", true);
+    return t_lf_override >= 0 ? t_lf_override != 0 : (t_lf_scope && v);
+}
+bool LeftoverFoldCheck()
+{
+    static const bool v = EnvOn("MTG_ORACLE_LEFTOVER_FOLD_CHECK");
+    return v;
+}
+struct LeftoverFoldScope
+{
+    bool saved;
+    LeftoverFoldScope() : saved(t_lf_scope) { t_lf_scope = true; }
+    ~LeftoverFoldScope() { t_lf_scope = saved; }
+    LeftoverFoldScope(const LeftoverFoldScope&) = delete;
+    LeftoverFoldScope& operator=(const LeftoverFoldScope&) = delete;
+};
+// (c): the pool state is the general pool's six colours and nothing else.
+bool LeftoverFoldPlain(const GameState& g)
+{
+    const ManaPool& f = g.floating_mana;
+    if (f.wild != 0 || f.wild_c != 0 || f.wild_phantom != 0 || f.wild_conv != 0 || f.snow_units != 0) { return false; }
+    if (!(g.floating_creature_mana == ManaPool{}) || !(g.floating_bigspell_mana == ManaPool{})) { return false; }
+    if (g.floating_haste_c != 0 || g.floating_prepay_c != 0) { return false; }
+    const GameState::PrepayWildTrue& w = g.prepay_wild_true;
+    if (w.gtot != 0xFF) { return false; }
+    for (std::uint8_t x : w.gen)   { if (x != 0) { return false; } }
+    for (std::uint8_t x : w.cre)   { if (x != 0) { return false; } }
+    for (std::uint8_t x : w.gfund) { if (x != 0) { return false; } }
+    for (std::uint8_t x : w.cfund) { if (x != 0) { return false; } }
+    for (std::uint8_t x : w.gheld) { if (x != 0) { return false; } }
+    return true;
+}
+std::uint64_t LeftoverFoldKey(std::uint64_t e, const ManaPool& f)
+{
+    const int v[6] = { f.white, f.blue, f.black, f.red, f.green, f.colorless };
+    std::uint64_t h = e ^ 0x1EF7F01Dull;
+    for (int x : v) { h = (h ^ (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x)) + 0x9Bull)) * 0x9E3779B97F4A7C15ULL; }
+    return h;
+}
+// E: the post-tap board's key with the general pool emptied (the restricted ones are empty already, (c)).
+std::uint64_t LeftoverFoldE(GameState& sc)
+{
+    const ManaPool keep = sc.floating_mana;
+    sc.floating_mana = ManaPool{};
+    const std::uint64_t e = TapFoldKey(sc);
+    sc.floating_mana = keep;
+    return e;
+}
+
 struct PayEnum
 {
     const GameState&                state;
@@ -2075,6 +2168,16 @@ struct PayEnum
     std::uint64_t                   tap_key      = 0;
     std::string                     verify_from;
     std::unordered_map<std::uint64_t, std::string> memo_text;   // verify mode only
+    // THE LEFTOVER FOLD (LeftoverFold, above): the table's record, and Verify's side channel into PayAndRecord.
+    LeftoverFold*                   fold     = nullptr;
+    bool                            lf_want_e = false;   // this probe takes E off its post-tap board
+    bool                            lf_e_ok   = false;   // E of the tap set being split
+    std::uint64_t                   lf_e      = 0;
+    bool                            lf_pred_on = false;  // this real leftover probe's predicted key (check (b))
+    std::uint64_t                   lf_pred   = 0;
+    bool                            lf_dry    = false;   // the check mode's folded probe: pay and key, record nothing
+    bool                            lf_dry_paid = false;
+    std::uint64_t                   lf_dry_key  = 0;
 
     std::uint64_t PreKey(const std::vector<Pick>& picks, bool& ok) const
     {
@@ -2219,17 +2322,46 @@ struct PayEnum
         const int have[6] = { offered.white, offered.blue, offered.black, offered.red, offered.green, offered.colorless };
         const int was[6]  = { left.white, left.blue, left.black, left.red, left.green, left.colorless };
         int k[6] = { 0, 0, 0, 0, 0, 0 };
+        lf_e_ok = false;   // the first real leftover probe of this tap set takes E
         std::function<void(int, int)> rec = [&](int c, int rest)
         {
             if (capped) { return; }
             if (c == 6)
             {
                 if (rest != 0 || std::equal(k, k + 6, was)) { return; }
-                if (++probes > cap) { capped = true; return; }
+                if (++probes > cap) { capped = true; return; }   // a folded probe counts too: the same cut
                 PayOption o2 = o;
                 o2.stash.white += k[0]; o2.stash.blue += k[1]; o2.stash.black += k[2];
                 o2.stash.red   += k[3]; o2.stash.green += k[4]; o2.stash.colorless += k[5];
+                const bool lf_live = fold != nullptr && !fold->dead && o2.stash_haste == 0;
+                if (lf_live && lf_e_ok)
+                {
+                    const std::uint64_t fk = LeftoverFoldKey(lf_e, o2.stash);
+                    const auto it = fold->reg.find(fk);
+                    if (it != fold->reg.end())
+                    {
+                        g_lf_folded.fetch_add(1, std::memory_order_relaxed);
+                        if (LeftoverFoldCheck())
+                        {
+                            lf_dry = true; lf_dry_paid = false;
+                            PayAndRecord(o2, nullptr, nullptr);
+                            lf_dry = false;
+                            g_lf_checked.fetch_add(1, std::memory_order_relaxed);
+                            if (lf_dry_paid && (lf_dry_key != it->second || seen.count(lf_dry_key) == 0))
+                            {
+                                g_lf_bad.fetch_add(1, std::memory_order_relaxed);
+                                std::lock_guard<std::mutex> lk(g_print_mu);
+                                std::fprintf(stderr, "[leftover-fold] MISMATCH %s stash %s: the folded probe pays into another result\n",
+                                             TapsText(o2).c_str(), PoolText(o2.stash, 0).c_str());
+                            }
+                        }
+                        return;
+                    }
+                    lf_pred_on = true; lf_pred = fk;
+                }
+                else if (lf_live) { lf_want_e = true; }
                 PayAndRecord(o2, nullptr, nullptr);
+                lf_pred_on = false; lf_want_e = false;
                 return;
             }
             for (int v = 0; v <= std::min(have[c], rest); ++v) { k[c] = v; rec(c + 1, rest - v); }
@@ -2256,6 +2388,7 @@ struct PayEnum
             return false;
         };
         if (!PerformTaps(sc, o)) { return why("a tap was refused"); }
+        if (lf_want_e && LeftoverFoldPlain(sc)) { lf_e = LeftoverFoldE(sc); lf_e_ok = true; }
         // A batch option leaves this pool FLOATING before the first cast. Two colour
         // choices can pay the same aggregate bill and leave the same post-payment
         // board, yet differ in which ordered cast can spend the float. Keep those
@@ -2304,6 +2437,21 @@ struct PayEnum
             {
                 if (!p.tapped || !KeyedApart(sc, p)) { continue; }
                 rkey = (rkey ^ (0x51A9ull + static_cast<std::uint64_t>(p.card.m_number))) * 0x9E3779B97F4A7C15ULL;
+            }
+        }
+        if (lf_dry) { lf_dry_paid = true; lf_dry_key = rkey; return true; }
+        if (fold != nullptr && lf_e_ok && offered == nullptr && !fold->dead)
+        {
+            // A real leftover probe of a tap set with E: record its result; checks (a) and (b).
+            const bool plain = LeftoverFoldPlain(sc);
+            const std::uint64_t fk = plain ? LeftoverFoldKey(lf_e, sc.floating_mana) : 0;
+            if (lf_pred_on && (!plain || fk != lf_pred))
+            { fold->dead = true; g_lf_spill.fetch_add(1, std::memory_order_relaxed); }
+            else if (plain)
+            {
+                const auto ins = fold->reg.emplace(fk, rkey);
+                if (!ins.second && ins.first->second != rkey)
+                { fold->dead = true; g_lf_conflict.fetch_add(1, std::memory_order_relaxed); }
             }
         }
         if (seen.insert(rkey).second)
@@ -2746,6 +2894,11 @@ static std::vector<PayOption> MinimalPaymentsImpl(const GameState& state, const 
                            (for_creature ? fc.green : 0) + fbg.green,
                            (for_creature ? fc.colorless : 0) + fbg.colorless };
     std::unordered_set<std::uint64_t> seen;
+    // THE LEFTOVER FOLD (LeftoverFold): one record per table, shared by its set-asides like `seen`. A whole-float
+    // table splits no leftover.
+    LeftoverFold lfold;
+    const bool lf_on = !whole_float && LeftoverFoldActive();
+    if (lf_on) { g_lf_tables.fetch_add(1, std::memory_order_relaxed); }
     for (const PayOption& st : whole_float ? std::vector<PayOption>(1) : StashChoices(state, unmodeled))
     {
         if (out.size() >= max_opts) { break; }   // the lazy stop (PayEnum::want): the caller can use no more
@@ -2762,6 +2915,7 @@ static std::vector<PayOption> MinimalPaymentsImpl(const GameState& state, const 
         pe.line_surplus_taps = line_surplus_taps;
         pe.want        = max_opts;
         pe.memo_on = memo;
+        pe.fold = lf_on ? &lfold : nullptr;
         // MTG_ORACLE_PAY_PROBES: the table's probe ceiling (default 131072; it was 4096). With the tap memo a probe is a
         // DISTINCT post-tap board, so what is left past 4096 is real breadth -- Prevent Damage seed 30020166 T8 paid
         // {2}{R} into 1,666 distinct results. The gate's 326 flagged games (play byte-identical in every arm): ceiling
@@ -4244,6 +4398,16 @@ struct PayTableMemoReport
                      g_ptm_full.load(), g_ptm_checked.load(), g_ptm_bad.load());
     }
 } g_pay_table_memo_report;
+struct LeftoverFoldReport
+{
+    ~LeftoverFoldReport()
+    {
+        if (Level() <= 0 || g_lf_tables.load() == 0) { return; }
+        std::fprintf(stderr, "=== MANA ORACLE leftover fold: tables=%lld folded=%lld checked=%lld mismatch=%lld conflicts=%lld "
+                             "spills=%lld ===\n", g_lf_tables.load(), g_lf_folded.load(), g_lf_checked.load(), g_lf_bad.load(),
+                     g_lf_conflict.load(), g_lf_spill.load());
+    }
+} g_leftover_fold_report;
 
 // Apply `plan` to a copy of `root` once per payment script, LAYERED by payment index: every script of
 // length k is applied, the frontier boards they reach are Pareto-pruned (same core, dominated
@@ -4873,6 +5037,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             const SelfTapSrcTableScope _self_src(f.self_tap_src);
             const auto table = [&]
             {
+                const LeftoverFoldScope _lf;   // the oracle's own table: the leftover fold may run (LeftoverFold)
                 return MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability,
                                        /*whole_float=*/f.batch,
                                        f.has_spell ? &f.spell : nullptr, f.has_ability_src ? &f.ability_src : nullptr,
@@ -7328,6 +7493,9 @@ std::vector<std::vector<std::string>> MenuVerdicts(const GameState& state, bool 
 
 long long GoalFoldedFrontiers() { return g_goal_folded.load(); }
 long long GoalFoldRedos() { return g_goal_fold_redo.load(); }
+void LeftoverFoldOverrideForTest(int v) { t_lf_override = v; }
+long long LeftoverFoldedProbes() { return g_lf_folded.load(); }
+long long LeftoverFoldMismatches() { return g_lf_bad.load() + g_lf_conflict.load() + g_lf_spill.load(); }
 
 // ---- THE EXECUTOR'S PAYMENT SCRIPT (ManaOracle.h) -------------------------------------------------------
 }   // namespace manaoracle

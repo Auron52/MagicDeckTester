@@ -2067,3 +2067,68 @@ TEST_CASE("mana oracle: Ulamog's target-choice copies share one frontier payment
     REQUIRE(on.size() == off.size());
     for (std::size_t i = 0; i < on.size(); ++i) { CHECK_MESSAGE(on[i] == off[i], "plan ", i); }
 }
+
+TEST_CASE("mana oracle: the leftover fold pays each colour face's shared leftovers once, with the same verdicts")
+{
+    // Two Lotus Fields and two Cities of Brass paying Ulamog's {10}: every colour assignment of the Fields' and the
+    // Cities' faces is verified, and each one's leftover split floats leftovers the others float too. The fold makes
+    // each (taps, leftover) once (LeftoverFold); the menu's verdicts must not move.
+    EnsureOracleCards();
+    GameState s = Board({ "Lotus Field", "Lotus Field", "City of Brass", "City of Brass", "Scorched Ruins",
+                          "Rakdos Carnarium", "Copperline Gorge", "Swamp" });
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    Hand(s, { "Ulamog, the Ceaseless Hunger", "Exploration" });
+    for (Card& c : s.players[0].hand) { c.m_mana_cost = CardDatabase::Instance().Lookup(c.m_name.str())->card.m_mana_cost; }
+    SetLibrary(s, std::vector<std::string>(20, "Swamp"));
+    std::vector<TurnSolver::Plan> menu;
+    TurnSolver::Plan u = PlanOf({ CastAction(s, "Ulamog, the Ceaseless Hunger") });
+    u.cast_trigger_target_choice = 1;
+    menu.push_back(u);
+    TurnSolver::Plan eu = PlanOf({ CastAction(s, "Exploration"), CastAction(s, "Ulamog, the Ceaseless Hunger") });
+    eu.cast_trigger_target_choice = 1;
+    menu.push_back(eu);
+    const long long bad0 = manaoracle::LeftoverFoldMismatches();
+    manaoracle::LeftoverFoldOverrideForTest(0);
+    const long long f0 = manaoracle::LeftoverFoldedProbes();
+    const std::vector<std::vector<std::string>> off = manaoracle::MenuVerdicts(s, /*pre=*/true, menu, false);
+    const long long f1 = manaoracle::LeftoverFoldedProbes();
+    manaoracle::LeftoverFoldOverrideForTest(1);
+    const std::vector<std::vector<std::string>> on = manaoracle::MenuVerdicts(s, /*pre=*/true, menu, false);
+    const long long f2 = manaoracle::LeftoverFoldedProbes();
+    manaoracle::LeftoverFoldOverrideForTest(-1);
+    CHECK(f1 == f0);    // off: nothing folded
+    CHECK(f2 > f1);     // on: shared leftovers folded
+    CHECK(manaoracle::LeftoverFoldMismatches() == bad0);
+    REQUIRE(on.size() == off.size());
+    for (std::size_t i = 0; i < on.size(); ++i) { CHECK_MESSAGE(on[i] == off[i], "plan ", i); }
+
+    // The table itself: the same options, in the same order, from the same representatives.
+    ManaCost ten; ten.generic = 10;
+    auto table = [&](int fold)
+    {
+        manaoracle::LeftoverFoldOverrideForTest(fold);
+        std::vector<manaoracle::PayOption> t = manaoracle::MinimalPayments(s, ten, /*for_creature=*/true, nullptr);
+        manaoracle::LeftoverFoldOverrideForTest(-1);
+        return t;
+    };
+    const long long g0 = manaoracle::LeftoverFoldedProbes();
+    const std::vector<manaoracle::PayOption> t_off = table(0);
+    const std::vector<manaoracle::PayOption> t_on  = table(1);
+    CHECK(manaoracle::LeftoverFoldedProbes() > g0);
+    CHECK(manaoracle::LeftoverFoldMismatches() == bad0);
+    REQUIRE(t_on.size() == t_off.size());
+    CHECK(t_on.size() > 1);
+    for (std::size_t i = 0; i < t_on.size(); ++i)
+    {
+        const manaoracle::PayOption& a = t_on[i];
+        const manaoracle::PayOption& b = t_off[i];
+        CHECK_MESSAGE(a.stash == b.stash, "option ", i);
+        REQUIRE(a.taps.size() == b.taps.size());
+        for (std::size_t j = 0; j < a.taps.size(); ++j)
+        {
+            CHECK_MESSAGE(a.taps[j].num == b.taps[j].num, "option ", i, " tap ", j);
+            CHECK_MESSAGE(a.taps[j].color == b.taps[j].color, "option ", i, " tap ", j);
+        }
+    }
+}

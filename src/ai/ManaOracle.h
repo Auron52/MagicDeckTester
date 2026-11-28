@@ -466,6 +466,14 @@ namespace manaoracle
     long long GoalFoldedFrontiers();
     long long GoalFoldRedos();
 
+    // THE LEFTOVER FOLD (MTG_ORACLE_LEFTOVER_FOLD, ManaOracle.cpp LeftoverFold), for the tests: force it off (0) / on (1)
+    // on this thread, in every table (a bare MinimalPayments call too), -1 = the flag (the oracle's own tables only); the leftover probes folded so far in this process; and the fold's self-checks that
+    // failed (a folded probe that would have paid elsewhere, a recorded result met again under another key, a payment
+    // that did not end with its predicted pools).
+    void      LeftoverFoldOverrideForTest(int v);
+    long long LeftoverFoldedProbes();
+    long long LeftoverFoldMismatches();
+
     // THE ENUM-GAP VERDICT for one plan a mana gate kept off `menu` (AuditDecision's per-plan check), for the unit
     // tests that pin its false-positive rules: the class it would report ("ENUM-GAP", "HIDDEN-INFO", a
     // "DOMINATED-*"), or "" for none. `observed` (optional): the rest of the observe-mode enumeration -- the plans
