@@ -8,6 +8,25 @@ The original untracked copy is backed up under
 Rebased onto the pushed overnight checkpoint `ffee59231` after its landing gate
 passed; implementation work starts from this shared source.
 
+## Value-leaf generation (2026-11-28)
+
+The full value-leaf pipeline completed from frozen commit `45df1f65f` on
+source tree `1d1b7b16299904599166a2e81fadf68fc16a319e` and smoke play
+digest `c9b93ee992bb`. Phase A produced 10,743 distinct training rows from
+2,500 games; held-out RMSE was 0.3025. The 52-cell, 20,800-game coverage
+matrix had no condemned cells, and its risk gate passed. Trust-depth calibration
+remained unset because its confidence bound did not meet the 0.002 tolerance.
+
+Eight paired 1,000-game seeds compared the learned evaluator and leafless
+search shapes with the live setting. The final-depth single-pass leafless shape
+won the adoption rule: 0.00100 fewer win turns per game at 0.631 times the
+search work units. The trained evaluator remains staged at
+`logs/eval/Zombies.value.STAGED.json`; the live sidecar uses the leafless shape.
+The play-setting screen then chose depth 6 and budget 20 ms from 8,000 paired
+games: 0.00012 fewer win turns per game at 0.987 times the old work units.
+No beam or escalation allowance was adopted. The mulligan generation setting
+remains depth 1, budget 1 ms, with ten expected buckets.
+
 ## Exhaustive mulligan profile (2026-11-28)
 
 All ten new Zombies play references matched search before generation and again
