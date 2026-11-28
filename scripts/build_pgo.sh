@@ -36,7 +36,9 @@
 # the checked-out one.
 #
 # Env: PGO_GAMES (named decks: games per deck, default 48), PGO_FRACTION (suite: share of each smoke
-# case's games, default 0.1), PGO_THREADS (default: nproc).
+# case's games, default 0.1), PGO_THREADS (training workers, default: nproc),
+# PGO_COMPILE_JOBS (compiler jobs, default: PGO_THREADS). Cap compilation separately on
+# memory-limited hosts without leaving training cores idle.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -57,12 +59,13 @@ TREE=build/pgo-work   # NOT build/pgo: /workspaces is case-INSENSITIVE, so that 
 PROF="$PWD/$TREE/profdata"
 OUTDIR=build/PGO
 jobs="${PGO_THREADS:-$(nproc 2>/dev/null || echo 4)}"
+compile_jobs="${PGO_COMPILE_JOBS:-$jobs}"
 
 echo ">>> pgo 1/3: instrumented build -> $TREE/"
 rm -rf "$PROF"; mkdir -p "$PROF"
 cmake -S . -B "$TREE" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
       "-DCMAKE_CXX_FLAGS=-fprofile-generate=$PROF -fprofile-update=atomic" >/dev/null
-cmake --build "$TREE" -j"$jobs" --target mtg mtg-analyze
+cmake --build "$TREE" -j"$compile_jobs" --target mtg mtg-analyze
 
 echo ">>> pgo 2/3: training, one pooled batch (${*:-the whole regression suite})"
 MAN="$TREE/train.manifest.json"
@@ -76,7 +79,7 @@ python3 scripts/pgo_train_manifest.py "$MAN" "$@"
 echo ">>> pgo 3/3: profile-use + LTO build"
 cmake -S . -B "$TREE" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
       "-DCMAKE_CXX_FLAGS=-fprofile-use=$PROF -fprofile-partial-training -Wno-missing-profile" >/dev/null
-cmake --build "$TREE" -j"$jobs" --target mtg mtg-analyze
+cmake --build "$TREE" -j"$compile_jobs" --target mtg mtg-analyze
 
 # Install ATOMICALLY (copy beside, then rename): a long run may be executing the previous build/PGO
 # binary right now, and a rename leaves its inode untouched. The stamp is removed first and written
