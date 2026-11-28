@@ -14334,8 +14334,9 @@ static int KeepOwedFloatPay(GameState& state, const ManaCost& cost_in, bool for_
 // ends the named line (the hold is this cost and the line opens unseen: Apex of Power after its rituals) sees no later
 // demand in the hold, so the drain and the land ladder spend whatever pays. A creature in hand whose cost has a colour
 // this cost lacks is a visible later demand; when exactly one such card is in hand (the visible-closer lump rule's
-// "sole creature", MTG_ONDEMAND_VISIBLE_CONTRIB), the plain payment is judged against it EXACTLY
-// (LumpAwareBillPayableOpener: every crack of the lumps left, the complete backtracker, the opener's ten in a pip colour)
+// "sole creature", MTG_ONDEMAND_VISIBLE_CONTRIB), or one of several whose bill dominates all the others', the plain
+// payment is judged against it EXACTLY (every crack of the lumps left, the complete backtracker, the opener's ten in the
+// colours the plan can name)
 // and, only when it strands the closer, a fixed list of alternative payments is tried; the first that pays this bill and
 // leaves the closer payable by the same judge (a witness) is made instead (CR 601.2h: the player chooses which mana pays):
 //   1. the floating units of the closer's colours (those this cost has no pip of) set aside for the payment;
@@ -14356,7 +14357,22 @@ static int VisibleCloserKeepPay(GameState& state, const ManaCost& cost_in, bool 
         || lu.blue != cost_in.blue || lu.black != cost_in.black || lu.red != cost_in.red || lu.green != cost_in.green)
     { return -1; }
     const int own[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+    // The closers: the creatures in hand whose cost has a colour this cost lacks. With more than one, the one whose
+    // effective bill DOMINATES every other's (no fewer of each colour and {C}, no smaller mana value; no hybrid, X,
+    // phyrexian or twobrid pip on either) stands for them all: a board that pays it pays each of the others (its
+    // coloured units cover their pips, the rest their generic). Karrthus ({4}{B}{R}{G}) over Dragonlord Kolaghan
+    // ({4}{B}{R}). No dominating closer: the continuation chooses between them, and the gate does not apply.
     const CardDefinition* closer = nullptr;
+    ManaCost bill;
+    auto plain_cost = [](const ManaCost& m)
+    { return m.hybrid_count == 0 && m.phyrexian_count == 0 && m.twobrid_count == 0 && m.x_pips == 0 && !m.has_x; };
+    auto dominates = [](const ManaCost& a, const ManaCost& b)
+    {
+        return a.white >= b.white && a.blue >= b.blue && a.black >= b.black && a.red >= b.red && a.green >= b.green
+               && a.colorless >= b.colorless && a.ManaValue() >= b.ManaValue();
+    };
+    bool several = false;
+    std::vector<ManaCost> others;
     for (const Card& card : state.players[state.active_player_index].hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
@@ -14365,12 +14381,16 @@ static int VisibleCloserKeepPay(GameState& state, const ManaCost& cost_in, bool 
         const int pip[5] = { m.white, m.blue, m.black, m.red, m.green };
         bool adds = false;
         for (int c = 0; c < 5; ++c) { if (own[c] == 0 && pip[c] > 0) { adds = true; } }
-        if (!adds) { continue; }
-        if (closer != nullptr && closer != d) { return -1; }   // two closers compete: the continuation chooses
-        closer = d;
+        if (!adds || d == closer) { continue; }
+        const ManaCost e = EffectiveSpellCost(*d, state, 1);
+        if (!plain_cost(e)) { return -1; }
+        if (closer == nullptr) { closer = d; bill = e; continue; }
+        several = true;
+        if (dominates(e, bill) && !dominates(bill, e)) { others.push_back(bill); closer = d; bill = e; }
+        else { others.push_back(e); }
     }
     if (closer == nullptr) { return -1; }
-    const ManaCost bill = EffectiveSpellCost(*closer, state, 1);
+    if (several) { for (const ManaCost& o : others) { if (!dominates(bill, o)) { return -1; } } }
     const int bp[5] = { bill.white, bill.blue, bill.black, bill.red, bill.green };
     int cmask = 0;   // the closer's colours this cost has no pip of
     for (int c = 0; c < 5; ++c) { if (own[c] == 0 && bp[c] > 0) { cmask |= 1 << c; } }
@@ -14378,6 +14398,40 @@ static int VisibleCloserKeepPay(GameState& state, const ManaCost& cost_in, bool 
     const ManaPool ritual = LineKeepRockFor(state).ritual;
     static const char* kCol[5] = { "W", "U", "B", "R", "G" };
     static const bool s_trace = EnvOn("MTG_VISIBLE_CLOSER_TRACE");
+    // The opener's ten (Apex of Power cast from hand: "add ten mana of any one color") is credited in the colours the
+    // plan can name. LumpAwareBillPayableOpener credits it in each colour the bill has a pip of, but a red-only provider
+    // (ImpulseFloatColorRedOnly, Dragonstorm; not under MTG_UNPRUNED(SacColor)) only ever enumerates a RED Apex
+    // (TurnSolver's Apex colour variants), so a ten in Karrthus's {G} or {B} is a payment no plan makes: the judge would
+    // read a plain payment that strands Karrthus as keeping it (s30129223 T4: {B} drained, one Bloom left).
+    int ten = 0;
+    {
+        const Card* pc = PayingSpellCard();
+        const CardDefinition* pd = pc != nullptr ? CardDatabase::Instance().LookupCached(*pc) : nullptr;
+        ten = (pd != nullptr && !pc->m_is_staged) ? pd->params.impulse_float_amount : 0;
+    }
+    const bool ten_red_only = ten > 0 && ResolveProvider(state).ImpulseFloatColorRedOnly()
+                              && !DecisionUnpruned(UnprunedGate::SacColor);
+    auto witness = [&](const GameState& b) -> bool
+    {
+        const ManaPool& pf = b.floating_mana;
+        if (pf.white >= bill.white && pf.blue >= bill.blue && pf.black >= bill.black && pf.red >= bill.red
+            && pf.green >= bill.green && static_cast<int>(pf.Total()) >= bill.ManaValue()) { return true; }
+        if (!ten_red_only) { return LumpAwareBillPayableOpener(b, bill, ritual); }
+        ManaPool extra = ritual;   // the opener's ten in the one colour the plan can name (red)
+        AddColorToPool(extra, "R", ten);
+        return LumpAwareBillPayable(b, bill, extra);
+    };
+    // EXACT PRE-CHECK: no alternative can have a witness unless the closer is payable on the board BEFORE this payment
+    // (the same judge, the same credit). A payment only spends: every source the post-payment judge can use (an untapped
+    // source, a lump to crack, a floating unit) is on this board too, and the judge is complete and monotone in them, so
+    // when this board cannot pay the closer no post-payment board can, and the plain payment stands untouched (no copy).
+    bool pre_fail = false;   // DS5-TEMP-AUDIT (remove): MTG_VC_PRECHECK_AUDIT=1 runs the full path and reports a miss
+    if (!witness(state))
+    {
+        static const bool s_audit = EnvOn("MTG_VC_PRECHECK_AUDIT");
+        if (!s_audit) { return -1; }
+        pre_fail = true;
+    }
     // The alternatives, in order: {lump index (-1 none), crack colour, hold the creature-only lands}.
     struct Alt { int lump; int col; bool hold; };
     std::vector<OnDemandCrack> lands, lumps;
@@ -14452,13 +14506,6 @@ static int VisibleCloserKeepPay(GameState& state, const ManaCost& cost_in, bool 
         }
     }
     if (alts.empty()) { return -1; }
-    auto witness = [&](const GameState& b) -> bool
-    {
-        const ManaPool& pf = b.floating_mana;
-        if (pf.white >= bill.white && pf.blue >= bill.blue && pf.black >= bill.black && pf.red >= bill.red
-            && pf.green >= bill.green && static_cast<int>(pf.Total()) >= bill.ManaValue()) { return true; }
-        return LumpAwareBillPayableOpener(b, bill, ritual);
-    };
     // The first alternative with a witness, judged on copies of `orig`; -1 when none.
     auto find_alt = [&](const GameState& orig) -> int
     {
@@ -14475,6 +14522,7 @@ static int VisibleCloserKeepPay(GameState& state, const ManaCost& cost_in, bool 
     };
     auto note = [&](int i)
     {
+        if (pre_fail) { std::fprintf(stderr, "[visible-closer] PRECHECK-MISS T%d\n", state.turn_number); }
         if (!s_trace) { return; }
         const Alt& a = alts[static_cast<std::size_t>(i)];
         std::fprintf(stderr, "[visible-closer] T%d closer=%s alt=%d lump=%d col=%d hold=%d\n", state.turn_number,
@@ -14493,7 +14541,12 @@ static int VisibleCloserKeepPay(GameState& state, const ManaCost& cost_in, bool 
         if (!pay(state, available, nullptr)) { return 0; }
         if (witness(state)) { return 1; }
         const int i = find_alt(*orig);
-        if (i < 0) { return 1; }
+        if (i < 0)
+        {
+            if (s_trace)
+            { std::fprintf(stderr, "[visible-closer] T%d closer=%s alt=none\n", state.turn_number, closer->card.m_name.str().c_str()); }
+            return 1;
+        }
         note(i);
         state = *orig;                                       // the alternative replaces the plain payment
         if (available != nullptr) { *available = orig_avail; }
@@ -14509,7 +14562,12 @@ static int VisibleCloserKeepPay(GameState& state, const ManaCost& cost_in, bool 
         if (witness(trial.Board())) { return -1; }
         pick = find_alt(state);
     }
-    if (pick < 0) { return -1; }
+    if (pick < 0)
+    {
+        if (s_trace)
+        { std::fprintf(stderr, "[visible-closer] T%d closer=%s alt=none\n", state.turn_number, closer->card.m_name.str().c_str()); }
+        return -1;
+    }
     note(pick);
     return pay(state, available, &alts[static_cast<std::size_t>(pick)]) ? 1 : 0;
 }

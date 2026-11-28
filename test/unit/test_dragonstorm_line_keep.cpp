@@ -17,6 +17,8 @@
 //                                      owes and does not make is kept when the plain payment strands the rest.
 //   MTG_UNSEEN_SCARCE_RITUAL_NET    -- the unseen-keep-scarce drain counted the later red the paying ritual itself
 //                                      makes as owed by the float, so a generic unit came off the {B}.
+//   MTG_VISIBLE_CLOSER_KEEP         -- the payment of an opener that ends the named line (Apex of Power) saw no later
+//                                      demand and stranded the sole visible creature closer in hand (Karrthus).
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -532,4 +534,128 @@ TEST_CASE("Dragonstorm line keep: s30093026 T4 -- Song's own red nets the later 
         }
         CHECK(s.floating_mana.black == (on ? 1 : 0));
     }
+}
+
+namespace
+{
+// Pay Apex of Power as the opener that ENDS the named line (the hold is Apex's own cost, the line opens unseen), let it
+// resolve (its ten red; red is the colour Karrthus's {R} and the continuation's rituals want), then whether Karrthus,
+// Tyrant of Jund ({4}{B}{R}{G}) is payable on what is left -- the continuation's cast.
+bool ApexThenKarrthus(GameState& s)
+{
+    const ManaCost apex = EffectiveSpellCost(DefDlk("Apex of Power"), s);
+    {
+        LineUnpaidCostScope luc(apex);
+        LineOpensUnseenScope unseen(true);
+        const Card ac = CardDlk("Apex of Power", 40);
+        SpellSubtypePayScope pay(&ac);
+        REQUIRE(TapForCostDirect(s, apex, /*for_creature=*/false));
+    }
+    s.floating_mana.red += DefDlk("Apex of Power").params.impulse_float_amount;   // Apex resolves (from hand)
+    const ManaCost karr = EffectiveSpellCost(DefDlk("Karrthus, Tyrant of Jund"), s);
+    LineUnpaidCostScope luc(karr);
+    const Card kc = CardDlk("Karrthus, Tyrant of Jund", 41);
+    SpellSubtypePayScope pay(&kc);
+    return TapForCostDirect(s, karr, /*for_creature=*/true);
+}
+}   // namespace
+
+// MTG_VISIBLE_CLOSER_KEEP. Dragonstorm s30095186 gi95186 T6 m1 {Rite of Flame, Pyretic Ritual, Apex of Power}, Karrthus in
+// hand: Pyretic's {1} cracked Lotus Bloom#19 for {B} (the visible-closer lump rule), so {B}{B} and five {R} float beside
+// Sandstone Needle#49, Mercadian Bazaar#22 and the second Bloom. Apex's {7}{R}{R}{R} sees no later demand in the hold (the
+// line ends at the breakpoint) and spent both {B} on its generic with red to spare; Karrthus then had one Bloom for one
+// of {B}{G}. The lever judges the plain payment against the sole visible closer and keeps one {B} floating instead.
+// (Traced in game: MTG_DS2_PAYDBG, before B2 R5 -> after B0 R3.)
+TEST_CASE("Dragonstorm visible closer: s30095186 T6 -- Apex keeps a floating {B} for Karrthus")
+{
+    GameState s0 = BaseDlk(6);
+    PutDlk(s0, "Mercadian Bazaar", 22).storage_counters = 4;
+    PutDlk(s0, "Sandstone Needle", 46).tapped = true;
+    Permanent& n49 = PutDlk(s0, "Sandstone Needle", 49);
+    PutDepletionCounters(s0, n49, 2);
+    PutDlk(s0, "Lotus Bloom", 21);
+    s0.floating_mana.black = 2;
+    s0.floating_mana.red = 5;
+    for (const char* h : { "Desperate Ritual", "Seething Song", "Seething Song", "Karrthus, Tyrant of Jund",
+                           "Scourge of Valkas" })
+    { s0.players[0].hand.push_back(CardDlk(h, 60 + static_cast<int>(s0.players[0].hand.size()))); }
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmDlk as(heurarm::VISIBLE_CLOSER_KEEP, on);
+        GameState s = s0;
+        CHECK(ApexThenKarrthus(s) == on);
+    }
+}
+
+// Dragonstorm s30113323 gi113323 T5 m1 {Rite of Flame, Rite of Flame, Pyretic Ritual, Apex of Power}, Karrthus in hand:
+// seven {R} float beside Mercadian Bazaar#24, Unclaimed Territory#58 and Lotus Bloom#21. Apex's generic took the
+// Territory's {C} (no later demand in the hold), and Karrthus had the Bloom for one of {B}{G} and nothing for the other.
+// The lever finds a payment that cracks the Bloom for {B}, keeps one {B} floating and holds the Territory for the {G}.
+TEST_CASE("Dragonstorm visible closer: s30113323 T5 -- Apex leaves Unclaimed Territory up for Karrthus")
+{
+    GameState s0 = BaseDlk(5);
+    PutDlk(s0, "Mercadian Bazaar", 23).tapped = true;
+    PutDlk(s0, "Mercadian Bazaar", 24).storage_counters = 2;
+    PutDlk(s0, "Unclaimed Territory", 58);
+    PutDlk(s0, "Lotus Bloom", 21);
+    s0.floating_mana.red = 7;
+    for (const char* h : { "Karrthus, Tyrant of Jund", "Dragonstorm" })
+    { s0.players[0].hand.push_back(CardDlk(h, 60 + static_cast<int>(s0.players[0].hand.size()))); }
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmDlk as(heurarm::VISIBLE_CLOSER_KEEP, on);
+        GameState s = s0;
+        CHECK(ApexThenKarrthus(s) == on);
+    }
+}
+
+// Dominance: the same board with Dragonlord Kolaghan ({4}{B}{R}) beside Karrthus -- Karrthus's bill dominates
+// Kolaghan's, so it stands for both (a board that pays Karrthus pays Kolaghan) and the lever keeps it payable.
+TEST_CASE("Dragonstorm visible closer: Karrthus dominates Kolaghan -- the lever keeps Karrthus payable")
+{
+    GameState s0 = BaseDlk(5);
+    PutDlk(s0, "Mercadian Bazaar", 23).tapped = true;
+    PutDlk(s0, "Mercadian Bazaar", 24).storage_counters = 2;
+    PutDlk(s0, "Unclaimed Territory", 58);
+    PutDlk(s0, "Lotus Bloom", 21);
+    s0.floating_mana.red = 7;
+    for (const char* h : { "Karrthus, Tyrant of Jund", "Dragonlord Kolaghan" })
+    { s0.players[0].hand.push_back(CardDlk(h, 60 + static_cast<int>(s0.players[0].hand.size()))); }
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmDlk as(heurarm::VISIBLE_CLOSER_KEEP, on);
+        GameState s = s0;
+        CHECK(ApexThenKarrthus(s) == on);
+    }
+}
+
+// Control: Craterhoof Behemoth ({5}{G}{G}{G}) beside Karrthus -- neither bill dominates the other, so there is no
+// closer that stands for both and the gate does not apply: both arms make the same payment.
+TEST_CASE("Dragonstorm visible closer: two closers, neither dominates -- the gate does not apply")
+{
+    GameState s0 = BaseDlk(5);
+    PutDlk(s0, "Mercadian Bazaar", 23).tapped = true;
+    PutDlk(s0, "Mercadian Bazaar", 24).storage_counters = 2;
+    PutDlk(s0, "Unclaimed Territory", 58);
+    PutDlk(s0, "Lotus Bloom", 21);
+    s0.floating_mana.red = 7;
+    for (const char* h : { "Karrthus, Tyrant of Jund", "Craterhoof Behemoth" })
+    { s0.players[0].hand.push_back(CardDlk(h, 60 + static_cast<int>(s0.players[0].hand.size()))); }
+    GameState res[2] = { s0, s0 };
+    bool ok[2] = { false, false };
+    for (const int on : { 1, 0 })
+    {
+        ArmDlk as(heurarm::VISIBLE_CLOSER_KEEP, on != 0);
+        ok[on] = ApexThenKarrthus(res[on]);
+    }
+    CHECK(ok[0] == ok[1]);
+    CHECK(res[0].floating_mana.Total() == res[1].floating_mana.Total());
+    CHECK(res[0].floating_mana.black == res[1].floating_mana.black);
+    CHECK(CountNamed(res[0], "Lotus Bloom") == CountNamed(res[1], "Lotus Bloom"));
+    int up[2] = { 0, 0 };
+    for (int k = 0; k < 2; ++k) { for (const Permanent& p : res[k].battlefield) { if (!p.tapped) { ++up[k]; } } }
+    CHECK(up[0] == up[1]);
 }

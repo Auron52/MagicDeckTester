@@ -832,10 +832,11 @@ inline bool LineSeqRestOn()
 // that ENDS the named line (g_line_opens_unseen, and the line hold is this cost: Apex of Power at the end of {rituals,
 // Apex}). The line after the reveal is re-solved by the continuation, so every payer rule that reads the hold sees no
 // later demand; but a creature in HAND whose cost has a colour this cost lacks (Karrthus, Tyrant of Jund's {B}{G} beside
-// Apex's red) is a visible demand, and when it is the only such creature it is the closer the visible-closer lump rule
-// (MTG_ONDEMAND_VISIBLE_CONTRIB) already pays for. The plain payment is judged against it with the exact judge
-// (LumpAwareBillPayableOpener: every crack of the lumps left, the complete backtracker, the opener's ten in a pip
-// colour); only when it STRANDS the closer is a fixed list of alternative payments tried (the closer's floating
+// Apex's red) is a visible demand: the closer (the only such creature, or the one whose bill dominates every other's --
+// Karrthus over Dragonlord Kolaghan). The plain payment is judged against it with the exact judge (every crack of the
+// lumps left, the complete backtracker, the opener's ten in the colours the plan can name: RED only for a red-only
+// provider, ImpulseFloatColorRedOnly); a board that cannot pay the closer even before this payment skips the gate
+// (exact: a payment only spends); only when the plain payment STRANDS the closer is a fixed list of alternative payments tried (the closer's floating
 // colours set aside; the untapped creature-only lands held; each lump cracked in each closer colour with its units set
 // aside, with and without the hold), and the first that pays this bill and leaves the closer payable (the same judge, a
 // witness) is made instead (CR 601.2h). It only replaces a payment that provably strands the closer by one that does
