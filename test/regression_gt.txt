@@ -1,4 +1,4 @@
-# Regression ground truth -- commit f34549aae  date 2026-11-28
+# Regression ground truth -- commit 08335012d  date 2026-11-28
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
@@ -10,14 +10,17 @@
 # accepted-with-regressions (regression, 2026-11-27): land-1130: DS round 4 MTG_LINE_SEQ_REST + MTG_UNSEEN_SCARCE_RITUAL_NET default ON (shared payer) + CPU cut 2 (exact) + TH oracle residuals (play-identical); 0 slower, 1 faster (hinata d0 gi), 3 same-score play changes (worldfire d5 gi36, elementals d0 gi22, bruna d0 gi819)
 # accepted-with-regressions (smoke, 2026-11-28): Zombies payable-order update: one greedy game slowed by one turn, two improved by one turn; seven searched games changed line without changing win turn. Dragonstorm d0 same-loss line changed.
 # accepted-with-regressions (regression, 2026-11-28): Zombies payable-order update: searched games 3 one-turn faster, 0 slower, 19 same-score line changes across Zombies and Dragonstorm; d0 one slower and two faster. Dragonstorm d5 gi171 remains T7; saved local comparison binary predates the committed T7 GT (prior budget-churn acceptance documented in GT header).
+# accepted-with-regressions (overnight, 2026-11-28): Zombies FULL profile adoption checkpoint measured before Elves integration on d3cb201e0 (src d705b7b89; now integrated src 1d1b7b162): profile-off baseline and profile-on 14,410-game run on identical rows; d3 4000 -0.1495t, d5 2000 -0.1280t, 2HG d5 400 -0.0550t, d0 8000 -0.1897t, work units 0.39-0.46x; per-game attribution reproduced both arms, one Zombies same-hand digest exception resolved by forcing lookahead bottoming, 2HG zero unexplained. Later Elves-only source changes were not in this checkpoint.
+# accepted-with-regressions (smoke, 2026-11-28): Zombies exhaustive mulligan profile adoption: four smoke rows match profile-on WIP run exactly; prior pre-profile GT intentionally superseded; per-game audit against profile-on logs 0 changed games; full integrated smoke 251 unchanged decks pass
+# accepted-with-regressions (regression, 2026-11-28): Zombies exhaustive mulligan profile adoption: all seven regression rows match profile-on WIP run exactly; pre-profile GT intentionally superseded; 2HG s2002 +0.0533t but full paired overnight 2HG -0.0550t over 400 games and prior per-game attribution; integrated audit vs profile-on logs 0 changed; 679 scenarios and 980 strict refs pass
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (full sweep; host-dependent); seeds disjoint.
 
 # --- smoke ---
-zombies_smoke_d0_s1001=4.7770/51b602d6072df118
-zombies_smoke_d3_s1001=4.4400/bb500485ffaf3a5a
-zombies_smoke_d5_s1001=4.4500/1a1ac68fc2b43328
-zombies2hg_smoke_d5_s1001=4.9200/a0978255e497614f
+zombies_smoke_d0_s1001=4.6040/ae0515b5c79a66c9
+zombies_smoke_d3_s1001=4.3400/11feeeb147ec622d
+zombies_smoke_d5_s1001=4.2900/8f006a2e3bd6a66a
+zombies2hg_smoke_d5_s1001=4.8400/e312ac101b7414d6
 mazesend_smoke_d0_s1001=6.7160/7a052adf70055959
 mazesend_smoke_d3_s1001=5.0000/485ceae25664e38d
 mazesend_smoke_d5_s1001=5.5833/f2f2f184c9ba0962
@@ -271,13 +274,13 @@ merfolkturns_smoke_d5_s1001=5.5300/ba0fe25beb7fb28b
 merfolkturns2hg_smoke_d3_s1001=5.6000/328239bb41524a66
 
 # --- regression ---
-zombies_regression_d3_s30281=4.4000/69681e79ecf3fd55
-zombies_regression_d5_s30281=4.4000/69681e79ecf3fd55
-zombies_regression_d0_s2002=4.8200/0a5c7a003d95ae3b
-zombies_regression_d3_s2002=4.5000/ded0a5192a785940
-zombies_regression_d5_s2002=4.4200/9ca8b80fe30dd59a
-zombies_regression_d5_s3003=4.3600/261d0de0fc996afc
-zombies2hg_regression_d5_s2002=4.9600/239e37426c99604f
+zombies_regression_d3_s30281=4.0000/617916b09aa10b53
+zombies_regression_d5_s30281=4.0000/617916b09aa10b53
+zombies_regression_d0_s2002=4.6400/fda384e5373642b4
+zombies_regression_d3_s2002=4.3800/262193d381b95ae7
+zombies_regression_d5_s2002=4.3333/335cba1b54a837f2
+zombies_regression_d5_s3003=4.2200/5554171da18c7146
+zombies2hg_regression_d5_s2002=5.0133/b11a272bf696aae8
 mazesend_regression_d0_s2002=6.7190/c086fa276a467f35
 mazesend_regression_d3_s2002=5.6000/d5da6afb7d28020a
 mazesend_regression_d5_s2002=5.4674/f9ab44fab6862b70
@@ -682,21 +685,24 @@ merfolkturns_regression_d5_s2002=5.3200/4452be2ded693aa5
 merfolkturns_regression_d5_s3003=5.4400/0640528e49a98cef
 
 # --- overnight ---
-zombies_overnight_d3_s30381=4.2000/df42dafd597d1cb3
-zombies_overnight_d5_s30381=4.2000/df42dafd597d1cb3
-zombies_overnight_d0_s4004=4.7950/05ab8acf8fb1bdb2
-zombies_overnight_d0_s6006=4.7900/8b7d1a51455a5915
-zombies_overnight_d0_s8008=4.8060/7cf0162087018ddb
-zombies_overnight_d0_s10010=4.8120/4fdec0f5a07f8c3a
-zombies_overnight_d3_s4004=4.3840/b9257547dfbb95a9
-zombies_overnight_d5_s4004=4.4333/da5e82e8bf199c22
-zombies_overnight_d5_s5005=4.4233/914863d2e2e0a362
-zombies_overnight_d5_s6006=4.4033/0f1b7859ea3da576
-zombies_overnight_d5_s7007=4.3567/e8af1fe760460b49
-zombies2hg_overnight_d5_s4004=4.8933/5e6bdd5b235249d7
-zombies2hg_overnight_d5_s5005=4.8933/b083e780060fadd2
-zombies2hg_overnight_d5_s6006=4.9200/23ed7e2199c547fb
-zombies2hg_overnight_d5_s7007=4.9200/7d567b27331fc49d
+zombies_overnight_d3_s30381=4.0000/22263bc570ec2c81
+zombies_overnight_d5_s30381=4.0000/22263bc570ec2c81
+zombies_overnight_d0_s4004=4.5975/0833a8a95b67b025
+zombies_overnight_d0_s6006=4.5985/d24cec6785751a6e
+zombies_overnight_d0_s8008=4.6000/c8b0f66a0c5b526f
+zombies_overnight_d0_s10010=4.6445/39e207a0ab89467f
+zombies_overnight_d3_s4004=4.2770/017bd5eca1147ece
+zombies_overnight_d3_s5005=4.2780/bed0639594929035
+zombies_overnight_d3_s6006=4.2470/647235ec041a1b0a
+zombies_overnight_d3_s7007=4.3010/f82346340cf4a6eb
+zombies_overnight_d5_s4004=4.2640/47ffb40f7e5dfc29
+zombies_overnight_d5_s5005=4.2660/82116c05ceeee8fe
+zombies_overnight_d5_s6006=4.2440/419621bca6ec0961
+zombies_overnight_d5_s7007=4.3180/2b813e31845ea113
+zombies2hg_overnight_d5_s4004=4.7700/ce2d67a727d368c7
+zombies2hg_overnight_d5_s5005=4.8500/1d82ab704eb7f26b
+zombies2hg_overnight_d5_s6006=4.8600/40ed0e743994f33d
+zombies2hg_overnight_d5_s7007=4.8300/892b568e152bb1c3
 mazesend_overnight_d0_s4004=6.6975/bd86b1642b87a822
 mazesend_overnight_d0_s6006=6.7095/45ad5a2a7a1c0032
 mazesend_overnight_d0_s8008=6.6950/36d5a55feef2854b
