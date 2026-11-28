@@ -1,4 +1,5 @@
 {
+  "value_play": { "expected_buckets": 10, "mull_gen_depth": 1, "mull_gen_budget_ms": 1 },
   "card_scores": {
     "Blood Scrivener": [
       -0.04857379898862213
