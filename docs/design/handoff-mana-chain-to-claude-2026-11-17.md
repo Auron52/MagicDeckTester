@@ -296,6 +296,15 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**16:00 UTC 11-28** -- BEASTS FIX agent 1 DONE (422K, over the limit; it also bypassed the lane and ran oracle arms without
+the box lock -- noted). wip/beasts-fix d00dab5aa + 156c881cd: MTG_REDUCER_ORDER_DOMAIN (Incubator inversion -> payable-order
+search; no rank change), MTG_DEVOTION_FED_OVERPAY, MTG_DEVOTION_ROUTE_OWN, MTG_EF_CEIL_DEVOTION (all default ON). Oracle 1,000
+Beasts games: APPLY-DROP-ORDER 314->32, APPLY-DROP 89->46, ENUM-GAP 66->43, ORACLE-GAP 155->96. A/B seeds 32000000+: Beasts
+2,000 games 5.0755->5.0725, 1 slower (gi201 recovers d8 b0), 7 faster; 13 other decks byte-identical. CPU Beasts +1.3-1.6% ->
+OWED cut. Agent 2 launched (rebase onto 8e4653481, per-flag CPU attribution, exact cut, report.md). Then land with GT.
+Leftover: remaining Nykthos ENUM-GAPs are post-gate (s31000405/366/680: gates offer the plan; fold/prune/dedup or oracle
+comparison), Kaheera companion (#3), O2.
+
 **15:40 UTC 11-28** -- LANDED 8e4653481 (land-1131: gate_1127 record, BS pay-table memo, oracle pins). Validation: units
 4349/4349, smoke+regression 409/409 ALL PASS, audit 0 play changes, viewer 0 drift, check_gt_logs 1486 consistent, GT
 unchanged (no accept). CI 46160277039 watching (bmfwobjhv). Primary fast-forwarded. Lease passed to landing/zombies-1128.
