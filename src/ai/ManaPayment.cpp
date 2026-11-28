@@ -14425,13 +14425,7 @@ static int VisibleCloserKeepPay(GameState& state, const ManaCost& cost_in, bool 
     // (the same judge, the same credit). A payment only spends: every source the post-payment judge can use (an untapped
     // source, a lump to crack, a floating unit) is on this board too, and the judge is complete and monotone in them, so
     // when this board cannot pay the closer no post-payment board can, and the plain payment stands untouched (no copy).
-    bool pre_fail = false;   // DS5-TEMP-AUDIT (remove): MTG_VC_PRECHECK_AUDIT=1 runs the full path and reports a miss
-    if (!witness(state))
-    {
-        static const bool s_audit = EnvOn("MTG_VC_PRECHECK_AUDIT");
-        if (!s_audit) { return -1; }
-        pre_fail = true;
-    }
+    if (!witness(state)) { return -1; }
     // The alternatives, in order: {lump index (-1 none), crack colour, hold the creature-only lands}.
     struct Alt { int lump; int col; bool hold; };
     std::vector<OnDemandCrack> lands, lumps;
@@ -14522,7 +14516,6 @@ static int VisibleCloserKeepPay(GameState& state, const ManaCost& cost_in, bool 
     };
     auto note = [&](int i)
     {
-        if (pre_fail) { std::fprintf(stderr, "[visible-closer] PRECHECK-MISS T%d\n", state.turn_number); }
         if (!s_trace) { return; }
         const Alt& a = alts[static_cast<std::size_t>(i)];
         std::fprintf(stderr, "[visible-closer] T%d closer=%s alt=%d lump=%d col=%d hold=%d\n", state.turn_number,
@@ -15015,23 +15008,6 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         && !(manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target) && !HumanPlayActive()
         && LeftoverLineSwapOn())
     { SwapLeftoverForLine(state, cost_in, float_before, available); }
-    { // DS2-TEMP-DEBUG (remove before commit)
-        static const int s_dbg_turn = EnvInt("MTG_DS2_PAYDBG", 0);
-        if (s_dbg_turn > 0 && state.turn_number == s_dbg_turn && outer_pilgrimage_pay && t_pay_nest == 0)
-        {
-            const Card* pc = PayingSpellCard();
-            const ManaPool& f = state.floating_mana;
-            std::fprintf(stderr, "[ds2pay] %s paid=%d fc=%d cost g%d B%d R%d G%d lu g%d B%d R%d G%d nc=%d bound=%d unseen=%d hook=%d before B%d R%d G%d fl B%d R%d G%d C%d W%d ->",
-                         pc ? pc->m_name.str().c_str() : "-", paid ? 1 : 0, for_creature ? 1 : 0, cost_in.generic,
-                         cost_in.black, cost_in.red, cost_in.green, g_line_unpaid_cost.generic, g_line_unpaid_cost.black,
-                         g_line_unpaid_cost.red, g_line_unpaid_cost.green, g_line_noncreature_mv, g_line_keep_bound, g_line_opens_unseen ? 1 : 0,
-                         manaoracle::t_hook != nullptr ? 1 : 0, float_before.black, float_before.red, float_before.green,
-                         f.black, f.red, f.green, f.colorless, f.wild);
-            for (const Permanent& q : state.battlefield)
-            { if (q.controller_index == state.active_player_index) { std::fprintf(stderr, " %s#%d%s", q.card.m_name.str().c_str(), q.card.m_number, q.tapped ? "T" : ""); } }
-            std::fprintf(stderr, "\n");
-        }
-    }
     --t_pilgrimage_pay_depth;
     if (paid && outer_pilgrimage_pay)
     { ResolvePilgrimagePaymentTaps(state, pilgrimage_controller, pilgrimage_before); }
