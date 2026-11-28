@@ -296,6 +296,13 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**01:40 UTC 11-28** -- CI 46079583570 (524d7c303) GREEN. DS verdict memo (wip/ds-memo 1fe212575, logs/ds-memo/report.md):
+NOT WORTH IT -- final digest-keyed memo saves 0.059% DS user instructions vs origin (< 0.1% bar); BoardHash probe's repeat
+rates were inflated (it ignores storage counters / entered_this_turn etc.); exact-board variants cost +0.8-1.75%. Not
+landed; DS levers' cost stays +0.96%. DS round 5 agent running (wip/ds-apply5, Karrthus need-later ~274 flags, small lane
+only; logs/ds-apply5/). gate_1127 running (waiter re-armed 01:02). NEXT unchanged: gate DONE -> mana_clean.json, rank
+clusters, spawn fix agents; DS round 5 -> land with GT.
+
 **22:58 UTC 11-27** -- LANDED 524d7c303 (land-1130: TH residuals + DS round 4 default ON + DS CPU cut 2 + GT accept;
 0 slower, 1 faster hinata d0, 3 same-score play changes worldfire d5 gi36 / elementals d0 gi22 / bruna d0 gi819;
 units 4347/4347; viewer 0 drift). CI run 46079583570 watching. Primary checkout fast-forwarded. DS verdict-memo agent
