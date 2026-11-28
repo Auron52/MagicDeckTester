@@ -822,3 +822,13 @@ Open USER decision: the tap-order default (after the fixed version's numbers).
 - **Next:** Maze's End K=20 mullgen launched 21:21 UTC from .claude/worktrees/maze-gen2 (wip/maze-gen2 rebased onto c4d5de01f).
 - **Still open (USER):** the lordcast default; Ezuri leftover-mana scaling counts.
 - **Later (agent):** Brigade split exception (USER-accepted), optional bandtap set-up exception, parked fold wip/elves-mem3, lordcast cost cut for Elves.
+
+### Checkpoint 21 (2026-11-28 ~02:10 UTC): Elves value sidecar ADOPTED (nlfit, d6b20)
+- **USER paused the Maze's End K=20 mullgen** at 01:34 UTC (journal intact, copies `*.prepause-20261128T0134`, `*.paused-final`) to run the Elves value leaf first.
+- **`valueleaf.sh run decks/Elves`** 01:34-02:01 UTC (frozen 450cb17a5, src d8c96049, PGO). Phase E vs live (no sidecar, d5 b20), 8 seeds x 1000 paired games:
+  - nlfit -0.00150t (t -2.51) at 0.641x units: PICKED (cheapest passing); staged -0.00175t 0.668x; nlesc -0.00175t 0.710x; emul -0.00125t 0.756x.
+  - Trust at d5 rejected (never engaged). E.6: no escalations.
+  - E.7 play setting d6b20 (delta 0, 0.989x units, 7/8 byte-identical).
+  - **TRADES for the USER (none adopted):** d5b40 / d6b40 -0.00063t at 1.06-1.07x; nlesc_d6b40 -0.00075t at 1.12x.
+- **Sidecar cb6ab1a29.** Suite with the sidecar: every Elves aggregate identical, 6 digests moved (0 slower / 0 faster); accepted deck-filtered, check_gt_logs consistent.
+- **Next:** land; resume Maze's End from its journal (build/scratch/maze-gen2/mullgen.sh).
