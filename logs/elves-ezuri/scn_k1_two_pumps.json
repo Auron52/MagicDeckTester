@@ -1,0 +1,78 @@
+{
+ "_comment": [
+  "Ezuri pump vs Warcaller kicks (MTG_ELVES_EZURI_COUNTS probe). 13 Forests, Ezuri + 2 Taunting Elf can attack",
+  "(2 power), Joraga Warcaller in hand, opponent at 23. Warcaller K=1 (3 mana) + two Ezuri pumps (10) = +7 per attacker",
+  "= 23, lethal. Every other line tops out at +6 (K=6 top: +6; K=0 / no cast: two pumps +6; K=3 + one pump +6) = 20.",
+  "K=1 is below the hold-back band (no attack-capable dork: h = 0, band = {6})."
+ ],
+ "deck": "decks/Elves/Elves.cod",
+ "profile": "decks/Elves/Elves.profile.json",
+ "turn": 5,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 23,
+ "resume_at": "main1",
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Forest"
+  },
+  {
+   "name": "Ezuri, Renegade Leader",
+   "sick": false
+  },
+  {
+   "name": "Taunting Elf",
+   "sick": false
+  },
+  {
+   "name": "Taunting Elf",
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Joraga Warcaller"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 5,
+ "budget_ms": 20,
+ "max_turns": 5,
+ "expect_win_turn": 5
+}
