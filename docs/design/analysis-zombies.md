@@ -27,6 +27,17 @@ games: 0.00012 fewer win turns per game at 0.987 times the old work units.
 No beam or escalation allowance was adopted. The mulligan generation setting
 remains depth 1, budget 1 ms, with ten expected buckets.
 
+Before integration, scoped smoke changed four searched play digests at the same
+win turn and no game scores. Scoped regression changed four same-score play
+digests and had two one-turn-later games: d3 seed 2002 game 20 (turn 4 to 5)
+and profile-depth seed 3003 game 58 (turn 3 to 4). Both used the same hand and
+draws, and both recovered the prior win turn at four times their case budget.
+The accepted 8,000-game paired screen is the quality basis for the setting;
+these two small-sample slowdowns are budget churn. All 679 scenarios, 980
+strict viewer references, and two require-beat references passed, with zero
+viewer play drift or contract failures. The final integrated gate follows the
+push-queue head.
+
 ## Exhaustive mulligan profile (2026-11-28)
 
 All ten new Zombies play references matched search before generation and again
