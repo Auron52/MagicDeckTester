@@ -9526,6 +9526,52 @@ static int SameTurnReducerGenericCredit(const GameState& state, const std::vecto
     return credit;
 }
 
+// MTG_REDUCER_ORDER_DOMAIN (DEFAULT ON; =0 -> as before). A permanent SPELL REDUCER cast in the line beside a cast it
+// discounts -- Urza's Incubator (chooses_creature_type: "creature spells of the chosen type cost {2} less"), a Warchief
+// (reduces_spell_subtype), a Medallion (reduces_spell_color). The reduction applies only to a spell cast while the
+// reducer is on the battlefield, so only an order with the reducer resolved first pays the discount -- and the
+// generic rank can put the discounted spell first: Incubator is a noncreature (rank 20) and is cast AFTER the Beasts
+// it discounts, so the apply paid Garruk's Packleader at {4}{G} and dropped Incubator's {3}, where Incubator first
+// pays both. The flat gate's same-turn reducer credit assumes the reducer goes first (SameTurnReducerCounts), so the
+// menu offered the pair and the apply lost a cast. Mana oracle gate claude-queue-20261127a, Beasts: 1,592+ events on
+// 1,112+ of 12,000 games (APPLY-DROP-ORDER, APPLY-DROP, ENUM-GAP), e.g. s30000022 T5, s30001030 T4. The payable-order
+// decider (PayableCastOrderCoreImpl) has no reducer term, so this joins the payable-order search's domain
+// (UnlockOrderSearch) -- at the apply ONLY when the given order does not pay (TurnSolver::UnlockPayableOrder), at the
+// enumeration as more orders of the same OR (SubsetPayableSequentialTail), and the exec-feas rescue walks such a
+// subset the flat pool refused. Rescue-only: the rank order is kept whenever it pays, so the cast-order POLICY
+// (USER-owned) is unchanged; a line only another order pays becomes realisable (completeness). The test is the flat
+// gate's own credit: another cast of `order` that the subset's same-turn reducers discount.
+static bool ReducerOrderDomainOn()
+{
+    static const bool s_on = EnvOn("MTG_REDUCER_ORDER_DOMAIN", true);   // DEFAULT ON; =0 disables
+    return s_on;
+}
+
+static bool SpellReducerOrderDomain(const GameState& state, const std::vector<Action>& acts,
+                                    const std::vector<int>& order)
+{
+    if (order.size() < 2 || !ReducerOrderDomainOn()) { return false; }
+    bool any = false;
+    for (int j : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(j)];
+        const CardDefinition* d = a.def;
+        if (a.kind != Action::Kind::CastFromHand || d == nullptr) { continue; }
+        if (!d->params.reduces_spell_subtype.empty() || !d->params.reduces_spell_color.empty()
+            || (d->params.chooses_creature_type && d->params.reduces_spell_subtype_amount > 0))
+        { any = true; break; }
+    }
+    if (!any) { return false; }
+    const SameTurnReducerCounts rc = CountSameTurnReducers(state, acts, order);
+    if (!rc.Any()) { return false; }
+    for (int j : order)
+    {
+        if (acts[static_cast<std::size_t>(j)].kind != Action::Kind::CastFromHand) { continue; }
+        if (SameTurnReducerDiscountFor(state, rc, acts, j) > 0) { return true; }
+    }
+    return false;
+}
+
 // ---- Same-turn COLOURED-pip reducer credit (Ragemonger) ----------------------------------------
 // The Medallion/Warchief credits above are GENERIC-only; Ragemonger ("Minotaur spells you cast
 // cost {B}{R} less... reduces only the amount of colored mana") takes COLOURED pips off, so its
@@ -15056,7 +15102,8 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
             || BeastsLordReducerOrderDomain(state, cands, order)
             || SacRitualOrderDomain(cands, order)
             || RitualReducerOrderDomain(cands, order)
-            || FleshbagReducerOrderDomain(state, cands, order));
+            || FleshbagReducerOrderDomain(state, cands, order)
+            || SpellReducerOrderDomain(state, cands, order));
     // MTG_UO_FOLD (DEFAULT ON; =0 -> the given walk, the ETB retry and the unlock-order search run one after the
     // other, as before). In the unlock-order domain this site's verdict is "the given order pays, or the ETB order
     // does, or some other class order does" -- an OR over walks, so the order they are tried in is free. The given
@@ -15310,7 +15357,8 @@ bool TurnSolver::UnlockPayableOrder(const GameState& state, const std::vector<Ac
         && !BeastsLordReducerOrderDomain(state, *use, order)
         && !SacRitualOrderDomain(*use, order)
         && !RitualReducerOrderDomain(*use, order)
-        && !FleshbagReducerOrderDomain(state, *use, order)) { return false; }
+        && !FleshbagReducerOrderDomain(state, *use, order)
+        && !SpellReducerOrderDomain(state, *use, order)) { return false; }
     const std::vector<int> none;
     if (SeqWalkFixedOrder(state, *use, sel, order, none)) { return false; }   // the given order pays: kept
     return UnlockOrderSearch(state, *use, sel, order, none, /*nearest=*/true);
@@ -92465,6 +92513,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             const bool pending_devotion_growth = DevotionOrderDomain(state, cands, sel);
             const bool pending_put_reducer = EtbPutReducerOrderDomain(state, cands, sel);
             const bool pending_lord_reducer = BeastsLordReducerOrderDomain(state, cands, sel);
+            // MTG_REDUCER_ORDER_DOMAIN: a same-subset spell reducer beside a cast it discounts (Urza's Incubator).
+            const bool pending_spell_reducer = SpellReducerOrderDomain(state, cands, sel);
             bool pending_enter_haste = false;
             if (pending_enter_haste_bound > 0)
             {
@@ -92480,11 +92530,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             }
             if (!ef_on && !seq_on_etb && !seq_on_aura && !pending_noncombat_discount
                 && !pending_enter_haste && !pending_devotion_growth && !pending_put_reducer
-                && !pending_lord_reducer)
+                && !pending_lord_reducer && !pending_spell_reducer)
             { return false; }
             bool interacts = (ef_on && any_hinata_credit) || pending_noncombat_discount
                           || pending_enter_haste || pending_devotion_growth || pending_put_reducer
-                          || pending_lord_reducer;
+                          || pending_lord_reducer || pending_spell_reducer;
             int  aura_bonus  = 0;           // new mana a same-subset land Aura brings online
             bool other_inter = interacts;   // any interaction OTHER than a land Aura?
             int  nonaura     = 0;           // casts the Aura could be funding
@@ -92643,6 +92693,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             // cast (mana-oracle ENUM-GAP). Computed only when the ceiling would reject; still an upper bound.
             int ef_ceiling = static_cast<int>((credited ? eff : pool).Total()) + aura_bonus;
             const int ef_pips = combined.ManaValue() - combined.generic;
+            // ...and the NYKTHOS DEVOTION the subset's own permanents add to an untapped devotion land before it taps
+            // (MTG_EF_CEIL_DEVOTION, DEFAULT ON; =0 -> as before): new total mana exactly like `aura_bonus` -- the fed tap
+            // yields the devotion when it taps, and the pool reads it at the BOARD's devotion. DevotionGrowthBound is an
+            // upper bound (0 with no untapped devotion land), so the ceiling only prunes less; the walk is the arbiter.
+            // Mana oracle gate claude-queue-20261127a, Beasts Nykthos ENUM-GAP.
+            static const bool s_ef_ceil_dev = EnvOn("MTG_EF_CEIL_DEVOTION", true);
+            if (ef_ceiling < ef_pips && s_ef_ceil_dev) { ef_ceiling += DevotionGrowthBound(state, cands, &sel); }
             if (ef_ceiling < ef_pips && EfScalarRefundOn())
             {
                 std::vector<int> sub_aura;

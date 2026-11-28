@@ -12958,8 +12958,151 @@ struct ScaledLandRouteStats
 ScaledLandRouteStats g_slr_stats;
 }   // namespace
 
+// THE PERMANENT BEING PAID FOR, AS DEVOTION (MTG_DEVOTION_ROUTE_OWN, DEFAULT ON; =0 -> the board as found). A
+// permanent spell with a coloured pip resolves before the next cast of the line, so a devotion land (Nykthos) tapped
+// for the rest of the line yields that pip too (CR 700.5: the mana costs of the permanents we control). The scaled-land
+// route reads "the rest" on the board this payment leaves, where the spell is still on the stack, so a line only the
+// spell's own devotion pays read as unpayable and the route never looked: Beasts mana oracle sample s31000265 T4
+// ({Elder Gargaroth, Garruk, Primal Hunter} off a Nykthos at green devotion 3) -- Gargaroth's {1}{G}{G} took both
+// Forests and Nykthos's {C}, where Stomping Ground's {R}{G}{G} pays it and the Forests then feed Nykthos at devotion 5
+// for Garruk's {2}{G}{G}{G}. The card is put on the route's rest-of-line boards (the trials and the bound) as a
+// permanent that entered this turn; the cast being paid's own payment is never priced on it. The printed card
+// (a kicked face resolves as its base card). Null without an untapped devotion land, so other decks are unchanged.
+static bool DevotionRouteOwnOn()
+{
+    static const bool s_on = EnvOn("MTG_DEVOTION_ROUTE_OWN", true);   // DEFAULT ON; =0 disables
+    return s_on;
+}
+
+static const Card* RouteOwnDevotionCard(const GameState& state)
+{
+    if (!DevotionRouteOwnOn()) { return nullptr; }
+    const Card* pc = PayingSpellCard();
+    if (pc == nullptr) { return nullptr; }
+    bool live = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && IsDevotionManaLand(*d) && !LandTypeChangedToIsland(state, p)) { live = true; break; }
+    }
+    if (!live) { return nullptr; }
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(*pc);
+    if (def == nullptr) { return nullptr; }
+    if (!def->params.kicked_base_name.empty())
+    {
+        if (const CardDefinition* base = CardDatabase::Instance().Lookup(def->params.kicked_base_name)) { def = base; }
+    }
+    const Card& c = def->card;
+    if (!c.IsPermanentCard() || c.IsLand()) { return nullptr; }
+    const ManaCost& mc = c.m_mana_cost;
+    if (mc.white + mc.blue + mc.black + mc.red + mc.green + mc.hybrid_count <= 0) { return nullptr; }
+    return &c;
+}
+
+static void PutRouteOwnDevotion(GameState& b, const Card* c)
+{
+    if (c == nullptr) { return; }
+    Permanent perm;
+    perm.card              = *c;
+    perm.controller_index  = b.active_player_index;
+    perm.owner_index       = b.active_player_index;
+    perm.entered_this_turn = true;
+    b.battlefield.push_back(perm);
+}
+
+// THE DEVOTION LAND'S FED OVER-PAY (MTG_DEVOTION_FED_OVERPAY, DEFAULT ON; =0 -> the hold-outs only). The scaled-land
+// route below re-makes a payment that strands the rest of the line by HOLDING OUT one of the greedy's sources. That
+// cannot help when the line needs the devotion land's FED mode to be fed out of the very sources that cover this bill:
+// the greedy pays the bill with plain lands (the backtracker takes Nykthos's fed branch only when the plain taps fail),
+// and every hold-out leaves the bill itself unpaid. Mana oracle gate claude-queue-20261127a, Beasts s30000008 T3
+// ({Herald of Ilharg, Questing Beast, Krosan Warchief} beside an Incubator): Questing Beast's {G}{G} took the Forest +
+// Utopia Sprawl, so Nykthos had nothing to feed and Warchief's {G} was lost; the Forest's {G}{G} fed into Nykthos at
+// green devotion 3 pays {G}{G} AND floats Warchief's {G}. So, once the route has proved the strand (the greedy's
+// payment leaves the rest unpayable while the board pays the bill and the rest together) and no hold-out keeps the
+// rest payable, the payment is tried THROUGH the fed mode: the {feeder} paid by the payer with the land held, the land
+// tapped for its devotion to one colour (the lump's colour order: the line's short and owed pips first), its land
+// Aura's bonus, then this bill paid off that pool and the board; the first colour whose board pays the rest is the
+// payment made. The payment exemption: which mode a mana source is tapped in is a payment choice, and the fed payment
+// replaces the greedy's only when the greedy's provably strands the declared line. Shared payer (search, rollout,
+// executor, the payability walks). A devotion land only (Nykthos): the route's other scaled lands keep their hold-outs.
+struct FedOverpayPick
+{
+    int num    = 0;    // the devotion land's card number (0 = no pick)
+    int colour = -1;   // the colour its fed tap adds
+};
+
+static bool DevotionFedOverpayOn()
+{
+    static const bool s_on = EnvOn("MTG_DEVOTION_FED_OVERPAY", true);   // DEFAULT ON; =0 disables
+    return s_on;
+}
+
+// Feed the devotion land `pk.num` its {feeder} (the payer, the land held out) and tap it for its devotion to
+// `pk.colour`, plus its land Aura's bonus, into the floating pool. False (the board partly changed: callers restore)
+// when the land is gone or tapped, the colour has no devotion, or the feed cannot be paid.
+static bool FedOverpayTap(GameState& b, const FedOverpayPick& pk, ManaPool* available, bool honor_legacy_cco)
+{
+    Permanent* sp = PermByNumber(b, pk.num);
+    if (sp == nullptr || sp->tapped || pk.colour < 0 || pk.colour >= 5) { return false; }
+    const CardDefinition* sd = CardDatabase::Instance().LookupCached(sp->card);
+    if (sd == nullptr || !IsDevotionManaLand(*sd) || LandTypeChangedToIsland(b, *sp)) { return false; }
+    const Color k = static_cast<Color>(pk.colour);
+    const int x = ScaledManaYieldFor(b, sp, k);   // devotion: no permanent changes while the feed is paid
+    if (x < 1) { return false; }
+    ManaCost feed;
+    feed.generic = sd->params.mana_per_creature_feeder_generic;
+    if (!PayHolding(b, pk.num, feed, /*for_creature=*/false, available, honor_legacy_cco)) { return false; }
+    sp = PermByNumber(b, pk.num);   // a payment may erase a sacrificed source: re-find
+    if (sp == nullptr || sp->tapped) { return false; }
+    TapConversionSource(b, *sp);
+    b.floating_mana.Add(k, x);
+    if (available != nullptr)
+    {
+        if (available->colorless > 0)  { --available->colorless; }
+        else if (available->wild > 0)  { --available->wild; }
+    }
+    CreditConversionLandAura(b, *sp, b.floating_mana, available);
+    return true;
+}
+
+namespace { static void LumpColourOrder(const GameState& state, const ManaCost& cost_in, int out[5]); }   // below
+
+// The first (land, colour) whose fed over-pay pays this bill and leaves `later` payable (see above), else false.
+static bool FedOverpayFind(const GameState& state, const ManaCost& cost_in, bool for_creature, ManaPool* available,
+                           bool honor_legacy_cco, const ManaCost& later, const CardDefinition* rock,
+                           const Card* own_dev, FedOverpayPick& out)
+{
+    const int active = state.active_player_index;
+    int order[5];
+    bool ordered = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !IsDevotionManaLand(*d) || LandTypeChangedToIsland(state, p)) { continue; }
+        if (!ordered) { LumpColourOrder(state, cost_in, order); ordered = true; }
+        for (int oi = 0; oi < 5; ++oi)
+        {
+            const int c = order[oi];
+            if (ScaledManaYieldFor(state, &p, static_cast<Color>(c)) < 1) { continue; }
+            const FedOverpayPick pk{ p.card.m_number, c };
+            RampScratch b(state);
+            ManaPool av_b = available ? *available : ManaPool{};
+            ManaPool* avp = available ? &av_b : nullptr;
+            if (!FedOverpayTap(b.Board(), pk, avp, honor_legacy_cco)) { continue; }
+            if (!TapForCostSharedDiag(b.Board(), cost_in, for_creature, avp, honor_legacy_cco)) { continue; }
+            PutRouteOwnDevotion(b.Board(), own_dev);
+            if (!RampLaterPayableConsume(b.Board(), later, rock)) { continue; }
+            out = pk;
+            return true;
+        }
+    }
+    return false;
+}
+
 static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, bool for_creature,
-                               ManaPool* available, bool honor_legacy_cco)
+                               ManaPool* available, bool honor_legacy_cco, FedOverpayPick* fed = nullptr)
 {
     if (!ScaledLandRouteOn() || state.dmg_events_armed) { return 0; }
     ManaCost later = RampLaterBill(cost_in);
@@ -13059,6 +13202,9 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
         const CardDefinition* d = CardDatabase::Instance().LookupCached(*pc);
         if (d != nullptr && d->params.mana_rock && !d->card.IsCreature() && !d->params.enters_tapped) { rock = d; }
     }
+    // MTG_DEVOTION_ROUTE_OWN: the permanent being paid for, on the rest-of-line boards (null: none, or a rock -- the
+    // rock is put on them already).
+    const Card* own_dev = rock == nullptr ? RouteOwnDevotionCard(state) : nullptr;
     g_slr_trial.fetch_add(1, std::memory_order_relaxed);
     static const bool s_clock = EnvOn("MTG_ANY_FILTER_ROUTE_STATS");
     struct Clock
@@ -13085,13 +13231,22 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
         // (No amount-short exit, unlike the ramp route: a fed scaled land MAKES mana, so a trial board short of the
         // rest's amount can still be the greedy's strand.)
         const ArmCredit _arm(grow);
+        PutRouteOwnDevotion(t.Board(), own_dev);
         if (RampLaterPayableConsume(t.Board(), later, rock)) { return 0; }
     }
     {
         // (An upper bound that gates the search for a hold-out: crediting the entrants to this payment's share too
-        // only lets the route look; each hold-out below pays this bill at City's real count.)
+        // only lets the route look; each hold-out below pays this bill at City's real count.) The paid permanent's
+        // devotion is credited to the whole bill here, the same over-count (MTG_DEVOTION_ROUTE_OWN).
         const ArmCredit _arm(grow);
-        if (!RampLaterPayable(state, AddManaCosts(cost_in, later), rock)) { return 0; }
+        if (own_dev == nullptr)
+        { if (!RampLaterPayable(state, AddManaCosts(cost_in, later), rock)) { return 0; } }
+        else
+        {
+            RampScratch u(state);
+            PutRouteOwnDevotion(u.Board(), own_dev);
+            if (!RampLaterPayableConsume(u.Board(), AddManaCosts(cost_in, later), rock)) { return 0; }
+        }
     }
     // A strand (rare): the same trial again, for the sources it tapped.
     RampScratch a(state);
@@ -13108,10 +13263,18 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
         if (!PayHolding(b.Board(), held, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
         { continue; }
         const ArmCredit _arm(grow);
+        PutRouteOwnDevotion(b.Board(), own_dev);
         if (!RampLaterPayableConsume(b.Board(), later, rock)) { continue; }
         g_slr_fired.fetch_add(1, std::memory_order_relaxed);
         if (acts_only) { g_slr_acts_fired.fetch_add(1, std::memory_order_relaxed); }
         return held;
+    }
+    // No hold-out keeps the rest payable: the devotion land's fed over-pay (see FedOverpayFind).
+    if (fed != nullptr && DevotionFedOverpayOn())
+    {
+        const ArmCredit _arm(grow);
+        if (FedOverpayFind(state, cost_in, for_creature, available, honor_legacy_cco, later, rock, own_dev, *fed))
+        { g_slr_fired.fetch_add(1, std::memory_order_relaxed); }
     }
     return 0;
 }
@@ -13558,13 +13721,16 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
     { afr_held = AnyFilterFeedRouteHold(state, cost_in, for_creature, available, honor_legacy_cco); }
     // THE SCALED-LAND FEED ROUTE (see ScaledLandRouteHold): the same hold-out, for a payment that leaves a scaled land
     // (Three Tree City) unable to fund the rest of the line.
+    FedOverpayPick fed_pick;
     if (t_pay_nest == 1 && !_ramp_route && haste_keep == 0 && afr_held == 0 && !manaoracle::t_float_only)
-    { afr_held = ScaledLandRouteHold(state, cost_in, for_creature, available, honor_legacy_cco); }
+    { afr_held = ScaledLandRouteHold(state, cost_in, for_creature, available, honor_legacy_cco, &fed_pick); }
+    const bool fed_over = fed_pick.num != 0;
     // THE PROVIDER'S HOLD-UP (see ProviderHoldUpHold): the same hold-out, for a cost the deck wants left payable.
     // Where the trial's quiet scope would change nothing, it is paid first instead (PayProviderHoldUp, below).
     HoldTargets phu_targets;
     bool phu_pay_first = false;
-    if (t_pay_nest == 1 && !_ramp_route && haste_keep == 0 && afr_held == 0 && ProviderHoldUpTargets(state, cost_in, phu_targets))
+    if (t_pay_nest == 1 && !_ramp_route && haste_keep == 0 && afr_held == 0 && !fed_over
+        && ProviderHoldUpTargets(state, cost_in, phu_targets))
     {
         bool quiet;
         { const RevealLogPause probe; quiet = probe.noop; }
@@ -13590,7 +13756,7 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
     // Off, outside such a line, or under another rung's decision: a counter test and out.
     LineKeepPlan lrk;
     if (t_pay_nest == 1 && t_lrk_depth == 0 && !_ramp_route && haste_keep == 0 && afr_held == 0 && !phu_pay_first
-        && (g_line_reducer_credit > 0 ? LineReducerKeepOn() : g_line_keep_bound != 0)
+        && !fed_over && (g_line_reducer_credit > 0 ? LineReducerKeepOn() : g_line_keep_bound != 0)
         && !state.dmg_events_armed && !manaoracle::t_float_only)
     { lrk = LineReducerKeepHold(state, cost_in, for_creature, available, honor_legacy_cco); }
     std::optional<PayRefineSnap> refine_pre;
@@ -13608,6 +13774,21 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
     }
     else if (phu_pay_first)   // unarmed (ProviderHoldUpTargets): the greedy's branch below, or the held payment
     { ok = PayProviderHoldUp(state, cost_in, phu_targets, for_creature, available, honor_legacy_cco); }
+    else if (fed_over)
+    {
+        // The trial proved this payment (FedOverpayFind); should the real board disagree, the greedy pays as it
+        // always did, on the board as this payment found it.
+        RampScratch pre(state);
+        ManaPool av_pre = available ? *available : ManaPool{};
+        ok = FedOverpayTap(state, fed_pick, available, honor_legacy_cco)
+          && TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+        if (!ok)
+        {
+            state = pre.Board();
+            if (available != nullptr) { *available = av_pre; }
+            ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+        }
+    }
     else if (afr_held != 0)
     {
         // The trial proved this payment; should the real board disagree, the greedy pays as it always did.

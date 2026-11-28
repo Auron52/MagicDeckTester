@@ -3036,3 +3036,93 @@ TEST_CASE("Kaheera companion: human menu offers fee then an exact ordinary cast"
     CHECK_FALSE(unaffordable_cast);
     ManaCacheClearPerGame();
 }
+
+TEST_CASE("Urza's Incubator: reducer first is the only payable order -- enumerated, and both apply worlds cast both")
+{
+    // Six Forests; hand Garruk's Packleader {4}{G} and Urza's Incubator {3}. The generic rank casts the creature (10)
+    // before the noncreature Incubator (20): Packleader 5 then Incubator 3 is 8 on six, so the apply dropped the
+    // Incubator. Incubator first: 3, then Packleader at {2}{G} -- 6 on six. MTG_REDUCER_ORDER_DOMAIN: the payable-order
+    // search prices the reducer-first order when the rank order does not pay (mana oracle gate claude-queue-20261127a,
+    // Beasts APPLY-DROP-ORDER, s30000022 T5).
+    BeastsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < 6; ++i) { BeAdd(s, "Forest", 10 + i); }
+    for (const char* n : { "Questing Beast", "Herald of Ilharg", "Thragtusk" })
+    { s.players[0].library.push_back(BeDef(n).card); }
+    BeHand(s, "Garruk's Packleader", 70);
+    BeHand(s, "Urza's Incubator", 71);
+    s.m_provider = &provider;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* both = BeFindCastPlan(plans, { "Garruk's Packleader", "Urza's Incubator" });
+    REQUIRE(both != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *both, true);
+    CHECK(BeIndexOf(roll, 70) >= 0);
+    CHECK(BeIndexOf(roll, 71) >= 0);
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, *both, true);
+    GameState ex = s;
+    eng.TakeTurn(ex, true, BeResolveAll);
+    CHECK(BeIndexOf(ex, 70) >= 0);
+    CHECK(BeIndexOf(ex, 71) >= 0);
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Nykthos: a bill the plain lands cover is paid THROUGH the fed mode when the greedy strands the line's rest")
+{
+    // MTG_DEVOTION_FED_OVERPAY. Nykthos + two Forests; Questing Beast + Krosan Warchief out (green devotion 3). The line
+    // owes {G}{G} now and {G} after. The greedy pays {G}{G} with the two Forests (the backtracker takes the fed branch
+    // only when the plain taps fail), and Nykthos's {C} cannot pay the {G} after. Fed by the two Forests, Nykthos makes
+    // {G}{G}{G}: the bill and the rest (mana oracle gate claude-queue-20261127a, Beasts s30000008 T3).
+    BeastsProvider provider;
+    ManaCacheClearPerGame();
+    GameState s = BeNykBoard(2, { "Questing Beast", "Krosan Warchief" });
+    s.m_provider = &provider;
+    {
+        LineUnpaidCostScope luc(BeCost(0, 0, 0, 0, 0, 3));
+        CHECK(TapForCostDirect(s, BeCost(0, 0, 0, 0, 0, 2), true));
+    }
+    CHECK(BeNyk(s).tapped);
+    CHECK(BeTapped(s, 10));
+    CHECK(BeTapped(s, 11));
+    CHECK(s.floating_mana.green == 1);
+    {
+        LineUnpaidCostScope luc(BeCost(0, 0, 0, 0, 0, 1));
+        CHECK(TapForCostDirect(s, BeCost(0, 0, 0, 0, 0, 1), true));
+    }
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Nykthos: the scaled-land route counts the devotion of the permanent being paid for")
+{
+    // MTG_DEVOTION_ROUTE_OWN (Beasts mana oracle sample s31000265 T4). Nykthos + Stomping Ground with two Wild Growths
+    // ({R}{G}{G} in one tap) + two Forests; Herald of Ilharg out (green devotion 1 + the two Auras = 3). The line:
+    // Elder Gargaroth at {1}{G}{G} (an Incubator's discount), then Garruk, Primal Hunter {2}{G}{G}{G}. The greedy paid
+    // Gargaroth with both Forests and Nykthos's {C}, leaving Stomping's three for Garruk's five. Read with Gargaroth
+    // still on the stack the rest is unpayable whatever pays Gargaroth (devotion 3), so the route never looked;
+    // Gargaroth resolves first (devotion 5): Stomping pays it and the Forests feed Nykthos for {G}x5.
+    BeastsProvider provider;
+    ManaCacheClearPerGame();
+    GameState s = BeNykBoard(2, { "Herald of Ilharg" });   // Forests 10, 11; Herald 40
+    s.deck_has_land_aura = true;
+    BeAdd(s, "Stomping Ground", 38);
+    for (int n : { 45, 46 })
+    { const int wg = BeAdd(s, "Wild Growth", n); s.battlefield[static_cast<std::size_t>(wg)].aura_attached_to = 38; }
+    s.m_provider = &provider;
+    {
+        LineUnpaidCostScope luc(BeCost(3, 0, 0, 0, 0, 5));
+        SpellSubtypePayScope ssp(&BeDef("Elder Gargaroth").card);
+        CHECK(TapForCostDirect(s, BeCost(1, 0, 0, 0, 0, 2), true));
+    }
+    CHECK_FALSE(BeNyk(s).tapped);
+    BeAdd(s, "Elder Gargaroth", 60, 0, /*sick=*/true);   // resolved: green devotion 5
+    {
+        LineUnpaidCostScope luc(BeCost(2, 0, 0, 0, 0, 3));
+        SpellSubtypePayScope ssp(&BeDef("Garruk, Primal Hunter").card);
+        CHECK(TapForCostDirect(s, BeCost(2, 0, 0, 0, 0, 3), false));
+    }
+    ManaCacheClearPerGame();
+}
