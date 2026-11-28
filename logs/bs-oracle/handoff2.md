@@ -33,7 +33,7 @@ The full write-up is in report2.md.
 
 ## Perf finding
 
-PERF_PLACEHOLDER
+Pending at handoff: `S/perf531.sh` was still waiting for a lane slot (its lane wrapper had not been admitted). When `S/perf531.DONE` lands, read `S/p531lf.self.txt` (self time) and `S/p531lf.children.txt` (inclusive time), and compare them with the pre-fold flat profile in `S/s531_memo.perf`. Before the fold, the leaders were BuildSimKeyBase at 24%, memmove at 7.4% and ApplyPreTap at 3.8%. Expect the breakpoint derivation under muted recomputes to lead now.
 
 ## Remaining, in order
 
